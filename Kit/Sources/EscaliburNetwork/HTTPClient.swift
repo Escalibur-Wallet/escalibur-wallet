@@ -26,6 +26,7 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
     public static let shared = HTTPClient()
 
     static let maxResponseBytes = 4 * 1024 * 1024
+    static let resourceTimeout: TimeInterval = 30
     static let userAgent = "EscaliburWallet"
 
     /// So para os testes: um `URLProtocol` no lugar da rede.
@@ -57,7 +58,13 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
 
     private func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
+        #if os(Android)
+        // No Android a requisicao sai pelo transporte do sistema, nunca pela libcurl do Swift
+        // SDK (AndroidTransport.swift).
+        configuration.protocolClasses = protocolClasses ?? [AndroidURLProtocol.self]
+        #else
         if let protocolClasses { configuration.protocolClasses = protocolClasses }
+        #endif
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
@@ -67,12 +74,12 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
         configuration.waitsForConnectivity = false
         #endif
         configuration.timeoutIntervalForRequest = 10
-        configuration.timeoutIntervalForResource = 30
+        configuration.timeoutIntervalForResource = Self.resourceTimeout
         #if canImport(Darwin)
         configuration.tlsMinimumSupportedProtocolVersion = .TLSv12
         #endif
-        // TODO(android): o URLSession do Android (FoundationNetworking, sobre a libcurl) nao tem
-        // essas duas opcoes. O TLS minimo no Android e conferido antes do app Android sair.
+        // O URLSession do Android nao tem essas duas opcoes. La o TLS 1.2 minimo e do transporte
+        // do sistema (AndroidTransport.swift).
         configuration.httpAdditionalHeaders = ["User-Agent": Self.userAgent, "Accept-Language": "en"]
         return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
     }

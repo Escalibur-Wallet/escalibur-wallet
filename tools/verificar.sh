@@ -147,13 +147,20 @@ achados=$(find . \( -name "*.xcframework" -o -name "*.framework" -o -name "*.a" 
 secao "fontes e build"
 # Caminhos separados por espaco; a lista so vale para .metal.
 metal_permitidos=""
+# A ponte JNI do Android (Kit/Sources/Android/CJNI) e C so para o Swift enxergar o jni.h do
+# NDK: os dois arquivos so podem ter comentario, a guarda do cabecalho e esse include.
+cjni=Kit/Sources/Android/CJNI
 achados=$(find App Kit/Sources Kit/Tests -type f \( "${nao_swift[@]}" \) -not -path "Kit/Sources/CArgon2/*" -not -path "Kit/Sources/CSecp256k1/*" -not -path "Kit/Sources/SwiftCrypto/*" 2>/dev/null \
     | while read -r fonte; do
         [[ "$fonte" == *.metal ]] && printf '%s\n' $metal_permitidos | grep -qxF "$fonte" && continue
+        [[ "$fonte" == "$cjni/CJNI.c" || "$fonte" == "$cjni/include/CJNI.h" ]] && continue
         echo "$fonte"
     done)
 [ -n "$achados" ] && { aviso "fonte que nao e Swift fora do C vendorizado (CArgon2, CSecp256k1 e SwiftCrypto)"; echo "$achados"; } \
     || ok "fora do C vendorizado (CArgon2, CSecp256k1 e SwiftCrypto), todo fonte e Swift"
+achados=$(cat "$cjni/CJNI.c" "$cjni/include/CJNI.h" 2>/dev/null | grep -vE '^\s*(//.*)?$|^#(ifndef|define|endif) CJNI_H|^#endif$|^#include (<jni\.h>|"CJNI\.h")$')
+[ -n "$achados" ] && { aviso "a ponte JNI em C tem mais que o include do jni.h"; echo "$achados"; } \
+    || ok "a ponte JNI em C so inclui o jni.h do NDK"
 # Nada roda nem entra no binario por fora do fonte: fase de script de build (shell a cada
 # build, com o repositorio e a rede na mao), acao de esquema, plugin do SwiftPM, framework
 # ou biblioteca que nao e do SDK, flag de linker (carregaria codigo de fora). Hoje nao ha

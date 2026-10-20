@@ -190,4 +190,14 @@ if ProcessInfo.processInfo.environment["ESCALIBUR_ANDROID"] != nil {
     let soDaApple: Set<String> = ["EscaliburKeys", "EscaliburKeysTests", "EscaliburEnginesTests"]
     package.targets.removeAll { soDaApple.contains($0.name) }
     package.products.removeAll { $0.name == "EscaliburKeys" }
+    // A ponte com o app Android (Kotlin), pelo JNI: a biblioteca que vai dentro do APK.
+    package.targets += [
+        .target(name: "CJNI", path: "Sources/Android/CJNI"),
+        .target(
+            name: "EscaliburAndroid",
+            dependencies: ["CJNI", "EscaliburCore", "EscaliburChains", "EscaliburNetwork", "EscaliburEngines"],
+            path: "Sources/Android/EscaliburAndroid"
+        ),
+    ]
+    package.products += [.library(name: "EscaliburAndroid", type: .dynamic, targets: ["EscaliburAndroid"])]
 }
