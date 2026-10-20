@@ -19,6 +19,10 @@ enum Nucleo {
             if let pasta = pedido["pasta"]?.stringValue { MetadataStore.directory = URL(fileURLWithPath: pasta) }
             if let vigias = pedido["vigias"]?.stringValue { Vigias.pasta = URL(fileURLWithPath: vigias) }
             if let recursos = pedido["recursos"]?.stringValue { CoreResources.directory = recursos }
+            if let pacote = pedido["pacote"] {
+                Pacote.abrir(nome: pacote["nome"]?.stringValue ?? "", versao: pacote["versao"]?.stringValue ?? "0",
+                             build: pacote["build"]?.stringValue ?? "0", idioma: pedido["idioma"]?.stringValue ?? "pt")
+            }
             if case .object(let tabela)? = pedido["textos"] {
                 // A tabela do idioma do aparelho: os textos do nucleo (kitText) e os do app.
                 let textos = tabela.compactMapValues(\.stringValue)
@@ -584,8 +588,10 @@ struct Estado: Encodable {
     let ajustes: Ajustes
     let responsabilidade: Int?
     let contatos: Int
+    let aviso: Pacote.Aviso?
 
     static func agora() -> Estado {
+        let aviso = Pacote.aviso()
         let root = Chaves.root
         let metadata = Sessao.shared.metadata
         let sistema: String
@@ -613,7 +619,8 @@ struct Estado: Encodable {
                 redesDesligadas: metadata.settings.disabledChainIDs.sorted(), apagarDepois: root.wipeThreshold, opcoesDeApagar: PINPolicy.wipeOptions
             ),
             responsabilidade: metadata.responsibilityVersion,
-            contatos: metadata.contacts.count
+            contatos: metadata.contacts.count,
+            aviso: aviso
         )
     }
 }

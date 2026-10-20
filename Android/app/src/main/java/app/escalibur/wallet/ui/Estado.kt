@@ -79,6 +79,8 @@ data class EstadoDoApp(
     val apagarDepois: Int? = null,
     val opcoesDeApagar: List<Int> = listOf(5, 10, 15, 20),
     val contatos: Int = 0,
+    /** O alerta de seguranca por cima de tudo, quando o nucleo manda. */
+    val aviso: JSONObject? = null,
 ) {
     val carteira: Carteira? get() = carteiras.firstOrNull { it.id == selecionada } ?: carteiras.firstOrNull()
     val biometriaPronta: Boolean get() = biometriaDoSistema == "pronta"
@@ -110,6 +112,7 @@ data class EstadoDoApp(
                 apagarDepois = if (ajustes.has("apagarDepois") && !ajustes.isNull("apagarDepois")) ajustes.getInt("apagarDepois") else null,
                 opcoesDeApagar = ajustes.optJSONArray("opcoesDeApagar")?.let { lista -> (0 until lista.length()).map { lista.getInt(it) } } ?: listOf(5, 10, 15, 20),
                 contatos = json.optInt("contatos"),
+                aviso = json.optJSONObject("aviso"),
             )
         }
     }

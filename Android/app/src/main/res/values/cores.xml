@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- O rosa do icone do app, o mesmo do iOS. -->
+    <color name="icone_fundo">#FFFF007B</color>
+</resources>

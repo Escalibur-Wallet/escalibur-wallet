@@ -561,6 +561,57 @@ else
     ok "nenhuma traducao invalida; $faltando texto(s) ainda sem traducao, adiados pelo dono (em portugues ate entrarem)"
 fi
 
+secao "android"
+AND=Android/app/src/main
+# A politica do Android: todo host do hosts.lock, menos os da conferencia de atualizacao da App
+# Store, que o Android nao faz.
+faltando=""
+for host in $(sed 's|https://||' hosts.lock); do
+    case "$host" in itunes.apple.com|escalibur-wallet.github.io) continue ;; esac
+    for politica in privacidade.md privacidade-en.md; do
+        grep -qF "\`$host\`" "$AND/assets/legal/$politica" 2>/dev/null || faltando="$faltando $host($politica)"
+    done
+done
+[ -n "$faltando" ] && aviso "host fora da Politica de privacidade do Android:$faltando" || ok "todo host do hosts.lock esta na Politica do Android, em portugues e em ingles"
+# As permissoes sao so as que a Politica explica.
+permissoes=$(grep -oE 'uses-permission android:name="android\.permission\.[A-Z_]+"' "$AND/AndroidManifest.xml" | sed -E 's/.*permission\.([A-Z_]+)"/\1/' | sort | tr '\n' ' ')
+esperadas="CAMERA HIDE_OVERLAY_WINDOWS INTERNET POST_NOTIFICATIONS RECEIVE_BOOT_COMPLETED USE_BIOMETRIC "
+[ "$permissoes" = "$esperadas" ] && ok "permissoes do Android: so as da Politica ($permissoes)" || aviso "permissoes do Android diferentes das da Politica: $permissoes"
+# Sem backup, sem texto puro, e so as autoridades do sistema.
+grep -q 'android:allowBackup="false"' "$AND/AndroidManifest.xml" && grep -q 'android:usesCleartextTraffic="false"' "$AND/AndroidManifest.xml" \
+    && grep -q '<certificates src="system" />' "$AND/res/xml/rede.xml" && ! grep -q 'src="user"' "$AND/res/xml/rede.xml" \
+    && ok "Android sem backup, sem trafego em texto puro e sem certificado instalado pelo usuario" || aviso "manifesto ou rede.xml do Android afrouxado"
+# A tela fora de captura e de recentes (so o build de depuracao, pedido pelo adb, deixa capturar).
+grep -q 'FLAG_SECURE' "$AND/java/app/escalibur/wallet/MainActivity.kt" && grep -q 'BuildConfig.DEBUG && intent.getBooleanExtra("capturas"' "$AND/java/app/escalibur/wallet/MainActivity.kt" \
+    && ok "FLAG_SECURE no Android, solto so no build de depuracao" || aviso "FLAG_SECURE do Android mudou"
+# Nenhuma biblioteca de analise, anuncio ou relatorio de falha.
+achados=$(grep -iE 'firebase|crashlytics|analytics|sentry|appsflyer|adjust|amplitude|mixpanel|segment|play-services-ads|bugsnag|datadog' Android/gradle/libs.versions.toml Android/app/build.gradle.kts 2>/dev/null)
+[ -n "$achados" ] && { aviso "biblioteca de rastreamento no Android"; echo "$achados"; } || ok "nenhuma biblioteca de analise, anuncio ou relatorio de falha no Android"
+# O Kotlin nao fala com a internet: o unico endereco e a pagina da auditoria, aberta no navegador.
+enderecos=$(grep -rhoE '"https?://[^"]+' "$AND/java" | sed 's/^"//' | sort -u | tr '\n' ' ')
+[ "$enderecos" = "https://escalibur-wallet.github.io/auditoria/ " ] && ok "o Kotlin so tem o endereco da auditoria (aberto no navegador)" || aviso "endereco novo no Kotlin: $enderecos"
+achados=$(grep -rnE 't\("[^"]*(—|–)[^"]*"' "$AND/java" 2>/dev/null; grep -nE '—|–' Android/app/textos-android.json "$AND"/assets/legal/*.md 2>/dev/null)
+[ -n "$achados" ] && { aviso "travessao em texto do Android"; echo "$achados" | head; } || ok "nenhum travessao nos textos, traducoes e documentos do Android"
+# Cada dependencia do Gradle conferida pelo digesto, e o proprio Gradle pelo digesto da distribuicao.
+grep -q '<verify-metadata>true</verify-metadata>' Android/gradle/verification-metadata.xml 2>/dev/null \
+    && grep -q '<sha256 ' Android/gradle/verification-metadata.xml && grep -q '^distributionSha256Sum=' Android/gradle/wrapper/gradle-wrapper.properties \
+    && ok "dependencias do Android conferidas pelo digesto ($(grep -c '<component ' Android/gradle/verification-metadata.xml) componentes) e o Gradle pela distribuicao" \
+    || aviso "Android sem verification-metadata.xml ou sem o digesto do Gradle"
+# Todo metodo que o nucleo procura pelo JNI tem regra no ProGuard: sem ela, o R8 renomeia o metodo no
+# release e a ligacao inteira falha (sem rede e sem cofre).
+faltando=$(python3 - <<'PY'
+import re
+java = open("Kit/Sources/Android/EscaliburAndroid/Java.swift").read()
+regras = open("Android/app/proguard-rules.pro").read()
+blocos = {m.group(1): m.group(2) for m in re.finditer(r"-keep class app\.escalibur\.wallet\.nucleo\.(\w+)\s*\{(.*?)\}", regras, re.S)}
+for classe, metodo in re.findall(r'\("(\w+)", "(\w+)", "\(', java):
+    if not re.search(r"\b" + metodo + r"\(", blocos.get(classe, "")):
+        print(f"{classe}.{metodo}", end=" ")
+PY
+)
+[ -n "$faltando" ] && aviso "metodo do JNI sem regra no ProGuard: $faltando" || ok "todo metodo que o nucleo procura pelo JNI esta no ProGuard"
+python3 tools/android/textos.py >/dev/null 2>&1 && ok "todo texto do Android traduzido nos 12 idiomas" || aviso "texto do Android sem traducao (tools/android/textos.py)"
+
 # 10. Testes com vetores oficiais, e a fronteira conferida tambem no binario (regra 3
 # de docs/seguranca.md §8.3): os objetos compilados de Chaves, Cadeias e Nucleo nao
 # podem referenciar nenhum simbolo de rede. O modulo de rede e o controle: nele os

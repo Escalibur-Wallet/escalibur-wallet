@@ -17,18 +17,43 @@ android {
         // compilado para android28 e roda em qualquer um destes.
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
+        // De 1001 em diante: os builds do Android nunca usam um numero de build do iOS.
+        versionCode = 1001
         versionName = "1.0.0"
         // O nucleo so existe para arm64 (todos os aparelhos Android atuais e o emulador do Mac
         // com chip da Apple).
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
+    // A chave de upload da Google Play: fora do repositorio, em ~/.escalibur/android, com a senha no
+    // Keychain do Mac. tools/android/gerar-aab.sh passa a senha por variavel de ambiente; sem ela, o
+    // release sai sem assinatura.
+    val senhaDeUpload: String? = System.getenv("ESCALIBUR_UPLOAD_SENHA")
+    signingConfigs {
+        create("upload") {
+            if (senhaDeUpload != null) {
+                storeFile = file(System.getenv("ESCALIBUR_UPLOAD_JKS") ?: "${System.getProperty("user.home")}/.escalibur/android/upload.jks")
+                storePassword = senhaDeUpload
+                keyAlias = "upload"
+                keyPassword = senhaDeUpload
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (senhaDeUpload != null) signingConfig = signingConfigs.getByName("upload")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        // O release minificado, com outro id e a chave de depuracao: conferir no emulador o que o R8
+        // faz, instalado ao lado do app de depuracao (e sem apagar as carteiras dele).
+        create("conferencia") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".conferencia"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
         }
     }
 
@@ -137,6 +162,7 @@ val copiarLogos = tasks.register<CopiarParaOApp>("copiarLogos") {
 }
 val copiarListas = tasks.register<CopiarParaOApp>("copiarListas") {
     origem.from(fileTree(raiz.resolve("Kit/Sources/EscaliburCore/Resources")) { include("Wordlists/**", "Forca/**") })
+    origem.from(fileTree(raiz.resolve("App/EscaliburWallet/Resources")) { include("Versoes/**") })
     subpasta.set("nucleo")
     achatar.set(false)
     saida.set(layout.buildDirectory.dir("gerado/nucleo"))

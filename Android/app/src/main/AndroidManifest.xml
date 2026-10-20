@@ -24,6 +24,8 @@
         android:usesCleartextTraffic="false"
         android:networkSecurityConfig="@xml/rede"
         android:label="Escalibur Wallet"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Tema.Escalibur">
         <activity

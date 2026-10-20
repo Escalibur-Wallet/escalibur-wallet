@@ -61,7 +61,7 @@ suspend fun iniciarNucleo(contexto: Context) = withContext(Dispatchers.IO) {
     val versao = "${BuildConfig.VERSION_CODE}-${contexto.packageManager.getPackageInfo(contexto.packageName, 0).lastUpdateTime}"
     if (!marca.exists() || marca.readText() != versao) {
         recursos.deleteRecursively()
-        for (pasta in listOf("Wordlists", "Forca")) {
+        for (pasta in listOf("Wordlists", "Forca", "Versoes")) {
             val destino = File(recursos, pasta).apply { mkdirs() }
             for (nome in contexto.assets.list("nucleo/$pasta").orEmpty()) {
                 contexto.assets.open("nucleo/$pasta/$nome").use { entrada -> File(destino, nome).outputStream().use { entrada.copyTo(it) } }
@@ -78,6 +78,8 @@ suspend fun iniciarNucleo(contexto: Context) = withContext(Dispatchers.IO) {
         .put("grupoPrimario", 3).put("grupoSecundario", 3).put("data", padrao)
     App.aplicar(Api.objeto("iniciar", JSONObject().put("pasta", pasta.absolutePath).put("recursos", recursos.absolutePath)
         .put("vigias", app.escalibur.wallet.vigias.Vigia.pasta(contexto).absolutePath)
+        .put("pacote", JSONObject().put("nome", contexto.packageName).put("versao", BuildConfig.VERSION_NAME).put("build", BuildConfig.VERSION_CODE.toString()))
+        .put("idioma", Textos.idioma)
         .put("textos", Textos.tabelaPlana()).put("numeros", numeros)))
 }
 
@@ -108,6 +110,7 @@ fun Raiz() {
         app.escalibur.wallet.ui.enviar.PedidoDePassphrase.pedido?.let { app.escalibur.wallet.ui.enviar.FolhaDaPassphrase(it) }
         Autorizacao.pedido?.let { FolhaDePin(it) }
         Avisos.Camada(Modifier.align(Alignment.TopCenter))
+        App.estado.aviso?.let { app.escalibur.wallet.ui.comp.AlertaDeSeguranca(it) }
     }
 }
 

@@ -26,3 +26,9 @@
     public static byte[] cadastroDaBiometria();
     public static byte[] boot();
 }
+
+# Os eventos do nucleo (o andamento das telas): o JNI_OnLoad procura este metodo pelo nome. Sem ele, a
+# ligacao inteira falha e o app fica sem rede e sem cofre.
+-keep class app.escalibur.wallet.nucleo.Eventos {
+    public static void emitir(java.lang.String, java.lang.String);
+}
