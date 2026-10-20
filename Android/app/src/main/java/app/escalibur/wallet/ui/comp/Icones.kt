@@ -100,6 +100,7 @@ object Icones {
     val mercado = traco("mercado", "M3.5 17.5 L9 11.5 L13 15 L20.5 7", "M15.5 7 H20.5 V12", "M3.5 20.5 H20.5")
     val atividade = traco("atividade", "M4 12 A8 8 0 1 0 6.3 6.3", "M3.5 4 V7.5 H7", "M12 8 V12 L14.5 14.5")
     val envelope = traco("envelope", "M4.5 6 H19.5 A1.5 1.5 0 0 1 21 7.5 V16.5 A1.5 1.5 0 0 1 19.5 18 H4.5 A1.5 1.5 0 0 1 3 16.5 V7.5 A1.5 1.5 0 0 1 4.5 6 Z", "M3.5 7 L12 13 L20.5 7")
+    val envelopeAberto = traco("envelopeAberto", "M3 10 L12 4 L21 10 V19 A1.5 1.5 0 0 1 19.5 20.5 H4.5 A1.5 1.5 0 0 1 3 19 Z", "M3.5 10.5 L12 15.5 L20.5 10.5")
     val chave = traco("chave", "M8 16 A4 4 0 1 0 8 8 A4 4 0 1 0 8 16 Z", "M12 12 H20.5 M17.5 12 V15 M20.5 12 V14")
     val pessoas = traco("pessoas", "M9 11 A3.5 3.5 0 1 0 9 4 A3.5 3.5 0 1 0 9 11 Z", "M3 19.5 C3 16.5 5.7 14.5 9 14.5 C12.3 14.5 15 16.5 15 19.5", "M16 4.3 A3.5 3.5 0 0 1 16 10.7 M18 14.8 C19.9 15.5 21 17.2 21 19.5")
     val microfone = traco("microfone", "M12 15 A3 3 0 0 0 15 12 V6 A3 3 0 0 0 9 6 V12 A3 3 0 0 0 12 15 Z", "M5.5 11.5 A6.5 6.5 0 0 0 18.5 11.5 M12 18 V21")

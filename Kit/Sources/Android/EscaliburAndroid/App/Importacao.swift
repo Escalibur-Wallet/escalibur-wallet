@@ -72,7 +72,7 @@ enum Importacao {
         }
     }
 
-    private static func segredo(_ frase: SecureBytes, passphrase: SecureBytes?) throws -> WalletSecret {
+    static func segredo(_ frase: SecureBytes, passphrase: SecureBytes?) throws -> WalletSecret {
         let (canonica, veredito) = resolver(frase)
         frase.wipe()
         guard case .valid(let idioma) = veredito else {

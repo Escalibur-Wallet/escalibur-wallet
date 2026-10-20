@@ -631,6 +631,15 @@ final class Sessao: @unchecked Sendable {
             rascunho = nil
         }
     }
+
+    /// As palavras de um envelope aberto, so para ver: o rascunho que a tela de gravar mostra de
+    /// tres em tres, sem carteira guardada.
+    func mostrar(_ novo: Rascunho) {
+        trava.withLock {
+            rascunho?.zerar()
+            rascunho = novo
+        }
+    }
 }
 
 /// A frase de uma carteira recem-criada, enquanto o dono anota e confere. As palavras so viram

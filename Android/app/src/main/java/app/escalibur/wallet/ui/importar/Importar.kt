@@ -606,11 +606,34 @@ private fun Garantia(icone: ImageVector, titulo: String, detalhe: String) {
  */
 @Composable
 private fun PreviaDaImportacao(dados: JSONObject, entrada: EntradaDaFrase, passphrase: TextFieldState?, aoVoltar: () -> Unit, aoGuardar: () -> Unit) {
+    ConferenciaDaImportacao(dados, comPassphrase = passphrase != null, doEnvelope = false, aoVoltar = aoVoltar,
+                            aoGuardar = { entrada.zerar(); aoGuardar() }) { tronOutraChave ->
+        Autorizacao.tentando(t("Guardar a carteira importada neste celular")) { credencial ->
+            val corpo = JSONObject().put("credencial", credencial.json()).put("palavras", entrada.quantidade).put("tronOutraChave", tronOutraChave)
+            val partes = if (passphrase != null) credencial.partes(entrada.frase(), passphrase.bytes()) else credencial.partes(entrada.frase())
+            Api.comSegredo("carteira.importar", corpo, *partes)
+        } != null
+    }
+}
+
+/**
+ * A conferencia de uma carteira que veio de fora, pela frase ou por um envelope: o envelope pode
+ * ter vindo de outra pessoa, e o aceite diz isso. `guardar` pede a autorizacao e guarda; devolve
+ * falso se o dono desistiu.
+ */
+@Composable
+internal fun ConferenciaDaImportacao(
+    dados: JSONObject, comPassphrase: Boolean, doEnvelope: Boolean, aoVoltar: () -> Unit, aoGuardar: () -> Unit,
+    guardar: suspend (tronOutraChave: Boolean) -> Boolean,
+) {
     val escopo = rememberCoroutineScope()
     var aceito by remember { mutableStateOf(false) }
     var tronOutraChave by remember { mutableStateOf(false) }
     var guardando by remember { mutableStateOf(false) }
     var mensagem by remember { mutableStateOf<String?>(null) }
+    // A recusa aparece no fim da lista, abaixo dos enderecos: a tela desce ate ela.
+    val rolagem = rememberScrollState()
+    LaunchedEffect(mensagem) { if (mensagem != null) rolagem.animateScrollTo(rolagem.maxValue) }
     LaunchedEffect(Unit) {
         val tron = dados.opcional("tron") ?: return@LaunchedEffect
         // A tela das palavras saiu: o silencio da rede termina antes de perguntar a Tron (a saida
@@ -621,10 +644,10 @@ private fun PreviaDaImportacao(dados: JSONObject, entrada: EntradaDaFrase, passp
     BackHandler(onBack = aoVoltar)
     Column(Modifier.fillMaxSize()) {
         CabecalhoDeFolha("", null, aoVoltar = aoVoltar)
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
+        Column(Modifier.weight(1f).verticalScroll(rolagem).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
             Text(t("Confira antes de guardar"), style = estilo(Tipo.titulo), color = Paleta.tinta)
             Text(
-                if (passphrase != null) t("Se esta carteira já recebeu antes, estes endereços são os que você conhece. Se não baterem, a frase ou a passphrase está diferente, e o que abriria aqui é outra carteira, vazia.")
+                if (comPassphrase) t("Se esta carteira já recebeu antes, estes endereços são os que você conhece. Se não baterem, a frase ou a passphrase está diferente, e o que abriria aqui é outra carteira, vazia.")
                 else t("Se esta carteira já recebeu antes, estes endereços são os que você conhece. Se não baterem, alguma palavra está diferente, e o que abriria aqui é outra carteira, vazia."),
                 style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm),
             )
@@ -651,20 +674,15 @@ private fun PreviaDaImportacao(dados: JSONObject, entrada: EntradaDaFrase, passp
             mensagem?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
         }
         Rodape {
-            Aceite(aceito, t("Entendo que quem me deu estas palavras controla esta carteira e pode levar o que entrar nela. Só deposito aqui se as palavras forem só minhas.")) { aceito = it }
+            Aceite(aceito, if (doEnvelope) t("Entendo que quem me mandou este envelope e a senha dele controla esta carteira e pode levar o que entrar nela. Só deposito aqui se o envelope for meu.")
+                           else t("Entendo que quem me deu estas palavras controla esta carteira e pode levar o que entrar nela. Só deposito aqui se as palavras forem só minhas.")) { aceito = it }
             BotaoPrimario(t("Guardar esta carteira"), Modifier.padding(top = Espaco.sm), ligado = aceito, carregando = guardando) {
                 guardando = true
                 mensagem = null
                 escopo.launch {
                     try {
-                        val guardou = Autorizacao.tentando(t("Guardar a carteira importada neste celular")) { credencial ->
-                            val corpo = JSONObject().put("credencial", credencial.json()).put("palavras", entrada.quantidade).put("tronOutraChave", tronOutraChave)
-                            val partes = if (passphrase != null) credencial.partes(entrada.frase(), passphrase.bytes()) else credencial.partes(entrada.frase())
-                            Api.comSegredo("carteira.importar", corpo, *partes)
-                        }
-                        if (guardou != null) {
+                        if (guardar(tronOutraChave)) {
                             App.recarregar()
-                            entrada.zerar()
                             aoGuardar()
                         }
                     } catch (falha: FalhaDoNucleo) {

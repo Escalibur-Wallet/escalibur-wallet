@@ -45,6 +45,7 @@ import app.escalibur.wallet.ui.comp.Icones
 import app.escalibur.wallet.ui.comp.LogoDaMoeda
 import app.escalibur.wallet.ui.comp.Rodape
 import app.escalibur.wallet.ui.comp.SeloDaCarteira
+import app.escalibur.wallet.ui.envelope.FluxoDeAbrirEnvelope
 import app.escalibur.wallet.ui.importar.FluxoDeImportar
 import app.escalibur.wallet.ui.importar.ObservarEndereco
 import app.escalibur.wallet.ui.novacarteira.FluxoDeNovaCarteira
@@ -66,6 +67,7 @@ fun AdicionarCarteira(primeira: Boolean, aoTerminar: () -> Unit) {
         "criar" -> { FluxoDeNovaCarteira(primeira) { rota = null; aoTerminar() }; return }
         "importar" -> { FluxoDeImportar(aoCancelar = { rota = null }) { rota = null; aoTerminar() }; return }
         "observar" -> { ObservarEndereco(aoCancelar = { rota = null }) { rota = null; aoTerminar() }; return }
+        "envelope" -> { FluxoDeAbrirEnvelope(aoCancelar = { rota = null }) { rota = null; aoTerminar() }; return }
     }
     if (!primeira) BackHandler(onBack = aoTerminar)
     Box(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding()) {
@@ -78,6 +80,7 @@ fun AdicionarCarteira(primeira: Boolean, aoTerminar: () -> Unit) {
             }
             Column(Modifier.padding(top = Espaco.md)) {
                 LinhaDeOrigem(t("Importar com a senha da carteira"), t("Você já tem 12 ou 24 palavras de outra carteira."), Icones.teclado) { rota = "importar" }
+                LinhaDeOrigem(t("Importar de um envelope Escalibur"), t("O arquivo .esclbr e a senha do envelope."), Icones.envelope) { rota = "envelope" }
                 LinhaDeOrigem(t("Só observar um endereço"), t("Acompanhe um saldo sem poder enviar."), Icones.olho) { rota = "observar" }
             }
             Spacer(Modifier.weight(1f))

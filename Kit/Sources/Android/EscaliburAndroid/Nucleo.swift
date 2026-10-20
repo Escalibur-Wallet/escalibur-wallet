@@ -136,6 +136,29 @@ enum Nucleo {
             Silencio.ligar(pedido["ligar"]?.boolValue ?? false)
             return try json(["ok": true])
 
+        case "envelope.calibrar":
+            return try json(Envelopes.calibrar())
+        case "envelope.sugerir":
+            return try json(["palavras": try Envelopes.sugerir()])
+        case "envelope.usarSorteada":
+            try Envelopes.usarSorteada()
+            return try json(["ok": true])
+        case "envelope.aceitarRisco":
+            Envelopes.aceitarRisco()
+            return try json(["ok": true])
+        case "envelope.voltar":
+            return try json(["palavras": Envelopes.voltar()])
+        case "envelope.encerrar":
+            Envelopes.encerrar()
+            Envelopes.fecharAbertura()
+            return try json(["ok": true])
+        case "envelope.inspecionar":
+            return try json(try Envelopes.inspecionar(pedido["dados"]?.stringValue ?? ""))
+        case "envelope.previa":
+            return try json(try Envelopes.previa())
+        case "envelope.verPalavras":
+            return try json(["palavras": try Envelopes.verPalavras()])
+
         case "receber.moedas":
             return try json(Receber.moedas())
         case "receber.endereco":
@@ -352,6 +375,22 @@ enum Nucleo {
             let cred = try credencial()
             let passphrase = partes.isEmpty ? nil : try proxima()
             return try Troca.assinar(cred, passphrase: passphrase, folga: pedido["folga"]?.doubleValue.map { Int($0) }, alvo: pedido["alvo"]?.stringValue)
+        case "envelope.abrirCarteira":
+            let id = try uuid(pedido["id"])
+            let cred = try credencial()
+            let passphrase = partes.isEmpty ? nil : try proxima()
+            return try json(["nome": try Envelopes.abrirCarteira(id, credencial: cred, passphraseDigitada: passphrase)])
+        case "envelope.medir":
+            return try json(Envelopes.medir(try proxima()))
+        case "envelope.conferir":
+            return try json(Envelopes.conferir(try proxima()))
+        case "envelope.lacrar":
+            return try json(try Envelopes.lacrar(repeticao: try proxima(), rotulo: pedido["nome"]?.stringValue ?? ""))
+        case "envelope.abrir":
+            return try json(try Envelopes.abrir(senha: try proxima()))
+        case "envelope.importar":
+            let wallet = try Envelopes.importar(tronComOutraChave: pedido["tronOutraChave"]?.boolValue ?? false, credencial: try credencial())
+            return try json(CarteiraResumo(wallet, selecionada: Sessao.shared.metadata.selectedWalletID == wallet.id))
         case "carteira.abrirComPassphrase":
             let base = try uuid(pedido["base"])
             let cred = try credencial()
@@ -448,6 +487,13 @@ enum Nucleo {
             saida["ate"] = .number(espera.ate.timeIntervalSince1970 * 1000)
         case let falha as Signer.Failure where falha == .passphraseMismatch:
             saida["erro"] = .string("passphrase.errada")
+        case let falha as Envelope.Failure:
+            if case .tooExpensiveForThisDevice(let mib) = falha {
+                saida["erro"] = .string("envelope.caro")
+                saida["mib"] = .number(Double(mib))
+            } else {
+                saida["erro"] = .string("envelope." + String(describing: falha))
+            }
         case let falha as SendEngineError:
             saida["erro"] = .string("envio.motor")
             if let mensagem = falha.errorDescription { saida["mensagem"] = .string(mensagem) }

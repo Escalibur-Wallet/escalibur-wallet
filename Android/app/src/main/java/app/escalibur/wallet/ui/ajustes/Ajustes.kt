@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.ajustes
 
+import app.escalibur.wallet.ui.envelope.FluxoDeAbrirEnvelope
+import app.escalibur.wallet.ui.envelope.FluxoDeLacrar
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -79,6 +81,7 @@ fun TelaDeAjustes() {
             LinhaDeAjuste(Icones.carteira, t("Carteiras"), "${estado.carteiras.size}") { Navegacao.abrir { TelaDeCarteiras() } }
             LinhaDeAjuste(Icones.cadeado, t("Segurança")) { Navegacao.abrir { TelaDeSeguranca() } }
             LinhaDeAjuste(Icones.pessoas, t("Endereços salvos"), estado.contatos.takeIf { it > 0 }?.toString()) { Navegacao.abrir { TelaDeContatos() } }
+            LinhaDeAjuste(Icones.envelopeAberto, t("Abrir um envelope")) { Navegacao.abrir { FluxoDeAbrirEnvelope() } }
         }
         SecaoDeAjustes(t("Preferências")) {
             val ligadas = (Redes.todas.size - estado.redesDesligadas.size).coerceAtLeast(0)
@@ -206,6 +209,11 @@ fun AjustesDaCarteira(id: String) {
                         corDoValor = if (carteira.passphraseConfirmada) Paleta.tintaSuave else Paleta.cautela,
                     ) { if (carteira.passphraseConfirmada) revelar() else Navegacao.abrir { CopiaAgora(carteira) } }
                 }
+                if (carteira.palavras != null) {
+                    LinhaDeAjuste(Icones.envelope, t("Envelope Escalibur"), carteira.envelopeLacradoEm?.let { t("lacrado em %@", dia(it)) } ?: t("nenhum")) {
+                        Navegacao.abrir { FluxoDeLacrar(carteira) }
+                    }
+                }
             }
             if (carteira.temPassphrase) {
                 SecaoDeAjustes(t("Segurança")) {
@@ -221,6 +229,7 @@ fun AjustesDaCarteira(id: String) {
             GrupoDeAjustes(Modifier.padding(top = Espaco.lg)) {
                 LinhaDeAjuste(Icones.olho, t("Ver a senha da carteira")) { revelar() }
                 if (carteira.palavras != null) {
+                    LinhaDeAjuste(Icones.cadeado, t("Criptografar a senha da carteira")) { Navegacao.abrir { FluxoDeLacrar(carteira) } }
                     LinhaDeAjuste(Icones.chave, t("Abrir ou criar com passphrase")) { Navegacao.abrir { FluxoDaCarteiraComPassphrase(carteira) } }
                 }
             }
