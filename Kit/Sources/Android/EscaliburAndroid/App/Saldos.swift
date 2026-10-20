@@ -358,6 +358,14 @@ final class Saldos: @unchecked Sendable {
         }
     }
 
+    /// A variacao de 24 h do preco, em %: a folga da tolerancia automatica da troca.
+    func variacao(_ ativo: Asset) -> Double? {
+        trava.withLock {
+            if let id = ativo.coingeckoID { return cotacoes[id]?.change24h }
+            return cotacoesPorContrato[ativo.id]?.change24h
+        }
+    }
+
     func preco(_ ativo: Asset) -> Double? {
         trava.withLock {
             if let id = ativo.coingeckoID { return cotacoes[id]?.price }

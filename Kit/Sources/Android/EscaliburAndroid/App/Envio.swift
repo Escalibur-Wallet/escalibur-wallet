@@ -674,7 +674,7 @@ final class Envio: @unchecked Sendable {
                             saida: (plano.review.outgoing?.amount ?? quantidade ?? BigUInt()).decimalString)
     }
 
-    private enum TipoDeTag { case tag, memo, comentario }
+    enum TipoDeTag { case tag, memo, comentario }
 
     private var tipoDeTag: TipoDeTag {
         switch chain?.destinationTag {
@@ -707,8 +707,10 @@ final class Envio: @unchecked Sendable {
         return saida
     }
 
+    private func textoDoAviso(_ aviso: PlanReview.Warning) -> String { Self.textoDoAviso(aviso, chain: chain, tipo: tipoDeTag) }
+
     /// O texto de cada aviso do plano, igual em todas as telas que assinam (PlanWarningText do iOS).
-    private func textoDoAviso(_ aviso: PlanReview.Warning) -> String {
+    static func textoDoAviso(_ aviso: PlanReview.Warning, chain: Chain?, tipo tipoDeTag: TipoDeTag) -> String {
         switch aviso {
         case .firstSendToAddress: return Textos.t("Primeira vez que você envia para este endereço.")
         case .lookalikeAddress(let conhecido): return preencher(Textos.t("Endereço parecido com %@."), Fmt.endereco(conhecido, chain: chain))
@@ -890,7 +892,9 @@ func preencher(_ modelo: String, _ valores: String...) -> String {
             posicao = Int(digitos).map { $0 - 1 }
             depois = depois.dropFirst(digitos.count + 1)
         }
-        guard depois.first == "@" else {
+        // "%@" e, para os numeros que o catalogo do iOS guarda como "%lld", tambem "%lld".
+        let marcador = depois.hasPrefix("lld") ? 3 : depois.first == "@" ? 1 : 0
+        guard marcador > 0 else {
             saida += "%"
             resto = resto[resto.index(after: marca)...]
             continue
@@ -898,7 +902,7 @@ func preencher(_ modelo: String, _ valores: String...) -> String {
         let indice = posicao ?? proximo
         if posicao == nil { proximo += 1 }
         saida += indice >= 0 && indice < valores.count ? valores[indice] : ""
-        resto = depois.dropFirst()
+        resto = depois.dropFirst(marcador)
     }
     return saida + resto
 }
@@ -906,13 +910,27 @@ func preencher(_ modelo: String, _ valores: String...) -> String {
 /// A formatacao que o nucleo do Android usa nos textos que ele mesmo monta: os separadores da
 /// regiao (NumberStyle), a mesma regra do `Fmt` do iOS.
 enum Fmt {
-    static func agrupado(_ valor: Double, casas: Int) -> String {
+    /// `aparar`: sem os zeros do fim ("1,5" em vez de "1,500000").
+    static func agrupado(_ valor: Double, casas: Int, aparar: Bool = false) -> String {
         let estilo = NumberStyle.current
         let fator = pow(10, Double(casas))
         let arredondado = (abs(valor) * fator).rounded() / fator
         let inteiro = Int(arredondado)
-        let fracao = casas > 0 ? String(format: "%0\(casas)d", Int(((arredondado - Double(inteiro)) * fator).rounded())) : ""
+        var fracao = casas > 0 ? String(format: "%0\(casas)d", Int(((arredondado - Double(inteiro)) * fator).rounded())) : ""
+        if aparar { while fracao.hasSuffix("0") { fracao.removeLast() } }
         return estilo.decimal(estilo.group(String(inteiro)), fracao)
+    }
+
+    /// O inteiro da rede como o dono digitaria: sem separador de milhar, com todas as casas que
+    /// contam ("1234,5").
+    static func decimalSimples(_ valor: BigUInt, casas: Int) -> String {
+        let digitos = valor.decimalString
+        guard casas > 0 else { return digitos }
+        let cheio = digitos.count <= casas ? String(repeating: "0", count: casas - digitos.count + 1) + digitos : digitos
+        let inteiro = String(cheio.dropLast(casas))
+        var fracao = String(cheio.suffix(casas))
+        while fracao.hasSuffix("0") { fracao.removeLast() }
+        return fracao.isEmpty ? inteiro : inteiro + NumberStyle.current.decimal + fracao
     }
 
     /// Valor de token a partir do inteiro da rede, truncado para baixo, com ate 8 casas (`cheio`)

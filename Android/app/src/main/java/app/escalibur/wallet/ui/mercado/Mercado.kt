@@ -38,7 +38,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import app.escalibur.wallet.nucleo.Api
 import app.escalibur.wallet.ui.App
 import app.escalibur.wallet.ui.Formato
-import app.escalibur.wallet.ui.carteira.Saldos
 import app.escalibur.wallet.ui.comp.BotaoPrimario
 import app.escalibur.wallet.ui.comp.BotaoSecundario
 import app.escalibur.wallet.ui.comp.CabecalhoDeFolha
@@ -53,11 +52,12 @@ import app.escalibur.wallet.ui.comp.SecaoDoGrafico
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
 import app.escalibur.wallet.ui.comp.TituloDeAba
 import app.escalibur.wallet.ui.data
-import app.escalibur.wallet.ui.enviar.FluxoDeEnviar
 import app.escalibur.wallet.ui.objetos
 import app.escalibur.wallet.ui.principal.Navegacao
+import app.escalibur.wallet.ui.receber.opcional
+import app.escalibur.wallet.ui.trocar.ControleDaTroca
+import app.escalibur.wallet.ui.principal.Aba
 import app.escalibur.wallet.ui.receber.CampoDeBusca
-import app.escalibur.wallet.ui.receber.FluxoDeReceber
 import app.escalibur.wallet.ui.t
 import app.escalibur.wallet.ui.textos
 import app.escalibur.wallet.ui.tema.Altura
@@ -220,7 +220,13 @@ fun DetalheDaMoeda(m: MoedaDeMercado) {
         detalhes = runCatching { Api.objeto("mercado.detalhes", JSONObject().put("id", m.id).put("moeda", moeda)) }.getOrNull()
         semDetalhes = detalhes == null
     }
-    val naCarteira = Saldos.retrato.todasAsLinhas.firstOrNull { it.coingecko == m.id }
+    // O que comprar e o que vender desta moeda, pelo nucleo: (comprar, vender).
+    var troca by remember { mutableStateOf<Pair<String?, String?>>(null to null) }
+    LaunchedEffect(m.id, App.estado.carteira?.id) {
+        troca = runCatching {
+            Api.objeto("troca.daMoeda", JSONObject().put("coingecko", m.id)).let { it.opcional("comprar") to it.opcional("vender") }
+        }.getOrDefault(null to null)
+    }
     val observacao = App.estado.carteira?.observacao == true
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding()) {
         Box(Modifier.fillMaxWidth()) {
@@ -243,12 +249,19 @@ fun DetalheDaMoeda(m: MoedaDeMercado) {
             SecaoDoGrafico(m.id, m.preco, m.variacao, moeda, estavel = m.id in listOf("tether", "usd-coin", "dai"))
             FatosDoMercado(m, detalhes, semDetalhes, moeda)
         }
-        if (naCarteira != null && !observacao) {
-            Row(Modifier.padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs), horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                BotaoSecundario(t("Enviar"), Modifier.weight(1f), altura = Altura.primaria) {
-                    Navegacao.abrir { FluxoDeEnviar(naCarteira.posicoes.firstOrNull()?.ativo) }
+        // Vender o que a carteira tem da moeda, na rede onde ha mais; comprar pela primeira rede com
+        // troca que tem a moeda (o MarketCoinDetail do iOS).
+        if (!observacao && (troca.first != null || troca.second != null)) {
+            fun abrir(ativo: String, vende: Boolean) {
+                escopo.launch {
+                    if (!ControleDaTroca.preparar(ativo, vende)) return@launch
+                    Navegacao.fecharTudo()
+                    Navegacao.aba = Aba.trocar
                 }
-                BotaoPrimario(t("Receber"), Modifier.weight(1f)) { Navegacao.abrir { FluxoDeReceber(naCarteira.posicoes.firstOrNull()?.ativo) } }
+            }
+            Row(Modifier.padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs), horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                troca.second?.let { vender -> BotaoSecundario(t("Vender"), Modifier.weight(1f), altura = Altura.primaria) { abrir(vender, true) } }
+                troca.first?.let { comprar -> BotaoPrimario(t("Comprar %@", m.simbolo.uppercase()), Modifier.weight(1f)) { abrir(comprar, false) } }
             }
         }
     }

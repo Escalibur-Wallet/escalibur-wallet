@@ -44,6 +44,8 @@ struct Metadata: Codable, Equatable {
     /// O ultimo historico lido de cada carteira, e quando cada rede foi lida.
     var activityCache: [UUID: [CachedActivity]]?
     var activityFetched: [UUID: [String: ActivityFetch]]?
+    /// Os tokens fora da lista que ja passaram por uma troca deste aparelho.
+    var tradedAssets: [Asset]?
 
     var customTokens: [Asset] { customAssets ?? [] }
 

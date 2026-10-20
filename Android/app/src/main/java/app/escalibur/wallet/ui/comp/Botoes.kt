@@ -177,26 +177,27 @@ fun AcaoRapida(titulo: String, icone: ImageVector, modifier: Modifier = Modifier
     }
 }
 
-/** A acao de receber quando falta saldo: lima chapado, texto escuro. O unico botao lima do app. */
+/** A acao de receber quando falta saldo: o rosa da acao, chapado, texto branco (o AccentButton do iOS). */
 @Composable
 fun BotaoDeDestaque(titulo: String, modifier: Modifier = Modifier, icone: ImageVector? = null, acao: () -> Unit) {
     val interacao = remember { MutableInteractionSource() }
     val apertado by interacao.collectIsPressedAsState()
     Row(
         modifier
-            .height(Altura.secundaria)
+            .fillMaxWidth()
+            .height(Altura.primaria)
             .clip(CircleShape)
-            .background(if (apertado) Color(0xFFA8D21F) else Paleta.lima)
+            .background(if (apertado) Paleta.acentoApertado else Paleta.acento)
             .clickable(interacao, indication = null, role = Role.Button, onClick = acao)
             .padding(horizontal = Espaco.lg),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icone != null) {
-            Icone(icone, Paleta.sobreLima, tamanho = 17.dp)
+            Icone(icone, Color.White, tamanho = 17.dp)
             Spacer(Modifier.width(Espaco.xs))
         }
-        Text(titulo, style = estilo(Tipo.acao), color = Paleta.sobreLima)
+        Text(titulo, style = estilo(Tipo.acao), color = Color.White)
     }
 }
 
