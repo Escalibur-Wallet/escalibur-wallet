@@ -420,6 +420,6 @@ fun avisoDaRede(ativo: AtivoRecebivel, existe: Boolean): String = when (ativo.fa
     else t("Na exchange, escolha a rede Polkadot Asset Hub. O primeiro recebimento precisa ser de 0,01 DOT ou mais, o mínimo da rede para a conta existir.")
     "near" -> if (existe) t("Na exchange, escolha a rede NEAR e envie só NEAR. Esta é a conta implícita da carteira, com 64 caracteres, e não precisa de memo.")
     else t("Na exchange, escolha a rede NEAR. Esta é a conta implícita da carteira: ela passa a existir no primeiro recebimento, de qualquer valor, e não precisa de memo.")
-    "aptos" -> t("Na exchange, escolha a rede Aptos e envie só APT. O endereço tem o mesmo formato dos endereços Sui, e um envio pela Aptos não chega aqui. A conta passa a existir no primeiro recebimento, de qualquer valor.")
+    "aptos" -> t("Na exchange, escolha a rede Aptos e envie só APT. O endereço tem o mesmo formato dos endereços Sui, e um envio pela Sui não chega aqui. A conta passa a existir no primeiro recebimento, de qualquer valor.")
     else -> ""
 }
