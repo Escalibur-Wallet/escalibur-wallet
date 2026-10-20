@@ -910,8 +910,16 @@ final class Troca: @unchecked Sendable {
             let novos = try await motor.submit(assinado, plan: plano)
             switch operacao {
             case .troca(let r, _): Self.lembrar([r.sell, r.buy])
-            case .limite(let r): Self.lembrar([r.sell, r.buy])
-            case .cancelar(let ordem, _): Ordens.shared.marcarCancelando(ordem.id)
+            case .limite(let r):
+                Self.lembrar([r.sell, r.buy])
+                // Os avisos de 24 horas antes de vencer e de executada (fora a carteira com passphrase).
+                if let uid = novos.first, let bytes = Hex.decode(uid), let vence = CoWProtocol.validTo(ofUID: bytes),
+                   Sessao.shared.metadata.wallets.first(where: { $0.id == r.walletID })?.hasPassphrase == false {
+                    VigiaDeOrdens.acompanhar(id: uid, rede: r.chain, venceEm: Date(timeIntervalSince1970: TimeInterval(vence)))
+                }
+            case .cancelar(let ordem, _):
+                Ordens.shared.marcarCancelando(ordem.id)
+                VigiaDeOrdens.esquecer(ordem.id)
             }
             // Edicao: o cancelamento saiu; a etapa 2 monta a ordem nova na mesma revisao.
             let segue = trava.withLock { () -> Bool in

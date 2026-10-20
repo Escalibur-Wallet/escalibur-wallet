@@ -17,6 +17,7 @@ enum Nucleo {
         switch metodo {
         case "iniciar":
             if let pasta = pedido["pasta"]?.stringValue { MetadataStore.directory = URL(fileURLWithPath: pasta) }
+            if let vigias = pedido["vigias"]?.stringValue { Vigias.pasta = URL(fileURLWithPath: vigias) }
             if let recursos = pedido["recursos"]?.stringValue { CoreResources.directory = recursos }
             if case .object(let tabela)? = pedido["textos"] {
                 // A tabela do idioma do aparelho: os textos do nucleo (kitText) e os do app.
@@ -170,6 +171,8 @@ enum Nucleo {
             return try Troca.chamar(troca, pedido)
         case let ponte where ponte.hasPrefix("ponte."):
             return try Ponte.chamar(ponte, pedido)
+        case let vigia where vigia.hasPrefix("vigias.") || vigia.hasPrefix("alertas.") || vigia.hasPrefix("recebimentos."):
+            return try Vigias.chamar(vigia, pedido)
 
         case "mercado.lista":
             let moeda = pedido["moeda"]?.stringValue ?? Sessao.shared.metadata.settings.currency

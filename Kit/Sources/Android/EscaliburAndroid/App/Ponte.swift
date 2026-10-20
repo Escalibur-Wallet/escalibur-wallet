@@ -458,7 +458,11 @@ final class Ponte: @unchecked Sendable {
             guard let lido = try? await BridgeEngine.shared.progress(registro) else { continue }
             trava.withLock { andamentos[registro.id] = lido }
             switch lido {
-            case .arrived(let hash, let quantia): assentar(registro.id, estado: .arrived, hash: hash, quantia: quantia)
+            case .arrived(let hash, let quantia):
+                assentar(registro.id, estado: .arrived, hash: hash, quantia: quantia)
+                // Sem valor nem moeda: a tela bloqueada nao conta o que a carteira tem.
+                Vigias.enfileirar(Aviso(id: "ponte.\(registro.id.uuidString)", canal: "pontes", tipo: "chegou",
+                                        rede: registro.to?.chain.name ?? registro.toChainID))
             case .refunded(let hash): assentar(registro.id, estado: .refunded, hash: hash, quantia: nil)
             case .depositFailed: assentar(registro.id, estado: .failed, hash: nil, quantia: nil)
             default: break

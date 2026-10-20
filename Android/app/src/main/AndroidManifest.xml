@@ -9,6 +9,10 @@
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <!-- Esconder janelas de outros apps por cima da Escalibur (o golpe da sobreposicao). -->
     <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
+    <!-- Os avisos locais (alertas de preco, moeda recebida, ordem limite), pedidos so ao ligar, e a
+         checagem de fundo de volta a agenda depois de reiniciar o aparelho. Nenhum push. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Sem backup (nem do Google nem de aparelho para aparelho): as chaves ficam so neste
          aparelho, como no iOS. Sem trafego em texto puro. -->
@@ -25,6 +29,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -32,5 +37,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".vigias.ConferenciaDoFundo"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
 </manifest>

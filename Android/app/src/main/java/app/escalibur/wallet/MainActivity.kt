@@ -14,6 +14,7 @@ import app.escalibur.wallet.ui.SemAprendizado
 import app.escalibur.wallet.ui.Textos
 import app.escalibur.wallet.ui.principal.Navegacao
 import app.escalibur.wallet.ui.tema.TemaEscalibur
+import app.escalibur.wallet.vigias.Vigia
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,6 +32,7 @@ class MainActivity : ComponentActivity() {
         // Nenhuma janela de outro app por cima desta (o golpe da sobreposicao).
         window.setHideOverlayWindows(true)
         Textos.carregar(this)
+        Vigia.receber(intent)
         enableEdgeToEdge()
         setContent { TemaEscalibur { SemAprendizado { Raiz() } } }
         if (BuildConfig.DEBUG) {
@@ -39,6 +41,12 @@ class MainActivity : ComponentActivity() {
             // as etapas no emulador com a carteira de teste, que nao tem saldo.
             Navegacao.telaDeDepuracao = intent.getStringExtra("tela")
         }
+    }
+
+    /** O toque numa notificacao com o app ja aberto. */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        Vigia.receber(intent)
     }
 
     override fun onStart() {

@@ -86,6 +86,7 @@ fun Principal() {
             if (tela.startsWith("enviar-")) Navegacao.abrir { app.escalibur.wallet.ui.enviar.FluxoDeEnviar("demo:" + tela.removePrefix("enviar-")) }
         }
     }
+    app.escalibur.wallet.ui.avisos.VigiasDaSessao()
     Box(Modifier.fillMaxSize().background(Paleta.vazio)) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f)) {

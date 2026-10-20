@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.mercado
 
+import app.escalibur.wallet.ui.avisos.SinoDoAlerta
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -231,6 +232,7 @@ fun DetalheDaMoeda(m: MoedaDeMercado) {
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding()) {
         Box(Modifier.fillMaxWidth()) {
             CabecalhoDeFolha(m.nome, null, aoVoltar = { Navegacao.fechar() })
+            SinoDoAlerta(m.id, m.simbolo, m.nome, Modifier.align(Alignment.CenterEnd).padding(end = Espaco.xs + Altura.toque))
             Box(Modifier.align(Alignment.CenterEnd).padding(end = Espaco.xs).size(Altura.toque).clickable {
                 val nova = !favorita
                 favorita = nova

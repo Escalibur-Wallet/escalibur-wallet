@@ -89,6 +89,8 @@ final class Sessao: @unchecked Sendable {
         trava.withLock {
             if faseAtual == .locked, !Chaves.root.isSetUp { faseAtual = .onboarding }
         }
+        // Sem cofre, nenhuma carteira: nenhum arquivo de aviso fica.
+        if !Chaves.root.isSetUp { Vigias.apagarTudo() }
     }
 
     // MARK: PIN e desbloqueio
@@ -427,6 +429,7 @@ final class Sessao: @unchecked Sendable {
     func apagarTudo() {
         Chaves.root.wipeAll()
         MetadataStore.deleteFile()
+        Vigias.apagarTudo()
         trava.withLock {
             rascunho?.zerar()
             rascunho = nil

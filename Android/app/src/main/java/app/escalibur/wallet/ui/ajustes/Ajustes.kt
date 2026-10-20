@@ -1,5 +1,10 @@
 package app.escalibur.wallet.ui.ajustes
 
+import app.escalibur.wallet.ui.Ciclo
+import app.escalibur.wallet.ui.avisos.TelaDoRecebimento
+import app.escalibur.wallet.ui.avisos.TelaDosAlertas
+import app.escalibur.wallet.ui.avisos.resumoDoRecebimento
+import app.escalibur.wallet.ui.avisos.resumoDosAlertas
 import app.escalibur.wallet.ui.envelope.FluxoDeAbrirEnvelope
 import app.escalibur.wallet.ui.envelope.FluxoDeLacrar
 import android.content.Intent
@@ -23,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,6 +81,13 @@ import java.util.Date
 @Composable
 fun TelaDeAjustes() {
     val estado = App.estado
+    var alertas by remember { mutableStateOf<String?>(null) }
+    var recebimento by remember { mutableStateOf<String?>(null) }
+    // Ao voltar de uma subtela: o resumo de agora.
+    LaunchedEffect(Navegacao.pilha.size, Ciclo.vinda) {
+        alertas = resumoDosAlertas()
+        recebimento = resumoDoRecebimento()
+    }
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = Espaco.xl)) {
         TituloDeAba(t("Ajustes"))
         GrupoDeAjustes(Modifier.padding(top = Espaco.lg)) {
@@ -86,6 +99,8 @@ fun TelaDeAjustes() {
         SecaoDeAjustes(t("Preferências")) {
             val ligadas = (Redes.todas.size - estado.redesDesligadas.size).coerceAtLeast(0)
             LinhaDeAjuste(Icones.globo, t("Redes"), t("%lld ligadas", ligadas)) { Navegacao.abrir { TelaDeRedes() } }
+            LinhaDeAjuste(Icones.sino, t("Alertas de preço"), alertas) { Navegacao.abrir { TelaDosAlertas() } }
+            LinhaDeAjuste(Icones.receber, t("Aviso de recebimento"), recebimento) { Navegacao.abrir { TelaDoRecebimento() } }
         }
         SecaoDeAjustes(t("Sobre")) {
             LinhaDeAjuste(Icones.pergunta, t("Suporte")) { Navegacao.abrir { TelaDeSuporte() } }

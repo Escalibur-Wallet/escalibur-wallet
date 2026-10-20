@@ -77,6 +77,7 @@ suspend fun iniciarNucleo(contexto: Context) = withContext(Dispatchers.IO) {
     val numeros = JSONObject().put("decimal", simbolos.decimalSeparator.toString()).put("grupo", simbolos.groupingSeparator.toString())
         .put("grupoPrimario", 3).put("grupoSecundario", 3).put("data", padrao)
     App.aplicar(Api.objeto("iniciar", JSONObject().put("pasta", pasta.absolutePath).put("recursos", recursos.absolutePath)
+        .put("vigias", app.escalibur.wallet.vigias.Vigia.pasta(contexto).absolutePath)
         .put("textos", Textos.tabelaPlana()).put("numeros", numeros)))
 }
 
@@ -89,6 +90,7 @@ fun Raiz() {
         pronto = true
     }
     val aparelhoComBloqueio = remember(Ciclo.vinda) { contexto.getSystemService(KeyguardManager::class.java).isDeviceSecure }
+    if (pronto) app.escalibur.wallet.ui.avisos.ConferenciaAberta()
     Box(Modifier.fillMaxSize().background(Paleta.vazio)) {
         if (pronto) {
             Crossfade(App.estado.fase, animationSpec = tween(150), label = "fase") { fase ->

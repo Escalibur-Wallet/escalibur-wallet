@@ -132,8 +132,18 @@ final class Ordens: @unchecked Sendable {
         var novasTerminadas: [(OpenOrder, OrderProgress)] = []
         for saiu in antes where redesQueResponderam.contains(saiu.chain.id) && !atuais.contains(saiu.id) && !jaTerminadas.contains(saiu.id) {
             guard let motor = TradeEngines.engine(for: saiu.chain), let conta = carteira.account(saiu.chain) else { continue }
-            if let andamento = try? await motor.orderProgress(id: saiu.id, account: conta), andamento.isFinal, andamento.state != .cancelled {
-                novasTerminadas.append((saiu, andamento))
+            if let andamento = try? await motor.orderProgress(id: saiu.id, account: conta), andamento.isFinal {
+                if andamento.state != .cancelled { novasTerminadas.append((saiu, andamento)) }
+                VigiaDeOrdens.assentar(saiu.id, executada: andamento.state == .filled)
+            }
+        }
+        // Ordem da CoW aberta (criada antes destes avisos, ou em outro aparelho): passa a ser
+        // acompanhada para o aviso de vencimento e o de executada. A carteira com passphrase fica de
+        // fora: o UID traz o endereco, e o arquivo dos avisos abre com o app travado.
+        if !carteira.hasPassphrase {
+            for aberta in lidas where !trava.withLock({ cancelandoAgora(aberta.id) }) {
+                guard let vence = aberta.expiresAt else { continue }
+                VigiaDeOrdens.acompanhar(id: aberta.id, rede: aberta.chain, venceEm: vence)
             }
         }
         trava.withLock {
