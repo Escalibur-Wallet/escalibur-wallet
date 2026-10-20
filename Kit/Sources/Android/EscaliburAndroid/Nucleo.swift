@@ -143,7 +143,7 @@ enum Nucleo {
 
         case let envio where envio.hasPrefix("envio."):
             return try Envio.chamar(envio, pedido)
-        case let troca where troca.hasPrefix("troca."):
+        case let troca where troca.hasPrefix("troca.") || troca.hasPrefix("ordens."):
             return try Troca.chamar(troca, pedido)
 
         case "mercado.lista":
@@ -336,7 +336,7 @@ enum Nucleo {
         case "troca.assinar":
             let cred = try credencial()
             let passphrase = partes.isEmpty ? nil : try proxima()
-            return try Troca.assinar(cred, passphrase: passphrase, folga: pedido["folga"]?.doubleValue.map { Int($0) })
+            return try Troca.assinar(cred, passphrase: passphrase, folga: pedido["folga"]?.doubleValue.map { Int($0) }, alvo: pedido["alvo"]?.stringValue)
         case "carteira.revelar":
             let cred = try credencial()
             let passphrase = partes.isEmpty ? nil : try proxima()

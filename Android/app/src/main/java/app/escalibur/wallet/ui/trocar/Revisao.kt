@@ -28,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,40 +75,57 @@ import org.json.JSONObject
 import java.util.Date
 
 /**
- * T3 a T5: a revisao da troca, a assinatura e o acompanhamento. A tela mostra o plano que o motor
- * montou e validou, nunca a intencao. O plano que nao sai volta para o formulario com o erro.
+ * T3 a T5 (e L2): a revisao da troca, da ordem limite ou do cancelamento, a assinatura e o
+ * acompanhamento. A tela mostra o plano que o motor montou e validou, nunca a intencao. A troca e a
+ * ordem que nao montam voltam para o formulario com o erro; o cancelamento fica aqui, com o tentar
+ * de novo. `iniciar` pede ao nucleo o que revisar; `encerra`: a troca desta tela sai da memoria ao
+ * fechar (a do cancelamento). `aoSair`: algo saiu (a edicao fecha a tela dela tambem).
  */
 @Composable
-fun RevisaoDaTroca() {
-    val controle = ControleDaTroca
+fun RevisaoDaTroca(controle: ControleDaTroca, encerra: Boolean = false, aoSair: () -> Unit = {}, iniciar: suspend (ControleDaTroca) -> Unit) {
     val escopo = rememberCoroutineScope()
-    // So depois de o pedido de revisar voltar: antes disso, o retrato ainda e o do formulario.
+    // So depois de o pedido voltar: antes disso, o retrato ainda e o do formulario.
     var pediu by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        controle.trabalhar("troca.revisar")
+        iniciar(controle)
         pediu = true
     }
+    if (encerra) DisposableEffect(Unit) { onDispose { controle.encerrar() } }
     val r = controle.retrato
     val etapa = r?.etapa ?: "formulario"
     LaunchedEffect(pediu, etapa) { if (pediu && etapa == "formulario") Navegacao.fechar() }
     val transmitindo = etapa == "enviando"
     fun fechar() {
+        val saiu = r != null && (r.etapa == "enviada" || r.etapa == "incerta" || r.cancelou)
         escopo.launch {
             controle.chamar("troca.fechar")
             Navegacao.fechar()
+            if (saiu) {
+                ControleDasOrdens.reler()
+                aoSair()
+            }
         }
     }
     BackHandler(enabled = !transmitindo) { fechar() }
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
         CabecalhoDeFolha("", if (transmitindo) null else ({ fechar() }))
         Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs)) {
-            if (r == null) return@Column
+            val frases = r?.frases
+            if (r == null || frases == null) {
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp) }
+                Spacer(Modifier.weight(1f))
+                return@Column
+            }
             when (etapa) {
-                "formulario", "montando" -> Espera(r, t("Recotando e simulando a troca antes de mostrar."), null)
-                "revisao" -> Revisao(r)
-                "enviando" -> Espera(r, r.revisao?.nota ?: t("Não feche o app até terminar."), t("Enviando a troca"))
-                "enviada" -> Enviada(r) { fechar() }
-                "incerta" -> Incerta(r) { fechar() }
+                "formulario", "montando" -> {
+                    val falha = r.falhaDaMontagem
+                    if (falha != null) NaoMontou(controle, r, frases, falha) else Espera(r, frases.passo, frases.montando, null)
+                }
+                "revisao" -> Revisao(controle, r, frases)
+                "enviando" -> Espera(r, frases.passo, r.revisao?.nota ?: t("Não feche o app até terminar."), frases.enviando)
+                "enviada" -> Enviada(controle, r, frases) { fechar() }
+                "incerta" -> Incerta(controle, r, frases) { fechar() }
             }
         }
     }
@@ -115,8 +133,10 @@ fun RevisaoDaTroca() {
 
 /** Montando ou enviando: as duas moedas e o texto, no meio da tela. */
 @Composable
-private fun ColumnScope.Espera(r: RetratoDaTroca, texto: String, titulo: String?) {
+private fun ColumnScope.Espera(r: RetratoDaTroca, passo: String?, texto: String, titulo: String?) {
     Spacer(Modifier.weight(1f))
+    passo?.let { Text(it, style = estilo(Tipo.nota), fontWeight = FontWeight.SemiBold, color = Paleta.tintaSuave, textAlign = TextAlign.Center,
+                      modifier = Modifier.fillMaxWidth().padding(bottom = Espaco.md)) }
     Direcao(r, null, null)
     if (titulo != null) Text(titulo, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
                              modifier = Modifier.fillMaxWidth().padding(top = Espaco.lg))
@@ -125,17 +145,28 @@ private fun ColumnScope.Espera(r: RetratoDaTroca, texto: String, titulo: String?
     Spacer(Modifier.weight(1f))
 }
 
+/** O cancelamento (ou a ordem nova depois dele) nao foi montado: o erro e o tentar de novo. */
+@Composable
+private fun ColumnScope.NaoMontou(controle: ControleDaTroca, r: RetratoDaTroca, frases: RetratoDaTroca.Frases, falha: String) {
+    val escopo = rememberCoroutineScope()
+    frases.passo?.let { Text(it, style = estilo(Tipo.nota), fontWeight = FontWeight.SemiBold, color = Paleta.tintaSuave, modifier = Modifier.padding(bottom = Espaco.sm)) }
+    Text(frases.naoMontou, style = estilo(Tipo.titulo), color = Paleta.tinta)
+    Faixa(TipoDeFaixa.falha, falha, Modifier.padding(top = Espaco.md))
+    Spacer(Modifier.weight(1f))
+    BotaoPrimario(t("Tentar de novo"), carregando = controle.trabalhando) { escopo.launch { controle.trabalhar("troca.remontar") } }
+}
+
 /** O que sai e o que entra, com as moedas. Sem os valores, a espera gira entre elas. */
 @Composable
 private fun Direcao(r: RetratoDaTroca, sai: String?, entra: String?) {
     val esperando = sai == null && entra == null
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        LadoDaDirecao(r.vende, sai, Modifier.weight(1f))
+        LadoDaDirecao(r.revisaoVende, sai, Modifier.weight(1f))
         Box(Modifier.width(36.dp).heightIn(min = 52.dp), contentAlignment = Alignment.Center) {
             if (esperando) CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
             else Icone(Icones.avancar, Paleta.tintaSuave, tamanho = 18.dp)
         }
-        LadoDaDirecao(r.compra, entra, Modifier.weight(1f))
+        LadoDaDirecao(r.revisaoCompra, entra, Modifier.weight(1f))
     }
 }
 
@@ -149,15 +180,15 @@ private fun LadoDaDirecao(ativo: AtivoDaTroca?, quantia: String?, modifier: Modi
 }
 
 @Composable
-private fun ColumnScope.Revisao(r: RetratoDaTroca) {
-    val controle = ControleDaTroca
+private fun ColumnScope.Revisao(controle: ControleDaTroca, r: RetratoDaTroca, frases: RetratoDaTroca.Frases) {
     val escopo = rememberCoroutineScope()
     val revisao = r.revisao ?: return
     var erro by remember { mutableStateOf<String?>(null) }
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = Espaco.md, bottom = Espaco.lg)) {
-        Direcao(r, revisao.sai, revisao.entra)
+        frases.passo?.let { Text(it, style = estilo(Tipo.nota), fontWeight = FontWeight.SemiBold, color = Paleta.tintaSuave, modifier = Modifier.padding(bottom = Espaco.sm)) }
+        if (revisao.sai != null || revisao.entra != null) Direcao(r, revisao.sai, revisao.entra)
         Text(revisao.titulo, style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.lg))
-        r.valorEmMoeda?.let {
+        r.valorEmMoeda?.takeIf { frases.tipo != "cancelar" }?.let {
             Text(t("cerca de %@", Formato.valor(it, r.moeda)), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = 2.dp))
         }
         if (revisao.enderecos.isNotEmpty()) Enderecos(revisao.enderecos, Modifier.padding(top = Espaco.lg))
@@ -176,10 +207,10 @@ private fun ColumnScope.Revisao(r: RetratoDaTroca) {
         for (aviso in revisao.avisos) Faixa(TipoDeFaixa.cautela, aviso, Modifier.padding(top = Espaco.sm))
         (erro ?: revisao.erro)?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
     }
-    BotaoPrimario(t("Confirmar troca"), Modifier.padding(top = Espaco.sm), carregando = controle.trabalhando) {
+    BotaoPrimario(frases.confirmar, Modifier.padding(top = Espaco.sm), carregando = controle.trabalhando) {
         escopo.launch {
             erro = null
-            erro = assinar(r, revisao.titulo)
+            erro = assinar(controle, r, frases, revisao.titulo)
         }
     }
 }
@@ -214,18 +245,23 @@ private fun Enderecos(linhas: List<Pair<String, String>>, modifier: Modifier = M
 }
 
 /**
- * Assina e transmite. A carteira com passphrase pede ela antes da biometria ou do PIN; o nucleo
- * confere dentro do assinador. Devolve o texto do erro, ou nil.
+ * Assina e transmite. A carteira com passphrase pede ela antes da biometria ou do PIN (menos no
+ * cancelamento, que nao tira valor); o nucleo confere dentro do assinador. Devolve o texto do erro,
+ * ou nil.
  */
-private suspend fun assinar(r: RetratoDaTroca, motivo: String): String? {
-    val controle = ControleDaTroca
+private suspend fun assinar(controle: ControleDaTroca, r: RetratoDaTroca, frases: RetratoDaTroca.Frases, motivo: String): String? {
     var passphrase: PedidoDePassphrase.Resposta? = null
-    if (r.pedePassphrase) passphrase = PedidoDePassphrase.pedir(r.nomeDaCarteira) ?: return null
+    if (r.pedePassphrase && frases.tipo != "cancelar") passphrase = PedidoDePassphrase.pedir(r.nomeDaCarteira) ?: return null
+    val naoSaiu = when (frases.tipo) {
+        "limite" -> t("A ordem não saiu. Nada foi debitado.")
+        "cancelar" -> t("O cancelamento não saiu. A ordem continua aberta.")
+        else -> t("A troca não saiu. Nada foi debitado.")
+    }
     controle.trabalhando = true
     try {
         val segredo = passphrase?.bytes
         Autorizacao.tentando(motivo) { credencial ->
-            val corpo = JSONObject().put("credencial", credencial.json())
+            val corpo = JSONObject().put("credencial", credencial.json()).put("alvo", controle.alvo)
             passphrase?.folga?.let { corpo.put("folga", it) }
             // Cada tentativa leva a sua copia: a chamada zera o que recebe.
             val partes = if (segredo != null) credencial.partes(segredo.copyOf()) else credencial.partes()
@@ -238,8 +274,8 @@ private suspend fun assinar(r: RetratoDaTroca, motivo: String): String? {
             "passphrase.errada" -> t("A passphrase não confere. Nada foi assinado. Escreva igual ao que você anotou: maiúscula, acento e espaço contam.")
             "passphrase.espera" -> t("Muitas passphrases erradas. Tente de novo às %@.", Formato.relogio(Date(falha.dados.optDouble("ate", 0.0).toLong())))
             "envio.pedePassphrase" -> t("A folga da passphrase acabou. Toque de novo para enviar.")
-            "envio.motor" -> falha.dados.optString("mensagem", "").ifEmpty { null } ?: t("A troca não saiu. Nada foi debitado.")
-            else -> Autorizacao.mensagemDeRecusa(falha) ?: t("A troca não saiu. Nada foi debitado.")
+            "envio.motor" -> falha.dados.optString("mensagem", "").ifEmpty { null } ?: naoSaiu
+            else -> Autorizacao.mensagemDeRecusa(falha) ?: naoSaiu
         }
     } finally {
         passphrase?.bytes?.fill(0)
@@ -250,15 +286,15 @@ private suspend fun assinar(r: RetratoDaTroca, motivo: String): String? {
 // MARK: Depois de enviar
 
 @Composable
-private fun ColumnScope.Enviada(r: RetratoDaTroca, aoConcluir: () -> Unit) {
-    val controle = ControleDaTroca
+private fun ColumnScope.Enviada(controle: ControleDaTroca, r: RetratoDaTroca, frases: RetratoDaTroca.Frases, aoConcluir: () -> Unit) {
     val contexto = LocalContext.current
     val resultado = r.resultado
     // O saldo novo: a carteira rele as redes, e a troca pergunta pela confirmacao (ou, na CoW,
-    // pelo preenchimento da ordem) ate terminar.
+    // pelo preenchimento da ordem) ate terminar. A ordem limite espera o preco: o andamento fica
+    // em Ordens abertas.
     LaunchedEffect(Unit) { runCatching { Api.objeto("saldos.atualizar", JSONObject().put("forcar", true)) } }
     LaunchedEffect(resultado?.id) {
-        if (resultado == null) return@LaunchedEffect
+        if (resultado == null || frases.tipo == "limite") return@LaunchedEffect
         repeat(120) {
             controle.chamar("troca.acompanhar")
             val agora = controle.retrato
@@ -281,11 +317,14 @@ private fun ColumnScope.Enviada(r: RetratoDaTroca, aoConcluir: () -> Unit) {
             Text(resultado.detalhe ?: "", style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
         } else {
             Box(contentAlignment = Alignment.BottomEnd) {
-                LogoDaMoeda(r.compra?.coingecko, r.compra?.simbolo ?: "", 72.dp, rede = r.compra?.rede, redeCoingecko = r.compra?.redeCoingecko,
-                            naoConferido = r.compra?.conferido == false)
+                LogoDaMoeda(r.revisaoVende?.coingecko, r.revisaoVende?.simbolo ?: "", 72.dp, rede = r.revisaoVende?.rede,
+                            redeCoingecko = r.revisaoVende?.redeCoingecko, naoConferido = r.revisaoVende?.conferido == false)
+                Box(Modifier.size(28.dp).clip(RoundedCornerShape(14.dp)).background(Paleta.vazio), contentAlignment = Alignment.Center) {
+                    Icone(Icones.vistoCheio, Paleta.alta, tamanho = 24.dp)
+                }
             }
-            Text(t("Troca enviada"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.lg))
-            Text(t("O saldo novo aparece quando a rede confirmar."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
+            Text(frases.feito, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.lg))
+            Text(frases.mensagemDoFeito, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
                  modifier = Modifier.padding(top = Espaco.xs))
             if (resultado?.situacao == "confirmado") {
                 Row(Modifier.padding(top = Espaco.md), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
@@ -317,7 +356,7 @@ private fun AndamentoDaOrdem(r: RetratoDaTroca) {
             drawArc(if (andamento?.estado == "preenchida") Paleta.alta else Paleta.tinta, -90f, (360 * fracao).toFloat(), false,
                     topLeft = Offset(traco / 2, traco / 2), size = Size(size.width - traco, size.height - traco), style = Stroke(traco, cap = StrokeCap.Round))
         }
-        Text(Formato.agrupado(fracao * 100, 0) + "%", style = estilo(Tipo.cabecalho), color = Paleta.tinta)
+        Text(percentual(fracao), style = estilo(Tipo.cabecalho), color = Paleta.tinta)
     }
     val titulo = when (andamento?.estado) {
         null -> t("Troca enviada")
@@ -332,7 +371,7 @@ private fun AndamentoDaOrdem(r: RetratoDaTroca) {
                              else t("Lendo o andamento na CoW.")
         andamento.estado == "preenchida" -> t("Saiu inteira, pelo mínimo garantido de %@ ou mais. O saldo novo aparece em instantes.", andamento.garantido)
         andamento.estado == "vencida" || andamento.estado == "cancelada" ->
-            if (fracao > 0) t("%@ foi preenchido. O restante continua na sua carteira.", Formato.agrupado(fracao * 100, 0) + "%")
+            if (fracao > 0) t("%@ foi preenchido. O restante continua na sua carteira.", percentual(fracao))
             else t("Nada foi preenchido. O valor continua na sua carteira.")
         else -> t("Cada parte sai pelo preço garantido ou melhor. %@", t("Pode fechar esta tela: o andamento fica em Ordens abertas."))
     }
@@ -343,10 +382,9 @@ private fun AndamentoDaOrdem(r: RetratoDaTroca) {
     }
 }
 
-/** Assinada e enviada sem resposta certa: so os mesmos bytes podem ir de novo, nunca outra troca. */
+/** Assinada e enviada sem resposta certa: so os mesmos bytes podem ir de novo, nunca outra. */
 @Composable
-private fun ColumnScope.Incerta(r: RetratoDaTroca, aoFechar: () -> Unit) {
-    val controle = ControleDaTroca
+private fun ColumnScope.Incerta(controle: ControleDaTroca, r: RetratoDaTroca, frases: RetratoDaTroca.Frases, aoFechar: () -> Unit) {
     val escopo = rememberCoroutineScope()
     val contexto = LocalContext.current
     LaunchedEffect(r.resultado?.id) {
@@ -358,7 +396,7 @@ private fun ColumnScope.Incerta(r: RetratoDaTroca, aoFechar: () -> Unit) {
     }
     Spacer(Modifier.weight(1f))
     Icone(Icones.pergunta, Paleta.cautela, tamanho = 44.dp)
-    Text(t("Não deu para confirmar a troca"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.md))
+    Text(frases.incerto, style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.md))
     Text(t("A resposta não veio com certeza, e o que foi assinado pode já estar a caminho. Não monte de novo: enviar de novo usa os mesmos dados e não paga duas vezes. Confira na Atividade antes de qualquer outra operação."),
          style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs))
     r.detalheIncerto?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.sm)) }
