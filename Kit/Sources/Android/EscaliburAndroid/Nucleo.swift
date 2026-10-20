@@ -144,6 +144,20 @@ enum Nucleo {
         case let envio where envio.hasPrefix("envio."):
             return try Envio.chamar(envio, pedido)
 
+        case "mercado.lista":
+            let moeda = pedido["moeda"]?.stringValue ?? Sessao.shared.metadata.settings.currency
+            return try json(esperar { try await Mercado.lista(moeda: moeda) })
+        case "mercado.grafico":
+            let id = pedido["id"]?.stringValue ?? "", moeda = pedido["moeda"]?.stringValue ?? Sessao.shared.metadata.settings.currency
+            let intervalo = pedido["intervalo"]?.stringValue ?? "day"
+            return try json(esperar { try await Mercado.grafico(id: id, moeda: moeda, intervalo: intervalo) })
+        case "mercado.detalhes":
+            let id = pedido["id"]?.stringValue ?? "", moeda = pedido["moeda"]?.stringValue ?? Sessao.shared.metadata.settings.currency
+            return try json(esperar { try await Mercado.detalhes(id: id, moeda: moeda) })
+        case "mercado.favorita":
+            try Mercado.favoritar(pedido["id"]?.stringValue ?? "", pedido["favorita"]?.boolValue ?? false)
+            return try json(["favoritas": Sessao.shared.metadata.settings.favoriteCoins ?? []])
+
         case "atividade.mostrar":
             return try json(Atividade.shared.mostrar())
         case "atividade.atualizar":
