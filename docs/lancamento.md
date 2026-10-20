@@ -213,8 +213,8 @@ O site também precisa sair com a página `/privacidade/android/` (a URL da pol�
   PIN, fora do backup do iCloud" por "Android Keystore e PIN, fora do backup do Google".
   Sem preço, sem promessa de ganho e sem nome de outra carteira.
 - Categoria: Finanças. Tags: Carteira de criptomoedas.
-- E-mail de contato: support@escaliburwallet.com. Site: https://escalibur-wallet.github.io/
-- Política de privacidade: https://escalibur-wallet.github.io/privacidade/android/
+- E-mail de contato: support@escaliburwallet.com. Site: https://escaliburwallet.com (o domínio verificado na conta)
+- Política de privacidade: https://escaliburwallet.com/privacidade/android/
 - Imagens: `swift tools/loja/destaque-android.swift` (ícone de 512 e destaque 1024x500, em
   `build/loja-android/grafico`); as 7 telas de celular em pt-BR e en-US com
   `ESCALIBUR_PLATAFORMA=android swift tools/loja/compor.swift tools/loja/legendas-android.json
