@@ -45,6 +45,8 @@ final class Sessao: @unchecked Sendable {
         case remocaoFalhou
         case semRascunho
         case carteiraNaoEncontrada
+        /// Alguma carteira ainda sem a copia conferida (o Super Security espera por ela).
+        case copiaPendente
         /// A passphrase tem um caractere que nao da para anotar no papel.
         case passphraseInvisivel
     }
@@ -258,6 +260,19 @@ final class Sessao: @unchecked Sendable {
 
     func trocarPIN(_ credencial: Credencial, novo: SecureBytes) throws {
         defer { novo.wipe() }
+        // No Super Security o PIN troca dentro do registro do modo, com a biometria de novo para
+        // conferir antes de valer.
+        if case .reforcado(let pin, let motivo) = credencial {
+            defer { pin.wipe() }
+            do {
+                try Chaves.root.changeHardenedPIN(currentPIN: pin, newPIN: novo, reason: motivo,
+                                                  confirmReason: Textos.t("Confirme a biometria para conferir o Super Security"))
+            } catch RootKeyVault.Failure.wiped {
+                apagarTudo()
+                throw RootKeyVault.Failure.wiped
+            }
+            return
+        }
         try comChaveRaiz(credencial) { rk in try Chaves.root.changePIN(rk: rk, newPIN: novo) }
     }
 

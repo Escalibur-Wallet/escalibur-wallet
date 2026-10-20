@@ -341,13 +341,33 @@ object Cofre {
         val privada = keyStore.getKey(alias(slot), null) as? PrivateKey ?: throw Recusa(SEM_CHAVE)
         val partes = partesHibridas(blob) ?: throw Recusa(FALHA)
         val rsa = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
+        // A chave que aceita a biometria recente (`kand.bio`, a unica de "Bloquear as carteiras"):
+        // a biometria vem antes, sem objeto de cifra, e a cifra abre dentro da janela dela. Com o
+        // app recem-aberto nao ha biometria recente, e iniciar a cifra primeiro recusava.
+        if (!porOperacao(slot)) {
+            biometria(null, motivo)
+            try {
+                rsa.init(Cipher.DECRYPT_MODE, privada, oaep)
+            } catch (e: KeyPermanentlyInvalidatedException) {
+                keyStore.deleteEntry(alias(slot))
+                throw Recusa(SEM_CHAVE)
+            } catch (e: Exception) {
+                throw Recusa(FALHA)
+            }
+            val chave = try { rsa.doFinal(partes.first) } catch (e: Exception) { throw Recusa(FALHA) }
+            try {
+                return abrirHibrido(slot, chave, partes.second)
+            } finally {
+                chave.fill(0)
+            }
+        }
         try {
             rsa.init(Cipher.DECRYPT_MODE, privada, oaep)
         } catch (e: KeyPermanentlyInvalidatedException) {
             keyStore.deleteEntry(alias(slot))
             throw Recusa(SEM_CHAVE)
         }
-        val autenticada = biometria(rsa, motivo)
+        val autenticada = biometria(rsa, motivo) ?: throw Recusa(FALHA)
         val chave = try { autenticada.doFinal(partes.first) } catch (e: Exception) { throw Recusa(FALHA) }
         try {
             return abrirHibrido(slot, chave, partes.second)
@@ -425,8 +445,11 @@ object Cofre {
      * e a vigia: aceita a biometria dos ultimos segundos, para abrir na mesma autenticacao da outra
      * camada sem pedir de novo. As outras pedem a biometria para cada operacao.
      */
+    /** Pede a biometria a cada operacao (o objeto de cifra no pedido); `kand.bio` aceita a recente. */
+    private fun porOperacao(slot: String) = slot != "kand.bio"
+
     private fun gerarRsa(alias: String, segueCadastro: Boolean) {
-        val porOperacao = alias != PREFIXO + "kand.bio"
+        val porOperacao = porOperacao(alias.removePrefix(PREFIXO))
         fun spec(comStrongBox: Boolean) = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_DECRYPT or KeyProperties.PURPOSE_ENCRYPT)
             .setKeySize(2048)
             .setDigests(KeyProperties.DIGEST_SHA256)
@@ -467,11 +490,16 @@ object Cofre {
      * liberada. Cancelar, nao reconhecer e o bloqueio do sistema sao CANCELADO: quem decide se o
      * cadastro mudou e o cofre.
      */
-    private fun biometria(cifra: Cipher, motivo: String): Cipher {
+    /**
+     * O pedido de biometria do sistema. Com `cifra`, ela volta autenticada para esta operacao; sem,
+     * o pedido so autentica, e a chave que aceita a biometria recente abre logo depois.
+     */
+    private fun biometria(cifra: Cipher?, motivo: String): Cipher? {
         check(Looper.myLooper() != Looper.getMainLooper()) { "biometria na thread da interface" }
         val activity = atividade?.get() ?: throw Recusa(CANCELADO)
         val pronto = CountDownLatch(1)
         val resultado = AtomicReference<Cipher?>(null)
+        val autenticou = java.util.concurrent.atomic.AtomicBoolean(false)
         val erro = AtomicInteger(CANCELADO)
         val cancelar = CancellationSignal()
         Handler(Looper.getMainLooper()).post {
@@ -482,23 +510,27 @@ object Cofre {
                     .setConfirmationRequired(false)
                     .setNegativeButton(activity.getString(android.R.string.cancel), activity.mainExecutor) { _, _ -> pronto.countDown() }
                     .build()
-                prompt.authenticate(BiometricPrompt.CryptoObject(cifra), cancelar, activity.mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
+                val retorno = object : BiometricPrompt.AuthenticationCallback() {
                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                         resultado.set(result.cryptoObject?.cipher)
+                        autenticou.set(true)
                         pronto.countDown()
                     }
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                         if (errorCode == BiometricPrompt.BIOMETRIC_ERROR_LOCKOUT_PERMANENT) erro.set(INDISPONIVEL)
                         pronto.countDown()
                     }
-                })
+                }
+                if (cifra != null) prompt.authenticate(BiometricPrompt.CryptoObject(cifra), cancelar, activity.mainExecutor, retorno)
+                else prompt.authenticate(cancelar, activity.mainExecutor, retorno)
             } catch (e: Exception) {
                 erro.set(FALHA)
                 pronto.countDown()
             }
         }
         pronto.await()
-        return resultado.get() ?: throw Recusa(erro.get())
+        if (!autenticou.get()) throw Recusa(erro.get())
+        return if (cifra != null) resultado.get() ?: throw Recusa(FALHA) else null
     }
 
     /** 0 pronta, 1 nada cadastrado, 2 indisponivel, 3 bloqueada pelo sistema. */

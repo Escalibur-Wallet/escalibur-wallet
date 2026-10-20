@@ -230,7 +230,8 @@ fun FluxoDeImportar(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
 internal fun TelaDaFrase(
     entrada: EntradaDaFrase, passphrase: TextFieldState, repeticao: TextFieldState, usaPassphrase: Boolean,
     aoMudarPassphrase: (Boolean) -> Unit, aoCancelar: () -> Unit, escolhendo: Int? = null,
-    aoEscolher: (suspend (ByteArray) -> String?)? = null, aoConferir: (JSONObject) -> Unit,
+    aoEscolher: (suspend (ByteArray) -> String?)? = null, conferindo: String? = null,
+    aoConferirCopia: (suspend (frase: ByteArray, passphrase: ByteArray?) -> String?)? = null, aoConferir: (JSONObject) -> Unit,
 ) {
     val escopo = rememberCoroutineScope()
     val contexto = LocalContext.current
@@ -326,8 +327,13 @@ internal fun TelaDaFrase(
                 val validacao = Api.comSegredo("carteira.validarFrase", JSONObject(), entrada.frase())
                 when (validacao.getString("resultado")) {
                     "valida" -> {
-                        val partes = if (usaPassphrase) arrayOf(entrada.frase(), passphrase.bytes()) else arrayOf(entrada.frase())
-                        aoConferir(Api.comSegredo("carteira.previa", JSONObject(), *partes))
+                        if (aoConferirCopia != null) {
+                            // Conferindo uma copia: a frase vai para quem pediu, sem enderecos nem carteira nova.
+                            mensagem = aoConferirCopia(entrada.frase(), if (usaPassphrase) passphrase.bytes() else null)
+                        } else {
+                            val partes = if (usaPassphrase) arrayOf(entrada.frase(), passphrase.bytes()) else arrayOf(entrada.frase())
+                            aoConferir(Api.comSegredo("carteira.previa", JSONObject(), *partes))
+                        }
                     }
                     "tamanho" -> mensagem = t("Faltam palavras: %lld de %lld.", validacao.optInt("contagem"), entrada.quantidade)
                     "desconhecida" -> mensagem = t("A palavra %lld não existe na lista. Confira no papel.", validacao.optInt("posicao"))
@@ -348,11 +354,17 @@ internal fun TelaDaFrase(
         CabecalhoDeFolha("", aoCancelar)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                Text(if (escolhendo != null) t("Escolha as suas palavras") else t("Importar com a senha da carteira"), style = estilo(Tipo.titulo),
-                     color = Paleta.tinta, textAlign = TextAlign.Center)
+                Text(when {
+                         escolhendo != null -> t("Escolha as suas palavras")
+                         conferindo != null -> t("Confira a seed phrase de %@", conferindo)
+                         else -> t("Importar com a senha da carteira")
+                     }, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
                 Text(
-                    if (escolhendo != null) t("Digite %lld palavras da lista em inglês, na ordem em que você anotou. A %lldª o app sorteia, para a conta da frase fechar.", escolhendo - 1, escolhendo)
-                    else t("Digite as palavras na ordem em que você anotou, uma em cada campo."),
+                    when {
+                        escolhendo != null -> t("Digite %lld palavras da lista em inglês, na ordem em que você anotou. A %lldª o app sorteia, para a conta da frase fechar.", escolhendo - 1, escolhendo)
+                        conferindo != null -> t("Digite as palavras de onde você anotou, todas, em ordem. No Super Security, essa cópia é o único caminho de volta.")
+                        else -> t("Digite as palavras na ordem em que você anotou, uma em cada campo.")
+                    },
                     style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
                 )
             }
@@ -375,7 +387,7 @@ internal fun TelaDaFrase(
                     }
                 }
             }
-            if (escolhendo == null) Row(Modifier.padding(top = Espaco.lg), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+            if (escolhendo == null && conferindo == null) Row(Modifier.padding(top = Espaco.lg), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                 val opcoes = if (maisTamanhos) EntradaDaFrase.TAMANHOS else if (entrada.quantidade == 24) listOf(12, 24) else listOf(entrada.quantidade, 24)
                 Segmentado(opcoes.map { it to if (maisTamanhos) "$it" else t("%lld palavras", it) }, entrada.quantidade, Modifier.weight(1f)) {
                     entrada.mudarQuantidade(it)
@@ -388,7 +400,8 @@ internal fun TelaDaFrase(
                     }
                 }
             }
-            if (escolhendo == null) Row(Modifier.padding(top = Espaco.sm)) {
+            // Conferindo uma copia, nada de colar: a conferencia e do papel.
+            if (escolhendo == null && conferindo == null) Row(Modifier.padding(top = Espaco.sm)) {
                 Row(
                     Modifier.height(36.dp).clip(CircleShape).background(Paleta.trilho).clickable { colar() }.padding(horizontal = Espaco.sm),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -412,7 +425,7 @@ internal fun TelaDaFrase(
                 Spacer(Modifier.weight(1f))
                 BotaoTerciario(if (mostrar) t("Esconder palavras") else t("Mostrar palavras")) { mostrar = !mostrar }
             }
-            if (escolhendo == null) Row(Modifier.padding(top = Espaco.md), verticalAlignment = Alignment.CenterVertically) {
+            if (escolhendo == null && conferindo == null) Row(Modifier.padding(top = Espaco.md), verticalAlignment = Alignment.CenterVertically) {
                 Text(t("Esta carteira usa passphrase"), style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
                 Switch(usaPassphrase, aoMudarPassphrase, colors = SwitchDefaults.colors(
                     checkedTrackColor = Paleta.acento, checkedThumbColor = Paleta.sobreAcento,
@@ -469,7 +482,7 @@ internal fun TelaDaFrase(
                 if (escolhendo != null) {
                     BotaoPrimario(t("Sortear a %lldª palavra", escolhendo), ligado = entrada.preenchidas == entrada.quantidade, carregando = trabalhando) { escolher() }
                 } else {
-                    BotaoPrimario(t("Importar"), ligado = entrada.preenchidas == entrada.quantidade, carregando = trabalhando) { importar() }
+                    BotaoPrimario(if (conferindo != null) t("Conferir") else t("Importar"), ligado = entrada.preenchidas == entrada.quantidade, carregando = trabalhando) { importar() }
                 }
             }
         }

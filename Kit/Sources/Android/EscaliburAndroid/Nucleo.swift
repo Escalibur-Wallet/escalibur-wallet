@@ -177,6 +177,8 @@ enum Nucleo {
             return try Ponte.chamar(ponte, pedido)
         case let vigia where vigia.hasPrefix("vigias.") || vigia.hasPrefix("alertas.") || vigia.hasPrefix("recebimentos."):
             return try Vigias.chamar(vigia, pedido)
+        case "reforco.estado", "reforco.esquecer":
+            return try Reforco.chamar(metodo, pedido, segredo: { throw Falha(erro: "segredo incompleto") }, segundo: { nil })
 
         case "mercado.lista":
             let moeda = pedido["moeda"]?.stringValue ?? Sessao.shared.metadata.settings.currency
@@ -287,6 +289,8 @@ enum Nucleo {
         }
 
         switch metodo {
+        case let reforco where reforco.hasPrefix("reforco."):
+            return try Reforco.chamar(reforco, pedido, segredo: proxima, segundo: { partes.isEmpty ? nil : try proxima() })
         case "sessao.cadastrarPIN":
             try Sessao.shared.cadastrarPIN(try proxima())
             return try json(Estado.agora())
@@ -488,6 +492,17 @@ enum Nucleo {
                 saida["nome"] = .string(nome)
             default:
                 saida["erro"] = .string("sessao." + String(describing: falha))
+            }
+        case let falha as Reforco.Falha:
+            switch falha {
+            case .naoConfere(let nome):
+                saida["erro"] = .string("reforco.naoConfere")
+                saida["nome"] = .string(nome)
+            case .passphraseAntiga(let nome):
+                saida["erro"] = .string("reforco.passphraseAntiga")
+                saida["nome"] = .string(nome)
+            case .faltamPalavras:
+                saida["erro"] = .string("reforco.faltamPalavras")
             }
         case let espera as PortaDaPassphrase.Espera:
             saida["erro"] = .string("passphrase.espera")

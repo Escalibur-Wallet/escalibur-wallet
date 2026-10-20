@@ -57,7 +57,9 @@ fun TelaDeSeguranca() {
     Subtela(t("Segurança")) {
         GrupoDeAjustes(Modifier.padding(top = Espaco.md)) {
             LinhaDeAjuste(Icones.teclado, t("Mudar o PIN")) { Navegacao.abrir { TrocarPin() } }
-            LinhaComInterruptor(Icones.digital, t("Biometria"), estado.biometriaLigada, habilitado = disponivel) { ligar ->
+            // No Super Security a biometria faz parte do modo: desliga junto com ele.
+            LinhaComInterruptor(Icones.digital, t("Biometria"), estado.biometriaLigada || estado.reforcado, habilitado = disponivel && !estado.reforcado,
+                                detalhe = if (estado.reforcado) t("Faz parte do Super Security.") else null) { ligar ->
                 if (ligar) Navegacao.abrir { LigarBiometria() } else desligarBiometria()
             }
             LinhaDeAjuste(Icones.relogio, t("Bloquear o app"), rotuloDoBloqueio(estado.autoTravar)) { Navegacao.abrir { BloquearApp() } }
@@ -67,6 +69,9 @@ fun TelaDeSeguranca() {
             else t("Para usar a biometria aqui, cadastre uma digital ou o rosto nas configurações do celular."),
             cor = if (erro == null) Paleta.tintaApagada else Paleta.baixa,
         )
+        GrupoDeAjustes(Modifier.padding(top = Espaco.lg)) {
+            LinhaDeAjuste(Icones.escudo, t("Super Security"), if (estado.reforcado) t("Ligado") else t("Desligado")) { Navegacao.abrir { TelaDoSuperSecurity() } }
+        }
         GrupoDeAjustes(Modifier.padding(top = Espaco.lg)) {
             LinhaDeAjuste(Icones.lixeira, t("Apagar depois de PINs errados"), rotuloDoApagar(estado.apagarDepois)) { Navegacao.abrir { ApagarDepois() } }
         }
