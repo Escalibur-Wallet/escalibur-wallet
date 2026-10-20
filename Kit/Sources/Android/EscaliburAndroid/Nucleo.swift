@@ -30,6 +30,10 @@ enum Nucleo {
             // So no build de depuracao: o transporte de rede do Android contra os servidores de
             // teste do badssl.com. Cada um tem de ser recusado, menos o "valido".
             return try json(esperar { await TesteTLS.rodar() })
+        case "cofre.teste":
+            // So no build de depuracao, e so no emulador: apaga o cofre do aparelho.
+            let pedido = try JSONDecoder().decode(PedidoTesteCofre.self, from: entrada)
+            return try json(TesteCofre.rodar(biometria: pedido.biometria, etapa: pedido.etapa))
         #endif
         default:
             throw Falha(erro: "metodo desconhecido: \(metodo)")
@@ -60,4 +64,5 @@ enum Nucleo {
     }
 
     struct PedidoSaldo: Decodable { let rede: String; let enderecos: [String] }
+    struct PedidoTesteCofre: Decodable { let biometria: Bool; let etapa: String }
 }

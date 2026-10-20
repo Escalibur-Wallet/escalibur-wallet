@@ -8,7 +8,7 @@ import Testing
 /// As respostas gravadas da Cardano, as mesmas dos testes do leitor
 /// (EscaliburNetworkTests/Fixtures/leitores/cardano, `gravar.py`), lidas do repositorio.
 enum CardanoEngineRecorded {
-    static let folder = URL(fileURLWithPath: #filePath)
+    static let folder = URL(fileURLWithPath: caminhoNoAparelho(#filePath))
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("EscaliburNetworkTests/Fixtures/leitores/cardano")
 

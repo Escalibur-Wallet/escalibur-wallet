@@ -51,9 +51,9 @@ func CCKeyDerivationPBKDF(_ algorithm: CCPBKDFAlgorithm, _ password: UnsafePoint
 }
 
 /// Zeragem que o otimizador nao remove: `OPENSSL_cleanse`, no lugar do `memset_s` do C11, que o
-/// Android nao tem.
+/// Android nao tem. Publica: o modulo de chaves tambem zera com ela.
 @discardableResult
-func memset_s(_ destination: UnsafeMutableRawPointer!, _ maximum: Int, _ value: Int32, _ count: Int) -> Int32 {
+public func memset_s(_ destination: UnsafeMutableRawPointer!, _ maximum: Int, _ value: Int32, _ count: Int) -> Int32 {
     guard let destination, count > 0 else { return 0 }
     precondition(value == 0 && count <= maximum)
     CCryptoBoringSSL_OPENSSL_cleanse(destination, count)

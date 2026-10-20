@@ -9,7 +9,7 @@ import Testing
 /// (EscaliburNetworkTests/Fixtures/leitores/near, `gravar.py`), lidas do repositorio. O
 /// dono e a conta implicita 78cb7728...0a31, com a chave dela.
 enum NEAREngineRecorded {
-    static let folder = URL(fileURLWithPath: #filePath)
+    static let folder = URL(fileURLWithPath: caminhoNoAparelho(#filePath))
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("EscaliburNetworkTests/Fixtures/leitores/near")
 

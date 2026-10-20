@@ -1,7 +1,11 @@
 import EscaliburCore
 import Foundation
+#if canImport(LocalAuthentication)
 import LocalAuthentication
+#endif
+#if canImport(Security)
 import Security
+#endif
 
 /// Onde os itens da carteira moram. Um protocolo para os testes poderem trocar o
 /// chaveiro por memoria; em producao existe uma implementacao so, `KeychainStore`.
@@ -46,6 +50,7 @@ public enum StoreError: Error, Equatable, Sendable {
     case unexpected(OSStatus)
 }
 
+#if canImport(Security)
 /// O chaveiro do iOS, com os atributos exatos de docs/seguranca.md §2.3.
 public final class KeychainStore: SecretStore, @unchecked Sendable {
     public static let service = "app.escalibur.wallet"
@@ -180,3 +185,4 @@ public final class KeychainStore: SecretStore, @unchecked Sendable {
         #endif
     }
 }
+#endif

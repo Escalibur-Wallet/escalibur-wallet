@@ -10,7 +10,7 @@ import Testing
 /// relogio do motor fica na hora do ledger gravado: as transacoes que ele monta sao, byte a
 /// byte, as que foram simuladas na gravacao.
 enum AptosRecorded {
-    static let folder = URL(fileURLWithPath: #filePath)
+    static let folder = URL(fileURLWithPath: caminhoNoAparelho(#filePath))
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("EscaliburNetworkTests/Fixtures/leitores/aptos")
 

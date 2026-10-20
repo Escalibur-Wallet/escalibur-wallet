@@ -1,6 +1,12 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
+#if canImport(Security)
 import Security
+#endif
 import Testing
 @testable import EscaliburCore
 @testable import EscaliburKeys
@@ -978,7 +984,9 @@ struct HardenedModeTests {
         withKnownIssue("o duble registra a quebra da invariante") {
             _ = try wrapper.wrap(SecureBytes.from(Array(repeating: 1, count: 160)), slot: .hardenedBiometryAny)
         }
+        #if canImport(Security)
         #expect(throws: EnclaveError.self) { try SecureEnclaveWrapper().wrap(rk, slot: .hardenedBiometryAny) }
+        #endif
     }
 
     // MARK: Desligar e o A1
@@ -1177,6 +1185,7 @@ struct HardenedModeTests {
 
     // MARK: A chave biometryAny
 
+    #if canImport(Security)
     @Test("flags(for:): so a kand.qualquer recebe biometryAny; as do rosto seguem o cadastro; as do PIN tem senha")
     func flagsPerSlot() {
         for slot in WrapSlot.allCases {
@@ -1192,4 +1201,5 @@ struct HardenedModeTests {
         #expect(WrapSlot.hardenedBiometryAny.usesBiometry)
         #expect(!WrapSlot.hardenedBiometryAny.followsEnrollment)
     }
+    #endif
 }

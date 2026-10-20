@@ -1,8 +1,16 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import EscaliburCore
 import Foundation
+#if canImport(LocalAuthentication)
 import LocalAuthentication
+#endif
+#if canImport(Security)
 import Security
+#endif
 
 /// Chaves de hardware que embrulham a chave raiz (RK).
 ///
@@ -99,6 +107,7 @@ public enum EnclaveError: Error, Equatable, Sendable {
     case wrongPassword
 }
 
+#if canImport(Security)
 /// O Secure Enclave de verdade.
 public final class SecureEnclaveWrapper: KeyWrapper, @unchecked Sendable {
     private static let tagPrefix = "app.escalibur.wallet."
@@ -464,4 +473,5 @@ public enum EnclaveSpike {
         return "\(ns.domain) \(ns.code)"
     }
 }
+#endif
 #endif

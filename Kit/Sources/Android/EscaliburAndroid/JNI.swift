@@ -10,7 +10,7 @@ import Foundation
 struct JavaEnv {
     let env: UnsafeMutablePointer<JNIEnv?>
 
-    private var table: JNINativeInterface { env.pointee!.pointee }
+    var table: JNINativeInterface { env.pointee!.pointee }
 
     func string(_ value: jstring?) -> String? {
         guard let value, let chars = table.GetStringUTFChars(env, value, nil) else { return nil }
@@ -106,13 +106,17 @@ func esperar<T: Sendable>(_ operacao: @escaping @Sendable () async throws -> T) 
     return try caixa.resultado!.get()
 }
 
-/// Quando o Kotlin carrega a biblioteca: liga a rede do nucleo ao transporte do Android. Se a
-/// classe de rede nao estiver no APK, o nucleo fica sem rede (nao volta para a libcurl).
+/// Quando o Kotlin carrega a biblioteca: liga a rede do nucleo ao transporte do Android e o cofre
+/// ao Keystore. Se faltar alguma classe do app, o nucleo fica sem rede (nao volta para a libcurl)
+/// e sem cofre.
 @_cdecl("JNI_OnLoad")
 public func JNI_OnLoad(_ vm: UnsafeMutablePointer<JavaVM?>, _ reservado: UnsafeMutableRawPointer?) -> jint {
     var bruto: UnsafeMutableRawPointer?
     guard vm.pointee!.pointee.GetEnv(vm, &bruto, jint(JNI_VERSION_1_6)) == JNI_OK, let bruto else { return JNI_ERR }
-    _ = Rede.prender(vm, JavaEnv(env: bruto.assumingMemoryBound(to: JNIEnv?.self)))
+    if Java.ligar(vm, JavaEnv(env: bruto.assumingMemoryBound(to: JNIEnv?.self))) {
+        Rede.instalar()
+        Cofre.instalar()
+    }
     return jint(JNI_VERSION_1_6)
 }
 

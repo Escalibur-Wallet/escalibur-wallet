@@ -136,7 +136,7 @@ let package = Package(
         ),
         .target(
             name: "EscaliburKeys",
-            dependencies: ["EscaliburCore", "EscaliburChains"],
+            dependencies: ["EscaliburCore", "EscaliburChains", .target(name: "Crypto", condition: .when(platforms: foraDaApple))],
             path: "Sources/EscaliburKeys"
         ),
         .target(
@@ -163,7 +163,7 @@ let package = Package(
         ),
         .testTarget(
             name: "EscaliburKeysTests",
-            dependencies: ["EscaliburKeys"],
+            dependencies: ["EscaliburKeys", .target(name: "Crypto", condition: .when(platforms: foraDaApple))],
             path: "Tests/EscaliburKeysTests"
         ),
         .testTarget(
@@ -174,7 +174,7 @@ let package = Package(
         ),
         .testTarget(
             name: "EscaliburEnginesTests",
-            dependencies: ["EscaliburEngines", "EscaliburKeys"],
+            dependencies: ["EscaliburEngines", "EscaliburKeys", .target(name: "Crypto", condition: .when(platforms: foraDaApple))],
             path: "Tests/EscaliburEnginesTests",
             resources: [.copy("Fixtures")]
         ),
@@ -183,19 +183,15 @@ let package = Package(
     cxxLanguageStandard: .cxx17
 )
 
-// Build Android (ESCALIBUR_ANDROID=1): sem o modulo de chaves, que usa o Secure Enclave, o
-// chaveiro e o Face ID da Apple e e reescrito no app Android sobre o Keystore, e sem os testes
-// que dependem dele.
+// Build Android (ESCALIBUR_ANDROID=1): a ponte com o app Android (Kotlin), pelo JNI, a
+// biblioteca que vai dentro do APK. O modulo de chaves e o mesmo do iOS; o chaveiro e o Secure
+// Enclave dele dao lugar ao Keystore do Android, implementado na ponte.
 if ProcessInfo.processInfo.environment["ESCALIBUR_ANDROID"] != nil {
-    let soDaApple: Set<String> = ["EscaliburKeys", "EscaliburKeysTests", "EscaliburEnginesTests"]
-    package.targets.removeAll { soDaApple.contains($0.name) }
-    package.products.removeAll { $0.name == "EscaliburKeys" }
-    // A ponte com o app Android (Kotlin), pelo JNI: a biblioteca que vai dentro do APK.
     package.targets += [
         .target(name: "CJNI", path: "Sources/Android/CJNI"),
         .target(
             name: "EscaliburAndroid",
-            dependencies: ["CJNI", "EscaliburCore", "EscaliburChains", "EscaliburNetwork", "EscaliburEngines"],
+            dependencies: ["CJNI", "EscaliburCore", "EscaliburChains", "EscaliburKeys", "EscaliburNetwork", "EscaliburEngines"],
             path: "Sources/Android/EscaliburAndroid"
         ),
     ]

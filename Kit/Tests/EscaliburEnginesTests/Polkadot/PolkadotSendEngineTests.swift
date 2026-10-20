@@ -10,7 +10,7 @@ import Testing
 /// O dono e a conta 1626DFYA..., que assina com Ed25519 (a chave publica e a da
 /// transferencia real dele no bloco 21.172.670).
 enum PolkadotEngineRecorded {
-    static let folder = URL(fileURLWithPath: #filePath)
+    static let folder = URL(fileURLWithPath: caminhoNoAparelho(#filePath))
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("EscaliburNetworkTests/Fixtures/leitores/polkadot")
 

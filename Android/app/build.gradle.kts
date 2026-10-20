@@ -9,9 +9,10 @@ android {
 
     defaultConfig {
         applicationId = "app.escalibur.wallet"
-        // Android 9: o StrongBox e o BiometricPrompt existem a partir dele, e o nucleo em Swift
-        // e compilado para android28 (tools/android/compilar-nucleo.sh).
-        minSdk = 28
+        // Android 11: a biometria forte por operacao no Keystore (setUserAuthenticationParameters)
+        // e o BiometricPrompt com a classe de biometria existem a partir dele. O nucleo em Swift e
+        // compilado para android28 e roda em qualquer um destes.
+        minSdk = 30
         targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
@@ -51,5 +52,4 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.activity.compose)
-    implementation(libs.biometric)
 }

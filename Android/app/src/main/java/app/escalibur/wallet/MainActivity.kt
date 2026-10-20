@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.escalibur.wallet.nucleo.Cofre
 import app.escalibur.wallet.nucleo.Nucleo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,11 +33,22 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent { Prova() }
     }
+
+    override fun onResume() {
+        super.onResume()
+        Cofre.primeiroPlano(this)
+    }
+
+    override fun onPause() {
+        Cofre.primeiroPlano(null)
+        super.onPause()
+    }
 }
 
 /** A prova da ponte: o nucleo em Swift responde de dentro do APK. */
 @Composable
 private fun Prova() {
+    val contexto = androidx.compose.ui.platform.LocalContext.current
     var versao by remember { mutableStateOf("...") }
     var saldo by remember { mutableStateOf("...") }
     LaunchedEffect(Unit) {
@@ -52,6 +64,11 @@ private fun Prova() {
         if (BuildConfig.DEBUG) {
             val tls = withContext(Dispatchers.IO) { Nucleo.chamar("tls.teste", "{}") }
             android.util.Log.i("Escalibur", "tls: $tls")
+            val intent = (contexto as android.app.Activity).intent
+            val biometria = intent.getBooleanExtra("biometria", false)
+            val etapa = intent.getStringExtra("etapa") ?: "completo"
+            val cofre = withContext(Dispatchers.IO) { Nucleo.chamar("cofre.teste", """{"biometria":$biometria,"etapa":"$etapa"}""") }
+            android.util.Log.i("Escalibur", "cofre: $cofre")
         }
     }
     Column(Modifier.fillMaxSize().background(Color(0xFF0B0B0C)).padding(24.dp)) {

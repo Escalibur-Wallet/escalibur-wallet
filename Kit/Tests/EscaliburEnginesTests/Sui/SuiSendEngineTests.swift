@@ -8,7 +8,7 @@ import Testing
 /// As respostas gravadas da Sui, as mesmas dos testes do leitor
 /// (EscaliburNetworkTests/Fixtures/leitores/sui, `gravar.py`), lidas do repositorio.
 enum SuiRecorded {
-    static let folder = URL(fileURLWithPath: #filePath)
+    static let folder = URL(fileURLWithPath: caminhoNoAparelho(#filePath))
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("EscaliburNetworkTests/Fixtures/leitores/sui")
 

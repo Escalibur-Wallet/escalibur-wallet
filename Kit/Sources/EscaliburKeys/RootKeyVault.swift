@@ -1,7 +1,13 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import EscaliburCore
 import Foundation
+#if canImport(LocalAuthentication)
 import LocalAuthentication
+#endif
 
 /// A chave raiz (RK) e os dois caminhos que a destrancam: PIN e biometria.
 ///
@@ -641,6 +647,9 @@ public final class RootKeyVault: @unchecked Sendable {
     }
 
     static func biometryDomainState() -> Data? {
+        #if !canImport(LocalAuthentication)
+        return KeyPlatform.current.biometryState()
+        #else
         let context = LAContext()
         defer { context.invalidate() }
         var error: NSError?
@@ -649,6 +658,7 @@ public final class RootKeyVault: @unchecked Sendable {
             return context.domainState.biometry.stateHash
         }
         return context.evaluatedPolicyDomainState
+        #endif
     }
 
     /// O Face ID deste iPhone visto pelo app agora: sem rosto cadastrado ou tirado do app
@@ -657,6 +667,12 @@ public final class RootKeyVault: @unchecked Sendable {
     public enum BiometryAvailability: Sendable { case available, gone }
 
     static func systemBiometryAvailability() -> BiometryAvailability {
+        #if !canImport(LocalAuthentication)
+        switch KeyPlatform.current.biometry() {
+        case .notEnrolled, .unavailable: return .gone
+        case .ready, .lockedOut: return .available
+        }
+        #else
         let context = LAContext()
         defer { context.invalidate() }
         var error: NSError?
@@ -666,6 +682,7 @@ public final class RootKeyVault: @unchecked Sendable {
         case .biometryNotEnrolled?, .biometryNotAvailable?: return .gone
         default: return .available
         }
+        #endif
     }
 
     // MARK: Troca de PIN
@@ -1171,6 +1188,14 @@ extension RootKeyVault {
     static let hardenedKeys: [WrapSlot] = [.hardenedBiometry, .hardenedBiometryAny, .hardenedPINA, .hardenedPINB]
 
     static func systemBiometryStatus() -> BiometryStatus {
+        #if !canImport(LocalAuthentication)
+        switch KeyPlatform.current.biometry() {
+        case .ready: return .ready
+        case .lockedOut: return .lockedOut
+        case .notEnrolled: return .notEnrolled
+        case .unavailable: return .unavailable
+        }
+        #else
         let context = LAContext()
         defer { context.invalidate() }
         var error: NSError?
@@ -1182,6 +1207,7 @@ extension RootKeyVault {
         case .biometryNotAvailable?: return .unavailable
         default: return .ready  // o SEP decide; nada e recusado nem apagado por duvida
         }
+        #endif
     }
 
     /// Reforcado so com o rk.and presente e nenhum slot do PIN: o commit de ligar e

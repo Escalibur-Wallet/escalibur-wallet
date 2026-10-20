@@ -1,4 +1,10 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Android)
+import Android
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 /// As regras do PIN: a forma, a escada de atraso e o relogio que sobrevive a
@@ -60,7 +66,12 @@ public enum PINPolicy {
     /// adiantar nao encurta, atrasar nao tranca o dono por um ano.
     public static var uptime: TimeInterval {
         var time = timespec()
+        #if os(Android)
+        // No Linux o relogio que conta o tempo dormindo e o CLOCK_BOOTTIME.
+        clock_gettime(CLOCK_BOOTTIME, &time)
+        #else
         clock_gettime(CLOCK_MONOTONIC_RAW, &time)
+        #endif
         return TimeInterval(time.tv_sec) + TimeInterval(time.tv_nsec) / 1e9
     }
 
@@ -73,14 +84,21 @@ public enum PINPolicy {
     /// com folga de `boottimeTolerance` em `isSameBoot`, porque ele oscila um pouco com o
     /// ajuste de hora pela rede.
     public static var bootSession: [UInt8] {
+        #if os(Android)
+        // No Android, a identidade do boot que o sistema da ao app (KeyPlatform).
+        guard let boot = KeyPlatform.current.bootIdentity(), boot.count == 16, boot != unknownBoot else { return unknownBoot }
+        return boot
+        #else
         if let uuid = bootSessionUUID { return withUnsafeBytes(of: uuid.uuid) { Array($0) } }
         var time = timeval()
         var size = MemoryLayout<timeval>.size
         guard sysctlbyname("kern.boottime", &time, &size, nil, 0) == 0, time.tv_sec > 0 else { return unknownBoot }
         let micros = UInt64(time.tv_sec) * 1_000_000 + UInt64(time.tv_usec)
         return boottimeMark + (0..<8).map { UInt8(truncatingIfNeeded: micros >> (56 - 8 * $0)) }
+        #endif
     }
 
+    #if !os(Android)
     private static var bootSessionUUID: UUID? {
         var size = 0
         guard sysctlbyname("kern.bootsessionuuid", nil, &size, nil, 0) == 0, size > 0 else { return nil }
@@ -88,6 +106,7 @@ public enum PINPolicy {
         guard sysctlbyname("kern.bootsessionuuid", &buffer, &size, nil, 0) == 0 else { return nil }
         return UUID(uuidString: String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self))
     }
+    #endif
 
     /// Os 8 primeiros bytes de uma identidade tirada do `kern.boottime` ("ESCBOOT1").
     static let boottimeMark: [UInt8] = Array("ESCBOOT1".utf8)

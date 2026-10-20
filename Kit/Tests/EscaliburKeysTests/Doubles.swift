@@ -1,7 +1,13 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import EscaliburCore
 import Foundation
+#if canImport(LocalAuthentication)
 import LocalAuthentication
+#endif
 import Testing
 @testable import EscaliburKeys
 
@@ -246,6 +252,11 @@ final class SoftwareWrapper: KeyWrapper, @unchecked Sendable {
         let shared = try key.sharedSecretFromKeyAgreement(with: ephemeral)
         let symmetric = shared.hkdfDerivedSymmetricKey(using: SHA256.self, salt: Data(), sharedInfo: Data("wrap".utf8), outputByteCount: 32)
         let plain = try ChaChaPoly.open(ChaChaPoly.SealedBox(combined: blob.dropFirst(65)), using: symmetric)
+        #if canImport(Security)
         return SecureBytes.consuming(plain as CFData)
+        #else
+        var copy = plain
+        return SecureBytes.consuming(&copy)
+        #endif
     }
 }
