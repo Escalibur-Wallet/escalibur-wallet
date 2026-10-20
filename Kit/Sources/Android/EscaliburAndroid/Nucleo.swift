@@ -70,6 +70,11 @@ enum Nucleo {
         case "carteira.confirmarCopia":
             try Sessao.shared.confirmarCopia(try uuid(pedido["id"]))
             return try json(Estado.agora())
+        case "carteira.passphraseDoRascunho":
+            return try json(["passphrase": Sessao.shared.passphraseDoRascunho()])
+        case "carteira.terminarRevelacao":
+            Sessao.shared.terminarRevelacao(try uuid(pedido["id"]))
+            return try json(Estado.agora())
         case "carteira.descartarRascunho":
             Sessao.shared.descartarRascunho()
             return try json(["ok": true])
@@ -111,6 +116,21 @@ enum Nucleo {
         case "carteira.observar":
             let wallet = try Observacao.guardar(String((pedido["endereco"]?.stringValue ?? "").prefix(512)), nome: pedido["nome"]?.stringValue ?? "")
             return try json(CarteiraResumo(wallet, selecionada: true))
+        case "contatos.lista":
+            return try json(Contatos.lista())
+        case "contatos.recentes":
+            return try json(Contatos.recentes())
+        case "contatos.conferir":
+            return try json(Contatos.conferir(
+                rede: pedido["rede"]?.stringValue ?? "", endereco: String((pedido["endereco"]?.stringValue ?? "").prefix(512)),
+                tag: pedido["tag"]?.stringValue ?? "", conferencia: pedido["conferencia"]?.stringValue ?? "",
+                conferenciaDoMemo: pedido["conferenciaDoMemo"]?.stringValue ?? "", comMemo: pedido["comMemo"]?.boolValue ?? false
+            ))
+        case "contatos.link":
+            return try json(Contatos.lerLink(String((pedido["texto"]?.stringValue ?? "").prefix(4096)), rede: pedido["rede"]?.stringValue ?? ""))
+        case "contatos.remover":
+            try Contatos.remover(try uuid(pedido["id"]))
+            return try json(Estado.agora())
         case "rede.silencio":
             // Enquanto as palavras estao na tela, o app nao fala com rede nenhuma.
             Silencio.ligar(pedido["ligar"]?.boolValue ?? false)
@@ -143,8 +163,29 @@ enum Nucleo {
             try Sessao.shared.alterar { $0.settings.hideBalances = ocultar }
             return try json(Estado.agora())
         case "ajustes.autoTravar":
-            let segundos = Int(pedido["segundos"]?.doubleValue ?? 60)
-            try Sessao.shared.alterar { $0.settings.autoLockSeconds = max(0, min(segundos, 3600)) }
+            // Encurtar vale na hora; alongar amplia a janela de quem pega o celular destravado, e
+            // pede o PIN ("ajustes.autoTravar" com segredo).
+            let segundos = Estado.Ajustes.prazo(Int(pedido["segundos"]?.doubleValue ?? 60))
+            guard segundos <= Estado.Ajustes.prazo(Sessao.shared.metadata.settings.autoLockSeconds) else { throw Falha(erro: "ajustes.pedePIN") }
+            try Sessao.shared.alterar { $0.settings.autoLockSeconds = segundos }
+            return try json(Estado.agora())
+        case "ajustes.rede":
+            let rede = pedido["rede"]?.stringValue ?? ""
+            guard Chain.find(rede) != nil else { throw Falha(erro: "rede desconhecida") }
+            let ligada = pedido["ligada"]?.boolValue ?? true
+            try Sessao.shared.alterar { metadata in
+                if ligada { metadata.settings.disabledChainIDs.remove(rede) } else { metadata.settings.disabledChainIDs.insert(rede) }
+            }
+            return try json(Estado.agora())
+        case "carteira.pedirPassphraseParaEnviar":
+            // Ligar e na hora; desligar pede a passphrase e o PIN ("carteira.naoPedirPassphrase").
+            try Sessao.shared.atualizar(try uuid(pedido["id"])) { $0.passphraseToSend = true }
+            return try json(Estado.agora())
+        case "carteira.removerObservacao":
+            // So observar: nao ha chave a proteger, nada pede o PIN.
+            let id = try uuid(pedido["id"])
+            guard Sessao.shared.metadata.wallets.first(where: { $0.id == id })?.isWatchOnly == true else { throw Falha(erro: "carteira com chave") }
+            try Sessao.shared.remover(id)
             return try json(Estado.agora())
 
         #if DEBUG
@@ -232,10 +273,49 @@ enum Nucleo {
                 tronComOutraChave: pedido["tronOutraChave"]?.boolValue ?? false, credencial: cred
             )
             return try json(CarteiraResumo(wallet, selecionada: true))
+        case "ajustes.autoTravar":
+            let segundos = Estado.Ajustes.prazo(Int(pedido["segundos"]?.doubleValue ?? 60))
+            try Sessao.shared.comChaveRaiz(try credencial()) { _ in }
+            try Sessao.shared.alterar { $0.settings.autoLockSeconds = segundos }
+            return try json(Estado.agora())
+        case "contatos.salvar":
+            let contato = try Contatos.salvar(
+                rede: pedido["rede"]?.stringValue ?? "", endereco: String((pedido["endereco"]?.stringValue ?? "").prefix(512)),
+                nome: pedido["nome"]?.stringValue ?? "", tag: pedido["tag"]?.stringValue ?? "", conferencia: pedido["conferencia"]?.stringValue ?? "",
+                conferenciaDoMemo: pedido["conferenciaDoMemo"]?.stringValue, credencial: try credencial()
+            )
+            return try json(contato)
+        case "ajustes.apagarDepois":
+            // Qualquer mudanca pede o PIN: ligar e uma forma de destruir as carteiras errando de
+            // proposito; desligar ou afrouxar tira a barreira contra quem tenta adivinhar.
+            let limite = pedido["limite"]?.doubleValue.map { UInt32($0) }
+            let cred = try credencial()
+            if limite != nil, let sem = Sessao.shared.metadata.wallets.first(where: { !$0.hasBackup && !$0.isWatchOnly }) {
+                cred.zerar()
+                throw Falha(erro: "ajustes.semCopia:" + sem.name)
+            }
+            try Sessao.shared.comChaveRaiz(cred) { _ in }
+            try Chaves.root.setWipeAfterErrors(limite)
+            return try json(Estado.agora())
+        case "carteira.naoPedirPassphrase":
+            let id = try uuid(pedido["id"])
+            let cred = try credencial()
+            try Sessao.shared.naoPedirPassphrase(id, credencial: cred, digitada: try proxima())
+            return try json(Estado.agora())
         case "envio.assinar":
             let cred = try credencial()
             let passphrase = partes.isEmpty ? nil : try proxima()
             return try Envio.assinar(cred, passphrase: passphrase, folga: pedido["folga"]?.doubleValue.map { Int($0) })
+        case "carteira.revelar":
+            let cred = try credencial()
+            let passphrase = partes.isEmpty ? nil : try proxima()
+            let aberto = try Sessao.shared.revelar(try uuid(pedido["id"]), credencial: cred, passphraseDigitada: passphrase)
+            return try json(Revelado(palavras: aberto.palavras, passphrase: aberto.passphrase))
+        case "carteira.conferirPassphrase":
+            // Com o rascunho aberto, so a passphrase vem; sem ele, o PIN primeiro.
+            let cred = pedido["credencial"] == nil ? nil : try credencial()
+            let resultado = try Sessao.shared.conferirPassphrase(try uuid(pedido["id"]), digitada: try proxima(), credencial: cred)
+            return try json(["resultado": resultado.rawValue])
         case "carteira.remover":
             let id = try uuid(pedido["id"])
             // Remover pede a mesma presenca que ver as palavras: o cofre confere antes.
@@ -341,6 +421,8 @@ enum Nucleo {
 
     struct Versao: Encodable { let nucleo: String; let redes: Int }
 
+    struct Revelado: Encodable { let palavras: Int; let passphrase: Bool }
+
     struct Sugestoes: Encodable { let palavras: [String]; let letras: [String] }
 
     struct RedeResumo: Encodable {
@@ -367,12 +449,20 @@ struct Estado: Encodable {
     }
 
     struct Ajustes: Encodable {
+        /// Os prazos de bloquear o app que a tela oferece. Um valor de versao anterior vale como o maior.
+        static let prazos = [0, 30, 60, 300, 600]
+        static func prazo(_ segundos: Int) -> Int { min(max(segundos, 0), prazos.last ?? 600) }
+
         let moeda: String
         let unidade: String
         let ocultarSaldos: Bool
         let autoTravar: Int
         let tecladoProprio: Bool
         let protecaoMEV: Bool
+        let redesDesligadas: [String]
+        /// Apagar as carteiras depois de tantos PINs errados seguidos; nil, nunca.
+        let apagarDepois: UInt32?
+        let opcoesDeApagar: [UInt32]
     }
 
     let fase: Sessao.Fase
@@ -385,6 +475,7 @@ struct Estado: Encodable {
     let selecionada: String?
     let ajustes: Ajustes
     let responsabilidade: Int?
+    let contatos: Int
 
     static func agora() -> Estado {
         let root = Chaves.root
@@ -409,10 +500,12 @@ struct Estado: Encodable {
             selecionada: selecionada?.uuidString,
             ajustes: Ajustes(
                 moeda: metadata.settings.currency, unidade: metadata.settings.totalUnit ?? metadata.settings.currency,
-                ocultarSaldos: metadata.settings.hideBalances, autoTravar: metadata.settings.autoLockSeconds,
-                tecladoProprio: metadata.settings.ownKeyboard ?? true, protecaoMEV: metadata.settings.mevProtection
+                ocultarSaldos: metadata.settings.hideBalances, autoTravar: Ajustes.prazo(metadata.settings.autoLockSeconds),
+                tecladoProprio: metadata.settings.ownKeyboard ?? true, protecaoMEV: metadata.settings.mevProtection,
+                redesDesligadas: metadata.settings.disabledChainIDs.sorted(), apagarDepois: root.wipeThreshold, opcoesDeApagar: PINPolicy.wipeOptions
             ),
-            responsabilidade: metadata.responsibilityVersion
+            responsabilidade: metadata.responsibilityVersion,
+            contatos: metadata.contacts.count
         )
     }
 }
@@ -431,9 +524,15 @@ struct CarteiraResumo: Encodable {
     let temPassphrase: Bool
     let passphraseConfirmada: Bool
     let tronOutraChave: Bool
+    /// Pede a passphrase para mover saldo e para ver as palavras.
+    let pedePassphrase: Bool
     let selecionada: Bool
     let digital: String?
     let contas: [Conta]
+    let copiaConfirmadaEm: Date?
+    let passphraseConferidaEm: Date?
+    let envelopeLacradoEm: Date?
+    let vistaEm: Date?
 
     init(_ wallet: WalletMeta, selecionada: Bool) {
         id = wallet.id.uuidString
@@ -447,9 +546,14 @@ struct CarteiraResumo: Encodable {
         temPassphrase = wallet.hasPassphrase
         passphraseConfirmada = wallet.passphraseConfirmed
         tronOutraChave = wallet.tronForeignControl ?? false
+        pedePassphrase = PortaDaPassphrase.pede(wallet)
         self.selecionada = selecionada
         digital = wallet.fingerprint?.uppercased()
         contas = wallet.accounts.map { Conta(rede: $0.chainID, endereco: $0.address) }
+        copiaConfirmadaEm = wallet.backupConfirmedAt
+        passphraseConferidaEm = wallet.passphraseConfirmedAt
+        envelopeLacradoEm = wallet.envelopeSealedAt
+        vistaEm = wallet.lastRevealedAt
     }
 }
 

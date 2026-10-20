@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.legal
 
+import app.escalibur.wallet.ui.comp.seguraToques
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -95,7 +96,7 @@ fun FolhaLegal(documento: DocumentoLegal, aoFechar: () -> Unit) {
     BackHandler(onBack = aoFechar)
     val contexto = LocalContext.current
     val blocos = remember(documento) { documento.blocos(contexto) }
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
+    Column(Modifier.fillMaxSize().background(Paleta.vazio).seguraToques().statusBarsPadding().navigationBarsPadding()) {
         CabecalhoDeFolha(documento.titulo, aoFechar)
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.xl),

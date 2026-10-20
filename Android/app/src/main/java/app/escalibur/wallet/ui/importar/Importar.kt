@@ -502,7 +502,7 @@ private fun PosicaoDaFrase(
 }
 
 @Composable
-private fun CampoSecreto(campo: TextFieldState, dica: String, revelar: Boolean, aoRevelar: (Boolean) -> Unit) {
+fun CampoSecreto(campo: TextFieldState, dica: String, revelar: Boolean, aoRevelar: (Boolean) -> Unit) {
     Box(
         Modifier.fillMaxWidth().height(Altura.primaria).background(Paleta.corpo, RoundedCornerShape(Raio.cartao))
             .border(1.dp, Paleta.borda, RoundedCornerShape(Raio.cartao))

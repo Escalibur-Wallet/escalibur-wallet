@@ -5,8 +5,9 @@ import app.escalibur.wallet.ui.Carteira
 import app.escalibur.wallet.ui.TelaProvisoria
 import app.escalibur.wallet.ui.t
 
+/** O "Gravar agora": a copia que faltou, pelas palavras ou so pela passphrase. */
 @Composable
-fun CopiaAgora(@Suppress("UNUSED_PARAMETER") carteira: Carteira) = TelaProvisoria(t("Gravar agora"))
+fun CopiaAgora(carteira: Carteira) = FluxoDeRevelar(carteira, copia = true) { app.escalibur.wallet.ui.principal.Navegacao.fechar() }
 
 @Composable
 fun DetalheDoAtivo(id: String) = TelaProvisoria(id)

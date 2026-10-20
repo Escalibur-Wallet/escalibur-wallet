@@ -27,6 +27,14 @@ enum PortaDaPassphrase {
         return !emFolga(wallet.id)
     }
 
+    /// A passphrase digitada confere com a do cofre? As duas em NFKD, em tempo constante: a mesma
+    /// regra do assinador.
+    static func confere(_ guardada: SecureBytes, _ digitada: SecureBytes) -> Bool {
+        let a = BIP39.nfkd(guardada), b = BIP39.nfkd(digitada)
+        defer { a.wipe(); b.wipe() }
+        return a.count > 0 && Hash.constantTimeEqual(a, b)
+    }
+
     static func emFolga(_ id: UUID) -> Bool { trava.withLock { (folgaAte[id] ?? 0) > PINPolicy.uptime } }
 
     /// O assinador conferiu: a folga escolhida na folha comeca agora, so na memoria.

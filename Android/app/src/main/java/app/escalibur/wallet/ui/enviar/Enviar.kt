@@ -521,7 +521,7 @@ private fun Pilula(titulo: String, icone: ImageVector, acao: () -> Unit) {
 
 /** O campo do endereco enquanto um desafio esta na tela: escondido, porque a resposta se leria nele. */
 @Composable
-private fun CampoEscondido(modifier: Modifier = Modifier, aoEditar: () -> Unit) {
+fun CampoEscondido(modifier: Modifier = Modifier, aoEditar: () -> Unit) {
     Row(
         modifier.fillMaxWidth().heightIn(min = Altura.campo).background(Paleta.corpo, RoundedCornerShape(Raio.cartao))
             .border(1.dp, Paleta.borda, RoundedCornerShape(Raio.cartao)).padding(start = Espaco.md, end = Espaco.xs, top = Espaco.xs, bottom = Espaco.xs),
@@ -538,7 +538,7 @@ private fun CampoEscondido(modifier: Modifier = Modifier, aoEditar: () -> Unit) 
 
 /** Um endereco com o trecho que o dono le e digita destacado; escondido, ele le na fonte. */
 @Composable
-private fun EnderecoMarcado(rotulo: String, endereco: String, trecho: Trecho?, escondido: Boolean = false, modifier: Modifier = Modifier) {
+fun EnderecoMarcado(rotulo: String, endereco: String, trecho: Trecho?, escondido: Boolean = false, modifier: Modifier = Modifier) {
     val texto = buildAnnotatedString {
         if (trecho == null || trecho.inicio < 0 || trecho.inicio + trecho.tamanho > endereco.length) {
             append(endereco)
@@ -557,7 +557,7 @@ private fun EnderecoMarcado(rotulo: String, endereco: String, trecho: Trecho?, e
 }
 
 @Composable
-private fun CampoCurto(texto: String, dica: String, modifier: Modifier = Modifier, largura: Dp = 180.dp, aoMudar: (String) -> Unit) {
+fun CampoCurto(texto: String, dica: String, modifier: Modifier = Modifier, largura: Dp = 180.dp, aoMudar: (String) -> Unit) {
     Box(
         modifier.widthIn(max = largura).fillMaxWidth().height(Altura.campo).background(Paleta.corpo, RoundedCornerShape(Raio.chip))
             .padding(horizontal = Espaco.sm),

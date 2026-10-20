@@ -374,9 +374,11 @@ fun Responsabilidade(tituloDoSeguir: String, carregando: Boolean = false, aoSegu
  * grupo na tela e os vizinhos viram texto; o resto fica no nucleo.
  */
 @Composable
-fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, aoTerminar: () -> Unit) {
+fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolean = false, aoTerminar: () -> Unit) {
     val porGrupo = 3
-    val grupos = palavras / porGrupo
+    // A passphrase, quando a carteira tem, e o ultimo cartao.
+    val grupoDaPassphrase = if (comPassphrase) palavras / porGrupo else -1
+    val grupos = palavras / porGrupo + (if (comPassphrase) 1 else 0)
     var grupo by remember { mutableIntStateOf(0) }
     var escondidas by remember { mutableStateOf(false) }
     var todas by remember { mutableStateOf(false) }
@@ -401,7 +403,9 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, aoTerminar: () -> Uni
         val faixa = if (todas) 0 until grupos else maxOf(0, grupo - 1)..minOf(grupos - 1, grupo + 1)
         for (chave in mostradas.keys.toList()) if (chave !in faixa) mostradas.remove(chave)
         for (indice in faixa) {
-            if (mostradas[indice] == null) {
+            if (mostradas[indice] == null && indice == grupoDaPassphrase) {
+                mostradas[indice] = listOfNotNull(runCatching { Api.objeto("carteira.passphraseDoRascunho").optString("passphrase", "").ifEmpty { null } }.getOrNull())
+            } else if (mostradas[indice] == null) {
                 val inicio = indice * porGrupo
                 mostradas[indice] = runCatching {
                     Api.lista("carteira.palavras", JSONObject().put("de", inicio).put("ate", minOf(inicio + porGrupo, palavras))).let { lista ->
@@ -426,13 +430,16 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, aoTerminar: () -> Uni
         Text(if (nomeDaCarteira == null) t("Grave a senha da carteira") else t("Senha da carteira"), style = estilo(Tipo.titulo), color = Paleta.tinta)
         val prefixo = nomeDaCarteira?.let { "$it · " } ?: ""
         Text(
-            if (todas) t("%@As %lld palavras, em ordem", prefixo, palavras)
-            else t("%@Palavras %lld a %lld de %lld", prefixo, grupo * porGrupo + 1, minOf(grupo * porGrupo + porGrupo, palavras), palavras),
+            when {
+                todas -> t("%@As %lld palavras, em ordem", prefixo, palavras)
+                grupo == grupoDaPassphrase -> prefixo + t("Passphrase")
+                else -> t("%@Palavras %lld a %lld de %lld", prefixo, grupo * porGrupo + 1, minOf(grupo * porGrupo + porGrupo, palavras), palavras)
+            },
             style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xxs),
         )
         if (todas) {
             Box(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = Espaco.md)) {
-                ChapaDeTodas(palavras, mostradas, escondidas) { escondidas = false }
+                ChapaDeTodas(palavras, mostradas, escondidas, mostradas[grupoDaPassphrase]?.firstOrNull()) { escondidas = false }
             }
         } else {
             Box(
@@ -468,7 +475,11 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, aoTerminar: () -> Uni
                             .shadow(if (profundidade == 0) 10.dp else 0.dp, RoundedCornerShape(16.dp))
                             .clip(RoundedCornerShape(16.dp)).background(tons[profundidade]),
                     ) {
-                        if (profundidade == 0) CartaoDePalavras(grupo * porGrupo, mostradas[grupo] ?: emptyList(), escondidas) { escondidas = false }
+                        if (profundidade == 0 && grupo == grupoDaPassphrase) {
+                            CartaoDaPassphrase(mostradas[grupo]?.firstOrNull() ?: "", escondidas) { escondidas = false }
+                        } else if (profundidade == 0) {
+                            CartaoDePalavras(grupo * porGrupo, mostradas[grupo] ?: emptyList(), escondidas) { escondidas = false }
+                        }
                     }
                 }
             }
@@ -517,9 +528,36 @@ private fun CartaoDePalavras(inicio: Int, palavras: List<String>, escondidas: Bo
     }
 }
 
+/**
+ * A passphrase inteira, sem cortar: o espaco aparece como ␣ e a contagem vem embaixo, porque um
+ * espaco a mais ou um caractere que sumiu ja abre outra carteira.
+ */
+@Composable
+private fun CartaoDaPassphrase(passphrase: String, escondidas: Boolean, aoMostrar: () -> Unit) {
+    if (escondidas) {
+        CartaoDePalavras(0, emptyList(), true, aoMostrar)
+        return
+    }
+    Row(Modifier.fillMaxSize().padding(horizontal = Espaco.base, vertical = Espaco.md), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Espaco.md)) {
+        Text("Pass", color = Paleta.placaApagada, modifier = Modifier.width(44.dp), style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+        Column(verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+            Text(passphrase.replace(" ", "␣"), fontFamily = FontFamily.Monospace, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, color = Paleta.placaTinta)
+            Text(contagemDaPassphrase(passphrase), style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = Paleta.placaApagada)
+        }
+    }
+}
+
+/** A contagem, e o aviso de que a quebra de linha da tela nao e caractere. */
+fun contagemDaPassphrase(passphrase: String): String {
+    val quantos = passphrase.codePointCount(0, passphrase.length)
+    val contagem = if (passphrase.contains(" ")) t("%lld caracteres. ␣ é um espaço.", quantos) else t("%lld caracteres.", quantos)
+    return if (quantos > 16) contagem + " " + t("A quebra de linha não é espaço.") else contagem
+}
+
 /** A frase inteira numa chapa clara, em duas colunas, em ordem de cima para baixo. */
 @Composable
-private fun ChapaDeTodas(palavras: Int, mostradas: Map<Int, List<String>>, escondidas: Boolean, aoMostrar: () -> Unit) {
+private fun ChapaDeTodas(palavras: Int, mostradas: Map<Int, List<String>>, escondidas: Boolean, passphrase: String? = null, aoMostrar: () -> Unit) {
     val todas = (0 until palavras / 3).flatMap { mostradas[it] ?: emptyList() }
     val metade = (palavras + 1) / 2
     Box(
@@ -528,7 +566,7 @@ private fun ChapaDeTodas(palavras: Int, mostradas: Map<Int, List<String>>, escon
     ) {
         if (escondidas) {
             CartaoDePalavras(0, emptyList(), true, aoMostrar)
-        } else {
+        } else Column {
             Row(horizontalArrangement = Arrangement.spacedBy(Espaco.md)) {
                 for (coluna in 0..1) {
                     Column(Modifier.weight(1f)) {
@@ -539,6 +577,16 @@ private fun ChapaDeTodas(palavras: Int, mostradas: Map<Int, List<String>>, escon
                             }
                         }
                     }
+                }
+            }
+            if (passphrase != null) {
+                Column(Modifier.padding(top = Espaco.sm), verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
+                    Box(Modifier.fillMaxWidth().height(1.5.dp).background(Color(0xFF9C9EA5)))
+                    Row(Modifier.padding(top = Espaco.xs), horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                        Text("Pass", fontSize = 13.sp, fontWeight = FontWeight.Black, color = Color(0xFF55575E))
+                        Text(passphrase.replace(" ", "␣"), fontFamily = FontFamily.Monospace, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2A2B30))
+                    }
+                    Text(contagemDaPassphrase(passphrase), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF55575E))
                 }
             }
         }
