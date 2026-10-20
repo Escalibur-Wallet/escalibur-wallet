@@ -4,6 +4,7 @@
 // dados em JSON, e recebe JSON (`Nucleo.chamar`). Segredo (frase, PIN, chave raiz) nunca passa
 // por String: vai em ByteBuffer direto, fora do heap do Java, e quem recebe zera.
 import CJNI
+import EscaliburCore
 import Foundation
 
 /// O ambiente do JNI de uma chamada: as funcoes da tabela do Java, com nomes do Swift.
@@ -133,5 +134,25 @@ public func Java_app_escalibur_wallet_nucleo_Nucleo_chamar(
     } catch {
         resposta = Nucleo.erro(error)
     }
+    return java.string(String(decoding: resposta, as: UTF8.self))
+}
+
+/// O mesmo ponto de entrada, para operacoes com segredo: o PIN, as palavras ou a passphrase vem
+/// num byte[], que e copiado direto para o buffer seguro e zerado no lugar antes de soltar.
+@_cdecl("Java_app_escalibur_wallet_nucleo_Nucleo_chamarComSegredo")
+public func Java_app_escalibur_wallet_nucleo_Nucleo_chamarComSegredo(
+    _ env: UnsafeMutablePointer<JNIEnv?>, _ classe: jclass?, _ metodo: jstring?, _ corpo: jstring?, _ segredo: jbyteArray?
+) -> jstring? {
+    let java = JavaEnv(env: env)
+    let nome = java.string(metodo) ?? ""
+    let entrada = Data((java.string(corpo) ?? "{}").utf8)
+    let bytes = java.secureBytes(segredo, from: 0) ?? SecureBytes(capacity: 1)
+    let resposta: Data
+    do {
+        resposta = try Nucleo.chamarComSegredo(nome, entrada, bytes)
+    } catch {
+        resposta = Nucleo.erro(error)
+    }
+    bytes.wipe()
     return java.string(String(decoding: resposta, as: UTF8.self))
 }

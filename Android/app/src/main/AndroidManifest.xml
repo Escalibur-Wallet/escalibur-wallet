@@ -5,6 +5,8 @@
          sem armazenamento. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Esconder janelas de outros apps por cima da Escalibur (o golpe da sobreposicao). -->
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
 
     <!-- Sem backup (nem do Google nem de aparelho para aparelho): as chaves ficam so neste
          aparelho, como no iOS. Sem trafego em texto puro. -->

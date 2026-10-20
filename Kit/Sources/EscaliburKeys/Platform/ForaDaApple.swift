@@ -79,6 +79,6 @@ public struct KeyPlatform: Sendable {
         lock.withLock { if installed == nil { installed = platform } }
     }
 
-    static var current: KeyPlatform { lock.withLock { installed ?? .none } }
+    public static var current: KeyPlatform { lock.withLock { installed ?? .none } }
 }
 #endif

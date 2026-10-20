@@ -312,7 +312,7 @@ public enum PasswordStrength {
         static let ranks: [[UInt8]: Int32] = {
             var out: [[UInt8]: Int32] = [:]
             out.reserveCapacity(260_000)
-            let bundle = Bundle.module
+            let bundle = CoreResources.bundle
             for name in files {
                 guard let url = bundle.url(forResource: name, withExtension: "txt", subdirectory: "Forca")
                         ?? bundle.url(forResource: name, withExtension: "txt"),

@@ -35,6 +35,7 @@ enum Java {
         ("Cofre", "estadoDaBiometria", "()I"),
         ("Cofre", "cadastroDaBiometria", "()[B"),
         ("Cofre", "boot", "()[B"),
+        ("Eventos", "emitir", "(Ljava/lang/String;Ljava/lang/String;)V"),
     ]
 
     /// Gravada uma vez no JNI_OnLoad, antes de a biblioteca voltar ao Java: toda leitura vem depois.

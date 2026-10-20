@@ -1,3 +1,6 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -43,6 +46,117 @@ android {
         // As bibliotecas nativas ficam descomprimidas e alinhadas no APK (o carregador le
         // direto dele), e o .so do nucleo ja vem sem simbolos de depuracao.
         jniLibs { useLegacyPackaging = false }
+    }
+
+    androidResources {
+        // As listas de palavras sao conferidas por digesto: nada de compressao mexendo nelas, e o
+        // video toca direto do APK.
+        noCompress += listOf("txt", "mp4")
+    }
+}
+
+// O que o app Android usa do iOS e do nucleo vem direto das pastas deles, no build: nenhuma
+// copia no repositorio que possa divergir.
+val raiz: File = rootDir.parentFile
+
+/** Copia arquivos para uma pasta que vira assets ou res do APK. */
+abstract class CopiarParaOApp : DefaultTask() {
+    @get:InputFiles abstract val origem: ConfigurableFileCollection
+    @get:Input abstract val subpasta: Property<String>
+    @get:Input abstract val achatar: Property<Boolean>
+    @get:OutputDirectory abstract val saida: DirectoryProperty
+
+    @TaskAction
+    fun copiar() {
+        val destino = saida.get().asFile.resolve(subpasta.get())
+        destino.deleteRecursively()
+        destino.mkdirs()
+        origem.asFileTree.visit {
+            if (!isDirectory) {
+                val alvo = if (achatar.get()) destino.resolve(name) else destino.resolve(relativePath.pathString)
+                alvo.parentFile.mkdirs()
+                file.copyTo(alvo, overwrite = true)
+            }
+        }
+    }
+}
+
+/**
+ * As tabelas de texto de cada idioma, geradas do catalogo do iOS (Localizable.xcstrings) mais o que
+ * so o Android diz (textos-android.json): `assets/textos/<idioma>.json`, da frase em portugues
+ * para a traducao. Plural vira um objeto com as formas ("one", "other"...).
+ */
+abstract class GerarTextos : DefaultTask() {
+    @get:InputFile abstract val catalogo: RegularFileProperty
+    @get:InputFile abstract val adicoes: RegularFileProperty
+    @get:OutputDirectory abstract val saida: DirectoryProperty
+
+    @TaskAction
+    fun gerar() {
+        @Suppress("UNCHECKED_CAST")
+        val strings = (JsonSlurper().parse(catalogo.get().asFile) as Map<String, Any?>)["strings"] as Map<String, Map<String, Any?>>
+        val tabelas = sortedMapOf<String, MutableMap<String, Any>>()
+        for ((chave, entrada) in strings) {
+            @Suppress("UNCHECKED_CAST")
+            val localizacoes = entrada["localizations"] as? Map<String, Map<String, Any?>> ?: continue
+            for ((idioma, local) in localizacoes) {
+                val valor = valorDe(local) ?: continue
+                tabelas.getOrPut(idioma) { sortedMapOf() }[chave] = valor
+            }
+        }
+        val extras = JsonSlurper().parse(adicoes.get().asFile) as Map<*, *>
+        for (entrada in extras.entries) {
+            val chave = entrada.key as String
+            val traducoes = entrada.value as? Map<*, *> ?: continue
+            for ((idioma, valor) in traducoes) tabelas.getOrPut(idioma as String) { sortedMapOf() }[chave] = valor as Any
+        }
+        val pasta = saida.get().asFile.resolve("textos")
+        pasta.deleteRecursively()
+        pasta.mkdirs()
+        for ((idioma, tabela) in tabelas) pasta.resolve("$idioma.json").writeText(JsonOutput.toJson(tabela))
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun valorDe(local: Map<String, Any?>): Any? {
+        (local["stringUnit"] as? Map<String, Any?>)?.let { return it["value"] }
+        val plural = (local["variations"] as? Map<String, Any?>)?.get("plural") as? Map<String, Map<String, Any?>> ?: return null
+        return plural.mapValues { (_, forma) -> (forma["stringUnit"] as? Map<String, Any?>)?.get("value") ?: "" }
+    }
+}
+
+val gerarTextos = tasks.register<GerarTextos>("gerarTextos") {
+    catalogo.set(raiz.resolve("App/EscaliburWallet/Resources/Localizable.xcstrings"))
+    adicoes.set(layout.projectDirectory.file("textos-android.json"))
+    saida.set(layout.buildDirectory.dir("gerado/textos"))
+}
+val copiarLogos = tasks.register<CopiarParaOApp>("copiarLogos") {
+    origem.from(fileTree(raiz.resolve("App/EscaliburWallet/Resources/Assets.xcassets/Logos")) { include("**/*.png", "**/*.jpg") })
+    subpasta.set("logos")
+    achatar.set(true)
+    saida.set(layout.buildDirectory.dir("gerado/logos"))
+}
+val copiarListas = tasks.register<CopiarParaOApp>("copiarListas") {
+    origem.from(fileTree(raiz.resolve("Kit/Sources/EscaliburCore/Resources")) { include("Wordlists/**", "Forca/**") })
+    subpasta.set("nucleo")
+    achatar.set(false)
+    saida.set(layout.buildDirectory.dir("gerado/nucleo"))
+}
+val copiarAbertura = tasks.register<CopiarParaOApp>("copiarAbertura") {
+    origem.from(
+        raiz.resolve("App/EscaliburWallet/Resources/Abertura/abertura-espada.mp4"),
+        raiz.resolve("App/EscaliburWallet/Resources/Assets.xcassets/AberturaEspada.imageset/abertura-espada.jpg"),
+    )
+    subpasta.set("abertura")
+    achatar.set(true)
+    saida.set(layout.buildDirectory.dir("gerado/abertura"))
+}
+
+androidComponents {
+    onVariants { variante ->
+        variante.sources.assets?.addGeneratedSourceDirectory(gerarTextos, GerarTextos::saida)
+        variante.sources.assets?.addGeneratedSourceDirectory(copiarLogos, CopiarParaOApp::saida)
+        variante.sources.assets?.addGeneratedSourceDirectory(copiarListas, CopiarParaOApp::saida)
+        variante.sources.assets?.addGeneratedSourceDirectory(copiarAbertura, CopiarParaOApp::saida)
     }
 }
 

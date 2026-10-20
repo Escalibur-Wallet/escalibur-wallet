@@ -220,7 +220,7 @@ public final class WordlistStore: @unchecked Sendable {
     private var slip39Loaded: Wordlist?
     private let bundle: Bundle
 
-    init(bundle: Bundle = .module) {
+    init(bundle: Bundle = CoreResources.bundle) {
         self.bundle = bundle
     }
 
