@@ -220,6 +220,9 @@ fun AjustesDaCarteira(id: String) {
             }
             GrupoDeAjustes(Modifier.padding(top = Espaco.lg)) {
                 LinhaDeAjuste(Icones.olho, t("Ver a senha da carteira")) { revelar() }
+                if (carteira.palavras != null) {
+                    LinhaDeAjuste(Icones.chave, t("Abrir ou criar com passphrase")) { Navegacao.abrir { FluxoDaCarteiraComPassphrase(carteira) } }
+                }
             }
         }
         if (!carteira.temCopia && !carteira.observacao) {

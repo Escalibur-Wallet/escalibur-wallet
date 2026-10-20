@@ -45,6 +45,8 @@ final class Sessao: @unchecked Sendable {
         case remocaoFalhou
         case semRascunho
         case carteiraNaoEncontrada
+        /// A passphrase tem um caractere que nao da para anotar no papel.
+        case passphraseInvisivel
     }
 
     private let trava = NSLock()
@@ -285,6 +287,67 @@ final class Sessao: @unchecked Sendable {
             metadata.wallets.append(wallet)
             if selecionar || metadata.selectedWalletID == nil { metadata.selectedWalletID = id }
             return wallet
+        }
+    }
+
+    /// A carteira da 25a palavra a partir de outra (o `addPassphraseWallet` do iOS): o cofre abre a
+    /// frase da base, junta a passphrase e guarda a carteira nova, sem a frase aparecer. A mesma frase
+    /// com a mesma passphrase e a mesma carteira: se ela ja esta aqui, so passa a ser a escolhida.
+    /// Criar e uma porta de chute (a passphrase certa reabre a que existe): toda tentativa conta na
+    /// espera das outras portas e nunca zera a conta.
+    func abrirComPassphrase(base id: UUID, passphrase: SecureBytes, nome: String, credencial: Credencial) throws -> (WalletMeta, jaAberta: Bool) {
+        defer { passphrase.wipe() }
+        guard let base = metadata.wallets.first(where: { $0.id == id }), case .phrase(let palavras) = base.kind else {
+            credencial.zerar()
+            throw Falha.carteiraNaoEncontrada
+        }
+        guard PortaDaPassphrase.escrevivel(passphrase) else {
+            credencial.zerar()
+            throw Falha.passphraseInvisivel
+        }
+        do { try PortaDaPassphrase.comecar() } catch { credencial.zerar(); throw error }
+        let novo = UUID()
+        let contas: [DerivedAccount]
+        let digital: [UInt8]
+        do {
+            (contas, digital) = try comChaveRaiz(credencial) { rk in
+                let original = try Chaves.wallets.open(walletID: id, rk: rk)
+                defer { original.wipe() }
+                let entropia = SecureBytes(capacity: original.entropy.count)
+                original.entropy.withUnsafeBytes { entropia.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+                // A 25a palavra em NFKD, como a importacao grava: a chave da Cardano (Icarus) usa os
+                // bytes como estao, e "ação" do teclado (NFC) daria outra conta.
+                let normalizada: SecureBytes
+                if passphrase.withUnsafeBytes({ raw in raw.contains { $0 >= 0x80 } }) {
+                    normalizada = BIP39.nfkd(passphrase)
+                } else {
+                    normalizada = SecureBytes(capacity: passphrase.count)
+                    passphrase.withUnsafeBytes { normalizada.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+                }
+                let secret = WalletSecret(entropy: entropia, language: original.language, passphrase: normalizada)
+                defer { secret.wipe() }
+                try Chaves.wallets.save(secret, walletID: novo, rk: rk)
+                return try AccountDeriver.derive(secret)
+            }
+        } catch {
+            PortaDaPassphrase.devolver()
+            throw error
+        }
+        // Conta na espera, sem o aviso de passphrase errada: aqui nada errou.
+        PortaDaPassphrase.errou()
+        return try alterar { metadata in
+            if let existente = metadata.wallets.first(where: { $0.fingerprint == digital.hex && !$0.isWatchOnly }) {
+                try? Chaves.wallets.delete(novo)
+                metadata.selectedWalletID = existente.id
+                return (existente, true)
+            }
+            let wallet = WalletMeta(
+                id: novo, name: Self.nomeUnico(nome, origem: base.origin, em: metadata), kind: .phrase(wordCount: palavras), origin: base.origin,
+                createdAt: .now, accounts: contas, fingerprint: digital.hex, hasPassphrase: true, backupConfirmedAt: base.backupConfirmedAt
+            )
+            metadata.wallets.append(wallet)
+            metadata.selectedWalletID = novo
+            return (wallet, false)
         }
     }
 

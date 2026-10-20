@@ -35,6 +35,31 @@ enum PortaDaPassphrase {
         return a.count > 0 && Hash.constantTimeEqual(a, b)
     }
 
+    /// A passphrase cabe no papel? Caractere de controle, de formato (largura zero, bidirecional),
+    /// separador de linha, uso privado ou um espaco que nao e o comum nao aparecem, ou aparecem
+    /// iguais a outros, e quem anota perde a carteira (revisao da auditoria 4, C7-02).
+    static func escrevivel(_ segredo: SecureBytes) -> Bool {
+        segredo.withUnsafeBytes { raw in
+            var iterador = raw.makeIterator()
+            var decodificador = Unicode.UTF8()
+            while true {
+                switch decodificador.decode(&iterador) {
+                case .scalarValue(let escalar):
+                    switch escalar.properties.generalCategory {
+                    case .format, .control, .lineSeparator, .paragraphSeparator, .privateUse, .surrogate, .unassigned:
+                        return false
+                    case .spaceSeparator where escalar != " ":
+                        return false
+                    default:
+                        continue
+                    }
+                case .emptyInput: return true
+                case .error: return false
+                }
+            }
+        }
+    }
+
     static func emFolga(_ id: UUID) -> Bool { trava.withLock { (folgaAte[id] ?? 0) > PINPolicy.uptime } }
 
     /// O assinador conferiu: a folga escolhida na folha comeca agora, so na memoria.

@@ -352,6 +352,12 @@ enum Nucleo {
             let cred = try credencial()
             let passphrase = partes.isEmpty ? nil : try proxima()
             return try Troca.assinar(cred, passphrase: passphrase, folga: pedido["folga"]?.doubleValue.map { Int($0) }, alvo: pedido["alvo"]?.stringValue)
+        case "carteira.abrirComPassphrase":
+            let base = try uuid(pedido["base"])
+            let cred = try credencial()
+            let nome = String((pedido["nome"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+            let (wallet, jaAberta) = try Sessao.shared.abrirComPassphrase(base: base, passphrase: try proxima(), nome: nome, credencial: cred)
+            return try json(AbertaComPassphrase(carteira: CarteiraResumo(wallet, selecionada: true), jaAberta: jaAberta))
         case "carteira.revelar":
             let cred = try credencial()
             let passphrase = partes.isEmpty ? nil : try proxima()
@@ -371,6 +377,11 @@ enum Nucleo {
         default:
             throw Falha(erro: "metodo desconhecido: \(metodo)")
         }
+    }
+
+    struct AbertaComPassphrase: Encodable {
+        let carteira: CarteiraResumo
+        let jaAberta: Bool
     }
 
     /// O segredo em partes, separadas por quebra de linha. PIN, palavras e passphrase nunca tem
