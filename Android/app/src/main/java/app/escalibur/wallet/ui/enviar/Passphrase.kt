@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.enviar
 
+import app.escalibur.wallet.ui.comp.seguraToques
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -118,7 +119,7 @@ fun FolhaDaPassphrase(pedido: PedidoDePassphrase.Pedido) {
     LaunchedEffect(pedido) { runCatching { foco.requestFocus() } }
     BackHandler { fechar() }
 
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().imePadding()) {
+    Column(Modifier.fillMaxSize().background(Paleta.vazio).seguraToques().statusBarsPadding().navigationBarsPadding().imePadding()) {
         CabecalhoDeFolha(t("Digite a passphrase"), { fechar() })
         Column(Modifier.weight(1f).padding(horizontal = Espaco.margem)) {
             Text(pedido.motivo, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))

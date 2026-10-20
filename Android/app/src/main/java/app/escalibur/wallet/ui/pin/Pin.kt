@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.pin
 
+import app.escalibur.wallet.ui.comp.seguraToques
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -225,7 +226,7 @@ fun TelaDoPin(
     val haptico = LocalHapticFeedback.current
     LaunchedEffect(entrada.tremida) { if (entrada.tremida > 0) haptico.performHapticFeedback(HapticFeedbackType.Reject) }
     Column(
-        modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding(),
+        modifier.fillMaxSize().background(Paleta.vazio).seguraToques().statusBarsPadding().navigationBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.weight(1f).heightIn(min = Espaco.xs))

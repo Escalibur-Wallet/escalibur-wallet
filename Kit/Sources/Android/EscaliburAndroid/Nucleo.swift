@@ -81,11 +81,40 @@ enum Nucleo {
             guard !nome.isEmpty else { throw Falha(erro: "nome vazio") }
             try Sessao.shared.atualizar(try uuid(pedido["id"])) { $0.name = nome }
             return try json(Estado.agora())
+        case "carteira.ordenar":
+            // A ordem nova da lista de carteiras: os mesmos ids, so em outra ordem.
+            let ids = (pedido["ids"]?.arrayValue ?? []).compactMap { $0.stringValue.flatMap(UUID.init(uuidString:)) }
+            try Sessao.shared.alterar { metadata in
+                guard Set(ids) == Set(metadata.wallets.map(\.id)), ids.count == metadata.wallets.count else { throw Falha(erro: "ordem invalida") }
+                metadata.wallets = ids.compactMap { id in metadata.wallets.first { $0.id == id } }
+            }
+            return try json(Estado.agora())
         case "carteira.sugestoes":
             // As palavras da lista que comecam com o que foi digitado, e as letras que ainda
-            // levam a alguma (o teclado proprio apaga as outras). So o pedaco digitado.
+            // levam a alguma (o teclado proprio apaga as outras). So o pedaco digitado; os
+            // idiomas, quando vem, sao os das palavras ja fechadas da frase.
             let digitado = pedido["digitado"]?.stringValue ?? ""
-            return try json(Sugestoes(palavras: WordLexicon.completions(digitado), letras: WordLexicon.nextLetters(after: digitado).map(String.init).sorted()))
+            let idiomas = pedido["idiomas"]?.arrayValue.map { Set($0.compactMap { $0.stringValue.flatMap(BIP39Language.init(rawValue:)) }) }
+            let limite = Int(pedido["limite"]?.doubleValue ?? 4)
+            return try json(Sugestoes(palavras: WordLexicon.completions(digitado, preferring: idiomas, limit: max(1, min(limite, 8))),
+                                      letras: WordLexicon.nextLetters(after: digitado, languages: idiomas).map(String.init).sorted()))
+        case "carteira.tron":
+            // Quem controla a conta da Tron da carteira em conferencia (fora da tela das palavras).
+            let endereco = pedido["endereco"]?.stringValue ?? ""
+            let outra = try esperar { await Importacao.tronComOutraChave(endereco) }
+            return try json(["outraChave": outra])
+        case "carteira.reconhecer":
+            // A rede de um endereco colado para so observar: nada e guardado.
+            let texto = String((pedido["endereco"]?.stringValue ?? "").prefix(512))
+            if Envio.pareceFrase(texto) { return try json(["frase": true]) }
+            return try json(["reconhecida": Observacao.reconhecer(texto)])
+        case "carteira.observar":
+            let wallet = try Observacao.guardar(String((pedido["endereco"]?.stringValue ?? "").prefix(512)), nome: pedido["nome"]?.stringValue ?? "")
+            return try json(CarteiraResumo(wallet, selecionada: true))
+        case "rede.silencio":
+            // Enquanto as palavras estao na tela, o app nao fala com rede nenhuma.
+            Silencio.ligar(pedido["ligar"]?.boolValue ?? false)
+            return try json(["ok": true])
 
         case "receber.moedas":
             return try json(Receber.moedas())
@@ -191,7 +220,9 @@ enum Nucleo {
         case "carteira.previa":
             let frase = try proxima()
             let passphrase = partes.isEmpty ? nil : try proxima()
-            return try json(esperar { try await Importacao.previa(frase, passphrase: passphrase) })
+            return try json(Importacao.previa(frase, passphrase: passphrase))
+        case "carteira.idiomas":
+            return try json(["idiomas": Importacao.idiomas(try proxima())])
         case "carteira.importar":
             let cred = try credencial()
             let frase = try proxima()
@@ -419,5 +450,20 @@ struct CarteiraResumo: Encodable {
         self.selecionada = selecionada
         digital = wallet.fingerprint?.uppercased()
         contas = wallet.accounts.map { Conta(rede: $0.chainID, endereco: $0.address) }
+    }
+}
+
+/// O silencio da rede pedido pela interface (a tela das palavras), aberto e fechado uma vez so:
+/// uma chamada repetida nao empilha, e travar o app fecha.
+enum Silencio {
+    private static let trava = NSLock()
+    nonisolated(unsafe) private static var ligado = false
+
+    static func ligar(_ ligar: Bool) {
+        trava.withLock {
+            guard ligado != ligar else { return }
+            ligado = ligar
+            if ligar { HTTPClient.shared.beginQuiet() } else { HTTPClient.shared.endQuiet() }
+        }
     }
 }

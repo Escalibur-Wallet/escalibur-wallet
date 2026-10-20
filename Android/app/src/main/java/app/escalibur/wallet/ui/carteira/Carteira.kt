@@ -113,9 +113,16 @@ fun TelaDaCarteira() {
     val variacao = retrato.converter(retrato.variacao24h, unidade) ?: retrato.variacao24h
     val taxa = retrato.converter(1.0, unidade)
 
+    // O indicador de cima so quando o dono puxa; a leitura automatica fica no circulo de Ativos.
+    var puxando by remember { mutableStateOf(false) }
     PullToRefreshBox(
-        isRefreshing = retrato.carregando,
-        onRefresh = { escopo.launch { Saldos.atualizar(forcar = true) } },
+        isRefreshing = puxando,
+        onRefresh = {
+            puxando = true
+            escopo.launch {
+                try { Saldos.atualizar(forcar = true) } finally { puxando = false }
+            }
+        },
         modifier = Modifier.fillMaxSize(),
     ) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(bottom = Espaco.xl)) {

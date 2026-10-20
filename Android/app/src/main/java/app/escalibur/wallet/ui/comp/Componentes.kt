@@ -45,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
@@ -323,3 +324,11 @@ fun Divisor(modifier: Modifier = Modifier) {
 }
 
 private fun t(chave: String) = app.escalibur.wallet.ui.t(chave)
+
+/**
+ * Uma camada por cima de outra tela segura todos os toques: sem isto, o toque num lugar vazio
+ * passava para a tela de baixo (um toque no canto da escolha do Enviar abria a lista de carteiras).
+ */
+fun Modifier.seguraToques(): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope { while (true) awaitPointerEvent() }
+}

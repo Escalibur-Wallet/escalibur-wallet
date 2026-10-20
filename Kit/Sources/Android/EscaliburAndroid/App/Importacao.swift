@@ -19,8 +19,8 @@ enum Importacao {
         struct Endereco: Encodable { let rede: String; let nome: String; let endereco: String }
         let digital: String
         let enderecos: [Endereco]
-        /// A rede mostrou outra chave no controle da conta da Tron (o golpe da "frase com saldo").
-        let tronOutraChave: Bool
+        /// O endereco na Tron, so para conferir quem controla a conta (`tron`); nao aparece na lista.
+        let tron: String?
     }
 
     static let redesDaPrevia: [Chain] = [.bitcoin, .ethereum, .solana]
@@ -65,19 +65,32 @@ enum Importacao {
 
     /// Os primeiros enderecos e a impressao digital, antes de guardar: frase com uma palavra
     /// trocada que ainda fecha, ou 25a palavra diferente, abre outra carteira, vazia, sem aviso.
-    static func previa(_ frase: SecureBytes, passphrase: SecureBytes?) async throws -> Previa {
+    /// So deriva, sem rede: a tela das palavras fica em silencio.
+    static func previa(_ frase: SecureBytes, passphrase: SecureBytes?) throws -> Previa {
         let secret = try segredo(frase, passphrase: passphrase)
         defer { secret.wipe() }
         let (contas, digital) = try AccountDeriver.derive(secret, chains: redesDaPrevia + [.tron])
         let enderecos = redesDaPrevia.compactMap { rede in
             contas.first { $0.chainID == rede.id }.map { Previa.Endereco(rede: rede.id, nome: rede.name, endereco: $0.address) }
         }
-        var outraChave = false
-        if let texto = contas.first(where: { $0.chainID == Chain.tron.id })?.address, let endereco = TronAddress(texto),
-           let controle = try? await TronReader.shared.ownerControl(owner: endereco) {
-            outraChave = controle.isCompromised
-        }
-        return Previa(digital: digital.hex.uppercased(), enderecos: enderecos, tronOutraChave: outraChave)
+        return Previa(digital: digital.hex.uppercased(), enderecos: enderecos, tron: contas.first { $0.chainID == Chain.tron.id }?.address)
+    }
+
+    /// Quem controla a conta na Tron, ja fora da tela das palavras. Sem rede ou com a conta ainda
+    /// nao ativada, nada a dizer: o envio na Tron confere de novo antes de qualquer saldo.
+    static func tronComOutraChave(_ texto: String) async -> Bool {
+        guard let endereco = TronAddress(texto), let controle = try? await TronReader.shared.ownerControl(owner: endereco) else { return false }
+        return controle.isCompromised
+    }
+
+    /// Os idiomas em que todas as palavras ja fechadas existem: as sugestoes seguem eles. Nil:
+    /// qualquer um.
+    static func idiomas(_ frase: SecureBytes) -> [String]? {
+        let palavras = Nucleo.dividirPorEspaco(frase)
+        frase.wipe()
+        defer { palavras.forEach { $0.wipe() } }
+        guard let achados = WordLexicon.languages(containing: palavras), !achados.isEmpty else { return nil }
+        return achados.map(\.rawValue).sorted()
     }
 
     static func importar(_ frase: SecureBytes, passphrase: SecureBytes?, palavras: Int, tronComOutraChave: Bool, credencial: Credencial) throws -> WalletMeta {
@@ -120,5 +133,36 @@ extension Nucleo {
             }
             return palavras
         }
+    }
+}
+
+/// So observar um endereco (o WatchAddressView do iOS): a rede reconhecida pelo formato e a
+/// carteira sem chave nenhuma.
+enum Observacao {
+    struct Rede: Encodable { let id: String; let nome: String; let coingecko: String }
+
+    struct Reconhecida: Encodable {
+        let rede: Rede
+        let evm: Bool
+        /// Na EVM o mesmo endereco vale em todas: as redes onde ele vai aparecer.
+        let redesEVM: [Rede]
+    }
+
+    static func rede(_ chain: Chain) -> Rede { Rede(id: chain.id, nome: chain.name, coingecko: chain.coingeckoID) }
+
+    static func reconhecer(_ texto: String) -> Reconhecida? {
+        let limpo = texto.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !limpo.isEmpty, let chain = Address.guessChain(limpo) else { return nil }
+        return Reconhecida(rede: rede(chain), evm: chain.family == .evm, redesEVM: chain.family == .evm ? Chain.evmChains.map(rede) : [])
+    }
+
+    static func guardar(_ texto: String, nome: String) throws -> WalletMeta {
+        let limpo = texto.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !Envio.pareceFrase(limpo), let chain = Address.guessChain(limpo),
+              case .success(let destino) = Address.validate(limpo, for: chain) else { throw Nucleo.Falha(erro: "observar.invalido") }
+        // Endereco M da Stellar e um cliente dentro de uma conta: o saldo e o da conta base.
+        let observado = chain.family == .stellar ? (StellarMuxedAccount(address: destino.address)?.account.address ?? destino.address) : destino.address
+        let limpoNome = nome.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try Sessao.shared.adicionarObservacao(rede: chain, endereco: observado, nome: String((limpoNome.isEmpty ? Textos.t("Carteira fria") : limpoNome).prefix(40)))
     }
 }

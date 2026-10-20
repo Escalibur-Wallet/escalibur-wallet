@@ -1,11 +1,737 @@
 package app.escalibur.wallet.ui.importar
 
+import android.content.ClipboardManager
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicSecureTextField
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextObfuscationMode
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import app.escalibur.wallet.ui.TelaProvisoria
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.escalibur.wallet.nucleo.Api
+import app.escalibur.wallet.nucleo.FalhaDoNucleo
+import app.escalibur.wallet.ui.App
+import app.escalibur.wallet.ui.Autorizacao
+import app.escalibur.wallet.ui.Textos
+import app.escalibur.wallet.ui.carteira.Redes
+import app.escalibur.wallet.ui.comp.Aceite
+import app.escalibur.wallet.ui.comp.BotaoPrimario
+import app.escalibur.wallet.ui.comp.BotaoTerciario
+import app.escalibur.wallet.ui.comp.CabecalhoDeFolha
+import app.escalibur.wallet.ui.comp.Confirmacao
+import app.escalibur.wallet.ui.comp.EnderecoEmBlocos
+import app.escalibur.wallet.ui.comp.Faixa
+import app.escalibur.wallet.ui.comp.Icone
+import app.escalibur.wallet.ui.comp.Icones
+import app.escalibur.wallet.ui.comp.Rodape
+import app.escalibur.wallet.ui.comp.Segmentado
+import app.escalibur.wallet.ui.comp.SeloDaRede
+import app.escalibur.wallet.ui.comp.SugestoesDePalavra
+import app.escalibur.wallet.ui.comp.TecladoDePalavras
+import app.escalibur.wallet.ui.comp.rememberPalavra
+import app.escalibur.wallet.ui.comp.TipoDeFaixa
+import app.escalibur.wallet.ui.novacarteira.VerificacaoDoAparelho
+import app.escalibur.wallet.ui.objetos
+import app.escalibur.wallet.ui.receber.opcional
 import app.escalibur.wallet.ui.t
+import app.escalibur.wallet.ui.tema.Altura
+import app.escalibur.wallet.ui.tema.Espaco
+import app.escalibur.wallet.ui.tema.Paleta
+import app.escalibur.wallet.ui.tema.Raio
+import app.escalibur.wallet.ui.tema.Tipo
+import app.escalibur.wallet.ui.tema.estilo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+import java.text.Normalizer
+
+/**
+ * As palavras em digitacao, uma por posicao, cada uma em bytes que o app zera (o PhraseEntry do
+ * iOS). Na tela, cada palavra fechada aparece em pontos; segurar mostra.
+ */
+class EntradaDaFrase(quantas: Int = 12) {
+    private var posicoes: MutableList<ByteArray?> = MutableList(quantas) { null }
+    var quantidade by mutableIntStateOf(quantas)
+        private set
+    var ativa by mutableIntStateOf(0)
+    /** Os bytes mudam sem o Compose ver: a revisao avisa as telas. */
+    var revisao by mutableIntStateOf(0)
+        private set
+
+    fun mudarQuantidade(nova: Int) {
+        while (posicoes.size < nova) posicoes.add(null)
+        while (posicoes.size > nova) posicoes.removeAt(posicoes.lastIndex)?.fill(0)
+        quantidade = nova
+        ativa = minOf(ativa, nova - 1)
+        revisao++
+    }
+
+    /** A palavra em NFKD minuscula, como a lista; a maior das listas cabe em 48 bytes. */
+    fun definir(palavra: String, indice: Int) {
+        posicoes[indice]?.fill(0)
+        val bytes = Normalizer.normalize(palavra.trim().lowercase(), Normalizer.Form.NFKD).toByteArray(Charsets.UTF_8)
+        posicoes[indice] = bytes.copyOf(minOf(bytes.size, 48))
+        bytes.fill(0)
+        revisao++
+    }
+
+    fun limpar(indice: Int) {
+        posicoes[indice]?.fill(0)
+        posicoes[indice] = null
+        revisao++
+    }
+
+    fun preenchida(indice: Int): Boolean = posicoes.getOrNull(indice) != null
+    val preenchidas: Int get() = posicoes.count { it != null }
+
+    /** Quantas letras tem a palavra (os pontos da tela). */
+    fun letras(indice: Int): Int = posicoes.getOrNull(indice)?.let { String(it, Charsets.UTF_8).length } ?: 0
+
+    /** So para mostrar enquanto o dono segura a posicao. */
+    fun texto(indice: Int): String = posicoes.getOrNull(indice)?.let { String(it, Charsets.UTF_8) } ?: ""
+
+    /** Distribui uma frase colada. Com uma contagem que nao e de frase, nada entra. */
+    fun colar(texto: String): Int {
+        val palavras = texto.split(Regex("[\\s,;]+")).filter { it.isNotBlank() }
+        if (palavras.size !in TAMANHOS) return palavras.size
+        mudarQuantidade(palavras.size)
+        palavras.forEachIndexed { indice, palavra -> definir(palavra, indice) }
+        ativa = palavras.size - 1
+        return palavras.size
+    }
+
+    /** A frase inteira, palavras separadas por espaco. Quem chama zera. */
+    fun frase(semAtiva: Boolean = false): ByteArray {
+        val partes = posicoes.withIndex().filter { (indice, bytes) -> bytes != null && !(semAtiva && indice == ativa) }.map { it.value!! }
+        val saida = ByteArray(partes.sumOf { it.size } + maxOf(0, partes.size - 1))
+        var posicao = 0
+        partes.forEachIndexed { indice, bytes ->
+            if (indice > 0) saida[posicao++] = ' '.code.toByte()
+            bytes.copyInto(saida, posicao)
+            posicao += bytes.size
+        }
+        return saida
+    }
+
+    fun zerar() {
+        posicoes.forEach { it?.fill(0) }
+        posicoes = MutableList(quantidade) { null }
+        ativa = 0
+        revisao++
+    }
+
+    companion object {
+        val TAMANHOS = listOf(12, 15, 18, 21, 24)
+    }
+}
+
+/** Os bytes de uma passphrase digitada, sem passar por String. Quem chama zera. */
+fun TextFieldState.bytes(): ByteArray {
+    val buffer = Charsets.UTF_8.encode(java.nio.CharBuffer.wrap(text))
+    val saida = ByteArray(buffer.remaining()).also { buffer.get(it) }
+    if (buffer.hasArray()) buffer.array().fill(0)
+    return saida
+}
+
+/** Importar com a senha da carteira: a checagem do aparelho, as palavras e a conferencia. */
+@Composable
+fun FluxoDeImportar(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
+    var etapa by remember { mutableStateOf("checagem") }
+    val entrada = remember { EntradaDaFrase() }
+    val passphrase = remember { TextFieldState() }
+    val repeticao = remember { TextFieldState() }
+    var usaPassphrase by remember { mutableStateOf(false) }
+    var previa by remember { mutableStateOf<JSONObject?>(null) }
+    DisposableEffect(Unit) {
+        onDispose {
+            entrada.zerar()
+            passphrase.clearText()
+            repeticao.clearText()
+        }
+    }
+    Box(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
+        when (etapa) {
+            "checagem" -> {
+                BackHandler(onBack = aoCancelar)
+                Column(Modifier.fillMaxSize()) {
+                    CabecalhoDeFolha("", aoCancelar)
+                    VerificacaoDoAparelho(t("Deslize para digitar as palavras"), criando = false) { etapa = "frase" }
+                }
+            }
+            "frase" -> TelaDaFrase(entrada, passphrase, repeticao, usaPassphrase, { usaPassphrase = it }, aoCancelar) { conferida ->
+                previa = conferida
+                etapa = "previa"
+            }
+            "previa" -> previa?.let { dados ->
+                PreviaDaImportacao(dados, entrada, if (usaPassphrase) passphrase else null, aoVoltar = { etapa = "frase" }, aoGuardar = aoTerminar)
+            }
+        }
+    }
+}
 
 @Composable
-fun FluxoDeImportar(aoCancelar: () -> Unit, @Suppress("UNUSED_PARAMETER") aoTerminar: () -> Unit) = TelaProvisoria(t("Importar"), aoCancelar)
+private fun TelaDaFrase(
+    entrada: EntradaDaFrase, passphrase: TextFieldState, repeticao: TextFieldState, usaPassphrase: Boolean,
+    aoMudarPassphrase: (Boolean) -> Unit, aoCancelar: () -> Unit, aoConferir: (JSONObject) -> Unit,
+) {
+    val escopo = rememberCoroutineScope()
+    val contexto = LocalContext.current
+    val palavra = rememberPalavra()
+    var digitando by remember { mutableStateOf(false) }
+    var mensagem by remember { mutableStateOf<String?>(null) }
+    var colado by remember { mutableStateOf(false) }
+    var trabalhando by remember { mutableStateOf(false) }
+    var confirmarLimpar by remember { mutableStateOf(false) }
+    var mostrar by remember { mutableStateOf(false) }
+    var maisTamanhos by remember { mutableStateOf(false) }
+    val revisao = entrada.revisao
+
+    // Sem internet enquanto as palavras estao na tela: a conferencia e toda local.
+    DisposableEffect(Unit) {
+        escopo.launch { runCatching { Api.objeto("rede.silencio", JSONObject().put("ligar", true)) } }
+        onDispose { CoroutineScope(Dispatchers.IO).launch { runCatching { Api.objeto("rede.silencio", JSONObject().put("ligar", false)) } } }
+    }
+    // Os idiomas das palavras ja fechadas, fora a posicao em digitacao: as sugestoes seguem eles.
+    LaunchedEffect(revisao, entrada.ativa) {
+        palavra.idiomas = runCatching { Api.comSegredo("carteira.idiomas", JSONObject(), entrada.frase(semAtiva = true)).optJSONArray("idiomas") }.getOrNull()
+    }
+
+    fun fechar(escolhida: String) {
+        val limpa = escolhida.trim()
+        if (limpa.isEmpty()) return
+        entrada.definir(limpa, entrada.ativa)
+        palavra.limpar()
+        mensagem = null
+        if (entrada.ativa < entrada.quantidade - 1) entrada.ativa++ else digitando = false
+    }
+
+    // O Seguinte: a primeira sugestao do que esta digitado (a palavra exata vem antes); sem
+    // sugestao, o digitado.
+    fun seguir() {
+        escopo.launch { fechar(palavra.sugestoesAgora().palavras.firstOrNull() ?: palavra.texto) }
+    }
+
+    // Saindo das posicoes com uma palavra completa digitada, ela entra; pela metade, fica so no campo.
+    fun pronto(depois: () -> Unit = {}) {
+        escopo.launch {
+            if (palavra.texto.isNotEmpty() && palavra.sugestoesAgora().palavras.firstOrNull() == palavra.texto) fechar(palavra.texto)
+            digitando = false
+            depois()
+        }
+    }
+
+    fun colar() {
+        val gerente = contexto.getSystemService(ClipboardManager::class.java)
+        val texto = runCatching { gerente.primaryClip?.getItemAt(0)?.coerceToText(contexto)?.toString() }.getOrNull().orEmpty()
+        if (texto.isBlank()) return
+        palavra.limpar()
+        val quantas = entrada.colar(texto)
+        runCatching { gerente.clearPrimaryClip() }
+        colado = true
+        digitando = false
+        mensagem = if (quantas in EntradaDaFrase.TAMANHOS) null
+                   else t("O texto colado tem %lld palavras, e uma frase tem 12, 15, 18, 21 ou 24. Nada foi preenchido: confira o que você copiou.", quantas)
+    }
+
+    fun importar() {
+        mensagem = null
+        if (usaPassphrase) {
+            val a = passphrase.bytes()
+            val b = repeticao.bytes()
+            val iguais = a.isNotEmpty() && java.security.MessageDigest.isEqual(a, b)
+            a.fill(0)
+            b.fill(0)
+            if (!iguais) {
+                mensagem = t("As duas versões da passphrase não conferem.")
+                return
+            }
+        }
+        trabalhando = true
+        escopo.launch {
+            try {
+                val validacao = Api.comSegredo("carteira.validarFrase", JSONObject(), entrada.frase())
+                when (validacao.getString("resultado")) {
+                    "valida" -> {
+                        val partes = if (usaPassphrase) arrayOf(entrada.frase(), passphrase.bytes()) else arrayOf(entrada.frase())
+                        aoConferir(Api.comSegredo("carteira.previa", JSONObject(), *partes))
+                    }
+                    "tamanho" -> mensagem = t("Faltam palavras: %lld de %lld.", validacao.optInt("contagem"), entrada.quantidade)
+                    "desconhecida" -> mensagem = t("A palavra %lld não existe na lista. Confira no papel.", validacao.optInt("posicao"))
+                    "conferencia" -> mensagem = t("Todas as palavras existem, mas a conferência da frase não fecha. Alguma está trocada ou fora de ordem. Confira no papel.")
+                    "idiomas" -> mensagem = t("As palavras são de idiomas diferentes. Confira no papel.")
+                    else -> mensagem = t("Esta frase vale em mais de um idioma, e a escolha muda a carteira. Importe pela versão em inglês da frase.")
+                }
+            } catch (_: FalhaDoNucleo) {
+                mensagem = t("Não foi possível importar a carteira.")
+            } finally {
+                trabalhando = false
+            }
+        }
+    }
+
+    BackHandler { if (digitando) pronto() else aoCancelar() }
+    Column(Modifier.fillMaxSize()) {
+        CabecalhoDeFolha("", aoCancelar)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                Text(t("Importar com a senha da carteira"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
+                Text(t("Digite as palavras na ordem em que você anotou, uma em cada campo."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
+            }
+            Row(Modifier.padding(top = Espaco.lg), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                val opcoes = if (maisTamanhos) EntradaDaFrase.TAMANHOS else if (entrada.quantidade == 24) listOf(12, 24) else listOf(entrada.quantidade, 24)
+                Segmentado(opcoes.map { it to if (maisTamanhos) "$it" else t("%lld palavras", it) }, entrada.quantidade, Modifier.weight(1f)) {
+                    entrada.mudarQuantidade(it)
+                    palavra.limpar()
+                    maisTamanhos = false
+                }
+                if (!maisTamanhos) {
+                    Box(Modifier.size(40.dp).clip(CircleShape).background(Paleta.corpo).clickable { maisTamanhos = true }, contentAlignment = Alignment.Center) {
+                        Icone(Icones.mais, Paleta.tintaSuave, tamanho = 16.dp, descricao = t("Outros tamanhos de frase"))
+                    }
+                }
+            }
+            Row(Modifier.padding(top = Espaco.sm)) {
+                Row(
+                    Modifier.height(36.dp).clip(CircleShape).background(Paleta.trilho).clickable { colar() }.padding(horizontal = Espaco.sm),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icone(Icones.colar, Paleta.tinta, tamanho = 15.dp)
+                    Text(t("Colar"), style = estilo(Tipo.rotulo), color = Paleta.tinta)
+                }
+            }
+            if (colado) {
+                Text(t("Colado. A área de transferência foi limpa agora."), style = estilo(Tipo.nota), color = Paleta.cautela, modifier = Modifier.padding(top = Espaco.xs))
+            }
+            GradeDaFrase(entrada, revisao, digitando, palavra.texto, mostrar, Modifier.padding(top = Espaco.md)) { indice ->
+                pronto {
+                    entrada.ativa = indice
+                    palavra.limpar()
+                    digitando = true
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(top = Espaco.xs), verticalAlignment = Alignment.CenterVertically) {
+                if (entrada.preenchidas > 0) BotaoTerciario(t("Limpar")) { confirmarLimpar = true }
+                Spacer(Modifier.weight(1f))
+                BotaoTerciario(if (mostrar) t("Esconder palavras") else t("Mostrar palavras")) { mostrar = !mostrar }
+            }
+            Row(Modifier.padding(top = Espaco.md), verticalAlignment = Alignment.CenterVertically) {
+                Text(t("Esta carteira usa passphrase"), style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
+                Switch(usaPassphrase, aoMudarPassphrase, colors = SwitchDefaults.colors(
+                    checkedTrackColor = Paleta.acento, checkedThumbColor = Paleta.sobreAcento,
+                    uncheckedTrackColor = Paleta.trilho, uncheckedThumbColor = Paleta.tintaSuave, uncheckedBorderColor = Paleta.borda,
+                ))
+            }
+            AnimatedVisibility(usaPassphrase) {
+                Column(verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                    Text(t("Com a passphrase errada, a carteira abre vazia e sem aviso nenhum. Por isso ela é digitada duas vezes. Segure o dedo num campo para conferir as duas."),
+                         style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs))
+                    var revelar by remember { mutableStateOf(false) }
+                    CampoSecreto(passphrase, t("Passphrase"), revelar) { revelar = it }
+                    CampoSecreto(repeticao, t("Repita a passphrase"), revelar) { revelar = it }
+                }
+            }
+            mensagem?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
+            Column(
+                Modifier.padding(top = Espaco.lg).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.base),
+                verticalArrangement = Arrangement.spacedBy(Espaco.md),
+            ) {
+                Garantia(Icones.cadeado, t("Escondidas nos campos"), t("Segure uma palavra para conferir. As sugestões mostram a palavra para você escolher."))
+                Garantia(Icones.celular, t("Só neste celular"), t("O app não manda as palavras para lugar nenhum, e ninguém da Escalibur pede estas palavras."))
+                Garantia(Icones.globo, t("Sem internet nesta tela"),
+                         t("Enquanto ela está aberta, o app não fala com rede nenhuma. A conferência é feita aqui: a última palavra traz uma soma de verificação das outras, calculada no celular com a lista de 2048 palavras que vem dentro do app."))
+            }
+        }
+        if (digitando) {
+            Row(Modifier.fillMaxWidth().height(52.dp).background(Paleta.corpo).padding(horizontal = Espaco.margem), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) {
+                    val sugestoes = palavra.sugestoes.palavras
+                    when {
+                        palavra.texto.isEmpty() -> Text(t("Palavra %lld de %lld", entrada.ativa + 1, entrada.quantidade), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+                        sugestoes.isEmpty() -> Unit
+                        else -> SugestoesDePalavra(sugestoes) { fechar(it) }
+                    }
+                    if (palavra.texto.isNotEmpty() && palavra.sugestoes.letras.isEmpty() && sugestoes.isEmpty()) {
+                        Text(t("Nenhuma palavra da lista começa assim."), style = estilo(Tipo.nota), color = Paleta.cautela)
+                    }
+                }
+                BotaoTerciario(t("Pronto")) { pronto() }
+            }
+            TecladoDePalavras(
+                palavra.texto, letrasPossiveis = palavra.sugestoes.letras,
+                aoDigitar = { if (palavra.texto.length < 12) palavra.texto += it },
+                aoApagar = {
+                    if (palavra.texto.isNotEmpty()) palavra.texto = palavra.texto.dropLast(1)
+                    else if (entrada.preenchida(entrada.ativa)) entrada.limpar(entrada.ativa)
+                },
+                aoSeguir = { seguir() },
+                tituloDoSeguir = if (entrada.ativa < entrada.quantidade - 1) t("Próxima") else t("Pronto"),
+            )
+        } else {
+            Rodape {
+                BotaoPrimario(t("Importar"), ligado = entrada.preenchidas == entrada.quantidade, carregando = trabalhando) { importar() }
+            }
+        }
+    }
+    if (confirmarLimpar) {
+        Confirmacao(
+            t("Apagar as palavras digitadas?"), t("As %lld palavras saem desta tela. Você digita de novo, a partir da primeira.", entrada.preenchidas), t("Apagar"),
+            aoConfirmar = {
+                confirmarLimpar = false
+                entrada.zerar()
+                palavra.limpar()
+                digitando = false
+                colado = false
+                mensagem = null
+            },
+            aoCancelar = { confirmarLimpar = false },
+        )
+    }
+}
+
+/** As posicoes em duas colunas: o numero e, no lugar da palavra, pontos; segurar mostra. */
+@Composable
+private fun GradeDaFrase(
+    entrada: EntradaDaFrase, revisao: Int, digitando: Boolean, digitado: String, mostrar: Boolean, modifier: Modifier = Modifier,
+    aoTocar: (Int) -> Unit,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+        for (linha in 0 until (entrada.quantidade + 1) / 2) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                for (coluna in 0..1) {
+                    val indice = linha * 2 + coluna
+                    if (indice < entrada.quantidade) {
+                        PosicaoDaFrase(indice, entrada, revisao, ativa = digitando && entrada.ativa == indice, digitado, mostrar, Modifier.weight(1f)) { aoTocar(indice) }
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
-fun ObservarEndereco(aoCancelar: () -> Unit, @Suppress("UNUSED_PARAMETER") aoTerminar: () -> Unit) = TelaProvisoria(t("Só observar um endereço"), aoCancelar)
+private fun PosicaoDaFrase(
+    indice: Int, entrada: EntradaDaFrase, @Suppress("UNUSED_PARAMETER") revisao: Int, ativa: Boolean, digitado: String, mostrar: Boolean,
+    modifier: Modifier, aoTocar: () -> Unit,
+) {
+    var segurando by remember { mutableStateOf(false) }
+    val forma = RoundedCornerShape(Raio.cartao)
+    val preenchida = entrada.preenchida(indice)
+    Row(
+        modifier.height(48.dp).clip(forma).background(Paleta.corpo).border(1.dp, if (ativa) Paleta.acento else Paleta.borda, forma)
+            .pointerInput(indice) {
+                detectTapGestures(
+                    onPress = {
+                        segurando = true
+                        tryAwaitRelease()
+                        segurando = false
+                    },
+                    onTap = { aoTocar() },
+                )
+            }
+            .padding(horizontal = Espaco.sm),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs),
+    ) {
+        Text("${indice + 1}", style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.width(20.dp))
+        val texto = when {
+            ativa && digitado.isNotEmpty() -> digitado
+            ativa && !preenchida -> ""
+            preenchida && (mostrar || segurando) -> entrada.texto(indice)
+            preenchida -> "•".repeat(entrada.letras(indice).coerceIn(3, 8))
+            else -> ""
+        }
+        if (texto.isEmpty() && !ativa) {
+            Text(t("palavra"), style = estilo(Tipo.mono), color = Paleta.tintaMorta)
+        } else {
+            Text(texto, fontFamily = FontFamily.Monospace, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Paleta.tinta, maxLines = 1)
+        }
+        if (ativa) Box(Modifier.width(2.dp).height(20.dp).background(Paleta.acento))
+    }
+}
+
+@Composable
+private fun CampoSecreto(campo: TextFieldState, dica: String, revelar: Boolean, aoRevelar: (Boolean) -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().height(Altura.primaria).background(Paleta.corpo, RoundedCornerShape(Raio.cartao))
+            .border(1.dp, Paleta.borda, RoundedCornerShape(Raio.cartao))
+            .pointerInput(Unit) { detectTapGestures(onPress = { aoRevelar(true); tryAwaitRelease(); aoRevelar(false) }) }
+            .padding(horizontal = Espaco.md),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        if (campo.text.isEmpty()) Text(dica, style = estilo(Tipo.mono), color = Paleta.tintaMorta)
+        BasicSecureTextField(
+            state = campo, textObfuscationMode = if (revelar) TextObfuscationMode.Visible else TextObfuscationMode.Hidden,
+            textStyle = estilo(Tipo.mono).copy(color = Paleta.tinta), cursorBrush = SolidColor(Paleta.acento),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun Garantia(icone: ImageVector, titulo: String, detalhe: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) { Icone(icone, Paleta.tintaSuave, tamanho = 14.dp) }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(titulo, style = estilo(Tipo.linha), color = Paleta.tinta)
+            Text(detalhe, style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+        }
+    }
+}
+
+/**
+ * A conferencia antes de guardar uma carteira que veio de fora: os primeiros enderecos, a impressao
+ * digital, quem controla a conta na Tron e o aceite de que quem deu as palavras controla a carteira.
+ */
+@Composable
+private fun PreviaDaImportacao(dados: JSONObject, entrada: EntradaDaFrase, passphrase: TextFieldState?, aoVoltar: () -> Unit, aoGuardar: () -> Unit) {
+    val escopo = rememberCoroutineScope()
+    var aceito by remember { mutableStateOf(false) }
+    var tronOutraChave by remember { mutableStateOf(false) }
+    var guardando by remember { mutableStateOf(false) }
+    var mensagem by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        val tron = dados.opcional("tron") ?: return@LaunchedEffect
+        // A tela das palavras saiu: o silencio da rede termina antes de perguntar a Tron (a saida
+        // dela fecha o silencio em paralelo, e a pergunta chegava a ser recusada).
+        runCatching { Api.objeto("rede.silencio", JSONObject().put("ligar", false)) }
+        tronOutraChave = runCatching { Api.objeto("carteira.tron", JSONObject().put("endereco", tron)).getBoolean("outraChave") }.getOrDefault(false)
+    }
+    BackHandler(onBack = aoVoltar)
+    Column(Modifier.fillMaxSize()) {
+        CabecalhoDeFolha("", null, aoVoltar = aoVoltar)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
+            Text(t("Confira antes de guardar"), style = estilo(Tipo.titulo), color = Paleta.tinta)
+            Text(
+                if (passphrase != null) t("Se esta carteira já recebeu antes, estes endereços são os que você conhece. Se não baterem, a frase ou a passphrase está diferente, e o que abriria aqui é outra carteira, vazia.")
+                else t("Se esta carteira já recebeu antes, estes endereços são os que você conhece. Se não baterem, alguma palavra está diferente, e o que abriria aqui é outra carteira, vazia."),
+                style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm),
+            )
+            Column(Modifier.padding(top = Espaco.lg), verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
+                for (item in dados.getJSONArray("enderecos").objetos()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                            SeloDaRede(item.getString("rede"), Redes.rede(item.getString("rede"))?.coingecko ?: item.getString("rede"), 20.dp, Paleta.vazio)
+                            Text(item.getString("nome"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+                        }
+                        EnderecoEmBlocos(item.getString("endereco"))
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
+                    Text(t("Impressão digital da carteira"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+                    Text(dados.getString("digital"), style = estilo(Tipo.linha), color = Paleta.tinta)
+                    Text(t("A mesma que carteiras de hardware mostram para esta frase."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+                }
+            }
+            if (tronOutraChave) {
+                Faixa(TipoDeFaixa.falha, t("Na Tron, esta conta é controlada por outra chave"), Modifier.padding(top = Espaco.lg),
+                      mensagem = t("É o golpe da frase com saldo: o que entrar nela, quem controla a outra chave leva. Não deposite nada nesta carteira."))
+            }
+            mensagem?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
+        }
+        Rodape {
+            Aceite(aceito, t("Entendo que quem me deu estas palavras controla esta carteira e pode levar o que entrar nela. Só deposito aqui se as palavras forem só minhas.")) { aceito = it }
+            BotaoPrimario(t("Guardar esta carteira"), Modifier.padding(top = Espaco.sm), ligado = aceito, carregando = guardando) {
+                guardando = true
+                mensagem = null
+                escopo.launch {
+                    try {
+                        val guardou = Autorizacao.tentando(t("Guardar a carteira importada neste celular")) { credencial ->
+                            val corpo = JSONObject().put("credencial", credencial.json()).put("palavras", entrada.quantidade).put("tronOutraChave", tronOutraChave)
+                            val partes = if (passphrase != null) credencial.partes(entrada.frase(), passphrase.bytes()) else credencial.partes(entrada.frase())
+                            Api.comSegredo("carteira.importar", corpo, *partes)
+                        }
+                        if (guardou != null) {
+                            App.recarregar()
+                            entrada.zerar()
+                            aoGuardar()
+                        }
+                    } catch (falha: FalhaDoNucleo) {
+                        mensagem = when (falha.codigo) {
+                            "sessao.jaImportada" -> t("Esta carteira já está neste app, com o nome %@.", falha.dados.optString("nome"))
+                            else -> Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível importar a carteira.")
+                        }
+                    } finally {
+                        guardando = false
+                    }
+                }
+            }
+            BotaoTerciario(t("Voltar e conferir"), Modifier.fillMaxWidth(), acao = aoVoltar)
+        }
+    }
+}
+
+/** So observar um endereco: a rede pelo formato, sem chave nenhuma neste celular. */
+@Composable
+fun ObservarEndereco(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
+    val escopo = rememberCoroutineScope()
+    val contexto = LocalContext.current
+    var endereco by remember { mutableStateOf("") }
+    var nome by remember { mutableStateOf(t("Carteira fria")) }
+    var reconhecida by remember { mutableStateOf<JSONObject?>(null) }
+    var erro by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(endereco) {
+        val resposta = runCatching { Api.objeto("carteira.reconhecer", JSONObject().put("endereco", endereco)) }.getOrNull()
+        if (resposta?.optBoolean("frase") == true) {
+            endereco = ""
+            erro = t("Este código traz as palavras de uma senha de carteira, não um endereço. Quem tem essas palavras tem o saldo: não mostre a ninguém.")
+            return@LaunchedEffect
+        }
+        reconhecida = resposta?.optJSONObject("reconhecida")
+    }
+    BackHandler(onBack = aoCancelar)
+    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().imePadding()) {
+        CabecalhoDeFolha("", aoCancelar)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                Box(Modifier.size(60.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) { Icone(Icones.olho, Paleta.tinta, tamanho = 24.dp) }
+                Text(t("Observar um endereço"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
+                Text(t("Acompanhe o saldo de um endereço sem guardar chave nenhuma neste celular."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
+            }
+            Text(t("Endereço"), style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.lg))
+            Row(
+                Modifier.padding(top = Espaco.xs).fillMaxWidth().heightIn(min = 56.dp).background(Paleta.corpo, RoundedCornerShape(Raio.cartao))
+                    .border(1.dp, Paleta.borda, RoundedCornerShape(Raio.cartao)).padding(start = Espaco.md, end = Espaco.xs, top = Espaco.xxs, bottom = Espaco.xxs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) {
+                    if (endereco.isEmpty()) Text(t("Cole ou digite o endereço"), style = estilo(Tipo.corpo), color = Paleta.tintaMorta)
+                    BasicTextField(
+                        endereco, { endereco = it.take(512); erro = null }, maxLines = 4,
+                        textStyle = estilo(Tipo.mono).copy(color = Paleta.tinta), cursorBrush = SolidColor(Paleta.acento),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = KeyboardType.Ascii),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (endereco.isEmpty()) {
+                    Row(
+                        Modifier.height(32.dp).clip(CircleShape).background(Paleta.controle).clickable {
+                            val gerente = contexto.getSystemService(ClipboardManager::class.java)
+                            endereco = runCatching { gerente.primaryClip?.getItemAt(0)?.coerceToText(contexto)?.toString() }.getOrNull().orEmpty().trim().take(512)
+                        }.padding(horizontal = Espaco.sm),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icone(Icones.colar, Paleta.tinta, tamanho = 14.dp)
+                        Text(t("Colar"), style = estilo(Tipo.rotulo), color = Paleta.tinta)
+                    }
+                } else {
+                    Box(Modifier.size(Altura.toque).clickable { endereco = "" }, contentAlignment = Alignment.Center) {
+                        Icone(Icones.fecharCheio, Paleta.tintaApagada, tamanho = 20.dp, descricao = t("Apagar o endereço"))
+                    }
+                }
+            }
+            val achada = reconhecida
+            if (achada != null) {
+                val rede = achada.getJSONObject("rede")
+                val evm = achada.getBoolean("evm")
+                val redesEVM = achada.getJSONArray("redesEVM").objetos()
+                Row(
+                    Modifier.padding(top = Espaco.sm).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.sm),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
+                ) {
+                    if (evm) {
+                        Box {
+                            redesEVM.take(4).forEachIndexed { indice, item ->
+                                SeloDaRede(item.getString("id"), item.getString("coingecko"), 28.dp, Paleta.corpo, Modifier.padding(start = (indice * 18).dp))
+                            }
+                        }
+                    } else {
+                        SeloDaRede(rede.getString("id"), rede.getString("coingecko"), 32.dp, Paleta.corpo)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(if (evm) t("Endereço EVM") else t("Endereço %@", rede.getString("nome")), style = estilo(Tipo.linha), color = Paleta.tinta)
+                        val nomes = redesEVM.map { it.getString("nome") }
+                        Text(if (evm) t("Vale em %@.", android.icu.text.ListFormatter.getInstance(Textos.locale).format(nomes)) else t("Rede reconhecida."),
+                             style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+                    }
+                    Icone(Icones.vistoCheio, Paleta.alta, tamanho = 20.dp)
+                }
+            } else if (endereco.isNotBlank()) {
+                Text(t("Não reconheci este endereço em nenhuma rede ligada. Confira se copiou inteiro."), style = estilo(Tipo.nota), color = Paleta.baixa,
+                     modifier = Modifier.padding(top = Espaco.sm))
+            }
+            Text(t("Nome da carteira"), style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.lg))
+            Box(
+                Modifier.padding(top = Espaco.xs).fillMaxWidth().height(Altura.campo).background(Paleta.corpo, RoundedCornerShape(Raio.cartao))
+                    .border(1.dp, Paleta.borda, RoundedCornerShape(Raio.cartao)).padding(horizontal = Espaco.md),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                BasicTextField(
+                    nome, { nome = it.take(40) }, singleLine = true, textStyle = estilo(Tipo.linha).copy(color = Paleta.tinta),
+                    cursorBrush = SolidColor(Paleta.acento), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Row(Modifier.padding(top = Espaco.sm), horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                Icone(Icones.olho, Paleta.tintaApagada, tamanho = 13.dp)
+                Text(t("Desta carteira você vê saldo e histórico. Enviar e trocar ficam desligados."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+            }
+            erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
+        }
+        Rodape {
+            BotaoPrimario(t("Observar"), ligado = reconhecida != null) {
+                escopo.launch {
+                    try {
+                        Api.objeto("carteira.observar", JSONObject().put("endereco", endereco).put("nome", nome))
+                        App.recarregar()
+                        aoTerminar()
+                    } catch (_: FalhaDoNucleo) {
+                        erro = t("Não foi possível guardar.")
+                    }
+                }
+            }
+        }
+    }
+}

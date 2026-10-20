@@ -172,6 +172,7 @@ final class Sessao: @unchecked Sendable {
         Saldos.shared.esquecer()
         PortaDaPassphrase.encerrarFolgas()
         Envio.encerrar()
+        Silencio.ligar(false)
     }
 
     /// O app foi para o segundo plano (a tela ja fica coberta pelo FLAG_SECURE).
@@ -372,6 +373,7 @@ final class Sessao: @unchecked Sendable {
         Saldos.shared.esquecer()
         PortaDaPassphrase.encerrarFolgas()
         Envio.encerrar()
+        Silencio.ligar(false)
     }
 
     // MARK: Carteira nova

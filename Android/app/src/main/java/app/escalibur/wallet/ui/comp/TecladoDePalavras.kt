@@ -43,13 +43,17 @@ import app.escalibur.wallet.ui.tema.Paleta
 import app.escalibur.wallet.ui.tema.Raio
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** As palavras da lista que comecam com o que foi digitado, e as letras que ainda levam a alguma. */
 data class Sugestoes(val palavras: List<String>, val letras: Set<Char>) {
     companion object {
-        suspend fun de(digitado: String): Sugestoes = runCatching {
-            val json = Api.objeto("carteira.sugestoes", JSONObject().put("digitado", digitado))
+        /** `idiomas`: os das palavras ja fechadas da frase, quando ha. */
+        suspend fun de(digitado: String, idiomas: JSONArray? = null): Sugestoes = runCatching {
+            val corpo = JSONObject().put("digitado", digitado).put("limite", 4)
+            idiomas?.let { corpo.put("idiomas", it) }
+            val json = Api.objeto("carteira.sugestoes", corpo)
             val palavras = json.getJSONArray("palavras").let { lista -> (0 until lista.length()).map { lista.getString(it) } }
             val letras = json.getJSONArray("letras").let { lista -> (0 until lista.length()).mapNotNull { lista.getString(it).firstOrNull() }.toSet() }
             Sugestoes(palavras, letras)
@@ -169,14 +173,31 @@ private fun RowScope.TeclaDeIcone(icone: androidx.compose.ui.graphics.vector.Ima
     }
 }
 
-/** O estado de uma palavra em digitacao no teclado proprio, com as sugestoes do nucleo. */
+/**
+ * O estado de uma palavra em digitacao no teclado proprio, com as sugestoes do nucleo. A resposta do
+ * nucleo chega um instante depois de cada tecla: ate chegar a do texto atual, nenhuma letra fica
+ * apagada (uma tecla certa tocada rapido nao se perde) e o Seguinte pergunta antes de fechar.
+ */
 class PalavraEmDigitacao {
     var texto by mutableStateOf("")
-    var sugestoes by mutableStateOf(Sugestoes(emptyList(), ('a'..'z').toSet()))
-        private set
+    var idiomas by mutableStateOf<JSONArray?>(null)
+    private var resposta by mutableStateOf<Pair<String, Sugestoes>?>(null)
+
+    /** As sugestoes do texto atual; de um texto anterior, nenhuma. */
+    val sugestoes: Sugestoes
+        get() = resposta?.takeIf { it.first == texto }?.second ?: Sugestoes(emptyList(), ('a'..'z').toSet())
 
     suspend fun atualizar() {
-        sugestoes = Sugestoes.de(texto)
+        val digitado = texto
+        val nova = Sugestoes.de(digitado, idiomas)
+        if (texto == digitado) resposta = digitado to nova
+    }
+
+    /** As sugestoes do texto atual, esperando a resposta se ela ainda nao veio. */
+    suspend fun sugestoesAgora(): Sugestoes {
+        resposta?.takeIf { it.first == texto }?.let { return it.second }
+        val digitado = texto
+        return Sugestoes.de(digitado, idiomas).also { if (texto == digitado) resposta = digitado to it }
     }
 
     fun limpar() {
@@ -187,6 +208,6 @@ class PalavraEmDigitacao {
 @Composable
 fun rememberPalavra(): PalavraEmDigitacao {
     val palavra = remember { PalavraEmDigitacao() }
-    LaunchedEffect(palavra.texto) { palavra.atualizar() }
+    LaunchedEffect(palavra.texto, palavra.idiomas) { palavra.atualizar() }
     return palavra
 }

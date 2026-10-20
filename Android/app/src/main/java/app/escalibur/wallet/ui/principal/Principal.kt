@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.principal
 
+import app.escalibur.wallet.ui.comp.seguraToques
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -101,7 +102,7 @@ fun Principal() {
             BarraDeAbas()
         }
         Navegacao.pilha.forEachIndexed { indice, tela ->
-            Box(Modifier.fillMaxSize().background(Paleta.vazio)) { tela() }
+            Box(Modifier.fillMaxSize().background(Paleta.vazio).seguraToques()) { tela() }
             if (indice == Navegacao.pilha.lastIndex) BackHandler { Navegacao.fechar() }
         }
     }
