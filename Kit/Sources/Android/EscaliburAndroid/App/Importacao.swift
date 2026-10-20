@@ -38,6 +38,26 @@ enum Importacao {
         return (copia(frase), veredito)
     }
 
+    /// A primeira palavra (1 a N) que nao esta na lista em ingles, ou nil: a frase escolhida a
+    /// dedo e so em ingles, como a sorteada.
+    static func foraDoIngles(_ frase: SecureBytes) -> Int? {
+        guard let lista = try? WordlistStore.shared.wordlist(for: .english) else { return nil }
+        return frase.withUnsafeBytes { raw -> Int? in
+            var inicio = 0
+            var posicao = 0
+            for indice in 0...raw.count where indice == raw.count || raw[indice] == 0x20 {
+                if indice > inicio {
+                    posicao += 1
+                    var palavra = Array(raw[inicio..<indice])
+                    defer { palavra.resetBytes() }
+                    if lista.position(nfkd: palavra) == nil { return posicao }
+                }
+                inicio = indice + 1
+            }
+            return nil
+        }
+    }
+
     static func validar(_ frase: SecureBytes) -> Validacao {
         defer { frase.wipe() }
         let (canonica, veredito) = resolver(frase)

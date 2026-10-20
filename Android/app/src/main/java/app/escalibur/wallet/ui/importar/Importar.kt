@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -220,10 +221,16 @@ fun FluxoDeImportar(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
     }
 }
 
+/**
+ * A tela das palavras. `escolhendo` (12 ou 24): criar uma carteira com as palavras do dono, todas
+ * menos a ultima, que o app sorteia para a conta da frase fechar; `aoEscolher` recebe as primeiras
+ * (em bytes que zera) e devolve o erro para mostrar, ou nil.
+ */
 @Composable
-private fun TelaDaFrase(
+internal fun TelaDaFrase(
     entrada: EntradaDaFrase, passphrase: TextFieldState, repeticao: TextFieldState, usaPassphrase: Boolean,
-    aoMudarPassphrase: (Boolean) -> Unit, aoCancelar: () -> Unit, aoConferir: (JSONObject) -> Unit,
+    aoMudarPassphrase: (Boolean) -> Unit, aoCancelar: () -> Unit, escolhendo: Int? = null,
+    aoEscolher: (suspend (ByteArray) -> String?)? = null, aoConferir: (JSONObject) -> Unit,
 ) {
     val escopo = rememberCoroutineScope()
     val contexto = LocalContext.current
@@ -243,8 +250,24 @@ private fun TelaDaFrase(
         onDispose { CoroutineScope(Dispatchers.IO).launch { runCatching { Api.objeto("rede.silencio", JSONObject().put("ligar", false)) } } }
     }
     // Os idiomas das palavras ja fechadas, fora a posicao em digitacao: as sugestoes seguem eles.
+    // Escolhendo, so a lista em ingles: a frase gerada e so em ingles.
     LaunchedEffect(revisao, entrada.ativa) {
-        palavra.idiomas = runCatching { Api.comSegredo("carteira.idiomas", JSONObject(), entrada.frase(semAtiva = true)).optJSONArray("idiomas") }.getOrNull()
+        palavra.idiomas = if (escolhendo != null) org.json.JSONArray().put("english")
+                          else runCatching { Api.comSegredo("carteira.idiomas", JSONObject(), entrada.frase(semAtiva = true)).optJSONArray("idiomas") }.getOrNull()
+    }
+    var avisoAberto by remember { mutableStateOf(false) }
+
+    fun escolher() {
+        val receber = aoEscolher ?: return
+        mensagem = null
+        trabalhando = true
+        escopo.launch {
+            try {
+                mensagem = receber(entrada.frase())
+            } finally {
+                trabalhando = false
+            }
+        }
     }
 
     fun fechar(escolhida: String) {
@@ -325,10 +348,34 @@ private fun TelaDaFrase(
         CabecalhoDeFolha("", aoCancelar)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                Text(t("Importar com a senha da carteira"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
-                Text(t("Digite as palavras na ordem em que você anotou, uma em cada campo."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
+                Text(if (escolhendo != null) t("Escolha as suas palavras") else t("Importar com a senha da carteira"), style = estilo(Tipo.titulo),
+                     color = Paleta.tinta, textAlign = TextAlign.Center)
+                Text(
+                    if (escolhendo != null) t("Digite %lld palavras da lista em inglês, na ordem em que você anotou. A %lldª o app sorteia, para a conta da frase fechar.", escolhendo - 1, escolhendo)
+                    else t("Digite as palavras na ordem em que você anotou, uma em cada campo."),
+                    style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
+                )
             }
-            Row(Modifier.padding(top = Espaco.lg), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+            if (escolhendo != null) {
+                // Compacto, com a setinha para abrir o porque.
+                Column(
+                    Modifier.padding(top = Espaco.lg).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.cautelaFundo)
+                        .clickable { avisoAberto = !avisoAberto }.padding(Espaco.sm).animateContentSize(),
+                    verticalArrangement = Arrangement.spacedBy(Espaco.xs),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                        Icone(Icones.alerta, Paleta.cautela, tamanho = 14.dp)
+                        Text(t("Escolhidas a dedo, as palavras ficam mais fáceis de adivinhar"), style = estilo(Tipo.nota), fontWeight = FontWeight.SemiBold,
+                             color = Paleta.tinta, modifier = Modifier.weight(1f))
+                        Icone(if (avisoAberto) Icones.acima else Icones.abaixo, Paleta.tintaSuave, tamanho = 12.dp)
+                    }
+                    if (avisoAberto) {
+                        Text(t("Pessoas tendem a escolher palavras favoritas, do mesmo tema ou próximas na lista, e robôs testam essas combinações sem parar. O seguro é sortear cada palavra com dado ou moeda, ou deixar o app sortear. Uma passphrase forte por cima dá mais uma camada de proteção."),
+                             style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(start = 22.dp))
+                    }
+                }
+            }
+            if (escolhendo == null) Row(Modifier.padding(top = Espaco.lg), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                 val opcoes = if (maisTamanhos) EntradaDaFrase.TAMANHOS else if (entrada.quantidade == 24) listOf(12, 24) else listOf(entrada.quantidade, 24)
                 Segmentado(opcoes.map { it to if (maisTamanhos) "$it" else t("%lld palavras", it) }, entrada.quantidade, Modifier.weight(1f)) {
                     entrada.mudarQuantidade(it)
@@ -341,7 +388,7 @@ private fun TelaDaFrase(
                     }
                 }
             }
-            Row(Modifier.padding(top = Espaco.sm)) {
+            if (escolhendo == null) Row(Modifier.padding(top = Espaco.sm)) {
                 Row(
                     Modifier.height(36.dp).clip(CircleShape).background(Paleta.trilho).clickable { colar() }.padding(horizontal = Espaco.sm),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -353,7 +400,7 @@ private fun TelaDaFrase(
             if (colado) {
                 Text(t("Colado. A área de transferência foi limpa agora."), style = estilo(Tipo.nota), color = Paleta.cautela, modifier = Modifier.padding(top = Espaco.xs))
             }
-            GradeDaFrase(entrada, revisao, digitando, palavra.texto, mostrar, Modifier.padding(top = Espaco.md)) { indice ->
+            GradeDaFrase(entrada, revisao, digitando, palavra.texto, mostrar, Modifier.padding(top = Espaco.md), sorteada = escolhendo) { indice ->
                 pronto {
                     entrada.ativa = indice
                     palavra.limpar()
@@ -365,7 +412,7 @@ private fun TelaDaFrase(
                 Spacer(Modifier.weight(1f))
                 BotaoTerciario(if (mostrar) t("Esconder palavras") else t("Mostrar palavras")) { mostrar = !mostrar }
             }
-            Row(Modifier.padding(top = Espaco.md), verticalAlignment = Alignment.CenterVertically) {
+            if (escolhendo == null) Row(Modifier.padding(top = Espaco.md), verticalAlignment = Alignment.CenterVertically) {
                 Text(t("Esta carteira usa passphrase"), style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
                 Switch(usaPassphrase, aoMudarPassphrase, colors = SwitchDefaults.colors(
                     checkedTrackColor = Paleta.acento, checkedThumbColor = Paleta.sobreAcento,
@@ -419,7 +466,11 @@ private fun TelaDaFrase(
             )
         } else {
             Rodape {
-                BotaoPrimario(t("Importar"), ligado = entrada.preenchidas == entrada.quantidade, carregando = trabalhando) { importar() }
+                if (escolhendo != null) {
+                    BotaoPrimario(t("Sortear a %lldª palavra", escolhendo), ligado = entrada.preenchidas == entrada.quantidade, carregando = trabalhando) { escolher() }
+                } else {
+                    BotaoPrimario(t("Importar"), ligado = entrada.preenchidas == entrada.quantidade, carregando = trabalhando) { importar() }
+                }
             }
         }
     }
@@ -443,21 +494,39 @@ private fun TelaDaFrase(
 @Composable
 private fun GradeDaFrase(
     entrada: EntradaDaFrase, revisao: Int, digitando: Boolean, digitado: String, mostrar: Boolean, modifier: Modifier = Modifier,
-    aoTocar: (Int) -> Unit,
+    sorteada: Int? = null, aoTocar: (Int) -> Unit,
 ) {
+    // Escolhendo: a ultima aparece, mas e do app, sem campo.
+    val total = entrada.quantidade + if (sorteada != null) 1 else 0
     Column(modifier, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-        for (linha in 0 until (entrada.quantidade + 1) / 2) {
+        for (linha in 0 until (total + 1) / 2) {
             Row(horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                 for (coluna in 0..1) {
                     val indice = linha * 2 + coluna
                     if (indice < entrada.quantidade) {
                         PosicaoDaFrase(indice, entrada, revisao, ativa = digitando && entrada.ativa == indice, digitado, mostrar, Modifier.weight(1f)) { aoTocar(indice) }
+                    } else if (sorteada != null && indice == entrada.quantidade) {
+                        PosicaoSorteada(sorteada, Modifier.weight(1f))
                     } else {
                         Spacer(Modifier.weight(1f))
                     }
                 }
             }
         }
+    }
+}
+
+/** A posicao da ultima palavra, reservada: o mesmo tamanho e numero das outras, fundo rebaixado. */
+@Composable
+private fun PosicaoSorteada(numero: Int, modifier: Modifier) {
+    Row(
+        modifier.height(48.dp).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.trilho).padding(horizontal = Espaco.sm),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs),
+    ) {
+        Text("%02d".format(numero), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Paleta.tintaApagada)
+        Text(t("o app sorteia"), fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Paleta.tintaSuave, maxLines = 1, softWrap = false,
+             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Icone(Icones.atualizar, Paleta.tintaApagada, tamanho = 14.dp)
     }
 }
 

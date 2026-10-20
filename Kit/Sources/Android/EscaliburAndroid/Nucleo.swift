@@ -285,6 +285,15 @@ enum Nucleo {
             let cred = try credencial()
             let wallet = try Sessao.shared.criarComPalavras(try proxima(), palavras: palavras, credencial: cred)
             return try json(CarteiraResumo(wallet, selecionada: true))
+        case "carteira.conferirEscolhidas":
+            // As palavras escolhidas, antes do PIN: cada uma da lista em ingles e nenhuma das
+            // combinacoes que robo testa primeiro. A frase completada sai da memoria aqui mesmo.
+            let primeiras = try proxima()
+            defer { primeiras.wipe() }
+            if let fora = Importacao.foraDoIngles(primeiras) { return try json(["fora": fora]) }
+            let completa = try BIP39.completing(primeiras)
+            completa.wipe()
+            return try json(["ok": true])
         case "carteira.validarFrase":
             return try json(Importacao.validar(try proxima()))
         case "carteira.previa":

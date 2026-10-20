@@ -81,6 +81,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import app.escalibur.wallet.nucleo.Api
 import app.escalibur.wallet.nucleo.FalhaDoNucleo
+import app.escalibur.wallet.ui.importar.EntradaDaFrase
+import app.escalibur.wallet.ui.importar.TelaDaFrase
+import androidx.compose.foundation.text.input.TextFieldState
 import app.escalibur.wallet.ui.App
 import app.escalibur.wallet.ui.Autorizacao
 import app.escalibur.wallet.ui.Carteira
@@ -137,6 +140,8 @@ fun FluxoDeNovaCarteira(primeira: Boolean, aoTerminar: () -> Unit) {
     var guardando by remember { mutableStateOf(false) }
     var erro by remember { mutableStateOf<String?>(null) }
     var perguntandoDepois by remember { mutableStateOf(false) }
+    // O dono escolhe as palavras: digita todas menos a ultima, e o app sorteia a ultima, que fecha a conta.
+    var propria by remember { mutableStateOf(false) }
     val escopo = rememberCoroutineScope()
 
     fun cancelar() {
@@ -168,8 +173,40 @@ fun FluxoDeNovaCarteira(primeira: Boolean, aoTerminar: () -> Unit) {
         }
     }
 
+    /**
+     * As palavras escolhidas: conferidas antes do PIN (cada uma da lista em ingles, nenhuma
+     * combinacao que robo testa primeiro); depois o app sorteia a ultima e guarda a carteira como
+     * a sorteada inteira, antes de mostrar a palavra nova. Devolve o erro para mostrar, ou nil.
+     */
+    suspend fun escolher(primeiras: ByteArray): String? {
+        try {
+            val conferida = Api.comSegredo("carteira.conferirEscolhidas", JSONObject(), primeiras.copyOf())
+            if (conferida.has("fora")) return t("A palavra %lld não está na lista em inglês. Toque nela para corrigir.", conferida.getInt("fora"))
+            guardando = true
+            val salva = Autorizacao.tentando(t("Guardar a carteira nova neste celular")) { credencial ->
+                Api.comSegredo("carteira.criarComPalavras", JSONObject().put("palavras", palavras).put("credencial", credencial.json()),
+                               *credencial.partes(primeiras.copyOf()))
+            } ?: return null
+            carteira = Carteira.de(salva)
+            App.recarregar()
+            passo = "sorteada"
+            return null
+        } catch (falha: FalhaDoNucleo) {
+            return when (falha.codigo) {
+                "frase.fraca.repeated" -> t("Uma palavra aparece três vezes ou mais. Frases assim são as primeiras que os robôs testam: troque algumas.")
+                "frase.fraca.sequence" -> t("Três palavras seguidas estão na ordem da lista. Frases assim são as primeiras que os robôs testam: troque algumas.")
+                "frase.fraca.pattern" -> t("As palavras se repetem em bloco. Frases assim são as primeiras que os robôs testam: troque algumas.")
+                else -> Autorizacao.mensagemDeRecusa(falha) ?: t("Use só palavras da lista em inglês, uma em cada campo.")
+            }
+        } finally {
+            primeiras.fill(0)
+            guardando = false
+        }
+    }
+
     BackHandler {
         when (passo) {
+            "propria" -> passo = "antes"
             "aceite" -> passo = "antes"
             "checagem" -> passo = "aceite"
             "conferir" -> passo = "gravar"
@@ -181,14 +218,25 @@ fun FluxoDeNovaCarteira(primeira: Boolean, aoTerminar: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
         AnimatedContent(passo, transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) }, label = "nova") { atual ->
             Column(Modifier.fillMaxSize()) {
-                Spacer(Modifier.height(Altura.barra))
+                if (atual != "propria") Spacer(Modifier.height(Altura.barra))
                 when (atual) {
-                    "antes" -> AntesDasPalavras(palavras, erro, { palavras = it }) { erro = null; passo = "aceite" }
+                    "antes" -> AntesDasPalavras(palavras, erro, { palavras = it }, aoEscolherAsPalavras = { erro = null; propria = true; passo = "aceite" }) {
+                        erro = null
+                        propria = false
+                        passo = "aceite"
+                    }
                     "aceite" -> Responsabilidade(t("Conferir o aparelho")) { passo = "checagem" }
                     "checagem" -> Box(Modifier.weight(1f)) {
-                        VerificacaoDoAparelho(t("Deslize para ver as palavras"), criando = true) { guardar() }
+                        VerificacaoDoAparelho(if (propria) t("Deslize para escolher as palavras") else t("Deslize para ver as palavras"), criando = true) {
+                            if (propria) passo = "propria" else guardar()
+                        }
                         if (guardando) Trabalhando(t("Criando a carteira"))
                     }
+                    "propria" -> Box(Modifier.weight(1f)) {
+                        EscolherPalavras(palavras, aoCancelar = { passo = "antes" }, aoEscolher = ::escolher)
+                        if (guardando) Trabalhando(t("Criando a carteira"))
+                    }
+                    "sorteada" -> PalavraSorteada(palavras) { passo = "gravar" }
                     "gravar" -> GravarPalavras(palavras, nomeDaCarteira = null) { passo = "conferir" }
                     "conferir" -> ConferirPalavras(palavras, aoVoltar = { passo = "gravar" }, aoDepois = { perguntandoDepois = true }) {
                         escopo.launch {
@@ -201,7 +249,7 @@ fun FluxoDeNovaCarteira(primeira: Boolean, aoTerminar: () -> Unit) {
             }
         }
         // Voltar um passo, ou fechar: com a carteira ja guardada e sem copia, fechar passa pelo aviso.
-        if (passo != "criada") {
+        if (passo != "criada" && passo != "propria") {
             val voltar = passo in listOf("aceite", "checagem", "conferir")
             BotaoDeCanto(if (voltar) Icones.voltar else Icones.fechar, if (voltar) t("Voltar") else t("Fechar"), Modifier.padding(start = Espaco.xs)) {
                 when (passo) {
@@ -235,8 +283,49 @@ fun Trabalhando(titulo: String) {
     }
 }
 
+/** As palavras escolhidas pelo dono: a tela de digitar, com a ultima reservada para o sorteio. */
 @Composable
-private fun AntesDasPalavras(palavras: Int, erro: String?, aoEscolher: (Int) -> Unit, aoSeguir: () -> Unit) {
+private fun EscolherPalavras(palavras: Int, aoCancelar: () -> Unit, aoEscolher: suspend (ByteArray) -> String?) {
+    val entrada = remember(palavras) { EntradaDaFrase(palavras - 1) }
+    val semPassphrase = remember { TextFieldState() }
+    val semRepeticao = remember { TextFieldState() }
+    DisposableEffect(entrada) { onDispose { entrada.zerar() } }
+    TelaDaFrase(entrada, semPassphrase, semRepeticao, false, {}, aoCancelar, escolhendo = palavras, aoEscolher = aoEscolher) {}
+}
+
+/**
+ * A ultima palavra, sorteada: grande, com o numero, para o dono anotar no papel junto das que
+ * escolheu. Depois, as palavras e a conferencia de sempre.
+ */
+@Composable
+private fun PalavraSorteada(palavras: Int, aoAnotar: () -> Unit) {
+    var palavra by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(palavras) {
+        palavra = runCatching { Api.lista("carteira.palavras", JSONObject().put("de", palavras - 1).put("ate", palavras)).getString(0) }.getOrNull()
+    }
+    DisposableEffect(Unit) { onDispose { palavra = null } }
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f).padding(horizontal = Espaco.margem).padding(top = Espaco.md)) {
+            Text(t("A %lldª palavra", palavras), style = estilo(Tipo.titulo), color = Paleta.tinta)
+            Text(t("O app sorteou esta entre as %lld que fecham a conta com as suas %lld. Anote no papel, como a %lldª.", if (palavras == 12) 128 else 8, palavras - 1, palavras),
+                 style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs))
+            Row(
+                Modifier.padding(top = Espaco.lg).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.viva)
+                    .padding(horizontal = Espaco.lg, vertical = Espaco.lg),
+                verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
+            ) {
+                Text("$palavras", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Paleta.placaApagada)
+                Text(palavra ?: "", fontSize = 40.sp, fontWeight = FontWeight.Bold, color = Paleta.placaTinta)
+            }
+            Text(t("Em seguida vêm as %lld palavras, para conferir o que você anotou, e a conferência de sempre.", palavras),
+                 style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.md))
+        }
+        Rodape { BotaoPrimario(t("Anotei"), ligado = palavra != null) { palavra = null; aoAnotar() } }
+    }
+}
+
+@Composable
+private fun AntesDasPalavras(palavras: Int, erro: String?, aoEscolher: (Int) -> Unit, aoEscolherAsPalavras: () -> Unit, aoSeguir: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(top = Espaco.md, bottom = Espaco.md)) {
             PapelRabiscado(palavras, Modifier.align(Alignment.CenterHorizontally).padding(top = Espaco.xs))
@@ -255,7 +344,10 @@ private fun AntesDasPalavras(palavras: Int, erro: String?, aoEscolher: (Int) -> 
             }
             if (erro != null) Faixa(TipoDeFaixa.falha, erro, Modifier.padding(top = Espaco.md))
         }
-        Rodape { BotaoPrimario(t("Continuar"), acao = aoSeguir) }
+        Rodape {
+            BotaoPrimario(t("Continuar"), acao = aoSeguir)
+            BotaoTerciario(t("Prefiro escolher as minhas palavras"), Modifier.fillMaxWidth(), acao = aoEscolherAsPalavras)
+        }
     }
 }
 
