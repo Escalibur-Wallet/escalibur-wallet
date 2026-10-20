@@ -217,7 +217,7 @@ private fun ColumnScope.Revisao(controle: ControleDaTroca, r: RetratoDaTroca, fr
 
 /** Os enderecos e contratos (a propria conta, o contrato da troca, quem fica autorizado), atras de um toque. */
 @Composable
-private fun Enderecos(linhas: List<Pair<String, String>>, modifier: Modifier = Modifier) {
+internal fun Enderecos(linhas: List<Pair<String, String>>, modifier: Modifier = Modifier) {
     var aberto by remember { mutableStateOf(false) }
     val forma = RoundedCornerShape(Raio.cartao)
     Column(modifier.fillMaxWidth().clip(forma).background(Paleta.corpo).border(1.dp, Paleta.borda, forma).animateContentSize()) {

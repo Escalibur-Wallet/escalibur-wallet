@@ -94,7 +94,7 @@ import org.json.JSONObject
 internal fun CaixaDeValor(
     titulo: String, ativo: AtivoDaTroca?, texto: String, dica: String, saldo: String?, emMoeda: String?, passou: Boolean,
     carregando: Boolean, calculado: Boolean, aoDigitar: (String) -> Unit, aoEscolher: () -> Unit, aoFracao: ((Double) -> Unit)?,
-    aoFoco: ((Boolean) -> Unit)? = null,
+    aoFoco: ((Boolean) -> Unit)? = null, editavel: Boolean = true,
 ) {
     val forma = RoundedCornerShape(Raio.cartao)
     Column(
@@ -120,7 +120,8 @@ internal fun CaixaDeValor(
                     Box(Modifier.height(40.dp), contentAlignment = Alignment.CenterStart) { Esqueleto(120.dp, 22.dp) }
                 } else {
                     if (texto.isEmpty()) Text(dica, style = estiloDoValor.copy(color = Paleta.tintaMorta), maxLines = 1)
-                    CampoDeNumero(texto, estiloDoValor, Modifier.fillMaxWidth().onFocusChanged { aoFoco?.invoke(it.isFocused) }, aoDigitar)
+                    if (editavel) CampoDeNumero(texto, estiloDoValor, Modifier.fillMaxWidth().onFocusChanged { aoFoco?.invoke(it.isFocused) }, aoDigitar)
+                    else Text(texto, style = estiloDoValor, maxLines = 1)
                 }
             }
             PilulaDoToken(ativo, aoEscolher)

@@ -145,6 +145,8 @@ enum Nucleo {
             return try Envio.chamar(envio, pedido)
         case let troca where troca.hasPrefix("troca.") || troca.hasPrefix("ordens."):
             return try Troca.chamar(troca, pedido)
+        case let ponte where ponte.hasPrefix("ponte."):
+            return try Ponte.chamar(ponte, pedido)
 
         case "mercado.lista":
             let moeda = pedido["moeda"]?.stringValue ?? Sessao.shared.metadata.settings.currency
@@ -333,6 +335,10 @@ enum Nucleo {
             let cred = try credencial()
             let passphrase = partes.isEmpty ? nil : try proxima()
             return try Envio.assinar(cred, passphrase: passphrase, folga: pedido["folga"]?.doubleValue.map { Int($0) })
+        case "ponte.assinar":
+            let cred = try credencial()
+            let passphrase = partes.isEmpty ? nil : try proxima()
+            return try Ponte.assinar(cred, passphrase: passphrase, folga: pedido["folga"]?.doubleValue.map { Int($0) })
         case "troca.assinar":
             let cred = try credencial()
             let passphrase = partes.isEmpty ? nil : try proxima()

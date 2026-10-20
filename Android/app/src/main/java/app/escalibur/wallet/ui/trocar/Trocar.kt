@@ -136,7 +136,7 @@ fun TelaDeTrocar() {
     val r = controle.retrato
     // A cotacao viva: a cada pedido novo (par, valor, tolerancia), depois de 400 ms, e de 15 em 15
     // s enquanto ele nao muda. So com a aba na tela e o app na frente; na revisao, para.
-    val cotavel = r != null && r.podeCotar && r.etapa == "formulario"
+    val cotavel = r != null && r.podeCotar && r.etapa == "formulario" && !controle.naPonte
     LaunchedEffect(r?.chave, cotavel) {
         val chave = r?.chave ?: return@LaunchedEffect
         if (!cotavel) return@LaunchedEffect
@@ -162,7 +162,7 @@ fun TelaDeTrocar() {
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding()) {
         TituloDeAba(t("Trocar")) {
             val rede = r?.rede
-            if (rede != null && r.redes.isNotEmpty()) PilulaDaRede(rede) { escolhendoRede = true }
+            if (rede != null && r.redes.isNotEmpty() && !controle.naPonte) PilulaDaRede(rede) { escolhendoRede = true }
         }
         if (r == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp) }
@@ -177,11 +177,15 @@ fun TelaDeTrocar() {
             return
         }
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.lg)) {
-            Segmentado(listOf("agora" to t("Imediata"), "limite" to t("Limite")), r.modo, Modifier.fillMaxWidth().padding(top = Espaco.sm)) {
-                mudar(JSONObject().put("modo", it))
+            Segmentado(listOf("agora" to t("Imediata"), "limite" to t("Limite"), "ponte" to t("Ponte")), if (controle.naPonte) "ponte" else r.modo,
+                       Modifier.fillMaxWidth().padding(top = Espaco.sm)) {
+                controle.naPonte = it == "ponte"
+                if (it != "ponte") mudar(JSONObject().put("modo", it))
             }
             if (r.observa) Faixa(TipoDeFaixa.neutra, t("Esta carteira só observa. Escolha outra carteira para trocar."), Modifier.padding(top = Espaco.md))
-            if (r.modo == "limite") {
+            if (controle.naPonte) {
+                FormularioDaPonte()
+            } else if (r.modo == "limite") {
                 FormularioLimite(r, ::mudar, aoEscolherToken = { escolhendoToken = it })
                 OrdensAbertas(soComOrdens = false, Modifier.padding(top = Espaco.lg))
             } else {
@@ -189,7 +193,7 @@ fun TelaDeTrocar() {
                 OrdensAbertas(soComOrdens = true, Modifier.padding(top = Espaco.lg))
             }
         }
-        RodapeDaTroca(controle, r)
+        if (controle.naPonte) RodapeDaPonte() else RodapeDaTroca(controle, r)
     }
     if (r == null) return
     if (escolhendoRede) FolhaDeRedes(r, aoFechar = { escolhendoRede = false }) { mudar(JSONObject().put("rede", it)) }

@@ -204,6 +204,8 @@ class ControleDaTroca(val alvo: String) {
     var proxima by mutableIntStateOf(15)
     /** Uma rodada de cotacao no ar. */
     var buscando by mutableStateOf(false)
+    /** Na aba: a Ponte escolhida no seletor (ela tem o proprio formulario, fora da troca). */
+    var naPonte by mutableStateOf(false)
 
     fun aplicar(json: JSONObject) {
         val novo = runCatching { RetratoDaTroca(json) }.getOrNull() ?: return
