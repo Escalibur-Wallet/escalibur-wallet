@@ -1,0 +1,157 @@
+import SwiftUI
+
+/// Antes das palavras, ao criar e ao importar: o que muda numa carteira so do dono,
+/// dito com calma, e o aceite de responsabilidade gravado nos metadados. Um
+/// componente so para os dois caminhos.
+///
+/// Aparece toda vez que uma frase vai entrar ou nascer neste iPhone, com a caixa
+/// desmarcada, mesmo para quem ja aceitou: e um evento raro, e e o momento em que o
+/// aviso vale. Um aceite antigo nunca pula a tela.
+struct ResponsibilityView: View {
+    /// Versao do texto de aceite. Mudou o texto do aceite ou a clausula dos Termos,
+    /// sobe o numero.
+    static let version = 1
+
+    @Environment(AppSession.self) private var session
+    let continueTitle: String
+    var loading: Bool = false
+    let onContinue: () -> Void
+
+    @State private var accepted = false
+    @State private var legalDocument: LegalDocument?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    header
+                    VStack(alignment: .leading, spacing: Space.md) {
+                        point("lock.iphone", String(localized: "Criptografada, só neste iPhone"),
+                              String(localized: "Tudo da carteira é criptografado e fica guardado somente aqui."))
+                        point("eye.slash", String(localized: "A Escalibur não tem acesso"),
+                              String(localized: "As chaves nunca saem deste iPhone. Ninguém da Escalibur consegue ver nem recuperar a sua carteira."))
+                        point("key.horizontal", String(localized: "As palavras recuperam"),
+                              String(localized: "A senha da carteira, as 12 ou 24 palavras, é a única forma de trazer a carteira de volta."))
+                        point("hand.raised", String(localized: "Ninguém da Escalibur pede"),
+                              String(localized: "Nem por suporte, e-mail ou mensagem. Quem pedir as palavras quer o seu saldo."))
+                    }
+                    .padding(.top, Space.lg)
+                    acceptance
+                        .padding(.top, Space.lg)
+                }
+                .padding(.horizontal, Space.gutter)
+                .padding(.top, Space.xs)
+                .padding(.bottom, Space.xs)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            ActionFooter {
+                // Desligado, o botao diz o que falta: no iPhone pequeno a caixa fica
+                // abaixo da dobra.
+                PrimaryButton(title: accepted ? continueTitle : String(localized: "Marque o aceite para continuar"),
+                              enabled: accepted, loading: loading) { accept() }
+            }
+        }
+        .background(Palette.void.ignoresSafeArea())
+        .sheet(item: $legalDocument) { LegalDocumentView(document: $0) }
+    }
+
+    private var header: some View {
+        VStack(spacing: Space.xs) {
+            Image(systemName: "lock.shield")
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(Palette.ink)
+                .frame(width: 60, height: 60)
+                .background(Circle().fill(Palette.control))
+                .accessibilityHidden(true)
+            Text("Só você tem a chave")
+                .typeStyle(.title).foregroundStyle(Palette.ink)
+                .padding(.top, Space.xs)
+            Text("A carteira é só sua. Por isso, o cuidado com ela também é.")
+                .typeStyle(.body).foregroundStyle(Palette.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func point(_ icon: String, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: Space.sm) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Palette.ink)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(Palette.control))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).typeStyle(.row).foregroundStyle(Palette.ink)
+                Text(detail).typeStyle(.note).foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// A caixa e a frase sao um botao so (tocar em qualquer parte marca), sozinhos no
+    /// cartao; o link dos Termos fica embaixo do cartao, em cinza e sem seta (pedido do
+    /// dono, 15/10/2026), longe o bastante para nao marcar a caixa sem querer.
+    private var acceptance: some View {
+        VStack(spacing: Space.xs) {
+            Button { toggle() } label: {
+                HStack(alignment: .top, spacing: Space.sm) {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(accepted ? Palette.control : Palette.void)
+                        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .stroke(accepted ? Palette.inkSoft : Palette.edgeStrong, lineWidth: 1.5))
+                        .overlay {
+                            if accepted {
+                                Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(Palette.ink)
+                            }
+                        }
+                        .frame(width: 24, height: 24)
+                        .padding(.top, 1)
+                    Text("Entendo que só eu guardo a senha desta carteira. Se eu perder a senha ou alguém tiver acesso a ela, a Escalibur não tem como recuperar meus ativos. Li e aceito os Termos de uso.")
+                        .typeStyle(.note).foregroundStyle(accepted ? Palette.ink : Palette.inkSoft)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(Space.md)
+                .contentShape(Rectangle())
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                        .fill(Palette.body)
+                        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                            .stroke(accepted ? Palette.edgeStrong : Palette.edge, lineWidth: 1))
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(accepted ? "Marcado" : "Desmarcado")
+            .accessibilityAddTraits(accepted ? .isSelected : [])
+            .accessibilityIdentifier("aceite-responsabilidade")
+            .sensoryFeedback(.selection, trigger: accepted)
+
+            Button { legalDocument = .terms } label: {
+                Text("Ler os Termos de uso").typeStyle(.note).fontWeight(.semibold).underline()
+                    .foregroundStyle(Palette.inkMuted)
+                    .frame(minHeight: Height.touch)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityRemoveTraits(.isButton)
+            .accessibilityAddTraits(.isLink)
+            .accessibilityIdentifier("link-termos")
+        }
+        .animation(Motion.select, value: accepted)
+    }
+
+    private func toggle() {
+        withAnimation(Motion.select) { accepted.toggle() }
+    }
+
+    private func accept() {
+        guard accepted else { return }
+        session.acceptResponsibility(version: Self.version)
+        onContinue()
+    }
+}

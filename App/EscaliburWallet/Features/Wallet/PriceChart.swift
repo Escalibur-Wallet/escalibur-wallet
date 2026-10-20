@@ -1,0 +1,248 @@
+import EscaliburNetwork
+import SwiftUI
+
+/// O grafico de preco: linha grossa com brilho, sem preenchimento embaixo, sem grade
+/// e sem eixo, so a maxima em cima do pico e a minima embaixo do vale. Lima quando o
+/// periodo sobe, vermelho quando desce. Toque longo ou arrasto horizontal mostra o
+/// preco de um ponto.
+struct PriceChart: View {
+    let points: [PricePoint]
+    var loading: Bool = false
+    /// Stablecoin: a escala tem piso de 2% do preco medio, senao 0,3% de oscilacao
+    /// vira sismografo.
+    var isStable: Bool = false
+    @Binding var selection: PricePoint?
+    /// A unidade escolhida em Ativos (ou a outra, ao tocar no preco).
+    let unit: Fmt.DisplayUnit
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Espaco acima e abaixo da linha para os rotulos de maxima e minima.
+    private static let labelRoom: CGFloat = 26
+
+    /// No maximo 160 pontos, pela media de cada balde: o dado cru de 24h tem 288, mais
+    /// do que a largura mostra, e o excesso so desenha ruido.
+    private var shown: [PricePoint] {
+        guard points.count > 160 else { return points }
+        let size = Double(points.count) / 160
+        return (0..<160).compactMap { bucket in
+            let start = Int(Double(bucket) * size)
+            let end = min(points.count, Int(Double(bucket + 1) * size))
+            guard start < end else { return nil }
+            let slice = points[start..<end]
+            let average = slice.reduce(0) { $0 + $1.price } / Double(slice.count)
+            return PricePoint(time: slice.last!.time, price: bucket == 159 ? points.last!.price : average)
+        }
+    }
+
+    private var trend: Color {
+        guard let first = points.first?.price, let last = points.last?.price else { return Palette.inkSoft }
+        if last > first { return Palette.up }
+        if last < first { return Palette.down }
+        return Palette.inkSoft
+    }
+
+    var body: some View {
+        ZStack {
+            if loading && points.isEmpty {
+                ChartLoading(labelRoom: Self.labelRoom)
+            } else if points.count < 2 {
+                Text("Sem histórico de preço neste período").typeStyle(.note).foregroundStyle(Palette.inkMuted)
+            } else {
+                chart
+            }
+        }
+        // Largura toda: sem isto, o texto de "sem historico" encolhe o quadro e cola na
+        // esquerda.
+        .frame(maxWidth: .infinity)
+        .frame(height: 248)
+    }
+
+    private var domain: ClosedRange<Double> {
+        let prices = shown.map(\.price)
+        var low = prices.min() ?? 0
+        var high = prices.max() ?? 1
+        if isStable {
+            let mean = prices.reduce(0, +) / Double(max(prices.count, 1))
+            low = min(low, mean * 0.99)
+            high = max(high, mean * 1.01)
+        }
+        if high <= low { high = low + max(abs(low) * 0.01, .ulpOfOne) }
+        return low...high
+    }
+
+    private var chart: some View {
+        let data = shown
+        let color = trend
+        let range = domain
+        return GeometryReader { geometry in
+            // Margem dos lados: a linha e o brilho nao encostam na borda da tela.
+            let plot = CGRect(x: Space.gutter, y: Self.labelRoom, width: geometry.size.width - Space.gutter * 2,
+                              height: geometry.size.height - Self.labelRoom * 2)
+            let place: (Int) -> CGPoint = { index in
+                let x = data.count > 1 ? plot.minX + plot.width * CGFloat(index) / CGFloat(data.count - 1) : plot.midX
+                let fraction = (data[index].price - range.lowerBound) / (range.upperBound - range.lowerBound)
+                return CGPoint(x: x, y: plot.maxY - plot.height * CGFloat(fraction))
+            }
+            ZStack(alignment: .topLeading) {
+                Canvas { context, _ in
+                    var line = Path()
+                    for index in data.indices {
+                        index == 0 ? line.move(to: place(index)) : line.addLine(to: place(index))
+                    }
+                    // So a linha e o brilho: a area em pontinhos embaixo dela saiu (pedido do
+                    // dono, 14/10/2026).
+                    // O brilho: a linha larga e desfocada por baixo da linha nitida, 38% mais
+                    // fraco desde 15/10/2026 (pedido do dono).
+                    context.drawLayer { glow in
+                        glow.addFilter(.blur(radius: 14))
+                        glow.stroke(line, with: .color(color.opacity(0.34)), style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round))
+                    }
+                    context.stroke(line, with: .color(color), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+
+                    if let selection, let index = data.firstIndex(where: { $0.time == selection.time }) {
+                        let point = place(index)
+                        var rule = Path()
+                        rule.move(to: CGPoint(x: point.x, y: plot.minY))
+                        rule.addLine(to: CGPoint(x: point.x, y: plot.maxY))
+                        context.stroke(rule, with: .color(Palette.inkMuted), lineWidth: 1)
+                        context.fill(Path(ellipseIn: CGRect(x: point.x - 6, y: point.y - 6, width: 12, height: 12)), with: .color(Palette.void))
+                        context.fill(Path(ellipseIn: CGRect(x: point.x - 4.5, y: point.y - 4.5, width: 9, height: 9)), with: .color(color))
+                    }
+                }
+                extremeLabel(data: data, top: true, place: place, width: geometry.size.width)
+                extremeLabel(data: data, top: false, place: place, width: geometry.size.width)
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                LongPressGesture(minimumDuration: 0.15)
+                    .sequenced(before: DragGesture(minimumDistance: 0))
+                    .onChanged { value in
+                        guard case .second(true, let drag?) = value, data.count > 1 else { return }
+                        let fraction = min(max((drag.location.x - plot.minX) / max(plot.width, 1), 0), 1)
+                        selection = data[Int((fraction * CGFloat(data.count - 1)).rounded())]
+                    }
+                    .onEnded { _ in withAnimation(Motion.fade) { selection = nil } }
+            )
+        }
+        .sensoryFeedback(.selection, trigger: selection?.time)
+        .accessibilityElement()
+        .accessibilityLabel("Gráfico de preço")
+        .accessibilityValue(accessibilitySummary(data))
+    }
+
+    /// A maxima em cima do pico, a minima embaixo do vale, sem sair da tela.
+    private func extremeLabel(data: [PricePoint], top: Bool, place: (Int) -> CGPoint, width: CGFloat) -> some View {
+        let prices = data.map(\.price)
+        let target = top ? (prices.max() ?? 0) : (prices.min() ?? 0)
+        let index = data.firstIndex { $0.price == target } ?? 0
+        let point = place(index)
+        return Text(priceText(target, prices: prices))
+            .typeStyle(.axis)
+            .foregroundStyle(Palette.inkSoft)
+            .fixedSize()
+            .position(x: min(max(point.x, 48), width - 48), y: top ? point.y - 16 : point.y + 16)
+    }
+
+    private func priceText(_ value: Double, prices: [Double]) -> String {
+        let amplitude = ((prices.max() ?? 0) - (prices.min() ?? 0)) / max(prices.max() ?? 1, .ulpOfOne)
+        // Preco miudo (abaixo de 0,0001) sai com os zeros em subscrito: com 4 casas, a
+        // maxima e a minima viravam as duas "R$ 0,0000".
+        guard unit != .btc, value >= 0.0001 else { return Fmt.price(value, unit: unit) }
+        return amplitude < 0.01 ? "\(unit.symbol)\(Fmt.nbsp)\(Fmt.grouped(value, fractionDigits: 4))" : Fmt.price(value, unit: unit)
+    }
+
+    private func accessibilitySummary(_ data: [PricePoint]) -> String {
+        let prices = data.map(\.price)
+        guard let low = prices.min(), let high = prices.max() else { return "" }
+        return String(localized: "Mínima \(priceText(low, prices: prices)), máxima \(priceText(high, prices: prices))")
+    }
+}
+
+/// Os periodos, por extenso: "1M" e ambiguo entre minuto e mes.
+struct PeriodPicker: View {
+    @Binding var range: ChartRange
+    @Namespace private var namespace
+
+    private func title(_ range: ChartRange) -> String {
+        switch range {
+        case .day: return "24h"
+        case .week: return String(localized: "7 dias")
+        case .month: return String(localized: "30 dias")
+        case .year: return String(localized: "1 ano")
+        case .all: return String(localized: "Tudo")
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(ChartRange.allCases) { option in
+                Button {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) { range = option }
+                } label: {
+                    Text(title(option))
+                        .typeStyle(.label)
+                        .fontWeight(range == option ? .semibold : .regular)
+                        .foregroundStyle(range == option ? Palette.ink : Palette.inkMuted)
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 38)
+                        .background {
+                            if range == option {
+                                Color.clear
+                                    .modifier(SelectionGlass(active: true))
+                                    .matchedGeometryEffect(id: "period", in: namespace)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(range == option ? .isSelected : [])
+            }
+        }
+        .sensoryFeedback(.selection, trigger: range)
+    }
+}
+
+/// O grafico carregando (pedido do dono, 14/10/2026): uma linha fantasma cinza, que ondula
+/// devagar, com um brilho que corre da esquerda para a direita. Cinza e sem rotulos, para
+/// nunca passar por dado. Com Reduzir Movimento, fica parada. O Mercado sem fonte usa a
+/// mesma linha.
+struct ChartLoading: View {
+    let labelRoom: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    static let sweepPeriod = 1.8
+
+    var body: some View {
+        TimelineView(.animation(paused: reduceMotion)) { context in
+            let time = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate
+            Canvas { canvas, size in
+                let plot = CGRect(x: Space.gutter, y: labelRoom, width: size.width - Space.gutter * 2, height: size.height - labelRoom * 2)
+                var line = Path()
+                let steps = 90
+                for step in 0...steps {
+                    let x = Double(step) / Double(steps)
+                    let wave = 0.5 + 0.16 * sin(x * 2 * .pi * 1.2 + time * 0.9) + 0.08 * sin(x * 2 * .pi * 2.9 - time * 1.3)
+                    let point = CGPoint(x: plot.minX + plot.width * x, y: plot.maxY - plot.height * wave)
+                    step == 0 ? line.move(to: point) : line.addLine(to: point)
+                }
+                let style = StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                canvas.stroke(line, with: .color(Palette.edgeStrong), style: style)
+                guard !reduceMotion else { return }
+                // O brilho: uma janela que atravessa a linha, mais clara no meio.
+                let phase = time.truncatingRemainder(dividingBy: Self.sweepPeriod) / Self.sweepPeriod
+                let width = plot.width * 0.28
+                let center = plot.minX - width / 2 + (plot.width + width) * phase
+                canvas.drawLayer { glow in
+                    glow.clip(to: Path(CGRect(x: center - width / 2, y: 0, width: width, height: size.height)))
+                    glow.stroke(line, with: .linearGradient(
+                        Gradient(stops: [.init(color: Palette.inkSoft.opacity(0), location: 0), .init(color: Palette.inkSoft, location: 0.5),
+                                         .init(color: Palette.inkSoft.opacity(0), location: 1)]),
+                        startPoint: CGPoint(x: center - width / 2, y: 0), endPoint: CGPoint(x: center + width / 2, y: 0)
+                    ), style: style)
+                }
+            }
+        }
+        .accessibilityLabel("Carregando o gráfico")
+    }
+}

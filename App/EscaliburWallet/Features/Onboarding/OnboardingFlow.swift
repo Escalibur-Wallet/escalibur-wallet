@@ -1,0 +1,259 @@
+import EscaliburCore
+import EscaliburKeys
+import SwiftUI
+
+/// A1 e A2: boas-vindas, o tour e o primeiro PIN. O PIN vem antes de a frase existir; o
+/// tour, antes do PIN (pedido do dono, 19/10/2026).
+struct OnboardingFlow: View {
+    @Environment(AppSession.self) private var session
+    @State private var step: Step = .welcome
+    @State private var entry = PINEntry(choosing: PINPolicy.digits)
+    @State private var firstPIN: SecureBytes?
+    @State private var working = false
+    @State private var legalDocument: LegalDocument?
+    @State private var tourPage = 0
+
+    enum Step { case welcome, tour, choosePIN, repeatPIN }
+
+    var body: some View {
+        ZStack {
+            Palette.void.ignoresSafeArea()
+            switch step {
+            case .welcome: welcome.transition(.opacity)
+            // Voltar do PIN reabre o tour no ultimo passo.
+            case .tour:
+                WelcomeTour(startPage: tourPage) { step = .choosePIN }
+                    .transition(.opacity)
+            case .choosePIN, .repeatPIN:
+                // Uma tela so para escolher e repetir: so o titulo e o texto trocam. Duas
+                // telas com fade piscavam, e o teclado mudava de altura com o texto.
+                let sixText = String(localized: "Seis dígitos para destravar o app e confirmar envios quando o \(KeyServices.biometryName) falhar. Não use o código do iPhone: quem rouba o iPhone geralmente já viu esse código.")
+                // Quatro digitos e escolha do dono, com o preco dito na tela (16/10/2026).
+                let fourText = String(localized: "Quatro dígitos para destravar o app e confirmar envios quando o \(KeyServices.biometryName) falhar. São mais fáceis de adivinhar que seis. Não use o código do iPhone: quem rouba o iPhone geralmente já viu esse código.")
+                let four = entry.length == 4
+                PINScreen(
+                    title: step == .choosePIN ? String(localized: "Escolha um PIN") : String(localized: "Repita o PIN"),
+                    subtitle: step == .choosePIN ? (four ? fourText : sixText)
+                        : (four ? String(localized: "Os mesmos quatro dígitos.") : String(localized: "Os mesmos seis dígitos.")),
+                    subtitleSpace: fourText,
+                    entry: entry, working: working,
+                    onComplete: { if step == .choosePIN { choose() } else { Task { await confirm() } } }
+                ) { pinFooter }
+                .overlay(alignment: .topLeading) { backButton }
+                .transition(.opacity)
+            }
+        }
+        .animation(Motion.fade, value: step)
+        .sheet(item: $legalDocument) { LegalDocumentView(document: $0) }
+    }
+
+    private var welcome: some View {
+        VStack(spacing: 0) {
+            // A imagem ocupa o que sobra acima do titulo, saindo pelas bordas e por baixo
+            // da barra de status.
+            Color.clear
+                .frame(maxWidth: .infinity, minHeight: 220, maxHeight: .infinity)
+                .background {
+                    hero
+                        .padding(.horizontal, -Space.gutter)
+                        .padding(.bottom, -Space.lg)
+                        .ignoresSafeArea(edges: .top)
+                }
+            VStack(spacing: Space.sm) {
+                Text("Só você pode")
+                    .typeStyle(.hero)
+                    .foregroundStyle(Palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("As chaves ficam criptografadas só neste iPhone. Se você perder a senha da carteira, a Escalibur não tem como ajudar a recuperá-la.")
+                    .typeStyle(.body)
+                    .foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .multilineTextAlignment(.center)
+            .padding(.top, Space.lg)
+            if DeviceIntegrity.suspicious {
+                Banner(kind: .caution, title: String(localized: "Este iPhone parece ter jailbreak"),
+                       message: String(localized: "Apps de fora da App Store podem ler o que este app guarda."))
+                    .padding(.top, Space.md)
+            }
+            if KeyServices.runningOnMac {
+                Banner(kind: .failure, title: String(localized: "A carteira não fica no Mac"),
+                       message: String(localized: "No Mac, outros programas podem ler o teclado e a tela. Use a Escalibur no iPhone."))
+                    .padding(.top, Space.md)
+            } else if !KeyServices.deviceIsEligible {
+                Banner(kind: .failure, title: String(localized: "Este iPhone não tem código"),
+                       message: String(localized: "Configure um código em Ajustes do iPhone. Sem ele, o iOS não protege as chaves da carteira."))
+                    .padding(.top, Space.md)
+            }
+            PrimaryButton(title: String(localized: "Começar"), enabled: KeyServices.deviceIsEligible) {
+                tourPage = 0
+                step = .tour
+            }
+            .padding(.top, Space.lg)
+            Text("Ao continuar, você aceita os [Termos de uso](escalibur-doc:termos) e a [Política de privacidade](escalibur-doc:privacidade).")
+                .typeStyle(.note)
+                .foregroundStyle(Palette.inkMuted)
+                .tint(Palette.inkSoft)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Space.sm)
+                .environment(\.openURL, OpenURLAction { url in
+                    legalDocument = LegalDocument(rawValue: url.absoluteString.replacingOccurrences(of: "escalibur-doc:", with: ""))
+                    return .handled
+                })
+        }
+        .padding(.horizontal, Space.gutter)
+        // O texto e o botao sobem um pouco da borda de baixo (pedido do dono, 16/10/2026).
+        .padding(.bottom, Space.lg)
+    }
+
+    /// A abertura (`WelcomeHero`): de borda a borda e por baixo da barra de status, sumindo
+    /// no fundo escuro embaixo para o titulo assentar sobre ela. Preenche o espaco e corta o
+    /// que sobra, centrada.
+    private var hero: some View {
+        Color.clear
+            .overlay {
+                GeometryReader { geo in
+                    let aspect = 720.0 / 1280.0
+                    let width = max(geo.size.width, geo.size.height * aspect)
+                    WelcomeHero()
+                        .frame(width: width, height: width / aspect)
+                        .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                }
+            }
+            .clipped()
+            .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.62),
+                                         .init(color: .black.opacity(0.45), location: 0.84), .init(color: .clear, location: 1)],
+                                 startPoint: .top, endPoint: .bottom))
+    }
+
+    /// Escolher volta para o tour; repetir volta para escolher, e o primeiro PIN e apagado.
+    private var backButton: some View {
+        Button {
+            if step == .repeatPIN {
+                firstPIN?.wipe()
+                firstPIN = nil
+                entry.reset()
+                step = .choosePIN
+            } else {
+                entry.reset()
+                tourPage = WelcomeTour.pages - 1
+                step = .tour
+            }
+        } label: {
+            Image(systemName: "chevron.backward")
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(Palette.inkSoft)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .padding(.leading, Space.xs)
+        .disabled(working)
+        .accessibilityLabel("Voltar")
+        .accessibilityIdentifier("pin-voltar")
+    }
+
+    private var pinFooter: some View {
+        VStack(spacing: Space.sm) {
+            // So ao escolher; ao repetir, o lugar fica reservado e o teclado nao se mexe.
+            PINLengthToggle(entry: entry)
+                .opacity(step == .choosePIN ? 1 : 0)
+                .disabled(step != .choosePIN)
+                .accessibilityHidden(step != .choosePIN)
+            Text("O PIN não recupera a carteira. Se você esquecer o PIN, a senha da carteira traz tudo de volta.")
+                .typeStyle(.note)
+                .foregroundStyle(Palette.inkMuted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, Space.xl)
+        }
+    }
+
+    private func choose() {
+        firstPIN = entry.take()
+        step = .repeatPIN
+    }
+
+    private func confirm() async {
+        let second = entry.take()
+        guard let first = firstPIN else { return }
+        let same = Hash.constantTimeEqual(first, second)
+        second.wipe()
+        guard same else {
+            first.wipe()
+            firstPIN = nil
+            entry.fail(String(localized: "Os dois não conferem. Escolha de novo."))
+            step = .choosePIN
+            return
+        }
+        working = true
+        defer { working = false }
+        do {
+            firstPIN = nil
+            try await session.setUpPIN(first)
+        } catch {
+            entry.fail(String(localized: "Não foi possível guardar o PIN neste iPhone."))
+            step = .choosePIN
+        }
+    }
+}
+
+/// A3: oferecer o Face ID, depois do PIN e antes da primeira carteira.
+struct BiometryOfferView: View {
+    @Environment(AppSession.self) private var session
+    let onDone: () -> Void
+    @State private var askPIN = false
+    @State private var entry = PINEntry()
+    @State private var working = false
+
+    var body: some View {
+        if askPIN {
+            PINScreen(title: String(localized: "Confirme com o PIN"), subtitle: String(localized: "Para ligar o \(KeyServices.biometryName) nesta carteira."), entry: entry, working: working,
+                      onComplete: { Task { await enable() } }) {
+                TertiaryButton(title: String(localized: "Voltar")) {
+                    entry = PINEntry()
+                    askPIN = false
+                }
+                .accessibilityIdentifier("biometria-voltar")
+            }
+        } else {
+            VStack(spacing: 0) {
+                Spacer()
+                Image(systemName: KeyServices.biometryIcon)
+                    .font(.system(size: 44, weight: .regular))
+                    .foregroundStyle(Palette.ink)
+                    .frame(width: 96, height: 96)
+                    .background(Circle().fill(Palette.rail))
+                Text("Destravar com o \(KeyServices.biometryName)")
+                    .typeStyle(.title).foregroundStyle(Palette.ink).padding(.top, Space.lg)
+                Text("Destrava o app e confirma envios em 1 segundo. Se o \(KeyServices.biometryName) falhar, o PIN vale.")
+                    .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                PrimaryButton(title: String(localized: "Usar o \(KeyServices.biometryName)")) { askPIN = true }
+                SecondaryButton(title: String(localized: "Agora não")) { onDone() }.padding(.top, Space.sm)
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, Space.gutter)
+            .padding(.bottom, Space.xs)
+            .background(Palette.void.ignoresSafeArea())
+        }
+    }
+
+    private func enable() async {
+        working = true
+        defer { working = false }
+        do {
+            try await session.enableBiometry(pin: entry.take())
+            onDone()
+        } catch RootKeyVault.Failure.wrongPIN {
+            entry.fail(String(localized: "PIN incorreto."))
+        } catch RootKeyVault.Failure.throttled(let seconds) {
+            entry.fail(String(localized: "Tentativas demais. Tente de novo em \(LockView.duration(seconds))."))
+        } catch RootKeyVault.Failure.cancelled {
+            entry.fail(String(localized: "O \(KeyServices.biometryName) não confirmou. Ele continua desligado; você pode ligar depois nos Ajustes."))
+        } catch {
+            entry.fail(String(localized: "Não foi possível ligar o \(KeyServices.biometryName) agora."))
+        }
+    }
+}

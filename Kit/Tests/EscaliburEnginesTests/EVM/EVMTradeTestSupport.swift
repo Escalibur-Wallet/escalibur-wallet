@@ -1,0 +1,350 @@
+@testable import EscaliburChains
+import EscaliburCore
+import EscaliburKeys
+import Foundation
+import Testing
+@testable import EscaliburEngines
+@testable import EscaliburNetwork
+
+/// Apoio dos testes da troca EVM.
+///
+/// As cotacoes sao as respostas reais dos quatro provedores gravadas em
+/// Fixtures/evm/troca (100 USDC -> ETH na Base, dono 0x9d8A...5A4F), lidas pelos clientes
+/// reais e entregues ao `TradeAggregator` real, que valida e ranqueia. O estado da cadeia
+/// e sintetico e dito aqui: nonce 7, baseFee 0,005 gwei, gorjeta 0,001 gwei, taxa L1 de
+/// 20 gwei por transacao, e duas simulacoes honestas de fontes diferentes.
+enum EVMTradeFixtures {
+    static let amount = BigUInt(100_000_000)
+    static let usdc = TokenRegistry.find(chainID: "base", contract: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")!
+    static let usdcToken = EVMToken(chain: .base, contract: try! EVMAddress("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"), symbol: "USDC", decimals: 6)
+    static let l1Fee = BigUInt(20_000_000_000)
+
+    static func proposals() throws -> [TradeProposal] {
+        [
+            try VeloraClient.parse(EVMFixtures.trade("velora-base-usdc-eth")),
+            try KyberSwapClient.parse(routes: EVMFixtures.trade("kyber-base-usdc-eth-routes"), build: EVMFixtures.trade("kyber-base-usdc-eth-build")),
+            try LiFiClient.parse(EVMFixtures.trade("lifi-base-usdc-eth")),
+            try De1Client.parse(EVMFixtures.trade("de1-base-usdc-eth")),
+            try uniswap(),
+            try pancake(),
+        ]
+    }
+
+    /// A PancakeSwap pela v3 USDC/WETH 0,05%, 2% abaixo da menor dos agregadores (por ultimo).
+    static func pancake() throws -> TradeProposal {
+        let intent = try intent()
+        let reference = try uniswap().expectedOut * BigUInt(98) / BigUInt(99)
+        let deployment = PancakeDeployment.on(.base)!
+        let built = try PancakeCalldata.encode(route: .v3(tokens: [usdcToken.contract, deployment.wrappedNative], fees: [500]), intent: intent,
+                                               minimumOut: intent.minimumOut(forExpected: reference),
+                                               deadline: UInt64(Date().addingTimeInterval(600).timeIntervalSince1970), deployment: deployment)
+        return TradeProposal(provider: .pancakeswap, chainID: 8453, from: intent.owner, to: deployment.router, value: built.value, data: built.data,
+                             expectedOut: reference, spender: deployment.router, gasEstimate: 170_000, routeSources: nil, reportedPriceImpactBps: nil)
+    }
+
+    /// A Uniswap nao tem resposta gravada: a calldata e montada pela rota direta USDC/ETH da
+    /// v4, com a estimativa 1% abaixo da menor dos agregadores (fica por ultimo no ranking,
+    /// e os testes do vencedor continuam valendo).
+    static func uniswap() throws -> TradeProposal {
+        let intent = try intent()
+        let lowest = try [
+            VeloraClient.parse(EVMFixtures.trade("velora-base-usdc-eth")).expectedOut,
+            KyberSwapClient.parse(routes: EVMFixtures.trade("kyber-base-usdc-eth-routes"), build: EVMFixtures.trade("kyber-base-usdc-eth-build")).expectedOut,
+            LiFiClient.parse(EVMFixtures.trade("lifi-base-usdc-eth")).expectedOut,
+            De1Client.parse(EVMFixtures.trade("de1-base-usdc-eth")).expectedOut,
+        ].min()!
+        let expected = lowest * BigUInt(99) / BigUInt(100)
+        let deployment = UniswapDeployment.on(.base)!
+        let built = try UniswapCalldata.encode(
+            route: .v4(currencies: [usdcToken.contract, .zero], tiers: [UniswapV4Tier(fee: 500, tickSpacing: 10)]),
+            intent: intent, minimumOut: intent.minimumOut(forExpected: expected),
+            deadline: UInt64(Date().addingTimeInterval(600).timeIntervalSince1970), deployment: deployment
+        )
+        return TradeProposal(provider: .uniswap, chainID: 8453, from: intent.owner, to: deployment.router, value: built.value, data: built.data,
+                             expectedOut: expected, spender: EIP712ValidatedMessage.permit2, gasEstimate: 180_000, routeSources: nil,
+                             reportedPriceImpactBps: nil)
+    }
+
+    static func intent(amount: BigUInt = amount) throws -> TradeIntent {
+        let owner = try EVMAddress(EVMTestAccounts.testAccount(on: .base).address)
+        return try TradeIntent(owner: owner, sell: .token(usdcToken), buy: .native(.base), amountIn: amount, slippageBps: 50)
+    }
+
+    static func request(amount: BigUInt = amount) throws -> TradeRequest {
+        TradeRequest(walletID: UUID(), chain: .base, account: try EVMTestAccounts.testAccount(on: .base), sell: usdc,
+                     buy: .native(.base), amountIn: amount, slippageBasisPoints: 50)
+    }
+
+    /// Os provedores que tem router na Base, onde estao as gravacoes (a ShibaSwap so existe
+    /// na Ethereum).
+    static var baseProviders: [TradeProvider] { TradeProvider.allCases.filter { TradeAllowlist.router(for: $0, on: .base) != nil } }
+
+    /// A mesma cotacao validada que o agregador produz, para o teste saber o esperado.
+    static func validated(_ provider: TradeProvider) throws -> ValidatedTradeQuote {
+        let proposal = try #require(try proposals().first { $0.provider == provider })
+        return try TradeValidator.validate(proposal, intent: intent())
+    }
+
+    static func network(localNextNonce: UInt64? = nil, gas: UInt64 = 21_000, l1: BigUInt? = nil,
+                        balance: BigUInt = BigUInt(decimal: "1000000000000000000")!) -> EVMNetworkState {
+        EVMNetworkState(
+            chain: .base, pendingNonces: [7, 7], localNextNonce: localNextNonce, baseFeePerGas: 5_000_000,
+            priorityFees: EVMPriorityFees(slow: 1_000_000, normal: 1_000_000, fast: 2_000_000), gasEstimate: gas,
+            l1DataFee: l1, nativeBalance: balance, destinationHasCode: true
+        )
+    }
+
+    // MARK: Simulacao sintetica
+
+    static let transferTopic = Hash.keccak256(Array("Transfer(address,address,uint256)".utf8))
+    static let approvalTopic = Hash.keccak256(Array("Approval(address,address,uint256)".utf8))
+    static let nativePseudoToken = EVMAddress(bytes: [UInt8](repeating: 0xEE, count: 20))!
+
+    static func topic(_ address: EVMAddress) -> [UInt8] { [UInt8](repeating: 0, count: 12) + address.bytes }
+    static func word(_ value: BigUInt) -> [UInt8] { value.bigEndianBytes(padTo: 32)! }
+
+    /// O que um no honesto devolveria: o approve exato e a troca, com o vendido saindo do
+    /// dono e o comprado entrando.
+    static func simulation(_ quote: ValidatedTradeQuote, allowance: BigUInt?, source: String, success: Bool = true) -> TradeSimulation {
+        let intent = quote.intent
+        var calls = [TradeSimulatedCall]()
+        for value in TradePlanner.approvals(for: quote, currentAllowance: allowance) {
+            calls.append(TradeSimulatedCall(success: true, gasUsed: 46_000, logs: [
+                TradeSimulatedLog(address: intent.sell.contract!, topics: [approvalTopic, topic(intent.owner), topic(quote.spender)], data: word(value)),
+            ]))
+        }
+        let sell = intent.sell.contract ?? nativePseudoToken
+        let buy = intent.buy.contract ?? nativePseudoToken
+        calls.append(TradeSimulatedCall(success: success, gasUsed: 310_000, logs: [
+            TradeSimulatedLog(address: sell, topics: [transferTopic, topic(intent.owner), topic(quote.to)], data: word(intent.amountIn)),
+            TradeSimulatedLog(address: buy, topics: [transferTopic, topic(quote.to), topic(intent.owner)], data: word(quote.expectedOut)),
+        ]))
+        return TradeSimulation(source: source, calls: calls)
+    }
+}
+
+/// Um provedor que devolve a proposta gravada para o valor gravado, e "sem rota" para
+/// qualquer outro (as fracoes da divisao).
+struct RecordedQuoteSource: TradeQuoteSource {
+    let provider: TradeProvider
+    let proposal: TradeProposal
+    let amountIn: BigUInt
+    let counter: EVMCallCounter
+
+    func propose(_ request: TradeQuoteRequest) async throws -> TradeProposal {
+        await counter.add(provider.rawValue)
+        guard request.intent.amountIn == amountIn else { throw TradeProviderError.noRoute(provider) }
+        return proposal
+    }
+}
+
+actor EVMCallCounter {
+    private(set) var counts: [String: Int] = [:]
+    func add(_ key: String) { counts[key, default: 0] += 1 }
+    func count(_ key: String) -> Int { counts[key] ?? 0 }
+}
+
+/// O estado da cadeia para a troca, sintetico e configuravel.
+actor FakeTradeChain: EVMTradeChainReading {
+    var tokenBalance: BigUInt
+    var allowance: BigUInt
+    var failingSimulationSource: String?
+    /// Os provedores cuja rota reverte na simulacao, nas duas fontes.
+    var failingSimulationProviders: Set<TradeProvider> = []
+    /// A perna da divisao que reverte quando as pernas rodam em sequencia (pool em comum:
+    /// sozinha ela passa).
+    var failingSequenceLeg: Int?
+    private(set) var sequences: [[TradeProvider]] = []
+    private(set) var reads: [(provider: TradeProvider, localNextNonce: UInt64?)] = []
+
+    init(tokenBalance: BigUInt = BigUInt(1_000_000_000), allowance: BigUInt = 0, failingSimulationSource: String? = nil,
+         failingSimulationProviders: Set<TradeProvider> = [], failingSequenceLeg: Int? = nil) {
+        self.tokenBalance = tokenBalance
+        self.allowance = allowance
+        self.failingSimulationSource = failingSimulationSource
+        self.failingSimulationProviders = failingSimulationProviders
+        self.failingSequenceLeg = failingSequenceLeg
+    }
+
+    func simulateSequence(_ legs: [TradeSimulationLeg]) async throws -> [TradeSimulation] {
+        sequences.append(legs.map(\.quote.provider))
+        return ["publicnode", "drpc"].map { source in
+            TradeSimulation(source: source, calls: legs.enumerated().flatMap { index, leg in
+                EVMTradeFixtures.simulation(leg.quote, allowance: allowance, source: source, success: index != failingSequenceLeg).calls
+            })
+        }
+    }
+
+    func network(chain: Chain, owner: EVMAddress, localNextNonce: UInt64?, gasEstimate: UInt64, l1DataFee: BigUInt?,
+                 destinationHasCode: Bool) async throws -> EVMNetworkState {
+        EVMTradeFixtures.network(localNextNonce: localNextNonce, gas: gasEstimate, l1: l1DataFee)
+    }
+
+    func l1DataFee(chain: Chain, calldataSize: Int) async throws -> BigUInt? { EVMTradeFixtures.l1Fee }
+
+    func token(chain: Chain, token: EVMAddress, owner: EVMAddress, spender: EVMAddress) async throws -> EVMTokenState {
+        EVMTokenState(contractHasCode: true, balance: tokenBalance, allowance: allowance)
+    }
+
+    func read(for quote: ValidatedTradeQuote, localNextNonce: UInt64?) async throws -> TradeChainState {
+        reads.append((quote.provider, localNextNonce))
+        let simulations = ["publicnode", "drpc"].map {
+            EVMTradeFixtures.simulation(quote, allowance: allowance, source: $0,
+                                        success: $0 != failingSimulationSource && !failingSimulationProviders.contains(quote.provider))
+        }
+        return TradeChainState(
+            network: EVMTradeFixtures.network(localNextNonce: localNextNonce),
+            sellToken: EVMTokenState(contractHasCode: true, balance: tokenBalance, allowance: allowance),
+            routerHasCode: true, routerPin: quote.router.pin.expected, simulations: simulations,
+            approveL1DataFee: EVMTradeFixtures.l1Fee, swapL1DataFee: EVMTradeFixtures.l1Fee
+        )
+    }
+
+    private(set) var cancellationReads: [[UInt8]] = []
+
+    func readCancellation(chain: Chain, owner: EVMAddress, uid: [UInt8], localNextNonce: UInt64?) async throws -> EVMNetworkState {
+        cancellationReads.append(uid)
+        return EVMTradeFixtures.network(localNextNonce: localNextNonce, gas: 36_000, l1: EVMTradeFixtures.l1Fee)
+    }
+
+    func readCoW(intent: CoWLimitOrderIntent, openOrdersSellTotal: BigUInt, localNextNonce: UInt64?) async throws -> CoWChainState {
+        CoWChainState(
+            network: EVMTradeFixtures.network(localNextNonce: localNextNonce, gas: 60_000, l1: EVMTradeFixtures.l1Fee),
+            sellToken: EVMTokenState(contractHasCode: true, balance: tokenBalance, allowance: allowance),
+            wrapGasEstimate: intent.sell.isNative ? 30_000 : nil, wrapL1DataFee: intent.sell.isNative ? EVMTradeFixtures.l1Fee : nil,
+            openOrdersSellTotal: openOrdersSellTotal
+        )
+    }
+}
+
+/// A CoW sem rede. O envio e o cancelamento passam pelas conferencias reais do
+/// `CoWClient` (assinatura recuperando o dono sobre o digesto local) antes de responder.
+actor FakeCoW: EVMCoWService {
+    var openTotal: BigUInt
+    var open: [CoWOrderStatus] = []
+    private(set) var registered: [CoWAppData] = []
+    private(set) var submitted: [[UInt8]] = []
+    private(set) var cancelled: [(uids: [[UInt8]], owner: EVMAddress)] = []
+
+    /// A cotacao da CoW por valor vendido. Sem entrada, a CoW nao cota (o padrao: os
+    /// testes da troca pelos agregadores nao a veem).
+    var quotes: [BigUInt: BigUInt] = [:]
+    private(set) var quoted: [BigUInt] = []
+    var statuses: [[UInt8]: CoWOrderStatus] = [:]
+
+    init(openTotal: BigUInt = 0, quotes: [BigUInt: BigUInt] = [:]) {
+        self.openTotal = openTotal
+        self.quotes = quotes
+    }
+
+    func quote(sellToken: EVMAddress, buyToken: EVMAddress, sellAmount: BigUInt, owner: EVMAddress, chain: Chain,
+               appData: CoWAppData) async throws -> CoWQuote {
+        quoted.append(sellAmount)
+        guard let bought = quotes[sellAmount] else { throw CoWClientError.badResponse("cotação") }
+        return CoWQuote(sellAmount: sellAmount, buyAmount: bought, feeAmount: 1_881, protocolFeeBps: 2, verified: true)
+    }
+
+    func setStatus(_ status: CoWOrderStatus) { statuses[status.uid] = status }
+
+    func order(uid: [UInt8], chain: Chain, expected: CoWOrder?) async throws -> CoWOrderStatus {
+        guard let status = statuses[uid] else { throw CoWClientError.badResponse("ordem") }
+        return status
+    }
+
+    func registerAppData(_ appData: CoWAppData, chain: Chain) async throws {
+        registered.append(appData)
+    }
+
+    func submit(_ plan: CoWLimitOrderPlan, signature: SignedTransaction) async throws -> [UInt8] {
+        _ = try CoWClient.submissionBody(plan, signature: signature)
+        submitted.append(plan.uid)
+        return plan.uid
+    }
+
+    func openSellTotal(owner: EVMAddress, sellToken: EVMAddress, chain: Chain) async throws -> BigUInt { openTotal }
+
+    func setOpen(_ orders: [CoWOrderStatus]) { open = orders }
+
+    func openOrders(owner: EVMAddress, chain: Chain, now: Date) async throws -> [CoWOrderStatus] { open.filter { $0.owner == owner } }
+
+    func cancel(uids: [[UInt8]], chain: Chain, owner: EVMAddress, signature: SignedTransaction) async throws {
+        let typed = try CoWPlanner.cancellationTypedData(chain: chain, uids: uids)
+        try CoWClient.checkSignature(signature, digest: try typed.signingDigest(), owner: owner)
+        cancelled.append((uids, owner))
+    }
+}
+
+/// A rede do `MarketService` nos testes da idade do preco: o CoinGecko responde o texto
+/// guardado ou cai (500), e o CoinPaprika esta sempre fora. O relogio anda pelo teste.
+final class FakeMarketNetwork: ReaderTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var gecko: Data?
+    private var clock = Date(timeIntervalSince1970: 1_791_133_200)
+
+    var now: Date { lock.withLock { clock } }
+    func advance(_ seconds: TimeInterval) { lock.withLock { clock = clock.addingTimeInterval(seconds) } }
+    /// `nil`: o CoinGecko fora do ar.
+    func answer(_ json: String?) { lock.withLock { gecko = json.map { Data($0.utf8) } } }
+
+    func send(_ request: ReaderRequest) async throws -> Data {
+        let data = lock.withLock { request.url.host == "api.coingecko.com" ? gecko : nil }
+        guard let data else { throw HTTPClient.Failure.status(500) }
+        return data
+    }
+}
+
+struct FakeOracle: EVMPriceOracle {
+    let prices: [String: String]?
+    /// Demora da resposta, para o caso da rede lenta entre o inicio do plano e a recotacao.
+    var delay: Duration = .zero
+
+    func usdPrices(_ ids: [String]) async throws -> [String: String] {
+        if delay > .zero { try await Task.sleep(for: delay) }
+        guard let prices else { throw HTTPClient.Failure.offline }
+        return prices
+    }
+}
+
+enum EVMTradeHarness {
+    /// A Base sem rede: chainId, transmissao que devolve o hash dos bytes recebidos e o
+    /// recibo gravado (status 1) para acompanhar a autorizacao da ordem limite.
+    static func baseTransport(receiptStatus: String = "0x1") throws -> EVMFixtureTransport {
+        let chainID = try EVMFixtures.data("eth_chainId-base")
+        let head = try EVMFixtures.data("eth_blockNumber-ethereum")
+        let receipt = String(decoding: try EVMFixtures.data("eth_getTransactionReceipt-binance8"), as: UTF8.self)
+            .replacingOccurrences(of: "\"status\":\"0x1\"", with: "\"status\":\"\(receiptStatus)\"")
+        return EVMFixtureTransport([{ call in
+            switch call.method {
+            case "eth_chainId": return chainID
+            case "eth_blockNumber": return head
+            case "eth_getTransactionReceipt": return Data(receipt.utf8)
+            case "eth_sendRawTransaction":
+                guard let raw = call.params.first as? String, let bytes = Hex.decode(raw) else { return nil }
+                return EVMFixtures.result("\"\(Hex.encode(Hash.keccak256(bytes), prefix: true))\"")
+            default: return nil
+            }
+        }])
+    }
+
+    static func sources(_ counter: EVMCallCounter, proposals: [TradeProposal]? = nil) throws -> [any TradeQuoteSource] {
+        try (proposals ?? EVMTradeFixtures.proposals()).map {
+            RecordedQuoteSource(provider: $0.provider, proposal: $0, amountIn: EVMTradeFixtures.amount, counter: counter)
+        }
+    }
+
+    /// `oracle`: um oraculo de verdade no lugar do `FakeOracle` (o `MarketPriceOracle` sobre
+    /// um `MarketService` sem rede, para a idade do preco).
+    static func engine(
+        chain: Chain = .base, state: FakeTradeChain = FakeTradeChain(), cow: FakeCoW = FakeCoW(), prices: [String: String]? = nil,
+        oracleDelay: Duration = .zero, oracle: (any EVMPriceOracle)? = nil, sources: [any TradeQuoteSource], transport: EVMFixtureTransport
+    ) -> EVMTradeEngine {
+        let reader = EVMReader(transport: transport, rpc: [chain.id: testProviders("a", "b")], history: [:],
+                               privateRelays: testProviders("relay1", "relay2"))
+        let services = EVMTradeServices(
+            aggregator: TradeAggregator(sources: sources), chainState: state, reader: reader, cow: cow,
+            prices: oracle ?? FakeOracle(prices: prices, delay: oracleDelay),
+            pendingOrders: EVMPendingLimitOrders(), confirmation: EVMConfirmationPolicy(interval: .milliseconds(1), attempts: 3)
+        )
+        return EVMTradeEngine(chain: chain, services: services)!
+    }
+}

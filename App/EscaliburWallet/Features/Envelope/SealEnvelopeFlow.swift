@@ -1,0 +1,830 @@
+import EscaliburCore
+import EscaliburKeys
+import SwiftUI
+import UniformTypeIdentifiers
+
+/// V1: lacrar a senha de uma carteira num envelope Escalibur.
+///
+/// O envelope sai no formato `.esclbr` v1 do Escalibur, byte a byte, e abre no app
+/// Escalibur e aqui. O decifrador para computador saiu do app (pedido do dono,
+/// 14/10/2026); o de referencia em Python ficou em `tools/referencia`, so para os
+/// testes conferirem a cifra.
+struct SealEnvelopeFlow: View {
+    @Environment(AppSession.self) private var session
+    @Environment(AuthCoordinator.self) private var auth
+    let wallet: WalletMeta
+    let onClose: () -> Void
+
+    @State private var step: Step = .intro
+    /// Em que parte do lacre estamos, para a tela dizer: 0 a senha fica cara de adivinhar
+    /// (o Argon2, quase todo o tempo), 1 cifra a senha da carteira, 2 grava o arquivo.
+    @State private var sealPart = 0
+    @State private var sealStarted = Date()
+    @State private var phrase: SecureBytes?
+    @State private var passphrase: SecureBytes?
+    @State private var password = SecureBytes(capacity: 256)
+    @State private var passwordLength = 0
+    @State private var repeatPassword = SecureBytes(capacity: 256)
+    @State private var repeatLength = 0
+    /// A senha do envelope digitada vira cifra viva; segurar o dedo no campo mostra o que
+    /// foi digitado, enquanto segura (pedido do dono, 15/10/2026).
+    @State private var cipher = LiveCipher()
+    @State private var revealPassword = false
+    @State private var label = ""
+    @State private var suggestion: [String] = []
+    /// As posicoes das palavras sorteadas: a senha e montada direto no buffer seguro.
+    @State private var suggestionIndices: [Int] = []
+    @State private var customPassword = false
+    /// A senha e a sorteada pelo app (vale a entropia do sorteio, 66 bits).
+    @State private var usingSuggestion = false
+    /// O "sim" explicito do dono para uma senha abaixo de forte.
+    @State private var acceptedRisk = false
+    @State private var riskBits: Double?
+    @State private var weakSealed = false
+    /// A forca medida fora da thread principal, depois que o dono para de digitar: o
+    /// medidor percorre listas grandes, e a digitacao nao espera por ele.
+    @State private var measured: (length: Int, bits: Double)?
+    @State private var error: String?
+    @State private var working = false
+    @State private var howItWorks = false
+    @State private var sealed: SealedFile?
+    /// Para mostrar custo e tempo. Comeca no piso de lacre e e trocado pela medida
+    /// deste aparelho, feita fora da thread principal.
+    @State private var kdf = KDFParameters(memoryKiB: KDFCalibration.sealFloorKiB, passes: 3, lanes: KDFCalibration.lanes)
+
+    enum Step { case intro, check, create, repeatIt, sealing, done }
+
+    struct SealedFile: Identifiable {
+        let id = UUID()
+        let url: URL
+        let name: String
+    }
+
+    var body: some View {
+        NavigationStack {
+            content
+                .padding(.horizontal, Space.gutter)
+                .padding(.top, Space.md)
+                .padding(.bottom, Space.xs)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(Palette.void.ignoresSafeArea())
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        // Na repeticao, voltar para a senha; o fechar vai para a direita
+                        // (pedido do dono, 18/10/2026).
+                        if step == .repeatIt {
+                            Button { backToCreate() } label: {
+                                Image(systemName: "chevron.backward").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.ink)
+                            }
+                            .accessibilityLabel("Voltar")
+                            .accessibilityIdentifier("envelope-voltar")
+                        } else {
+                            closeButton
+                        }
+                    }
+                    if step == .repeatIt {
+                        ToolbarItem(placement: .topBarTrailing) { closeButton }
+                    }
+                }
+        }
+        .interactiveDismissDisabled()
+        .sheet(isPresented: $howItWorks) { EnvelopeHowItWorks() }
+        .guardedAgainstCapture()
+        .onChange(of: passwordLength) { _, _ in cipher.seal(0, buffer: password) }
+        .onChange(of: repeatLength) { _, _ in cipher.seal(1, buffer: repeatPassword) }
+        .onDisappear { cipher.clearAll() }
+        .task {
+            // Na mesma prioridade do lacre: em `.utility` o iOS mede nos nucleos de
+            // eficiencia e a calibracao escolhe menos passes do que cabem.
+            kdf = await Offload.compute { KDFCalibration.calibrate() }
+            #if DEBUG
+            // `-tela senha-fraca`: a folha do risco de uma senha fraca, sem senha nenhuma.
+            if DebugDemo.screen == "senha-fraca" {
+                step = .create
+                customPassword = true
+                riskBits = 24
+            }
+            // `-tela lacrando`: o lacre de mentira, para ver a tela (nada e cifrado).
+            if DebugDemo.screen == "lacrando" {
+                sealStarted = .now
+                step = .sealing
+                try? await Task.sleep(for: .seconds(KDFCalibration.estimatedSeconds(for: kdf)))
+                sealPart = 1
+                try? await Task.sleep(for: .milliseconds(450))
+                sealPart = 2
+                sealed = SealedFile(url: FileManager.default.temporaryDirectory.appendingPathComponent("envelope-7F3A.esclbr"), name: "envelope-7F3A.esclbr")
+                try? await Task.sleep(for: .milliseconds(450))
+                step = .done
+            }
+            #endif
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch step {
+        case .intro: intro
+        case .check:
+            // Antes de criar a senha, a checagem do aparelho, como antes das palavras (pedido
+            // do dono, 16/10/2026). Ela tem as proprias margens.
+            ZStack {
+                DeviceCheckView(slideTitle: String(localized: "Deslize para criar a senha"),
+                                consent: String(localized: "Estou ciente de que este iPhone falhou na verificação de integridade e de que criar a senha do envelope aqui pode expor a carteira. Quero seguir mesmo assim.")) {
+                    Task {
+                        await unlockPhrase()
+                        if step == .check { step = .intro }
+                    }
+                }
+                // Depois do PIN, enquanto o cofre abre as palavras, a checagem com o deslizar ja
+                // usado nao reaparece.
+                if working { CipherWorking(title: String(localized: "Abrindo as palavras")) }
+            }
+            .animation(Motion.fade, value: working)
+            .padding(.horizontal, -Space.gutter)
+            .padding(.top, -Space.md)
+            .padding(.bottom, -Space.xs)
+        case .create: create
+        case .repeatIt: repeatStep
+        case .sealing, .done: sealStage
+        }
+    }
+
+    // MARK: Etapas
+
+    /// O laco das telas de explicar; `-tela lacrar-parado` (so na depuracao) para no envelope
+    /// trancado, para a captura da loja nao pegar a cena no meio.
+    private static var introStage: EnvelopePixelScene.Stage? {
+        #if DEBUG
+        if DebugDemo.screen == "lacrar-parado" { return .sealed }
+        #endif
+        return nil
+    }
+
+    private var intro: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+            // Um pouco mais para cima, com o texto junto, sem cortar o alto da cena. A mesma
+            // cena do passo 1 do "Como funciona", toda em pixels (pedidos do dono, 16/10/2026).
+            // Mais um pouco para cima (pedido do dono, 18/10/2026).
+            EnvelopePixelScene(height: 236, stage: Self.introStage).padding(.top, -Space.sm - 20).padding(.bottom, Space.xs)
+            VStack(spacing: Space.sm) {
+                // Um nome mais limpo, que diz o que acontece (pedido do dono, 16/10/2026).
+                Text("Criptografar a senha da carteira").typeStyle(.title).foregroundStyle(Palette.ink)
+                Text("Uma cópia de segurança da senha da carteira, trancada com outra senha que só você conhece.")
+                    .typeStyle(.body).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true)
+                // O mesmo "Como funciona" de abrir um envelope (pedido do dono, 18/10/2026).
+                Button { howItWorks = true } label: {
+                    Label("Como funciona", systemImage: "play.circle").typeStyle(.label).foregroundStyle(Palette.ink)
+                        .padding(.horizontal, Space.sm).frame(height: 34)
+                        .background(Capsule(style: .continuous).fill(Palette.rail))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, Space.xxs)
+                .accessibilityIdentifier("lacrar-como-funciona")
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: Space.md) {
+                // Cada frase cabe em duas linhas no iPhone de 6,3 polegadas (pedido do dono,
+                // 15/10/2026). O decifrador e o tools/referencia/decifrar.py, publico.
+                EnvelopePoint(icon: "lock.doc", text: String(localized: "A senha da carteira vira um arquivo criptografado, aqui no iPhone."))
+                EnvelopePoint(icon: "key", text: String(localized: "Só você cria a senha do arquivo. Ela nunca sai deste iPhone."))
+                EnvelopePoint(icon: "eye.slash", text: String(localized: "O arquivo não passa por nós. Sem a sua senha, ninguém abre. Só você."))
+                EnvelopePoint(icon: "externaldrive", text: String(localized: "Guarde onde quiser: sem a sua senha, o arquivo criptografado não abre."))
+            }
+            .padding(Space.base)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.body))
+            .padding(.top, Space.md)
+            if let error { Banner(kind: .failure, title: error).padding(.top, Space.md) }
+            }
+            .padding(.bottom, Space.lg)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollIndicators(.hidden)
+        // A cena sobe um pouco acima da area que rola: sem isto, o alto dela era cortado
+        // (visto pelo dono, 18/10/2026).
+        .scrollClipDisabled()
+        // O botao fica preso embaixo; o texto rola por tras dele no iPhone pequeno.
+        .safeAreaInset(edge: .bottom) {
+            PrimaryButton(title: String(localized: "Continuar"), loading: working) { error = nil; step = .check }
+                .padding(.top, Space.xs)
+                .background(Palette.void)
+        }
+    }
+
+    /// O caminho padrao e o forte: seis palavras sorteadas. A senha propria e livre, com
+    /// no minimo 4 caracteres; abaixo de forte, a tela diz em quanto tempo ela cai e
+    /// pede o "sim" (pedido do dono e auditoria do envelope, 14/10/2026).
+    private var create: some View {
+        EnvelopeScrollingStep {
+            // Digitando a senha propria: o selo das telas onde se digita um segredo, como na seed
+            // (pedido do dono, 18/10/2026).
+            if customPassword {
+                CipherEmblem().frame(maxWidth: .infinity).padding(.bottom, Space.md)
+            }
+            // O titulo e o texto no meio (pedido do dono, 18/10/2026).
+            Group {
+                Text("Crie a senha do envelope").typeStyle(.title).foregroundStyle(Palette.ink)
+                Text("Só ela abre o envelope, em qualquer aparelho. Não é o PIN e não pode ser a senha da carteira. Não existe redefinir.")
+                    .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm).fixedSize(horizontal: false, vertical: true)
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            if customPassword {
+                PasswordBox(buffer: password, length: $passwordLength, placeholder: String(localized: "Senha do envelope"), focusOnAppear: true,
+                            reveal: $revealPassword, onSubmit: { proceedFromCreate() }, glyphs: glyphs(0, count: passwordLength))
+                    .padding(.top, Space.lg)
+                Text("Segure o dedo no campo para ver o que digitou.")
+                    .typeStyle(.note).foregroundStyle(Palette.inkMuted).padding(.top, Space.xs)
+                strengthLine.padding(.top, Space.sm)
+                EnvelopeOptionButton(title: String(localized: "Usar 6 palavras sorteadas"), icon: EnvelopeOptionButton.draw) {
+                    password.wipe()
+                    passwordLength = 0
+                    error = nil
+                    customPassword = false
+                }
+                .padding(.top, Space.md)
+            } else {
+                Text(verbatim: suggestion.joined(separator: " "))
+                    .font(.system(size: 22, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Palette.plateInk)
+                    .padding(Space.base)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(LacquerPlate().fill(Palette.live))
+                    .padding(.top, Space.lg)
+                    .textSelection(.disabled)
+                    .accessibilityIdentifier("palavras-envelope")
+                    // As 6 palavras fora da captura. Sortear outras troca o bloco inteiro, com
+                    // o mesmo esmaecer de antes.
+                    .protectedFromCapture()
+                    .id(suggestion)
+                Text("Seis palavras sorteadas neste iPhone. Anote em outro lugar, longe do papel da senha da carteira.")
+                    .typeStyle(.note).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: Space.xs) {
+                    EnvelopeOptionButton(title: String(localized: "Sortear outras"), icon: EnvelopeOptionButton.draw) {
+                        withAnimation(Motion.fade) { suggest() }
+                    }
+                    EnvelopeOptionButton(title: String(localized: "Criar a minha"), icon: "pencil") {
+                        error = nil
+                        usingSuggestion = false
+                        customPassword = true
+                        DispatchQueue.global(qos: .utility).async { PasswordStrength.preload() }
+                    }
+                }
+                .padding(.top, Space.md)
+            }
+            if let error { Text(error).typeStyle(.note).foregroundStyle(Palette.down).padding(.top, Space.xs).fixedSize(horizontal: false, vertical: true) }
+        } footer: {
+            // O passo seguinte, dito antes (pedido do dono, 18/10/2026).
+            Text("Na próxima tela, você digita a senha de novo para confirmar.")
+                .typeStyle(.note).foregroundStyle(Palette.inkMuted)
+                .frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            if customPassword {
+                PrimaryButton(title: String(localized: "Continuar"), enabled: passwordLength > 0) { proceedFromCreate() }
+            } else {
+                PrimaryButton(title: String(localized: "Anotei, continuar"), enabled: !suggestionIndices.isEmpty) {
+                    // O buffer sai direto das posicoes. As palavras na tela sao String (para
+                    // mostrar, nao tem outro jeito: risco aceito no 6) e saem da memoria do
+                    // app assim que a tela segue (pentest de 14/10/2026).
+                    guard (try? PasswordStrength.write(suggestionIndices, into: password)) != nil else { return }
+                    passwordLength = password.count
+                    usingSuggestion = true
+                    suggestion = []
+                    proceedFromCreate()
+                }
+            }
+        }
+        .onAppear { if suggestion.isEmpty { suggest() } }
+        .sheet(isPresented: Binding(get: { riskBits != nil }, set: { if !$0 { riskBits = nil } })) {
+            if let bits = riskBits { riskSheet(bits: bits) }
+        }
+    }
+
+    /// O risco de uma senha abaixo de forte, dito com o tempo, antes do lacre.
+    private func riskSheet(bits: Double) -> some View {
+        let band = PasswordCost.band(bits: bits, kdf: kdf)
+        let crime = PasswordCost.describe(PasswordCost.seconds(bits: bits, kdf: kdf))
+        let state = PasswordCost.describe(PasswordCost.stateSeconds(bits: bits, kdf: kdf))
+        // Centralizada, e sem a frase do computador do atacante (pedido do dono, 16/10/2026).
+        return VStack(spacing: 0) {
+            Image(systemName: band == .fair ? "exclamationmark.shield" : "exclamationmark.triangle.fill")
+                .font(.system(size: 34, weight: .semibold)).foregroundStyle(band == .fair ? Palette.ink : Palette.down)
+            Text(band == .fair ? "Um governo abriria em \(state)" : "Esta senha cai em \(crime)")
+                .typeStyle(.title).foregroundStyle(Palette.ink).padding(.top, Space.md)
+            Text("Seis palavras sorteadas aguentam milhões de anos.")
+                .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm).fixedSize(horizontal: false, vertical: true)
+            PrimaryButton(title: String(localized: "Usar 6 palavras sorteadas")) {
+                riskBits = nil
+                password.wipe()
+                passwordLength = 0
+                customPassword = false
+                usingSuggestion = false
+                suggest()
+            }
+            .padding(.top, Space.lg)
+            HoldButton(title: band.needsHold ? String(localized: "Segure para usar mesmo assim") : String(localized: "Usar mesmo assim"), holdSeconds: band.needsHold ? 2 : 0) {
+                riskBits = nil
+                acceptedRisk = true
+                error = nil
+                step = .repeatIt
+            }
+            .padding(.top, Space.sm)
+        }
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, Space.gutter)
+        .padding(.top, Space.xl)
+        .padding(.bottom, Space.sm)
+        // Na altura do conteudo: o .medium deixava um vao vazio embaixo (pedido do dono,
+        // 17/10/2026).
+        .fittedSheet()
+        .presentationBackground(Palette.body)
+        .accessibilityIdentifier("senha-fraca")
+    }
+
+    /// Ao vivo, enquanto o dono digita: em quanto tempo a senha cai, com os parametros
+    /// reais deste envelope.
+    @ViewBuilder
+    private var strengthLine: some View {
+        let short = passwordLength > 0 && PasswordStrength.scalarCount(password) < PasswordStrength.minimumLength
+        let digits = passwordLength > 0 && password.withUnsafeBytes { $0.allSatisfy { (0x30...0x39).contains($0) } }
+        VStack(alignment: .leading, spacing: 4) {
+            if passwordLength == 0 {
+                Text("Qualquer senha com pelo menos 4 caracteres. Quanto mais longa e menos óbvia, mais tempo ela aguenta. Não use a senha da carteira.")
+                    .typeStyle(.note).foregroundStyle(Palette.inkSoft)
+            } else if short {
+                Text("No mínimo 4 caracteres.").typeStyle(.note).foregroundStyle(Palette.down)
+            } else if let measured, measured.length == passwordLength {
+                let band = PasswordCost.band(bits: measured.bits, kdf: kdf)
+                Text(PasswordCost.text(bits: measured.bits, kdf: kdf)).typeStyle(.note)
+                    .foregroundStyle(band == .veryWeak ? Palette.down : band == .weak ? Palette.caution : band == .fair ? Palette.ink : Palette.success)
+                if digits {
+                    Text("Não use o código do iPhone nem o PIN do app: quem já viu você digitar abre o envelope.")
+                        .typeStyle(.note).foregroundStyle(Palette.inkSoft)
+                }
+            } else {
+                Text("Medindo a senha…").typeStyle(.note).foregroundStyle(Palette.inkMuted)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .task(id: passwordLength) { await measure() }
+    }
+
+    /// Mede numa copia do buffer, fora da thread principal, meio segundo depois da
+    /// ultima tecla. A copia e zerada na saida.
+    private func measure() async {
+        guard passwordLength > 0 else { return }
+        try? await Task.sleep(for: .milliseconds(450))
+        guard !Task.isCancelled else { return }
+        let copy = SecureBytes(capacity: max(password.count, 1))
+        password.withUnsafeBytes { copy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+        let length = passwordLength
+        let bits = await Offload.compute {
+            defer { copy.wipe() }
+            return PasswordStrength.bits(copy)
+        }
+        guard !Task.isCancelled else { return }
+        measured = (length, bits)
+    }
+
+    private var repeatStep: some View {
+        EnvelopeScrollingStep {
+            CipherEmblem().frame(maxWidth: .infinity).padding(.bottom, Space.md)
+            // No meio, como na tela de criar (pedido do dono, 18/10/2026).
+            Text("Repita a senha do envelope").typeStyle(.title).foregroundStyle(Palette.ink)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+            PasswordBox(buffer: repeatPassword, length: $repeatLength, placeholder: String(localized: "Senha do envelope"),
+                        reveal: $revealPassword, onSubmit: { Task { await seal() } }, glyphs: glyphs(1, count: repeatLength))
+                .padding(.top, Space.lg)
+            Text("Segure o dedo no campo para ver o que digitou.")
+                .typeStyle(.note).foregroundStyle(Palette.inkMuted).padding(.top, Space.xs)
+            if let error { Text(error).typeStyle(.note).foregroundStyle(Palette.down).padding(.top, Space.xs) }
+            Text("Nome dentro do envelope").typeStyle(.note).foregroundStyle(Palette.inkSoft).padding(.top, Space.lg)
+            TextField("", text: $label)
+                .typeStyle(.row).foregroundStyle(Palette.ink)
+                .padding(.horizontal, Space.md).frame(height: Height.field)
+                .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.body)
+                    .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).stroke(Palette.edge, lineWidth: 1)))
+                .padding(.top, Space.xs)
+            Text("O nome fica cifrado. O arquivo não diz de quem é.")
+                .typeStyle(.note).foregroundStyle(Palette.inkMuted).padding(.top, Space.xs)
+        } footer: {
+            PrimaryButton(title: String(localized: "Lacrar envelope"), enabled: repeatLength > 0) { Task { await seal() } }
+        }
+    }
+
+    /// Lacrando e lacrado dividem a cena (`EnvelopePixelScene`, no mesmo estilo de pixels das
+    /// outras telas do envelope, pedido do dono, 16/10/2026): o cartao entra, a aba
+    /// fecha e o selo carimba na mesma ilustracao. O envelope nao se mexe ao lacrar (pedido do
+    /// dono, 17/10/2026): a cena e os dois textos ocupam o mesmo lugar nas duas etapas, no
+    /// meio da tela, e o rodape fica por cima, embaixo, sem empurrar nada.
+    private var sealStage: some View {
+        let done = step == .done
+        return VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                EnvelopePixelScene(height: 236, stage: sceneStage)
+                    .padding(.bottom, Space.xl)
+                ZStack(alignment: .top) {
+                    sealingText.opacity(done ? 0 : 1)
+                    sealedText.opacity(done ? 1 : 0)
+                }
+            }
+            // O alto da cena fica vazio depois que as palavras caem: o conjunto sobe metade disso.
+            .offset(y: -EnvelopePixelScene.emptyTop / 2)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Os dois rodapes ocupam a mesma altura: o meio de cima nao muda ao lacrar.
+            ZStack(alignment: .bottom) {
+                sealedFooter.opacity(done ? 1 : 0).allowsHitTesting(done)
+                Text("A senha do envelope não sai deste iPhone.")
+                    .typeStyle(.note).foregroundStyle(Palette.inkMuted).multilineTextAlignment(.center)
+                    .padding(.bottom, Space.sm)
+                    .opacity(done ? 0 : 1)
+            }
+        }
+        .animation(Motion.fade, value: step)
+        .sensoryFeedback(.success, trigger: sealed?.id)
+    }
+
+    private var sealedFooter: some View {
+        VStack(spacing: 0) {
+            if let sealed {
+                ShareLink(item: sealed.url) {
+                    Text("Salvar ou enviar o arquivo").typeStyle(.action)
+                        .frame(maxWidth: .infinity).frame(height: Height.primary)
+                }
+                .buttonStyle(PrimaryStyle())
+            } else {
+                Color.clear.frame(height: Height.primary)
+            }
+            Text("Para abrir: Ajustes, Abrir um envelope, neste ou em outro iPhone com o app.")
+                .typeStyle(.note).foregroundStyle(Palette.inkMuted).multilineTextAlignment(.center)
+                .padding(.top, Space.sm)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var sealingText: some View {
+        VStack(spacing: Space.sm) {
+            Text("Lacrando o envelope").typeStyle(.title).foregroundStyle(Palette.ink)
+            Text(sealPartText)
+                .typeStyle(.body).foregroundStyle(Palette.inkSoft)
+                .contentTransition(.opacity)
+                .animation(Motion.fade, value: sealPart)
+            SealProgress(started: sealStarted, estimate: KDFCalibration.estimatedSeconds(for: kdf), finished: sealPart > 0)
+                .frame(width: 220)
+                .padding(.top, Space.sm)
+            Text("Leva \(Fmt.aboutSeconds(KDFCalibration.estimatedSeconds(for: kdf))), só neste iPhone, sem internet.")
+                .typeStyle(.note).foregroundStyle(Palette.inkMuted)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// O nome do arquivo sem a capsula em volta (pedido do dono, 17/10/2026).
+    private var sealedText: some View {
+        VStack(spacing: Space.sm) {
+            Text("Envelope lacrado").typeStyle(.title).foregroundStyle(Palette.ink)
+            if let sealed {
+                HStack(spacing: Space.xs) {
+                    Image(systemName: "lock.doc").font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.inkSoft)
+                    Text(verbatim: sealed.name).typeStyle(.row).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
+                }
+            }
+            Text("O arquivo não mostra o que guarda. Guarde o arquivo e a senha em lugares diferentes: quem tiver os dois tem a carteira.")
+                .typeStyle(.body).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Space.xxs)
+            if weakSealed {
+                Banner(kind: .caution, title: String(localized: "Senha muito fraca: guarde o arquivo num pendrive ou no seu computador, nunca na nuvem nem por e-mail."))
+                    .padding(.top, Space.xs)
+            }
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// A etapa da cena: a conta da senha, a cifra, a gravacao e o lacre.
+    private var sceneStage: EnvelopePixelScene.Stage {
+        if step == .done { return .sealed }
+        return sealPart >= 2 ? .writing : .working
+    }
+
+    /// A cifra viva da senha digitada (posicao 0, a senha; 1, a repeticao).
+    private func glyphs(_ slot: Int, count: Int) -> ((UInt64) -> String)? {
+        guard count > 0 else { return nil }
+        let cipher = self.cipher
+        return { tick in cipher.glyphs(slot, count: count, tick: tick) }
+    }
+
+    private var sealPartText: String {
+        switch sealPart {
+        case 0: return String(localized: "Deixando a senha difícil de adivinhar")
+        case 1: return String(localized: "Cifrando a senha da carteira")
+        default: return String(localized: "Gravando o arquivo")
+        }
+    }
+
+    // MARK: Acoes
+
+    private func unlockPhrase() async {
+        working = true
+        defer { working = false }
+        error = nil
+        let id = wallet.id
+        do {
+            try AuthCoordinator.checkPINAndBiometry()
+            guard await VoiceGate.shared.confirm(.envelope, session: session) else { return }
+            // O envelope leva a passphrase junto: na carteira que pede a passphrase, ela so sai
+            // depois de digitada e conferida no cofre. Sem isso, quem tem o PIN e o rosto
+            // exportava as duas (revisao de seguranca de 16/10/2026).
+            let current = session.metadata.wallets.first { $0.id == id } ?? wallet
+            var typed: SecureBytes?
+            if PassphraseGate.asks(current) {
+                guard let given = await PassphraseGate.shared.ask(current, reason: String(localized: "O envelope de \(current.name) leva a passphrase junto. Digite a passphrase para seguir; depois vem a confirmação de sempre.")) else { return }
+                typed = given
+                if let wait = PassphraseGate.shared.begin(session) {
+                    self.error = wait
+                    given.wipe()
+                    return
+                }
+            }
+            defer { typed?.wipe() }
+            let check = typed
+            let opened: (SecureBytes, SecureBytes)? = try await auth.perform(session, reason: String(localized: "Lacrar a senha de \(wallet.name) num envelope"), presence: .pinAndBiometry) { rk in
+                let secret = try KeyServices.wallets.open(walletID: id, rk: rk)
+                defer { secret.wipe() }
+                if let check, !PassphraseGate.matches(secret.passphrase, check) { throw Signer.Failure.passphraseMismatch }
+                let phrase = try secret.phrase()
+                let passphrase = SecureBytes(capacity: max(secret.passphrase.count, 1))
+                secret.passphrase.withUnsafeBytes { passphrase.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+                return (phrase, passphrase)
+            }
+            guard let result = opened else {
+                if check != nil { PassphraseGate.shared.refund(session) }
+                return
+            }
+            if check != nil { PassphraseGate.shared.passed(session) }
+            phrase = result.0
+            passphrase = result.1
+            label = wallet.name
+            step = .create
+        } catch {
+            if (error as? Signer.Failure) == .passphraseMismatch {
+                PassphraseGate.shared.failed(session)
+                self.error = PassphraseGate.mismatchMessage
+                return
+            }
+            self.error = AuthCoordinator.refusalMessage(error) ?? String(localized: "Não foi possível abrir a carteira agora.")
+        }
+    }
+
+    private var closeButton: some View {
+        Button { close() } label: {
+            Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.inkSoft)
+        }
+        .accessibilityLabel("Fechar")
+    }
+
+    /// Da repeticao de volta para a senha: a repeticao sai da memoria. Com as palavras
+    /// sorteadas, voltam as mesmas (o dono ja anotou), montadas das posicoes guardadas.
+    private func backToCreate() {
+        repeatPassword.wipe()
+        repeatLength = 0
+        error = nil
+        acceptedRisk = false
+        if usingSuggestion {
+            password.wipe()
+            passwordLength = 0
+            usingSuggestion = false
+            let list = try? WordlistStore.shared.wordlist(for: .english)
+            suggestion = suggestionIndices.compactMap { list?.words[$0] }
+        }
+        step = .create
+    }
+
+    private func suggest() {
+        suggestionIndices = (try? PasswordStrength.suggestionIndices(avoiding: phrase)) ?? []
+        let list = try? WordlistStore.shared.wordlist(for: .english)
+        suggestion = suggestionIndices.compactMap { list?.words[$0] }
+    }
+
+    private func proceedFromCreate() {
+        guard passwordLength > 0 else { return }
+        acceptedRisk = false
+        if usingSuggestion {
+            error = nil
+            step = .repeatIt
+            return
+        }
+        // Palavras da propria frase anulam o backup (o papel da frase abriria o envelope):
+        // isso nao e questao de forca, e continua recusado.
+        if let phrase, PasswordStrength.reusesPhrase(password, phrase: phrase) {
+            error = String(localized: "Esta senha usa palavras da própria carteira. Quem achar o papel abre o envelope. Escolha outra.")
+            return
+        }
+        switch PasswordStrength.verdict(password) {
+        case .tooShort:
+            error = String(localized: "Use pelo menos 4 caracteres.")
+        case .strong:
+            // O medidor depende do custo do Argon2 deste iPhone: abaixo de forte nele, pede
+            // o "sim" como as outras. Antes, 60 bits saiam como "bom" no medidor e lacravam
+            // sem o aviso (pentest de 14/10/2026).
+            let bits = PasswordStrength.bits(password)
+            if PasswordCost.band(bits: bits, kdf: kdf) != .strong {
+                error = nil
+                riskBits = bits
+                return
+            }
+            error = nil
+            step = .repeatIt
+        case .digitsOnly(let bits), .weak(let bits):
+            error = nil
+            riskBits = bits
+        }
+    }
+
+    private func seal() async {
+        let same = Hash.constantTimeEqual(password, repeatPassword)
+        guard same else {
+            error = String(localized: "As duas não conferem. Digite a senha do envelope de novo.")
+            repeatPassword.wipe()
+            repeatLength = 0
+            return
+        }
+        guard let phrase else { return }
+        error = nil
+        sealPart = 0
+        sealStarted = .now
+        step = .sealing
+        let (password, label, passphrase, kdf) = (self.password, String(self.label.prefix(64)), self.passphrase, self.kdf)
+        let generated: Double? = usingSuggestion ? PasswordStrength.suggestionBits() : nil
+        let accepted = acceptedRisk
+        // Para a tela final: senha muito fraca, o arquivo fica fora da nuvem.
+        weakSealed = !usingSuggestion && PasswordCost.band(bits: PasswordStrength.bits(password), kdf: kdf) == .veryWeak
+        do {
+            let data = try await Offload.run {
+                try Envelope.seal(phrase: phrase, passphrase: passphrase, label: label, password: password, parameters: kdf,
+                                  generatedBits: generated, acceptedRisk: accepted)
+            }
+            password.wipe()
+            repeatPassword.wipe()
+            phrase.wipe()
+            passphrase?.wipe()
+            self.phrase = nil
+            self.passphrase = nil
+            // A cifra e a gravacao levam milissegundos: a tela mostra cada uma por um
+            // instante, para o dono ver o que aconteceu, e so entao o envelope fecha.
+            sealPart = 1
+            try? await Task.sleep(for: .milliseconds(450))
+            sealPart = 2
+            sealed = try write(data)
+            var updated = wallet
+            updated.envelopeSealedAt = .now
+            session.update(updated)
+            try? await Task.sleep(for: .milliseconds(450))
+            step = .done
+        } catch Envelope.Failure.notEnoughMemory {
+            self.error = String(localized: "Pouca memória livre agora. Feche outros apps e tente de novo.")
+            step = .repeatIt
+        } catch {
+            self.error = String(localized: "Não foi possível lacrar o envelope.")
+            step = .repeatIt
+        }
+    }
+
+    /// O arquivo vai para tmp com protecao completa e fora do backup, e e apagado
+    /// quando esta tela fecha.
+    private func write(_ data: Data) throws -> SealedFile {
+        var bytes = [UInt8](repeating: 0, count: 2)
+        _ = SecRandomCopyBytes(kSecRandomDefault, 2, &bytes)
+        let name = "envelope-\(Hex.encode(bytes).uppercased()).esclbr"
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("envelopes", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var url = directory.appendingPathComponent(name)
+        try data.write(to: url, options: [.atomic, .completeFileProtection])
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try url.setResourceValues(values)
+        return SealedFile(url: url, name: name)
+    }
+
+    private func close() {
+        phrase?.wipe()
+        passphrase?.wipe()
+        password.wipe()
+        repeatPassword.wipe()
+        if let sealed { try? FileManager.default.removeItem(at: sealed.url) }
+        onClose()
+    }
+}
+
+/// Um ponto da explicacao do envelope: icone do assunto e uma frase.
+private struct EnvelopePoint: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Space.sm) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Palette.ink)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(Palette.control))
+            Text(text).typeStyle(.body).foregroundStyle(Palette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 5)
+        }
+    }
+}
+
+/// As escolhas da senha do envelope: pilulas da mesma largura, com o icone do que fazem.
+private struct EnvelopeOptionButton: View {
+    /// O sorteio: os pixels do "o app sorteia" da tela de escolher as palavras, no lugar do
+    /// dado (pedido do dono, 18/10/2026).
+    static let draw = "sorteio"
+    let title: String
+    let icon: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Space.xs) {
+                if icon == Self.draw {
+                    DrawPixels().frame(width: 16, height: 16)
+                } else {
+                    Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.ink)
+                }
+                Text(title).typeStyle(.action).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.85)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(Capsule().fill(Palette.rail))
+            .overlay(Capsule().stroke(Palette.edge, lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// A barra do lacre: anda pelo tempo que este iPhone costuma levar e para em 92% ate o
+/// Argon2 terminar de verdade; dai enche. O tempo e estimado, o fim nao.
+private struct SealProgress: View {
+    let started: Date
+    let estimate: Double
+    let finished: Bool
+
+    /// Em pixels, como o resto do envelope (pedido do dono, 16/10/2026): cada pixel aceso
+    /// cifra de leve; os apagados ficam escuros.
+    private static let count = 30
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: finished)) { timeline in
+            let elapsed = timeline.date.timeIntervalSince(started)
+            let raw = min(max(elapsed / max(estimate, 0.5), 0), 1)
+            // Desacelera perto do fim: 1 - (1 - t)^2, ate 92%.
+            let fraction = finished ? 1 : 0.92 * (1 - (1 - raw) * (1 - raw))
+            let clock = timeline.date.timeIntervalSinceReferenceDate
+            Canvas { context, size in
+                let pitch = size.width / CGFloat(Self.count)
+                let side = min(pitch - 1.6, size.height)
+                let lit = Int((fraction * Double(Self.count)).rounded(.down))
+                for index in 0..<Self.count {
+                    let rect = CGRect(x: CGFloat(index) * pitch + (pitch - side) / 2, y: (size.height - side) / 2, width: side, height: side)
+                    let bit = PixelFill.noise(index, Int(clock * 6) % 997, 0x4E)
+                    let tone = index < lit ? 0.62 + 0.3 * bit : 0.16
+                    context.fill(Path(roundedRect: rect, cornerRadius: 1.2), with: .color(PixelFill.gray(tone)))
+                }
+            }
+            .frame(height: 6)
+        }
+        .accessibilityElement()
+        .accessibilityLabel(String(localized: "Lacrando"))
+    }
+}
+
+/// As telas de digitar a senha do envelope: o conteudo rola, e o rodape (a frase e o botao)
+/// fica preso embaixo, acima do teclado. Com o selo no alto, o conteudo nao cabia acima do
+/// teclado e o botao ficava atras dele (18/10/2026).
+struct EnvelopeScrollingStep<Content: View, Footer: View>: View {
+    @ViewBuilder var content: Content
+    @ViewBuilder var footer: Footer
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) { content }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, Space.md)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: Space.sm) { footer }
+                .padding(.top, Space.xs)
+                .background(Palette.void)
+        }
+    }
+}

@@ -1,0 +1,114 @@
+<header class="cabeca-pagina seg-cabeca">
+<div class="wrap">
+<p class="sobretitulo">Segurança</p>
+<h1 class="titulo-pagina">O que protege a sua carteira, e onde a proteção para.</h1>
+<p class="lead">Nenhuma defesa é absoluta. Cada uma tem um custo para quem ataca e um limite, e esta página diz os dois. O modelo de ameaça completo, com os números, está em <a href="{{repo}}/blob/main/docs/seguranca.md">docs/seguranca.md</a>.</p>
+<ul class="seg-resumo" aria-label="Em resumo">
+<li><b>0</b><span>servidores da Escalibur no caminho</span></li>
+<li><b>{{n_verificacoes}}</b><span>verificações a cada mudança</span></li>
+<li><b>256 MiB</b><span>de memória por tentativa de PIN</span></li>
+</ul>
+</div>
+</header>
+
+<section class="bloco" aria-labelledby="t-promessas">
+<div class="wrap">
+<h2 id="t-promessas">O que o app promete</h2>
+<p class="lead intro">E que o código confere a cada mudança, nas {{n_verificacoes}} verificações da <a href="{{base}}auditoria/">auditoria</a>.</p>
+<ul class="promessas">
+<li><span class="promessa-icone"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7M12 14.5v2.2"/></svg></span><h3>As palavras nunca saem do celular em claro.</h3><p>Cifradas, só saem por ação sua, num envelope com senha própria. O app não tem conta nem servidor, e não manda chave nem palavra para lugar nenhum.</p></li>
+<li><span class="promessa-icone"><svg viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor" stroke="none"><circle cx="7" cy="6.5" r="1.5"/><circle cx="12" cy="6.5" r="1.5"/><circle cx="17" cy="6.5" r="1.5"/><circle cx="7" cy="11.5" r="1.5"/><circle cx="12" cy="11.5" r="1.5"/><circle cx="17" cy="11.5" r="1.5"/><circle cx="12" cy="16.5" r="1.5"/></g><path d="M4 20 20 4"/></svg></span><h3>Nenhum verificador de PIN gravado.</h3><p>A chave raiz vai cifrada por uma chave derivada do PIN, com Argon2id de 256 MiB, dentro de um embrulho que só abre no chip de segurança do aparelho (o Secure Enclave, no iPhone). Cada tentativa passa pelo aparelho, uma de cada vez.</p></li>
+<li><span class="promessa-icone"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9.5 9.5v1.2M14.5 9.5v1.2M12 9.5v3.5h-1M9.6 15.8c1.4 1.1 3.4 1.1 4.8 0"/></svg></span><h3>Rosto novo não abre a carteira.</h3><p>O atalho do Face ID vale só para os rostos cadastrados hoje: cadastrar um rosto novo no iPhone destrói o atalho em vez de abri-lo. O código de desbloqueio do celular não abre nada aqui.</p></li>
+<li><span class="promessa-icone"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="4"/><path d="M12 12h8.5M17.5 12v3M20.5 12v2.2"/></svg></span><h3>Uma chave por carteira.</h3><p>A chave raiz desembrulha só a chave da carteira que vai assinar. O que se guarda é a entropia, não as palavras, e ela sai da memória assim que a assinatura termina.</p></li>
+<li><span class="promessa-icone"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.8 12s3.4-6 9.2-6 9.2 6 9.2 6-3.4 6-9.2 6-9.2-6-9.2-6Z"/><path d="m9.4 12.1 1.8 1.8 3.5-3.6"/></svg></span><h3>Nada é assinado às cegas.</h3><p>O assinador só aceita um plano que passou pela validação da rede: destino, valor, taxa com teto, tag e memo, e chamada de contrato decodificada contra uma lista compilada no app. A assinatura é verificada antes de sair.</p></li>
+<li><span class="promessa-icone"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1.8"/><rect x="4" y="14" width="16" height="6" rx="1.8"/><path d="M7.5 7h.01M7.5 17h.01M3 21 21 3"/></svg></span><h3>Nenhum provedor decide nada.</h3><p>O chainId, a passphrase de rede, os contratos de token, os roteadores e os emissores são constantes compiladas. Nonce e sequence só valem com dois provedores concordando.</p></li>
+</ul>
+<p class="apoio links-bloco">{{codigo chave-raiz | Ler a chave raiz e o PIN}} · {{codigo assinador | Ler o assinador}} · {{codigo conferencia-do-plano | Ler a conferência do plano}}</p>
+</div>
+</section>
+
+<section class="bloco" aria-labelledby="t-cadeia">
+<div class="wrap seg-cadeia">
+<div>
+<h2 id="t-cadeia">Do PIN até a assinatura</h2>
+<p class="lead intro">Cada degrau abre só o seguinte, e só no próprio aparelho. Nenhum deles existe fora dele.</p>
+</div>
+<ol class="cadeia" aria-label="Do PIN até a assinatura">
+<li><span class="no"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="4" cy="9" r="1.6" fill="currentColor"/><circle cx="9" cy="9" r="1.6" fill="currentColor"/><circle cx="14" cy="9" r="1.6" fill="currentColor"/></svg></span><div><b>Seu PIN</b><span>Seis dígitos que não ficam gravados em lugar nenhum, nem como verificador.</span></div></li>
+<li><span class="no"><svg viewBox="0 0 18 18" aria-hidden="true"><rect x="4" y="4" width="10" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 1.5v2.5M11 1.5v2.5M7 14v2.5M11 14v2.5M1.5 7H4M1.5 11H4M14 7h2.5M14 11h2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><div><b>Argon2id com 256 MiB</b><span>Cada tentativa custa memória e tempo, de propósito.</span></div></li>
+<li><span class="no"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.8 15 4v4.6c0 3.6-2.6 6.4-6 7.6-3.4-1.2-6-4-6-7.6V4Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m6.4 9 1.8 1.8L11.8 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><b>Chip de segurança</b><span>O Secure Enclave, no iPhone: a chave do PIN só abre nele, uma tentativa de cada vez.</span></div></li>
+<li><span class="no"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="5.5" cy="9" r="3.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8.7 9h7.3M13.5 9v2.6M15.8 9v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><div><b>Chave raiz</b><span>Destranca só a chave da carteira que vai assinar.</span></div></li>
+<li><span class="no"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 13.5c2-.2 2.8-2.6 4.2-2.6 1.6 0 .6 2.6 2.4 2.6 1.4 0 2.2-1.6 3.4-1.6.8 0 1.2.6 3 .6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="m10.5 3.5 3 3-5 5H5.5v-3Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span><div><b>Chave da carteira</b><span>Assina, confere a assinatura e é apagada da memória.</span></div></li>
+</ol>
+</div>
+</section>
+
+<section class="bloco" aria-labelledby="t-ligar">
+<div class="wrap">
+<h2 id="t-ligar">O que você pode ligar</h2>
+<p class="lead intro">Camadas a mais, para quem quer. Todas ficam no celular e nenhuma depende de servidor.</p>
+<ul class="camadas">
+<li><h3>Super Security</h3><p>O PIN e o Face ID juntos para abrir o app, enviar, trocar e ver as palavras. Nenhum dos dois sozinho abre nada: é a própria cifra das carteiras que pede os dois.</p></li>
+<li><h3>Safe Keyboard</h3><p>Um teclado desenhado pelo app, em todo campo. O teclado do sistema não vê as letras, e nada é previsto, ditado ou aprendido.</p></li>
+<li><h3>Passphrase</h3><p>Uma senha extra que abre outra carteira nas mesmas palavras, pedida antes de mover saldo e conferida dentro do cofre.</p></li>
+<li><h3>Envelope Escalibur</h3><p>Uma cópia cifrada da senha da carteira, com Argon2id e ChaCha20-Poly1305, trancada com uma senha só sua.</p></li>
+</ul>
+</div>
+</section>
+
+<section class="bloco" aria-labelledby="t-ameacas">
+<div class="wrap">
+<h2 id="t-ameacas">Contra quem</h2>
+<p class="lead intro">Os casos reais, do mais comum ao mais raro, com o que o app faz e o que sobra.</p>
+<ol class="ameacas">
+<li class="ameaca">
+<h3><span class="ameaca-numero">01</span>Alguém que viu o código do seu celular e levou o aparelho.</h3>
+<div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>É o caso mais comum de roubo. O código de desbloqueio do celular não abre nada aqui: o app pede o PIN ou o rosto ao abrir e trava ao sair. A espera entre erros de PIN cresce até tornar inviável tentar todos pela tela. Ver ou exportar as palavras pede o PIN.</p></div>
+<div class="sobra"><p class="rotulo-sobra">O que sobra</p><p>Nada, sem o PIN, sem o rosto do dono e sem um exploit para o iOS.</p></div>
+</li>
+<li class="ameaca">
+<h3><span class="ameaca-numero">02</span>Ladrão com o celular bloqueado.</h3>
+<div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>Tudo fica protegido pelo código de desbloqueio, preso ao aparelho, e a chave raiz só existe embrulhada pelo chip de segurança. As chaves de proteção de arquivo somem segundos depois do bloqueio.</p></div>
+<div class="sobra"><p class="rotulo-sobra">O que sobra</p><p>Um código de desbloqueio fraco, somado a uma ferramenta forense, leva ao caso seguinte.</p></div>
+</li>
+<li class="ameaca">
+<h3><span class="ameaca-numero">03</span>Exploit com execução de código no celular desbloqueado.</h3>
+<div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>Nenhum byte gravado abre fora do chip de segurança do aparelho, e o PIN não tem verificador para levar embora: o ataque fica preso ao aparelho, uma tentativa por vez. A chave da carteira só existe na memória durante a assinatura.</p></div>
+<div class="sobra"><p class="rotulo-sobra">O que sobra</p><p>Nesse cenário, o PIN de 6 dígitos cai em horas, de 6 a 11 no pior caso. Um programa malicioso dentro do app durante uma assinatura vê a chave. Nenhuma carteira de software se defende disso. Para valores altos, use uma carteira de hardware.</p></div>
+</li>
+<li class="ameaca">
+<h3><span class="ameaca-numero">04</span>Rede hostil ou provedor mentindo.</h3>
+<div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>ATS padrão, sem exceção, e nenhuma decisão de assinatura tomada com dado de rede. A chamada de contrato é decodificada no próprio celular, a aprovação é no valor exato, o mínimo é garantido pelo contrato, a taxa tem teto e o nonce exige dois provedores concordando.</p></div>
+<div class="sobra"><p class="rotulo-sobra">O que sobra</p><p>Uma rota pior dentro da tolerância de preço que você escolheu. E um provedor pode ficar fora do ar.</p></div>
+</li>
+<li class="ameaca">
+<h3><span class="ameaca-numero">05</span>Golpe: endereço falso, token falso, área de transferência.</h3>
+<div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>Sem navegador de dapps e sem conexão com sites: só se assina o que o app monta. Endereço parecido com um do seu histórico é marcado, transferência de valor zero e token fora da lista ficam à parte, e o endereço colado aparece inteiro para conferir.</p></div>
+<div class="sobra"><p class="rotulo-sobra">O que sobra</p><p>Quem passa por cima de um aviso que bloqueia o envio.</p></div>
+</li>
+<li class="ameaca">
+<h3><span class="ameaca-numero">06</span>Atualização maliciosa: GitHub invadido, conta da Apple invadida ou a própria Apple.</h3>
+<div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>Nenhum pacote remoto e nenhum binário de terceiro: o código de fora está no repositório, compilado do fonte e travado por SHA-256. Cada versão é autorizada numa lista assinada por chaves que nunca passam pelo GitHub nem pela Apple, e as chaves públicas estão gravadas dentro do app. Se aparecer na loja uma versão fora da lista, o app instalado trava com o alerta de tentativa de hack e diz para não abrir a versão nova.</p></div>
+<div class="sobra"><p class="rotulo-sobra">O que sobra</p><p>Quem controla o sistema do celular, como a Apple ou quem a obrigue, consegue trocar o app sem mudar o número da versão, e nenhum app se defende do próprio sistema. Isso só aparece comparando o app decifrado com o build atestado. Deixe a atualização automática desligada para o alerta chegar antes, e para valores altos use uma carteira de hardware.</p></div>
+</li>
+</ol>
+</div>
+</section>
+
+<section class="bloco" aria-label="Auditoria e relato de falhas">
+<div class="wrap seg-final">
+<article class="painel" aria-labelledby="t-auditar">
+<p class="sobretitulo">Auditoria</p>
+<h2 id="t-auditar">Conferido por script, a cada mudança</h2>
+<p class="lead intro">O que esta página afirma, o <code>tools/verificar.sh</code> confere no código: rede só no módulo de rede, chave só no módulo de chaves, chaveiro só em dois arquivos, nenhum SDK de análise, nenhum host fora da lista. São {{n_verificacoes}} verificações, e o CI para o merge se uma falhar.</p>
+<div class="botoes links-bloco"><a class="botao botao-principal" href="{{base}}auditoria/">Abrir a auditoria</a></div>
+</article>
+<article class="painel" aria-labelledby="t-relatar">
+<p class="sobretitulo">Falhas</p>
+<h2 id="t-relatar">Achou uma falha?</h2>
+<p class="lead intro">Relate em particular pelo <a href="{{repo}}/security/advisories/new">GitHub</a>, sem abrir issue pública. Os prazos que assumimos:</p>
+{{prazos_linha}}
+<p class="apoio links-bloco">Pesquisa de boa-fé dentro do escopo não é tratada como violação. O escopo completo está no <a href="{{repo}}/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+</article>
+</div>
+</section>

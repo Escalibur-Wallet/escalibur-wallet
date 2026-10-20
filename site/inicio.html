@@ -1,0 +1,246 @@
+<section class="abertura" aria-labelledby="t-abertura">
+{{moedas_abertura}}
+<div class="wrap abertura-texto">
+<img class="abertura-icone" src="{{base}}icone-256.png" alt="Escalibur Wallet" width="64" height="64">
+<h1 class="titulo-grande" id="t-abertura">A hot wallet<br>mais segura.</h1>
+<p class="lead">As chaves nascem, ficam e assinam no seu celular, presas ao chip de segurança dele e ao seu PIN. Envie e receba em {{n_redes}} redes, troque pelos protocolos públicos de cada uma e confira cada transação antes de assinar. Sem conta, sem cadastro e sem servidor da Escalibur.</p>
+{{botoes_baixar}}
+<p class="apoio">Versão {{versao}} · Código auditável · <a href="{{base}}auditoria/">Audite o código</a></p>
+</div>
+<div class="abertura-aparelhos">
+{{capa receber | Receber BTC: o QR e o endereço com as pontas em destaque | lado cedo}}
+{{aparelho carteira | A Carteira: o saldo, os valores escondidos e mostrados de novo, e a página do XRP | cedo}}
+{{capa trocar | Trocar XRP por RLUSD no livro do XRP Ledger | lado cedo}}
+</div>
+</section>
+
+<section class="manifesto" aria-label="Sem conta e sem servidor">
+<div class="wrap">
+<p>Não existe conta. Não existe servidor da Escalibur. <b>A carteira nasce no seu celular, fica cifrada no seu celular e assina no seu celular.</b> Do nosso lado, ninguém consegue ver, mover ou recuperar o que é seu.</p>
+</div>
+</section>
+
+<section class="recurso" id="enviar" aria-labelledby="t-enviar">
+<div class="wrap">
+<div class="recurso-grade">
+<div class="recurso-texto">
+<p class="sobretitulo">Enviar e receber</p>
+<h2 class="titulo-secao" id="t-enviar">12 palavras.<br>{{n_redes}} redes.</h2>
+<p class="lead">Bitcoin, Ethereum, Solana, XRP Ledger, Stellar, TON, Tron e mais {{n_redes_resto}}. Todos os endereços saem da mesma frase, pelos caminhos padrão de cada rede, e a mesma frase abre a carteira em outros apps que seguem o padrão.</p>
+<ul class="pontos">
+<li><b>Receber</b> mostra o QR e o endereço inteiro, com o começo e o fim em destaque para você conferir.</li>
+<li><b>Quando a rede pede</b>, o app pede junto: {{redes_com_tag}}.</li>
+<li><b>Enviar</b> acompanha a confirmação na própria rede e diz quanto ela costuma levar.</li>
+</ul>
+</div>
+<div class="recurso-midia">
+{{aparelho receber | Receber: da Carteira até o QR do bitcoin, e o endereço copiado}}
+{{aparelho envio | Enviando 150 XRP, e a confirmação no XRP Ledger}}
+</div>
+</div>
+<div class="redes-faixa">
+{{redes_logos}}
+<div class="redes-rodape">
+<a class="mais" href="{{base}}redes/">Ver as redes e os {{n_tokens}} tokens conferidos</a>
+<p class="apoio">Gerado do código do app a cada publicação.</p>
+</div>
+</div>
+</div>
+</section>
+
+<section class="recurso" id="trocar" aria-labelledby="t-trocar">
+<div class="wrap">
+<div class="recurso-grade invertido">
+<div class="recurso-texto">
+<p class="sobretitulo">Trocar</p>
+<h2 class="titulo-secao" id="t-trocar">Troca, ordem limite e ponte.</h2>
+<p class="lead">A troca vai direto aos protocolos públicos de cada rede, e o app compara as cotações entre eles. <strong>A Escalibur não cobra taxa.</strong> Você paga a taxa da rede e o spread do protocolo, mostrados antes de assinar.</p>
+</div>
+<div class="recurso-midia">
+{{aparelho trocar | Trocar: a rede XRP Ledger, 250 XRP digitados e a cotação chegando}}
+{{aparelho limite | Ordem limite: o preço acima do atual e o prazo da oferta}}
+</div>
+</div>
+<div class="colunas">
+<div><h3>Imediata</h3><p>CoW, Uniswap, PancakeSwap, ShibaSwap, KyberSwap, Velora, LI.FI, De¹ e Jupiter, e os livros de ofertas do XRP Ledger e da Stellar. Troca grande pode sair dividida entre provedores, e você pode escolher outro provedor da rodada.</p></div>
+<div><h3>Limite</h3><p>O preço que você escolher, com prazo ou até cancelar. Pela CoW nas redes EVM e no livro nativo do XRP Ledger e da Stellar, com aviso quando ela executa ou está perto de vencer.</p></div>
+<div><h3>Ponte</h3><p>USDC pelo CCTP da Circle, ETH, USDT e WBTC pelo Across, e USDT para a Tron pela USDT0 da Tether. Sempre para a sua própria conta na outra rede.</p></div>
+</div>
+</div>
+</section>
+
+<section class="recurso chaves" id="chaves" aria-labelledby="t-chaves">
+<div class="wrap">
+<div class="centro">
+<p class="sobretitulo">Chaves</p>
+<h2 class="titulo-secao" id="t-chaves">A chave nasce no seu celular e não sai dele.</h2>
+<p class="lead">A senha da carteira é cifrada no aparelho, presa ao chip de segurança (o Secure Enclave, no iPhone) e ao seu PIN, e fica fora do backup na nuvem. Não existe cópia em servidor, porque não existe servidor.</p>
+</div>
+<div class="chaves-grade">
+<div class="recurso-midia">
+{{aparelho promessa | A abertura do app: uma chave para todas as moedas, e só você assina}}
+</div>
+<div>
+<ol class="cadeia" aria-label="Do PIN até a assinatura">
+<li><span class="no"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="4" cy="9" r="1.6" fill="currentColor"/><circle cx="9" cy="9" r="1.6" fill="currentColor"/><circle cx="14" cy="9" r="1.6" fill="currentColor"/></svg></span><div><b>Seu PIN</b><span>Seis dígitos que não ficam gravados em lugar nenhum, nem como verificador.</span></div></li>
+<li><span class="no"><svg viewBox="0 0 18 18" aria-hidden="true"><rect x="4" y="4" width="10" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 1.5v2.5M11 1.5v2.5M7 14v2.5M11 14v2.5M1.5 7H4M1.5 11H4M14 7h2.5M14 11h2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><div><b>Argon2id com 256 MiB</b><span>Cada tentativa custa memória e tempo, de propósito.</span></div></li>
+<li><span class="no"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.8 15 4v4.6c0 3.6-2.6 6.4-6 7.6-3.4-1.2-6-4-6-7.6V4Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m6.4 9 1.8 1.8L11.8 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><b>Chip de segurança</b><span>O Secure Enclave, no iPhone: a chave do PIN só abre nele, uma tentativa de cada vez.</span></div></li>
+<li><span class="no"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="5.5" cy="9" r="3.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8.7 9h7.3M13.5 9v2.6M15.8 9v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><div><b>Chave raiz</b><span>Destranca só a chave da carteira que vai assinar.</span></div></li>
+<li><span class="no"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 13.5c2-.2 2.8-2.6 4.2-2.6 1.6 0 .6 2.6 2.4 2.6 1.4 0 2.2-1.6 3.4-1.6.8 0 1.2.6 3 .6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="m10.5 3.5 3 3-5 5H5.5v-3Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span><div><b>Chave da carteira</b><span>Assina, confere a assinatura e é apagada da memória.</span></div></li>
+</ol>
+<a class="mais" href="{{base}}seguranca/">Como a Escalibur protege, e onde a proteção para</a>
+</div>
+</div>
+</div>
+</section>
+
+<section class="recurso" id="passphrase" aria-labelledby="t-passphrase">
+<div class="wrap">
+<div class="recurso-grade invertido">
+<div class="recurso-texto">
+<p class="sobretitulo">Passphrase</p>
+<h2 class="titulo-secao" id="t-passphrase">Uma carteira escondida nas mesmas palavras.</h2>
+<p class="lead">A passphrase é uma senha extra que você escolhe. Junto com as palavras, ela abre outra carteira, separada da de sempre. Quem achar só as palavras vê a carteira de sempre, e o saldo da outra continua fora do alcance.</p>
+<ul class="pontos">
+<li><b>Endereços próprios.</b> A carteira com passphrase tem outros endereços de depósito, em todas as redes. Para guardar nela, receba nos endereços dela.</li>
+<li><b>Pedida antes de mover saldo.</b> Envio, troca e ponte pedem a passphrase antes do Face ID ou do PIN. Errada, nada é assinado.</li>
+<li><b>Conferida dentro do cofre.</b> A digitada é comparada com a guardada, em tempo constante, antes de nascer qualquer chave.</li>
+<li><b>Esquecer é perder.</b> Ninguém recupera a passphrase, nem a Escalibur. Anote longe das palavras.</li>
+</ul>
+</div>
+<div class="recurso-midia">
+{{aparelho passphrase | Como funciona a passphrase: a porta escondida, os endereços próprios e a chave esquecida, em pixels}}
+</div>
+</div>
+</div>
+</section>
+
+<section class="bento" aria-labelledby="t-bento">
+<div class="wrap">
+<p class="sobretitulo">Por dentro do app</p>
+<h2 class="titulo-secao" id="t-bento">Segurança em cada detalhe.</h2>
+<div class="bento-grade">
+
+<article class="bento-ladrilho bento-envelope" aria-labelledby="t-envelope" id="envelope">
+<div class="bento-texto">
+<h3 id="t-envelope">Envelope Escalibur</h3>
+<p>A senha da carteira num arquivo <code>.esclbr</code>, trancado com outra senha que só você conhece. Argon2id e ChaCha20-Poly1305, em formato aberto. Nem a Escalibur abre.</p>
+</div>
+{{aparelho envelope | Criptografar a senha da carteira: as palavras viram pixels, entram no envelope e o cadeado tranca}}
+</article>
+
+<article class="bento-ladrilho bento-super" aria-labelledby="t-super">
+<div class="emblema-super" aria-hidden="true">
+<span class="disco"><svg viewBox="0 0 24 24"><g fill="currentColor"><circle cx="6" cy="6" r="1.9"/><circle cx="12" cy="6" r="1.9"/><circle cx="18" cy="6" r="1.9"/><circle cx="6" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="18" cy="12" r="1.9"/><circle cx="6" cy="18" r="1.9"/><circle cx="12" cy="18" r="1.9"/><circle cx="18" cy="18" r="1.9"/></g></svg></span>
+<span class="cadeado"><svg viewBox="0 0 16 16"><path d="M5 7V5.2a3 3 0 0 1 6 0V7" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3.2" y="7" width="9.6" height="7" rx="1.8" fill="currentColor"/></svg></span>
+<span class="disco"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3.5 8V5.5a2 2 0 0 1 2-2H8M16 3.5h2.5a2 2 0 0 1 2 2V8M20.5 16v2.5a2 2 0 0 1-2 2H16M8 20.5H5.5a2 2 0 0 1-2-2V16M9 9.5v1.2M15 9.5v1.2M12 9.5v3.6h-1M9.3 15.6c1.6 1.3 3.8 1.3 5.4 0"/></svg></span>
+</div>
+<div class="bento-texto">
+<h3 id="t-super">Super Security</h3>
+<p>O PIN e o Face ID juntos para abrir o app, enviar, trocar e ver as palavras. Nenhum dos dois sozinho abre nada: é a própria cifra das carteiras que pede os dois.</p>
+</div>
+</article>
+
+<article class="bento-ladrilho bento-teclado" aria-labelledby="t-teclado">
+<div class="teclado" aria-hidden="true">
+<div><span>q</span><span>w</span><span class="apagada">e</span><span>r</span><span class="apagada">t</span><span>y</span><span class="apagada">u</span><span>i</span><span>o</span><span class="apagada">p</span></div>
+<div><span>a</span><span class="apagada">s</span><span>d</span><span class="apagada">f</span><span>g</span><span>h</span><span class="apagada">j</span><span>k</span><span>l</span></div>
+<p class="teclado-nome"><svg viewBox="0 0 16 16"><path d="M5 7V5.2a3 3 0 0 1 6 0V7" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3.2" y="7" width="9.6" height="7" rx="1.8" fill="currentColor"/></svg>Safe Keyboard</p>
+</div>
+<div class="bento-texto">
+<h3 id="t-teclado">Safe Keyboard</h3>
+<p>Desenhado pelo próprio app. O teclado do sistema não vê as letras, e nada é aprendido nem previsto.</p>
+</div>
+</article>
+
+<article class="bento-ladrilho bento-taxa" aria-labelledby="t-taxa">
+<p class="taxa-numero" aria-hidden="true">0%</p>
+<div class="bento-texto">
+<h3 id="t-taxa">Taxa zero</h3>
+<p>Em envio, troca, ordem e ponte. Você paga a taxa da rede e o spread do protocolo.</p>
+</div>
+</article>
+
+<article class="bento-ladrilho bento-alertas" aria-labelledby="t-alertas" id="alertas">
+<div class="bento-texto">
+<h3 id="t-alertas">Alertas do próprio celular</h3>
+<p>Preço, recebimento e ordem limite, conferidos em segundo plano. Sem servidor de notificação no caminho e sem conta.</p>
+</div>
+{{aparelho alertas | Alertas de preço: ligar e escolher quando avisar}}
+</article>
+
+<article class="bento-ladrilho bento-captura" aria-labelledby="t-captura">
+<div class="captura-par" aria-hidden="true">
+<div class="captura-placa"><small>Na tela</small><ol><li><b>tiger</b></li><li><b>ocean</b></li><li><b>march</b></li></ol></div>
+<div class="captura-placa vazia"><small>No print</small><ol><li></li><li></li><li></li></ol></div>
+</div>
+<div class="bento-texto">
+<h3 id="t-captura">Fora do print e da gravação</h3>
+<p>As palavras saem em branco na captura de tela, na gravação e no espelhamento. Na tela, você vê normal.</p>
+</div>
+</article>
+
+<article class="bento-ladrilho bento-limite" aria-labelledby="t-limite">
+<div class="ordem-mini" aria-hidden="true">
+<div class="ordem-linha"><span class="ordem-logo"><img src="{{base}}logos/logo-ethereum.png" alt="" width="30" height="30"><span class="ordem-rede"></span></span><div><b>Vende 0,5 ETH na Base</b><small>Preço: 1 ETH = 3.000 USDC</small></div><span class="ordem-vence">Vence em 6 d 23 h</span></div>
+<div class="ordem-linha"><span>Refazer quando vencer</span><span class="chave-ligada"></span></div>
+</div>
+<div class="bento-texto">
+<h3 id="t-limite">Ordem limite que conta o tempo</h3>
+<p>O prazo que falta, contando de verdade. Quando vence, o celular avisa e o app pergunta se refaz, com o mesmo preço.</p>
+</div>
+</article>
+
+</div>
+</div>
+</section>
+
+<section class="galeria" aria-labelledby="t-galeria">
+<div class="wrap">
+<p class="sobretitulo">E o resto</p>
+<h2 class="titulo-secao" id="t-galeria">Tudo o que uma carteira precisa.</h2>
+<div class="galeria-trilho">
+<figure>{{aparelho moeda | Página do bitcoin: o dedo correndo o gráfico e os períodos}}<figcaption class="legenda-aparelho"><strong>Página da moeda</strong>Gráfico no dedo, em cinco períodos.</figcaption></figure>
+<figure>{{aparelho mercado | Mercado: a lista de moedas, rolada}}<figcaption class="legenda-aparelho"><strong>Mercado</strong>Preços do CoinGecko, com reserva.</figcaption></figure>
+<figure>{{aparelho ponte | Ponte: 250 USDC da Base para a Arbitrum pelo CCTP, nas rotas rápida e padrão}}<figcaption class="legenda-aparelho"><strong>Ponte entre redes</strong>A taxa e o tempo de cada rota, antes de assinar.</figcaption></figure>
+</div>
+</div>
+</section>
+
+<section class="aberto" id="codigo" aria-labelledby="t-codigo">
+<div class="wrap">
+<div class="painel">
+<p class="sobretitulo">Código auditável</p>
+<h2 class="titulo-secao" id="t-codigo">Tudo à vista, linha por linha.</h2>
+<p class="lead">Todo o código que guarda chaves, assina e fala com as redes é público. A cada mudança, o CI roda as {{n_verificacoes}} verificações do <code>tools/verificar.sh</code> e os {{n_testes}} testes do núcleo, com os vetores oficiais de cada rede.</p>
+{{estado_ci}}
+<ul class="numeros">
+<li><b>0</b><span>dependências baixadas da internet para montar o app. Nenhum SDK de análise, anúncio ou rastreamento.</span></li>
+<li><b>{{n_travados}}</b><span>arquivos das bibliotecas de criptografia (libsecp256k1 e Argon2), guardados no repositório e conferidos por SHA-256.</span></li>
+</ul>
+<div class="botoes">
+<a class="botao botao-principal" href="{{base}}auditoria/">Abrir a auditoria</a>
+<a class="botao botao-secundario" href="{{repo}}">Ver no GitHub</a>
+</div>
+</div>
+</div>
+</section>
+
+<section class="novidades" aria-labelledby="t-novidades">
+<div class="wrap">
+<p class="sobretitulo">Novidades</p>
+<h2 class="titulo-secao" id="t-novidades">O que mudou por último.</h2>
+<p class="lead versao-linha">Versão <b>{{versao}}</b> (build {{build}}). {{situacao_loja}}</p>
+{{novidades_resumo}}
+<a class="mais" href="{{base}}novidades/">Todas as novidades</a>
+</div>
+</section>
+
+<section class="final" aria-labelledby="t-final">
+<div class="wrap">
+<img class="final-icone" src="{{base}}icone-256.png" alt="" width="112" height="112">
+<h2 class="titulo-secao" id="t-final">Escalibur Wallet</h2>
+<p class="lead">Carteira cripto sem custódia para o seu celular. {{situacao_loja}}</p>
+{{botoes_baixar}}
+</div>
+</section>

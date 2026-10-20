@@ -1,0 +1,229 @@
+import CryptoKit
+import EscaliburCore
+import EscaliburKeys
+import Foundation
+import LocalAuthentication
+import Security
+import UIKit
+
+/// Os objetos do modulo de chaves, montados uma vez.
+///
+/// No aparelho, o embrulho e sempre o Secure Enclave, sem alternativa: se ele nao
+/// existir, a carteira nao cria nem importa nada. No simulador, que nao tem SE, um
+/// embrulho em software persistido no chaveiro do simulador toma o lugar. Esse
+/// caminho so compila para simulador (`targetEnvironment(simulator)`).
+enum KeyServices {
+    static let store = KeychainStore()
+
+    static let wrapper: any KeyWrapper = {
+        #if targetEnvironment(simulator)
+        return SimulatorWrapper()
+        #else
+        return SecureEnclaveWrapper()
+        #endif
+    }()
+
+    static let root = RootKeyVault(store: store, wrapper: wrapper)
+
+    /// Quantos digitos pode ter o PIN gravado: quase sempre um tamanho so; os dois quando
+    /// nao da para saber (`RootKeyVault.pinLengths`).
+    static var pinLengths: Set<Int> { root.pinLengths }
+    static let wallets = WalletVault(store: store)
+
+    /// App de iPhone rodando num Mac com Apple Silicon: la outros programas leem teclado
+    /// e tela, e as defesas do iOS nao valem (pentest de 15/10, M3).
+    static var runningOnMac: Bool { ProcessInfo.processInfo.isiOSAppOnMac }
+
+    /// O aparelho pode guardar carteira? Precisa ser um iPhone de verdade, com codigo
+    /// configurado e com SE.
+    static var deviceIsEligible: Bool {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        if runningOnMac { return false }
+        var error: NSError?
+        return LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) && SecureEnclaveWrapper.isAvailable
+        #endif
+    }
+
+    /// O nome da biometria deste aparelho, para os textos: iPhone SE usa Touch ID, e
+    /// dizer "Face ID" nele seria errado. Sem biometria, "Face ID" (a tela que usa o
+    /// nome nem aparece).
+    static let biometryName: String = {
+        let context = LAContext()
+        var error: NSError?
+        _ = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+        switch context.biometryType {
+        case .touchID: return "Touch ID"
+        case .opticID: return "Optic ID"
+        default: return "Face ID"
+        }
+    }()
+
+    /// Touch ID: os textos dizem "digital" onde o Face ID diz "rosto".
+    static var usesFingerprint: Bool { biometryName == "Touch ID" }
+
+    /// O simbolo da biometria deste aparelho.
+    static var biometryIcon: String {
+        switch biometryName {
+        case "Touch ID": return "touchid"
+        case "Optic ID": return "opticid"
+        default: return "faceid"
+        }
+    }
+
+    static var biometryAvailable: Bool {
+        var error: NSError?
+        return LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+    }
+
+    /// O item do chaveiro sobrevive a desinstalacao do app. Na primeira abertura
+    /// depois de instalar, os itens que sobraram sao apagados: "apagar o app apaga as
+    /// carteiras" passa a ser verdade, e reinstalar para zerar o contador de
+    /// tentativas destroi o que se queria atacar.
+    ///
+    /// So com certeza de instalacao nova: dados protegidos disponiveis, e nenhum dos
+    /// tres sinais de uso (marcador nas preferencias, arquivo marcador, arquivo de
+    /// metadados). O iOS pode abrir o app em segundo plano antes do primeiro
+    /// desbloqueio, quando as preferencias leem vazio; um "instalacao nova" falso ali
+    /// apagaria tudo.
+    ///
+    /// Devolve se apagou o que sobrou de uma instalacao anterior. As marcas so sao
+    /// gravadas depois de conferir que nada sobrou: uma exclusao que falhou fica para a
+    /// proxima abertura, em vez de marcada como feita (revisao de 16/10/2026).
+    @MainActor
+    @discardableResult
+    static func firstLaunchCleanup() -> Bool {
+        guard UIApplication.shared.isProtectedDataAvailable else { return false }
+        let files = FileManager.default
+        let marker = installMarker
+        let installed = Preferences.installMarked
+            || files.fileExists(atPath: marker.path)
+            || files.fileExists(atPath: MetadataStore.file.path)
+        if !installed {
+            root.wipeAll()
+            // Todo slot da RK (inclusive o rk.and do modo reforcado) e toda chave do SE,
+            // pelo proprio cofre: o app nao conhece nomes de conta.
+            guard !root.hasResidue else { return true }
+        }
+        Preferences.installMarked = true
+        if !files.fileExists(atPath: marker.path) {
+            try? files.createDirectory(at: marker.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? Data().write(to: marker, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            var url = marker
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try? url.setResourceValues(values)
+        }
+        return !installed
+    }
+
+    private static var installMarker: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("instalacao.marca")
+    }
+}
+
+#if targetEnvironment(simulator)
+/// Embrulho em software com as chaves P-256 no chaveiro do simulador. Existe so
+/// porque o simulador nao tem Secure Enclave; nunca compila para aparelho.
+final class SimulatorWrapper: KeyWrapper, @unchecked Sendable {
+    private let store = KeychainStore()
+
+    private func key(_ slot: WrapSlot) -> P256.KeyAgreement.PrivateKey? {
+        guard let raw = try? store.read("sim.\(slot.rawValue)", context: nil) else { return nil }
+        return try? P256.KeyAgreement.PrivateKey(rawRepresentation: raw)
+    }
+
+    func createKey(_ slot: WrapSlot) throws {
+        if slot == .device, hasKey(.device) { throw EnclaveError.failed("chave do aparelho ja existe") }
+        deleteKey(slot)
+        try store.add(P256.KeyAgreement.PrivateKey().rawRepresentation, account: "sim.\(slot.rawValue)", protection: .standard, context: nil)
+    }
+
+    func hasKey(_ slot: WrapSlot) -> Bool { key(slot) != nil }
+
+    func probeKey(_ slot: WrapSlot) -> ItemState {
+        switch store.probe("sim.\(slot.rawValue)") {
+        case .present: return key(slot) != nil ? .present : .unknown
+        case .absent: return .absent
+        case .unknown: return .unknown
+        }
+    }
+
+    func deleteKey(_ slot: WrapSlot) {
+        try? store.delete("sim.\(slot.rawValue)")
+        try? store.delete("sim.\(slot.rawValue).senha")
+    }
+
+    /// A senha de aplicativo, simulada: o hash dela fica junto da chave e e conferido no
+    /// desembrulho, como o SE confere a senha de verdade.
+    func createKey(_ slot: WrapSlot, password: Data) throws {
+        deleteKey(slot)
+        try store.add(P256.KeyAgreement.PrivateKey().rawRepresentation, account: "sim.\(slot.rawValue)", protection: .standard, context: nil)
+        try store.add(Data(SHA256.hash(data: password)), account: "sim.\(slot.rawValue).senha", protection: .standard, context: nil)
+    }
+
+    func unwrap(_ blob: Data, slot: WrapSlot, password: Data) throws -> SecureBytes {
+        guard key(slot) != nil else { throw EnclaveError.keyMissing }
+        guard let saved = try? store.read("sim.\(slot.rawValue).senha", context: nil), saved == Data(SHA256.hash(data: password)) else {
+            throw EnclaveError.wrongPassword
+        }
+        return try unwrap(blob, slot: slot, reason: nil)
+    }
+
+    /// No simulador nao ha senha de aplicativo: o embrulho e o mesmo.
+    func wrap(_ secret: SecureBytes, slot: WrapSlot, password: Data) throws -> Data {
+        try wrap(secret, slot: slot)
+    }
+
+    func wrap(_ secret: SecureBytes, slot: WrapSlot) throws -> Data {
+        guard let key = key(slot) else { throw EnclaveError.keyMissing }
+        let ephemeral = P256.KeyAgreement.PrivateKey()
+        let symmetric = try ephemeral.sharedSecretFromKeyAgreement(with: key.publicKey)
+            .hkdfDerivedSymmetricKey(using: SHA256.self, salt: Data(), sharedInfo: Data("wrap".utf8), outputByteCount: 32)
+        let sealed = try secret.withUnsafeData { try ChaChaPoly.seal($0, using: symmetric) }
+        return ephemeral.publicKey.x963Representation + sealed.combined
+    }
+
+    /// Um Face ID so, e a vigia na mesma sessao, sem pedir de novo. A chave da vigia que nao
+    /// existe e a troca vista; `-rosto-novo` a apaga para simular um rosto cadastrado. As
+    /// chaves que nao seguem o cadastro sobrevivem a ele, como no aparelho.
+    func unwrap(_ blob: Data, slot: WrapSlot, reason: String, watching watch: Data, with watchSlot: WrapSlot) throws -> (SecureBytes, WatchResult) {
+        let opened = try unwrap(blob, slot: slot, reason: reason)
+        guard let watchKey = key(watchSlot) else { return (opened, .gone) }
+        guard let seen = try? Self.open(watch, key: watchKey) else { return (opened, .unknown) }
+        return (opened, .opened(seen))
+    }
+
+    func unwrap(_ blob: Data, slot: WrapSlot, reason: String?) throws -> SecureBytes {
+        guard let key = key(slot) else { throw EnclaveError.keyMissing }
+        if slot.usesBiometry {
+            // O Face ID simulado (Features > Face ID no simulador) decide aqui.
+            let context = LAContext()
+            let semaphore = DispatchSemaphore(value: 0)
+            nonisolated(unsafe) var allowed = false
+            context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason ?? String(localized: "Destravar")) { ok, _ in
+                allowed = ok
+                semaphore.signal()
+            }
+            semaphore.wait()
+            guard allowed else { throw EnclaveError.cancelled }
+        }
+        return try Self.open(blob, key: key)
+    }
+
+    private static func open(_ blob: Data, key: P256.KeyAgreement.PrivateKey) throws -> SecureBytes {
+        let ephemeral = try P256.KeyAgreement.PublicKey(x963Representation: blob.prefix(65))
+        let symmetric = try key.sharedSecretFromKeyAgreement(with: ephemeral)
+            .hkdfDerivedSymmetricKey(using: SHA256.self, salt: Data(), sharedInfo: Data("wrap".utf8), outputByteCount: 32)
+        var plain = try ChaChaPoly.open(ChaChaPoly.SealedBox(combined: blob.dropFirst(65)), using: symmetric)
+        let out = SecureBytes(capacity: max(plain.count, 1))
+        plain.withUnsafeMutableBytes { raw in
+            out.append(contentsOf: raw.bindMemory(to: UInt8.self).withMemoryRebound(to: UInt8.self) { UnsafeBufferPointer($0) })
+            if let base = raw.baseAddress { memset_s(base, raw.count, 0, raw.count) }
+        }
+        return out
+    }
+}
+#endif

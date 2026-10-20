@@ -1,0 +1,103 @@
+Respostas gravadas dos provedores para os testes dos leitores de estado
+(Kit/Tests/EscaliburNetworkTests/*ReaderTests.swift), uma pasta por familia em leitores/.
+
+Cada arquivo e a resposta de uma chamada real, gravada em 25/09/2026; o nome diz o
+metodo e a conta. Contas publicas de exchange e fundacao; nenhum dado de usuario.
+
+Alteracoes feitas na gravacao, com jq, so para reduzir tamanho (nada que o leitor le):
+- evm/blockscout-*: listas cortadas em 6 e 8 itens; `metadata` dos enderecos (icones SVG
+  de etiqueta) zerado.
+- xrpl/account_tx-exchange: `meta.AffectedNodes` removido.
+- tron/*: `raw_data_hex` e o objeto `transaction` das chamadas constantes removidos,
+  `log` do gettransactioninfobyid removido; listas da TronGrid com 6 itens.
+- ton/tonapi-events e ton/tonapi-message-transaction: so os campos que o leitor le.
+
+Gravadas depois, em 26/09/2026 na tonapi (sem chave), para a segunda fonte das leituras
+da TON (auditoria 2, B3):
+- ton/tonapi-account-nao-inicializada: /v2/blockchain/accounts/0:1111...1111, sem
+  alteracao (conta "uninit" com saldo, a mesma da gravacao da toncenter).
+- ton/tonapi-get_wallet_data: /v2/blockchain/accounts/0:16e07181...3948/methods/
+  get_wallet_data, a carteira jetton de USDT do dono das gravacoes. Alterado: o saldo
+  (`stack[0].num` e `decoded.balance`) foi trocado pelo da gravacao da toncenter de
+  25/09/2026 (0x2774a4866a), para as duas fontes descreverem o mesmo momento. Dono,
+  mestre e codigo sao os da resposta.
+A tonapi responde 404 ("entity not found") para conta que nunca existiu e para
+get-method em conta sem contrato; os testes simulam isso sem arquivo.
+
+Quando um teste precisa de um caso que a rede nao ofereceu na hora (pagamento parcial,
+DepositAuth, Sequence divergente, taxa absurda), ele altera a resposta gravada dentro do
+proprio teste e diz o que alterou.
+
+Sui, gravadas em 27/09/2026 por leitores/sui/gravar.py (sem chave, no da Sui Foundation e
+GraphQL da Sui Foundation): respostas gRPC-Web cruas (.bin, quadro e trailers como vieram),
+os bytes das duas transacoes simuladas (-tx.bin) e o GraphQL do historico. Conta: Binance 1;
+destino das simulacoes: OKX 1. Sem alteracao. Os testes dos motores (EscaliburEnginesTests)
+leem estes mesmos arquivos.
+
+Cardano, gravadas em 27/09/2026 por leitores/cardano/gravar.py (sem chave, Koios e backend
+da Yoroi, no mesmo minuto): moedas, ponta, parametros, genese, estado de transacao e
+historico. Contas: um endereco com duas moedas so de ADA (a chave publica e a testemunha
+das transacoes dele na rede) e um com oito moedas que carregam tokens. Alterado: o
+`costModels` dos parametros sai (o leitor nao le). Os testes dos motores
+(EscaliburEnginesTests) leem estes mesmos arquivos.
+
+Aptos, gravadas em 28/09/2026 por leitores/aptos/gravar.py (sem chave, PublicNode e Sentio
+na mesma versao do ledger, e o indexador GraphQL da Aptos Labs): indice de cada no, as views
+(sequencia, chave de autenticacao, saldo, loja de APT do destino), o preco do gas, as quatro
+simulacoes (estimativa e envio, para um destino com APT e um novo) com os bytes simulados
+(.bcs.hex), uma transacao pelo hash e o historico. Conta: 0x966e...6c41, chave publica tirada
+de uma assinatura dela na rede. Sem alteracao. Os testes dos motores leem estes arquivos.
+
+Tokens fora da lista e moeda custom, gravadas em 04/10/2026 (sem chave), em tokens/:
+- blockscout-tokens-base e blockscout-tokens-ethereum: /api/v2/addresses/0x9858...aEda94/
+  tokens?type=ERC-20 da conta publica de teste do BIP-39 ("abandon ... about"), sem
+  alteracao. Quase tudo e isca de golpe de verdade, e e o que o filtro tem de pegar.
+- routescan-erc20-holdings-avalanche: /v2/network/mainnet/evm/43114/address/.../erc20-holdings
+  da mesma conta, sem alteracao.
+- trongrid-account-abandon: /v1/accounts/TUEZ...YdH, so `address`, `create_time`, `trc20` e
+  `meta`. tron-constant-*-kyc: triggerconstantcontract de name(), symbol() e decimals() no
+  contrato TQGaH1...bmw8 (api.tronstack.io), sem o objeto `transaction`.
+- tonapi-jettons: /v2/accounts/EQCD39...xqB2N/jettons (TON Foundation), cortada em 8 jettons
+  (2 whitelist, 2 blacklist, 4 none) e so os campos que o leitor le. tonapi-jetton-not e
+  toncenter-jetton-masters-not: o mestre do NOT; sem `preview`, `holders_count` e `metadata`.
+- solana-getMultipleAccounts-metaplex-bonk (conta de metadados da Metaplex do BONK, base64) e
+  solana-getAccountInfo-mint-bonk (o mint, jsonParsed), sem alteracao.
+- horizon-assets-aqua (/assets?asset_code=AQUA&asset_issuer=GBNZ...AQUA, sem os `_links`),
+  xrpl-account_info-solo e xrpl-gateway_balances-solo (emissor do SOLO), sem alteracao.
+- coingecko-token_price-arb: /simple/token_price/arbitrum-one do ARB em BRL, sem alteracao.
+- aptos-indexer-saldos: current_fungible_asset_balances da conta 0x71d2...e0ce no indexador
+  GraphQL da Aptos Labs (APT, uma isca "APT Unlock at APTUNLOCK.COM" e o USDT da LayerZero),
+  sem alteracao.
+- trongrid-trc20-info: /v1/trc20/info com 4 dos 5 TRC-20 da conta de teste (o quinto fica de
+  fora de proposito, para o teste ler o que faltar no contrato), sem alteracao.
+- sidecar-asset-balances (conta 13UVJy...FsTB na Asset Hub, so os 7 ativos com saldo e 3 com
+  zero dos 763 da resposta) e sidecar-asset-info-{1984,30,31337,42069,1337}, sem alteracao.
+- fastnear-ft-aurora (api.fastnear.com/v1/account/aurora/ft, 6 dos tokens) e
+  near-ft_metadata-metapool (ft_metadata de meta-pool.near pela FastNEAR RPC), sem alteracao.
+
+BNB Chain pela Alchemy, gravadas em 16/10/2026 em bnb-mainnet.g.alchemy.com com a chave do
+app, conta publica de teste do BIP-39 (0x9858...aEda94), os mesmos pedidos que o leitor faz:
+- evm/alchemy-{external,erc20}-{from,to}-bnb: alchemy_getAssetTransfers, uma categoria e um
+  lado por arquivo, sem alteracao. A categoria `internal` nao tem arquivo: na BNB a Alchemy
+  responde -32602 ("not supported for this network").
+- evm/alchemy-recibos-bnb: o lote de eth_getTransactionReceipt dos envios do dono, so os
+  campos que o leitor le (transactionHash, gasUsed, effectiveGasPrice, status).
+- tokens/alchemy-saldos-bnb-{1,2,3}: alchemy_getTokenBalances, as tres paginas pela
+  `pageKey`, sem alteracao. tokens/alchemy-metadados-bnb: o lote de alchemy_getTokenMetadata
+  dos 145 contratos com saldo, sem alteracao.
+- evm/alchemy-deteccao-bnb: o lote do nonce (agora e antes da janela) e do codigo da mesma
+  conta, sem alteracao. O codigo e uma delegacao EIP-7702 (0xef0100...), e a recuperacao
+  para ali.
+
+Recuperacao do historico da BNB (falhas do dono e BNB mandado por contrato), gravadas em
+16/10/2026 pelo proprio leitor, ao vivo, com um transporte que guardou cada pedido e cada
+resposta (pares `request` e `response`, na ordem em que sairam), em duas contas comuns:
+- evm/alchemy-recuperacao-falhas-bnb: 0x3506...5572, que vende USDT por BNB o dia inteiro e
+  tem transacoes que falham (quatro na janela, achadas pelo nonce). Alterado: os blocos so
+  com `number`, `timestamp` e, de cada transacao, `hash`, `from`, `to` e `value`; os recibos
+  so com `transactionHash`, `blockNumber`, `gasUsed`, `effectiveGasPrice`, `status` e os
+  eventos reduzidos ao `address` (o leitor so conta quantos ha).
+- evm/alchemy-recuperacao-saldo-bnb: 0x7fa3...1db3, que troca token por BNB pelo roteador v2
+  da PancakeSwap (tres trocas). Alterado: blocos e recibos como acima, mas os eventos com
+  `address`, `topics` e `data`, para o teste conferir o BNB recuperado contra o `Withdrawal`
+  do WBNB.

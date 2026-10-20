@@ -1,0 +1,773 @@
+[
+ {
+  "sha": "7d9fdd57b9d8111a7bcfa943b5a9995adad14136",
+  "data": "2026-10-19T22:49:57-03:00",
+  "assunto": "Abertura com o video das moedas em espiral se reunindo no punho da espada",
+  "corpo": [
+   [
+    "p",
+    "6,2 s em HEVC, sem audio; o fim dissolve de volta ao pico calmo do comeco em 0,8 s."
+   ]
+  ]
+ },
+ {
+  "sha": "9a101c6058a33f16456bd6fc3c1c446a24b3eae2",
+  "data": "2026-10-19T22:34:44-03:00",
+  "assunto": "Imagem de compartilhamento com versao no endereco, para as previas buscarem a nova",
+  "corpo": []
+ },
+ {
+  "sha": "dd14e8a23883c41efefb4996bd53650765738fd8",
+  "data": "2026-10-19T22:24:32-03:00",
+  "assunto": "Chave da lista de versoes com nome neutro: escalibur-mac-1",
+  "corpo": [
+   [
+    "p",
+    "O mesmo par de chaves do Secure Enclave do Mac do dono, com outro nome a partir do build 11. A assinatura vale so para o texto da lista, entao nada foi assinado de novo: a lista do site leva a mesma assinatura sob os dois nomes (os builds 7 a 10 so conhecem o antigo), e a lista que vai dentro do app, agora num arquivo proprio, so sob o novo. O versoes.swift escreve as duas e confere que tem o mesmo texto; um teste confere as duas como os builds novos e antigos conferem."
+   ]
+  ]
+ },
+ {
+  "sha": "be8d37bc8b894a124b0e6e7c9f33e6db38f2c94b",
+  "data": "2026-10-19T22:14:11-03:00",
+  "assunto": "Lista de versoes assinada: 1.0.0 build 11",
+  "corpo": []
+ },
+ {
+  "sha": "db97fdb562d68bed34dc3ecb4918f775f84d0e05",
+  "data": "2026-10-19T21:57:55-03:00",
+  "assunto": "Checagem sem a frase do jailbreak escondido, e a imagem de compartilhamento com os dois selos",
+  "corpo": [
+   [
+    "p",
+    "A checagem do aparelho terminada diz so que tudo foi checado aqui, sem internet, e que nada sai do aparelho. A imagem de compartilhamento do site: a foto a esquerda, e a direita o icone, o nome, uma linha e os selos da App Store e do Google Play na mesma altura."
+   ]
+  ]
+ },
+ {
+  "sha": "013db36554f835966266e47f1a913b6633990a1d",
+  "data": "2026-10-19T21:53:55-03:00",
+  "assunto": "Abertura com o video novo das moedas em volta da espada",
+  "corpo": [
+   [
+    "p",
+    "O mesmo formato: 7,5 s em HEVC, sem audio, e a emenda do loop misturando o fim com o comeco em meio segundo. O quadro parado sai do inicio do video."
+   ]
+  ]
+ },
+ {
+  "sha": "fcd40a29bfbab86b6a1bf18a3ea9a8fa85c4cdf7",
+  "data": "2026-10-19T21:49:34-03:00",
+  "assunto": "Imagem de compartilhamento limpa: o iPhone no grafico do Bitcoin, o icone e o nome",
+  "corpo": [
+   [
+    "p",
+    "Ate o app estar na loja, \"Em breve na App Store\" no lugar do selo oficial (o script gera a versao com o selo com o argumento selo)."
+   ]
+  ]
+ },
+ {
+  "sha": "25b8feffec804ebdaadb00bf2a5d52322fff17c2",
+  "data": "2026-10-19T20:52:46-03:00",
+  "assunto": "Ignora o cache do wrangler",
+  "corpo": []
+ },
+ {
+  "sha": "b03e70ebd67e53a61ef810253a1a5b8e85c2d69a",
+  "data": "2026-10-19T20:52:34-03:00",
+  "assunto": "Dominio escaliburwallet.com: site na Cloudflare, e-mail de suporte do dominio",
+  "corpo": [
+   [
+    "p",
+    "O site sai tambem em escaliburwallet.com, por um Worker de arquivos estaticos na Cloudflare, com cabecalhos de seguranca e o www levando ao dominio. O app nunca fala com esse servidor: a lista de versoes e a auditoria continuam vindo do GitHub. O contato do app, da Politica, dos Termos, do site e das licencas passa a ser support@escaliburwallet.com (security@ para relato de falha). A imagem de compartilhamento do site e a foto da campanha da mao tirando o iPhone da pedra."
+   ]
+  ]
+ },
+ {
+  "sha": "db5e3ce223602c6482f45c1e5d23749a4ea4e463",
+  "data": "2026-10-19T20:17:40-03:00",
+  "assunto": "Lista de versoes assinada: 1.0.0 build 10",
+  "corpo": []
+ },
+ {
+  "sha": "ec6679a58540715b28b34642119b95dc77a1e190",
+  "data": "2026-10-19T19:57:06-03:00",
+  "assunto": "Checagem volta a so perguntar se ha texto copiado, e tools/loja/encaixar.swift",
+  "corpo": [
+   [
+    "p",
+    "A limpeza da area de transferencia na demonstracao quebrava a regra do verificar.sh de que a checagem nunca mexe no conteudo; sai. encaixar.swift poe imagens de campanha em 9:16 no tamanho de 6,9\" da App Store, cortando as laterais."
+   ]
+  ]
+ },
+ {
+  "sha": "a7dae66210083d8f5911350c2a174295a0453fc5",
+  "data": "2026-10-19T17:44:48-03:00",
+  "assunto": "Checagem: \"Instalado pela App Store\", e -checagem-aparelho para as capturas da loja",
+  "corpo": [
+   [
+    "p",
+    "O item da origem deixa de citar o TestFlight na tela (a mensagem de quando falha continua citando). So na depuracao, -checagem-aparelho mostra o jailbreak e a origem como num iPhone com o app da loja e limpa a area de transferencia do simulador."
+   ]
+  ]
+ },
+ {
+  "sha": "bbfbc91855759177d80aa153842229a76a41f351",
+  "data": "2026-10-19T16:33:21-03:00",
+  "assunto": "Checagem do aparelho no build de depuracao tambem traduzida, e a ilha so sai em fundo liso",
+  "corpo": []
+ },
+ {
+  "sha": "41ce1c2a53375b24073e665c0a8c12d99bd8bc9b",
+  "data": "2026-10-19T15:18:52-03:00",
+  "assunto": "Imagens da loja: de volta a titulo e apoio pequeno, com o apoio no espacamento da fonte",
+  "corpo": []
+ },
+ {
+  "sha": "3f5018170ca4eacf01f1f4bc11a3b7b0e3f6a645",
+  "data": "2026-10-19T15:15:02-03:00",
+  "assunto": "Imagens da loja: texto num paragrafo so, no centro, e a abertura com as redes em orbita",
+  "corpo": []
+ },
+ {
+  "sha": "d34ef072c9f74cf56a87b752050dec4303e97178",
+  "data": "2026-10-19T14:52:35-03:00",
+  "assunto": "XRP Ledger de novo com tres servidores: a 51234 da Ripple liberada, e as imagens da loja",
+  "corpo": [
+   [
+    "p",
+    "A trava de porta da auditoria 6 recusava s1 e s2.ripple.com na 51234, a porta de JSON-RPC deles: a XRP Ledger ficava com um servidor so e a leitura por dois parava (troca, ordem limite e envio, no build 9). A 51234 vale so para os dois, e um teste novo confere todo endereco escrito no codigo contra a regra do HTTPClient."
+   ],
+   [
+    "p",
+    "As capturas da loja saem em portugues e ingles: a revisao com a placa aberta, a troca de XRP que a carteira de teste consegue fazer, o envelope parado no trancado, e a ilha dinamica coberta quando a captura vem do simctl."
+   ]
+  ]
+ },
+ {
+  "sha": "9eedd95ccb83f807b8ebef9b40daa6a247cdf6a1",
+  "data": "2026-10-19T13:03:10-03:00",
+  "assunto": "Build 9: o tour antes do PIN, os textos novos da abertura e a lista de versoes com o build 9",
+  "corpo": [
+   [
+    "p",
+    "A abertura diz que as chaves ficam criptografadas e que a Escalibur nao tem como ajudar a recuperar a senha da carteira; o tour vem antes do PIN e o segundo passo virou \"Voce no controle\"; o rodape do PIN aparece inteiro; o \"Antes de ver as palavras\" fica centralizado, com os textos novos do print e dos 2 minutos; o aceite diz \"criptografada\" e \"A Escalibur nao tem acesso\". As capturas da loja ganham o idioma e a revisao do envio, e tools/loja monta as imagens no aparelho do site."
+   ]
+  ]
+ },
+ {
+  "sha": "45ed4c34092bb94943f50399e46dbf7df49faefd",
+  "data": "2026-10-19T03:35:18-03:00",
+  "assunto": "Auditoria 6: quatro revisores, os achados e os consertos",
+  "corpo": [
+   [
+    "p",
+    "Ligar o Super Security ja em \"Bloquear as carteiras\" volta a pedir as palavras (A6-04); travar fecha as folhas de PIN, passphrase e voz, e gravar travado da erro (A6-05); as cotacoes diretas contam como uma fonte so (A6-06); escolha fraca de palavras recusada (A6-08); palavras coreanas de 33 bytes (A6-09); busca de Receber com cara de frase nao sai do iPhone (A6-11); versoes.swift confere antes de assinar, respeita o limiar e confere a lista dentro do app pronto (A6-12); verificar.sh com qualquer .package(, Package.resolved e a lista de simbolos (A6-14, A6-15); relato de falha por e-mail (A6-16). Os altos esperam a decisao do dono."
+   ]
+  ]
+ },
+ {
+  "sha": "ae152891d377d4a2a51205aaa0cdb64bed1e6248",
+  "data": "2026-10-19T02:07:59-03:00",
+  "assunto": "Auditoria 5: o que mudou desde a auditoria 4, os achados e os consertos",
+  "corpo": [
+   [
+    "item",
+    "docs/auditoria-5.md: o que foi olhado, os achados (medios: a janela de senha do iOS nas chaves do PIN, o build 8 fora do pipeline, uma chave so de assinatura, o texto do codigo auditavel), os consertos e os testes."
+   ],
+   [
+    "item",
+    "A lista de versoes assinada vai dentro do app (recurso do commit): a conferencia da versao instalada nao depende mais de rede."
+   ],
+   [
+    "item",
+    "O teste do nucleo da lista confere tambem o build do projeto: subir o build pede a assinatura antes."
+   ],
+   [
+    "item",
+    "Criar carteira: a escolha de 12 ou 24 palavras sai de tras do rodape."
+   ],
+   [
+    "item",
+    "Checagem do aparelho: o VoiceOver le o horario sem o nome do icone."
+   ],
+   [
+    "item",
+    "Testes de interface desatualizados pelas telas novas, ajustados."
+   ]
+  ]
+ },
+ {
+  "sha": "eba147905a14334cdbc92a94f546ccee8ddde1f8",
+  "data": "2026-10-19T00:18:55-03:00",
+  "assunto": "Super Security sem o pedido de senha do iOS, \"Antes de ligar\" novo, saldo livre na troca e ordens de 10 em 10",
+  "corpo": [
+   [
+    "item",
+    "Chaves do PIN (kpin, kand.pin.a/b): o embrulho buscava a chave do Secure Enclave sem a senha de aplicativo, e no iPhone o iOS abria \"Digite a senha para Escalibur\" ao ligar e ao desligar o Super Security (e podia abrir ao criar ou trocar o PIN). Agora o embrulho dessas chaves leva a senha e proibe interface (`wrap(_:slot:password:)`); o embrulho sem senha recusa os slots do PIN e tambem nao mostra interface. O duble dos testes acusa qualquer embrulho de chave do PIN sem a senha. O simulador nao tem senha de aplicativo: so o proximo build no iPhone confirma."
+   ],
+   [
+    "item",
+    "Folha do PIN no Super Security: o motivo e, na linha de baixo, \"Depois do PIN, o Face ID confirma que é você.\" (sem o vao e sem o \"Super Security:\" de novo)."
+   ],
+   [
+    "item",
+    "\"Antes de ligar\": o emblema do PIN e do rosto, o resumo do que muda, a politica numa linha que abre as tres opcoes, e o deslizar de pixels. \"Continuar normal\" sem o \"redefinir pode fechar\", que vale para as tres e fica na tela da politica."
+   ],
+   [
+    "item",
+    "Troca imediata: o disponivel desconta o que as ordens abertas ainda vao vender, como na ordem limite (\"Livre X, o resto em ordens\")."
+   ],
+   [
+    "item",
+    "Ordens abertas: \"(N)\" no titulo e de 10 em 10, com \"Carregar mais\"."
+   ],
+   [
+    "item",
+    "Testes: o do bloqueio rola ate a linha da politica; o das ordens aceita o contador."
+   ]
+  ]
+ },
+ {
+  "sha": "8c5ff77b9b50c82c0c8c7372dc2a60fafb65a1ab",
+  "data": "2026-10-18T23:50:19-03:00",
+  "assunto": "Ordem criada mais acima, \"Ordem cancelada\", Safe Keyboard com barra, segurar sem lupa e o aviso da passphrase errada",
+  "corpo": [
+   [
+    "item",
+    "Ordem limite criada, troca enviada e cancelamento: o selo e o texto um pouco acima do meio; o cancelamento diz \"Ordem cancelada\" (os textos de baixo continuam dizendo o que ainda pode acontecer)."
+   ],
+   [
+    "item",
+    "Safe Keyboard de texto com a barra do alto, como o das palavras: o nome do teclado e o \"Pronto\", sem sugestao (ela mostraria a senha). A barra de espaco diz \"espaço\"."
+   ],
+   [
+    "item",
+    "Campo de senha: segurar para ver nao abre mais a lupa do iOS (os gestos do campo esperam o segurar falhar)."
+   ],
+   [
+    "item",
+    "Passphrase errada: o aviso aparece no alto da tela, por cima de tudo (o erro de cada tela ficava no fim dela, fora da vista). Criar uma carteira com passphrase conta a tentativa sem o aviso."
+   ],
+   [
+    "item",
+    "A folha da passphrase com o selo menor, para o \"Continuar\" caber acima do teclado."
+   ]
+  ]
+ },
+ {
+  "sha": "a556ad8983574e9eb8a0a3e04d877d692737522b",
+  "data": "2026-10-18T22:47:27-03:00",
+  "assunto": "Lista de versoes assinada: 1.0.0 build 8",
+  "corpo": []
+ },
+ {
+  "sha": "45183a44eceeac9ea39e8704bed12cf2e0daf2ab",
+  "data": "2026-10-18T22:43:14-03:00",
+  "assunto": "Envelope abrindo em pixels, bloqueio com deslizar, auditoria no app e alertas ate 7 moedas",
+  "corpo": [
+   [
+    "item",
+    "Abrir um envelope: a cena de pixels do lacre tocada ao contrario (EnvelopePixelScene opening): o anel apaga, o cadeado se desfaz, a aba abre, os pixels sobem e se montam nas palavras, e o cifrado vira palavra de exemplo. Titulo \"Abrir um envelope criptografado\" e o caminho inteiro no texto."
+   ],
+   [
+    "item",
+    "\"Só a sua senha abre\": as palavras reveladas no mesmo fundo de antes."
+   ],
+   [
+    "item",
+    "Bloquear as carteiras: titulo \"Trancar de vez se o Face ID mudar\", texto reescrito e no meio, e o deslizar de pixels no lugar do botao (volta ao comeco se a ativacao para com aviso). Sair do bloqueio escolhido pede o PIN tambem com o Super Security desligado. O motivo embaixo do PIN: \"Para trocar o que fazer se o Face ID mudar.\""
+   ],
+   [
+    "item",
+    "Auditar o codigo: a pagina de auditoria do site dentro do app, no navegador da Apple (SiteBrowser, SFSafariViewController em outro processo, so https://tmzzjr.github.io). O repositorio esta privado, e a auditoria do site e publica. A regra 21 do verificar.sh e da doc de seguranca: WKWebView e afins continuam proibidos; o Safari da Apple so nesse arquivo."
+   ],
+   [
+    "item",
+    "Alertas de preco: no maximo 7 moedas (eram 30), com \"N de 7\" e o aviso quando enche."
+   ],
+   [
+    "item",
+    "Detalhe da transacao: \"Conferida na rede\" em cinza, sem o fundo do selo."
+   ],
+   [
+    "item",
+    "A lista de carteiras com o fundo de antes."
+   ],
+   [
+    "item",
+    "Teste: a auditoria abre dentro do app; o do bloqueio desliza."
+   ]
+  ]
+ },
+ {
+  "sha": "8cd8c3dcf2c554dd02f0f892787d03b890a9c128",
+  "data": "2026-10-18T22:03:15-03:00",
+  "assunto": "Leva de telas: Super Security, teclado travado, 10 minutos, passphrase, envelope e o bloqueio",
+  "corpo": [
+   [
+    "titulo",
+    "Super Security"
+   ],
+   [
+    "item",
+    "Sem a etiqueta \"Desligado\" (a de ligado fica); o aviso do rosto novo e o do \"esperar 24 horas\" curtos, com o risco de cada opcao na tela da politica."
+   ],
+   [
+    "item",
+    "Com o Super Security ligado, o Safe Keyboard nao desliga: sem o globo no teclado das palavras e nos outros campos, e sem \"Usar o teclado do iPhone nesta tela\"."
+   ],
+   [
+    "item",
+    "\"Bloquear as carteiras\": sem as tres carteiras embaixo; quadro 2 com o Face ID e um anel de pixels acendendo como um cadastro de rosto, e o \"+\" no fim; quadro 3 com o selo de pixels e o cadeado vermelho; quadro 4 com a folha das palavras sendo anotada (PaperScribble). O botao diz \"Ativar o bloqueio\"."
+   ],
+   [
+    "titulo",
+    "Telas"
+   ],
+   [
+    "item",
+    "Bloquear o app: 10 minutos tambem."
+   ],
+   [
+    "item",
+    "Passphrase: a tela de criar com o conteudo mais para cima; o selo de pixels (CipherEmblem) nas telas de digitar, de conferir e na que pede antes de mover saldo."
+   ],
+   [
+    "item",
+    "\"Confira a seed phrase de X\" no lugar de \"Confira a cópia de X\"."
+   ],
+   [
+    "item",
+    "A lista de carteiras com o mesmo fundo da tela de copiar endereco."
+   ],
+   [
+    "titulo",
+    "Envelope"
+   ],
+   [
+    "item",
+    "Pixels de fundo do cartao e do desenho do envelope em cinza escuro, quase preto; as palavras reveladas num fundo mais escuro; abrindo, sem a faixa de varredura."
+   ],
+   [
+    "item",
+    "O selo de pixels nas telas de digitar a senha (criar, repetir e abrir), que agora rolam com o botao preso acima do teclado; titulo e texto no meio; a cena de \"Criptografar a senha da carteira\" sem o alto cortado."
+   ],
+   [
+    "item",
+    "\"Segure para usar mesmo assim\" volta aos pixels, com a frente reta (PixelFill.tilt 0)."
+   ],
+   [
+    "p",
+    "Flags de teste: `-tela bloquear`, `-quadros` (os quadros parados) e `-segure <fracao>`."
+   ]
+  ]
+ },
+ {
+  "sha": "e675b31a0be5669f5d93f41f828c6a3365ebc509",
+  "data": "2026-10-18T20:57:03-03:00",
+  "assunto": "Lista de versoes assinada: 1.0.0 build 7, pela chave do Mac do dono",
+  "corpo": [
+   [
+    "item",
+    "site/versoes.json, assinado no Secure Enclave do Mac do dono, com o Touch ID. O site publica a lista; o app confere com as chaves compiladas."
+   ],
+   [
+    "item",
+    "Teste do nucleo: a lista do site passa pelo mesmo codigo do app (ReleaseManifest.verified, ReleaseKeys) e autoriza a versao do project.yml."
+   ]
+  ]
+ },
+ {
+  "sha": "0ba5f3ee494af9cd8203dd70ed21d6bdb51c6585",
+  "data": "2026-10-18T18:43:16-03:00",
+  "assunto": "Carteira: o copiar endereco vai para a lista de carteiras",
+  "corpo": [
+   [
+    "p",
+    "O botao de copiar sai do alto da Carteira e fica na lista que abre no nome da carteira, em cada carteira, ao lado do lapis (por cima da linha, com o toque proprio, sem escolher a carteira). Abre a mesma tela de copiar, rede por rede. O teste abre a lista pelo nome (`carteira-nome`) e tira a foto dela."
+   ]
+  ]
+ },
+ {
+  "sha": "20afc04939b0603cbcdcefade5d0983e098ba70d",
+  "data": "2026-10-18T18:29:22-03:00",
+  "assunto": "Leva de telas: envelope, segurar em verde, alertas, placa, copiar, receber, adicionar moeda e Carteira",
+  "corpo": [
+   [
+    "titulo",
+    "Envelope"
+   ],
+   [
+    "item",
+    "Sortear com os pixels do \"o app sorteia\" (DrawPixels) no lugar do dado, nos dois botoes."
+   ],
+   [
+    "item",
+    "A tela de criar a senha diz que a proxima pede a senha de novo; a de repetir ganhou o voltar (o fechar vai para a direita), e as palavras sorteadas voltam as mesmas."
+   ],
+   [
+    "item",
+    "Sem a frase do pendrive na folha da senha fraca."
+   ],
+   [
+    "item",
+    "\"Criptografar a senha da carteira\" com o \"Como funciona\" e a cena mais para cima."
+   ],
+   [
+    "titulo",
+    "Telas"
+   ],
+   [
+    "item",
+    "HoldButton: o verde enche da esquerda, com a ponta direita levemente arredondada, e o texto escurece onde o verde passou (no lugar dos pixels). `-segure <fracao>` no teste."
+   ],
+   [
+    "item",
+    "Alertas de preco: o check das moedas escolhidas em verde."
+   ],
+   [
+    "item",
+    "A chapa de aco: a borda de baixo mais fina, com teto ao arrastar para cima."
+   ],
+   [
+    "item",
+    "\"Copiar as palavras\" de fundo branco (PrimaryButton light)."
+   ],
+   [
+    "item",
+    "Receber: \"Contrato da moeda X\", sem o \"quem envia tem de usar este\"."
+   ],
+   [
+    "item",
+    "Adicionar moeda: logos de moedas girando em volta do \"+\" (os que vem no app)."
+   ],
+   [
+    "item",
+    "Carteira: o copiar menor, logo depois da setinha do nome."
+   ],
+   [
+    "p",
+    "\"Abrir em outro app\" saiu dos Ajustes e foi para o site, na pagina Redes e moedas, com as regras e cada rede (os dados que estavam em RecoveryGuideView). O texto de depois das palavras aponta para o site."
+   ],
+   [
+    "p",
+    "Testes: o do envelope segura ate o fim, repete e volta; o dos alertas acompanha as moedas que ja vem ligadas (estava desatualizado: esperava a lista vazia)."
+   ]
+  ]
+ },
+ {
+  "sha": "9b6dcb9a4d7b9c5dd6f2cb6b0ebec850c2ae6f2c",
+  "data": "2026-10-18T13:36:16-03:00",
+  "assunto": "Trava de alerta: passo unico sem numero, Face ID automatico espera a trava sair",
+  "corpo": [
+   [
+    "item",
+    "UpdateAlarmView: com um passo so, o texto vai sem o numero."
+   ],
+   [
+    "item",
+    "UpdateAlarmWindow.covering: alguma trava na tela. O LockView nao abre o Face ID automatico por cima dela."
+   ],
+   [
+    "item",
+    "Conferencia periodica com a sessao."
+   ]
+  ]
+ },
+ {
+  "sha": "90b70a1780ce7b3fc48a1e64fd709dcd532c45b3",
+  "data": "2026-10-18T13:27:23-03:00",
+  "assunto": "Trava de alerta: quadro com os pixels, textos novos e rodape sem deslizar",
+  "corpo": [
+   [
+    "item",
+    "O quadro \"Seus fundos estão seguros\" com o selo de pixels que cifram (CipherEmblem verde) no lugar do cadeado; \"cifradas somente no chip\", sem \"os fundos só se movem com elas\"."
+   ],
+   [
+    "item",
+    "\"Não atualize o app por enquanto, até a Escalibur confirmar a versão nova\"; \"não visualizar as palavras da carteira\" no lugar de \"não usar a carteira\"."
+   ],
+   [
+    "item",
+    "UpdateAlarmView sem `onEmergency` mostra um rodape fixo no lugar do deslizar."
+   ],
+   [
+    "item",
+    "Traducoes em ingles; testes de interface da trava."
+   ]
+  ]
+ },
+ {
+  "sha": "975c3fc703d0fd6c62f7177c818cf4c1741304cc",
+  "data": "2026-10-18T12:53:01-03:00",
+  "assunto": "Trava de alerta: rotulo e titulo no meio, texto novo, some sozinha, e nenhum build sem a lista",
+  "corpo": [
+   [
+    "item",
+    "A trava da versao nao confirmada: \"Alerta de segurança\" e o titulo centralizados e em branco; sem o passo de nao abrir a versao nova; \"a versao possivelmente adulterada nao chegou a rodar aqui\"; e o aviso de que o alerta some sozinho quando a Escalibur confirmar."
+   ],
+   [
+    "item",
+    "Some sozinha depois da conferencia da Escalibur: versao assinada, ou a de fora trocada na loja por uma assinada, e a proxima conferencia tira a trava. Com a trava na tela, a conferencia repete a cada volta para a frente (minimo de 1 minuto) e a cada 5 minutos."
+   ],
+   [
+    "item",
+    "UpdateAlarmView recebe o texto de quem trava; UpdateAlarmWindow com o nivel da janela."
+   ],
+   [
+    "item",
+    "Conferencia periodica (StoreSync) ao voltar para a frente."
+   ],
+   [
+    "item",
+    "release.yml: o job assinatura recusa a tag (testflight-* e v*) se o site/versoes.json do commit nao trouxer a versao com aquele build; docs/release.md com a ordem (autorizar, lista na main, tag)."
+   ]
+  ]
+ },
+ {
+  "sha": "af33ab982033e6e200377f3ad03afb0a0531656a",
+  "data": "2026-10-18T12:35:03-03:00",
+  "assunto": "Versao nao confirmada: trava o app inteiro com o alerta de tentativa de hack",
+  "corpo": [
+   [
+    "item",
+    "No lugar do aviso na Carteira, uma tela numa janela propria, acima de tudo (ate do pedido de PIN): \"Detectamos uma tentativa de hack\", o que aconteceu, que a equipe da Escalibur esta investigando, que as palavras continuam cifradas no chip e a versao adulterada nao rodou ali, e o que fazer. O deslizar de pixels \"Usar em emergência\" tira a trava ate o app fechar."
+   ],
+   [
+    "item",
+    "O alarme fica guardado entre aberturas (Preferences.updateAlarm): sem internet, a trava continua; so uma conferencia que responde a tira."
+   ],
+   [
+    "item",
+    "CipherEmblem com a cor do simbolo; o escudo vermelho na trava."
+   ],
+   [
+    "item",
+    "Teste de interface: a trava aparece, o deslizar tira, a carteira atende. Traducoes em ingles."
+   ],
+   [
+    "item",
+    "docs/seguranca.md §8.6, docs/release.md e a pagina de seguranca falam da trava."
+   ],
+   [
+    "item",
+    "O teste do prazo mole da troca com folga para o runner do CI carregado: a fonte lenta em 3,2 s, entre o prazo mole e o duro, e a parcial antes de 2,9 s (no CI saiu em 2,6 s)."
+   ]
+  ]
+ },
+ {
+  "sha": "632ee7b9596e5891a16357cb227f4991090aba5b",
+  "data": "2026-10-18T12:03:58-03:00",
+  "assunto": "Versao autorizada: lista assinada fora do GitHub e da Apple, e o alarme no app",
+  "corpo": [
+   [
+    "item",
+    "ReleaseKeys (chaves P-256 compiladas no app, com limiar) e ReleaseManifest (o manifesto assinado, conferido byte a byte: chave desconhecida, texto mexido, limiar nao alcancado e lista de outro app recusam)."
+   ],
+   [
+    "item",
+    "ReleaseWatch: a versao instalada pergunta a App Store (itunes.apple.com/lookup) qual e a mais nova e confere na lista do site (tmzzjr.github.io/.../versoes.json). Versao nova fora da lista ou lista sumida: \"Atualizacao nao confirmada pela Escalibur\"; assinatura que nao confere: \"A lista de versoes da Escalibur nao confere\". Sem resposta, nao avisa."
+   ],
+   [
+    "item",
+    "UpdateGuard no app: ao voltar para a frente, no maximo a cada 6 horas; o aviso fica na Carteira, embaixo do saldo. Teste de interface com -alarme-versao."
+   ],
+   [
+    "item",
+    "tools/versoes/versoes.swift: a chave no Secure Enclave do Mac do dono, presa a ele e ao Touch ID a cada assinatura; autorizar e conferir a lista. O verificar.sh confere o versoes.json do site contra as chaves compiladas; o gerador do site publica o arquivo."
+   ],
+   [
+    "item",
+    "Os dois hosts novos no hosts.lock, no AllowedHosts e na Politica de privacidade (pt e en)."
+   ],
+   [
+    "item",
+    "docs/seguranca.md §8.6 com o que fica protegido e o limite (quem controla o sistema do celular troca o app; isso so a comparacao com o build atestado mostra); docs/release.md com o passo de autorizar a versao; item 06 da pagina de seguranca reescrito."
+   ],
+   [
+    "item",
+    "O teste da Stellar que ainda esperava o teto antigo de 5% na tolerancia agora testa 10,01%."
+   ]
+  ]
+ },
+ {
+  "sha": "862c5a107e4ae1f537f0fdb213bf0c8f6b97707d",
+  "data": "2026-10-18T10:34:14-03:00",
+  "assunto": "Copiar as palavras: o relogio vira um anel verde liso e conta o minuto no tempo real",
+  "corpo": [
+   [
+    "p",
+    "O anel de pixels sai; no lugar, um anel verde continuo que esvazia em 60 s, com os segundos de verdade no meio (1:00 ate 0:00). As palavras entram antes e se desfazem no zero, e o ciclo recomeca."
+   ]
+  ]
+ },
+ {
+  "sha": "fcc3b574fb5108b355203c46fc50358bc157cab4",
+  "data": "2026-10-18T10:27:27-03:00",
+  "assunto": "Moeda do saldo sem reler a carteira, dolar primeiro, colar no campo e animacao de copiar calma",
+  "corpo": [
+   [
+    "item",
+    "Trocar a moeda la em cima converte os precos que estao na tela pela cotacao do bitcoin nas duas e busca so os precos novos por baixo; os saldos das redes nao sao lidos de novo. A cotacao do bitcoin nas outras moedas passa a juntar com a anterior: uma busca que falha nao tira mais a unidade do seletor. US$ primeiro, R$ depois. Teste de interface."
+   ],
+   [
+    "item",
+    "Receber: o cartao diz que e o contrato (ou o emissor) da moeda."
+   ],
+   [
+    "item",
+    "Adicionar moeda: botao de colar dentro do campo vazio."
+   ],
+   [
+    "item",
+    "Copiar as palavras: o relogio da animacao conta em 8 s, de 10 em 10 segundos, num ciclo de 12 s (contava o minuto em menos de 3 s)."
+   ]
+  ]
+ },
+ {
+  "sha": "31a5496c99cfa6c380c23dce47d6af9c949484d7",
+  "data": "2026-10-18T10:01:06-03:00",
+  "assunto": "Lista de palavras: a escolhida fica verde, com a posicao, e tocar de novo desmarca",
+  "corpo": [
+   [
+    "p",
+    "A palavra que esta na frase fica marcada em verde, com o numero da posicao no canto, enquanto estiver nela; tocar de novo tira da ultima posicao em que esta, e essa posicao volta a ser a da vez. Com a frase cheia, so as marcadas respondem (para trocar uma). A folha continua atras da guarda de captura. Teste: marcar, desmarcar e marcar de novo."
+   ]
+  ]
+ },
+ {
+  "sha": "00623af007ae8470fd66f2447ec2ffb3c3a9d6a6",
+  "data": "2026-10-17T20:29:49-03:00",
+  "assunto": "Leva de telas: troca, ordem limite, envelope, Super Security e Safe Keyboard em todo campo",
+  "corpo": [
+   [
+    "titulo",
+    "Troca"
+   ],
+   [
+    "item",
+    "Tolerancia ate 10% em todas as redes (Stellar, XRP Ledger e Solana subiram de 5%); acima de 3% o controle fica roxo, no maximo a cor da Escalibur com a passada de luz. Texto do automatico curto e sem amarelo."
+   ],
+   [
+    "item",
+    "Cotacao de um pedido que ja mudou (tolerancia arrastada) nao mostra mais erro piscando."
+   ],
+   [
+    "item",
+    "Preco de token minusculo com a base em mil/mi/bi/tri (\"1 mi BNBFROG = 12,34 USDT\")."
+   ],
+   [
+    "item",
+    "Proxima cotacao num relogio redondo amarelo ao lado do preco."
+   ],
+   [
+    "item",
+    "Escolher outro provedor da rodada na rota (TradeQuote.choosing, com teste): o plano recota, valida e simula esse provedor; o melhor vira alternativa."
+   ],
+   [
+    "item",
+    "Erro ao montar a troca ou a ordem volta para a tela da troca."
+   ],
+   [
+    "item",
+    "Logo oficial da PancakeSwap; verificadas antes das de fora da lista no seletor."
+   ],
+   [
+    "item",
+    "Setinha no valor abre um controle de porcentagem do saldo."
+   ],
+   [
+    "titulo",
+    "Ordem limite"
+   ],
+   [
+    "item",
+    "Tela propria de editar; cancelar pergunta num popup; detalhes com \"Refazer quando vencer\"; prazo padrao de 30 dias; \"Vence em\" contando o tempo real; revisao sem o aviso das duas assinaturas e com \"De\" traduzido (tambem na ponte); ordens na folha de envio no desenho de Ordens abertas, fundo escuro; \"Ver enderecos e contratos\" num cartao escuro."
+   ],
+   [
+    "titulo",
+    "Seguranca e envelope"
+   ],
+   [
+    "item",
+    "Super Security liga com a copia de todas as carteiras conferida, sem digitar as frases de novo (o cofre ainda recusa a passphrase antiga fora de NFKD); titulo centralizado."
+   ],
+   [
+    "item",
+    "Safe Keyboard completo (letras, numeros, simbolos, acentos e numerico) em todo campo quando ligado, passando pelo delegate de cada campo (a senha vai para o buffer seguro)."
+   ],
+   [
+    "item",
+    "A 12a palavra sorteada fora da captura de tela; a lista de palavras nao reabre o teclado."
+   ],
+   [
+    "item",
+    "Envelope: lacrado sem subir e no meio da tela, sem capsula no nome nem passada de luz, cadeado sobre preto; folha da senha fraca na altura do conteudo; segurar para usar com os pixels; segurar para ver na repeticao."
+   ],
+   [
+    "item",
+    "Textos do teclado, tag \"Padrao\" fora, interruptores verdes, carregamentos centralizados, cena dos enderecos com moeda e endereco, palavras centralizadas, \"Auditar o codigo\" no Sobre, contrato no cartao do Receber com o copiar, aviso de moeda custom recolhivel."
+   ]
+  ]
+ },
+ {
+  "sha": "e3fe5fcd94a54f94423c2a3d48e1ad403ae8523a",
+  "data": "2026-10-17T16:22:17-03:00",
+  "assunto": "Build 7",
+  "corpo": []
+ },
+ {
+  "sha": "1bee2a4c2a36ab4cd490f7d0b4167ce878f3e3b7",
+  "data": "2026-10-17T16:21:55-03:00",
+  "assunto": "Telas: escolher palavras, conferir o aparelho e copiar endereco",
+  "corpo": [
+   [
+    "item",
+    "Lista de palavras: a palavra tocada acende no verde da verificacao e apaga sozinha (a lista e publica, quais palavras estao na frase nao), e uma barra de progresso enche."
+   ],
+   [
+    "item",
+    "\"O app sorteia\": posicao reservada com uma matriz de pixels cintilando no lugar do dado, e o aviso das palavras escolhidas reescrito."
+   ],
+   [
+    "item",
+    "Conferir o aparelho: os pixels de fora acendem um a um, suaves e em fila; o fundo do escudo virou aneis concentricos (era um octogono) que respiram, com uma onda do centro."
+   ],
+   [
+    "item",
+    "Copiar endereco: na linha das EVM, tocar abre as redes e copiar fica no botao; o texto mostra duas redes."
+   ],
+   [
+    "item",
+    "Catalogo de textos sincronizado com o codigo e o ingles completo."
+   ]
+  ]
+ },
+ {
+  "sha": "25d7db3e05b433918aa2ccf56690e1293a5758df",
+  "data": "2026-10-17T16:21:55-03:00",
+  "assunto": "Grafico \"Tudo\": a historia inteira pela Kraken e pela OKX, a que comeca mais cedo",
+  "corpo": [
+   [
+    "p",
+    "O CoinGecko e o CoinPaprika sem chave so entregam 365 dias, e o \"Tudo\" saia pela OKX, onde o BTC so existe desde 2017 e as stablecoins nem estao. Agora a Kraken (velas semanais em dolar, sem chave) e a OKX sao lidas em paralelo e fica a serie mais antiga: BTC desde 2013, ETH desde 2015, USDT desde 2017, USDC, DAI e PYUSD com anos de historia; a BNB continua pela OKX. api.kraken.com entra no hosts.lock e na Politica de Privacidade."
+   ]
+  ]
+ },
+ {
+  "sha": "d3030c1d58f5d31c724f45be578f99a0da99048d",
+  "data": "2026-10-17T16:21:54-03:00",
+  "assunto": "Ponte: USDT para a Tron pela USDT0 da propria Tether (Legacy Mesh)",
+  "corpo": [
+   [
+    "p",
+    "Da Ethereum e da Arbitrum para a conta Tron da mesma carteira. Os contratos da Tether (UsdtOFT, verificados no Sourcify com match exato, sem proxy) conferidos na cadeia em duas fontes de cada lado: o token, a taxa, o par na Tron e, na Tron, o USDT TR7NH e os pares de volta. Nada vem de API: o que chega, a liquidez e a taxa de mensagem saem do proprio contrato (quoteOFT, quoteSend). O app monta o send e le de volta pelo decodificador estrito: destino Tron e nenhum outro, a conta Tron da carteira, sem opcoes nem chamada, troco para o dono, o minimo cotado. No plano, o contrato lido de novo, approve exato, simulacao em duas fontes com o OFTSent, e a conta Tron tem de estar sob a chave dela. A chegada e conferida pelo guid da mensagem: o OFTReceived dele e o Transfer do USDT na Tron, lidos no no solidificado de dois provedores."
+   ],
+   [
+    "p",
+    "Testes de unidade para cada recusa e testes ao vivo: plano com simulacao real na Ethereum e na Arbitrum, e uma entrega real na Tron achada pelo guid. Na tela, a Tron aparece no Para."
+   ]
+  ]
+ }
+]
