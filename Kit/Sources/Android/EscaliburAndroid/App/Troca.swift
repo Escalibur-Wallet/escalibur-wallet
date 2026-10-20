@@ -114,6 +114,10 @@ final class Troca: @unchecked Sendable {
     /// Na ordem limite, o que acompanha o recebido digitado.
     private var deriva: Deriva = .preco
     private(set) var edicao: Edicao?
+    /// Refazer a ordem quando vencer: o app avisa e pergunta (`Renovacoes`).
+    private var refazer = false
+    /// A ordem vencida (ou editada) que esta substitui: sai das renovacoes quando a nova sair.
+    private var substitui: String?
 
     // MARK: A revisao
 
@@ -390,6 +394,7 @@ final class Troca: @unchecked Sendable {
                Self.validades(chain).contains(where: { $0.segundos == segundos }) { validade = segundos }
             if mudanca["ateCancelar"]?.boolValue == true, let chain, Self.validades(chain).contains(where: { $0.segundos == nil }) { validade = nil }
             if mudanca["limparErroDoPlano"]?.boolValue == true { erroDoPlano = nil }
+            if let novo = mudanca["refazer"]?.boolValue { refazer = novo }
             preencherAlvo()
             guard chave != antes else { return }
             impactoAceito = nil
@@ -912,6 +917,9 @@ final class Troca: @unchecked Sendable {
             case .troca(let r, _): Self.lembrar([r.sell, r.buy])
             case .limite(let r):
                 Self.lembrar([r.sell, r.buy])
+                let (renova, velha) = trava.withLock { (refazer && podeRefazer, substitui) }
+                if let velha { Renovacoes.esquecer(velha) }
+                if renova, let uid = novos.first { Renovacoes.registrar(uid, pedido: r) }
                 // Os avisos de 24 horas antes de vencer e de executada (fora a carteira com passphrase).
                 if let uid = novos.first, let bytes = Hex.decode(uid), let vence = CoWProtocol.validTo(ofUID: bytes),
                    Sessao.shared.metadata.wallets.first(where: { $0.id == r.walletID })?.hasPassphrase == false {
@@ -1077,11 +1085,41 @@ final class Troca: @unchecked Sendable {
                 troca.validade = nil
             }
             troca.edicao = Edicao(ordem: ordem, via: via, sell: sell, buy: buy)
+            troca.refazer = Renovacoes.renova(ordem.id)
+            troca.substitui = ordem.id
             troca.chaveDoAlvo = "\(troca.par)|\(troca.modo.rawValue)|\(troca.precoDeMercado != nil)"
             troca.versaoDoValor += 1
             troca.versaoDoPreco += 1
         }
         travaDasOutras.withLock { outras["edicao"] = troca }
+        return troca
+    }
+
+    /// Refazer uma ordem vencida: a ordem limite com o que falta vender, o mesmo preco e o mesmo
+    /// prazo, na tela propria. O dono confere e revisa como qualquer ordem.
+    static func refazer(_ vencida: Renovacoes.Vencida, continuar: Bool) -> Troca {
+        let troca = Troca(alvo: "refazer")
+        troca.trava.withLock {
+            troca.acompanharCarteira()
+            troca.reiniciar(vencida.rede)
+            troca.modo = .limite
+            troca.sell = vencida.vende
+            troca.buy = vencida.compra
+            troca.textoDoValor = Fmt.decimalSimples(vencida.quantia, casas: vencida.vende.decimals)
+            let quantia = Saldos.decimal(vencida.quantia, casas: vencida.vende.decimals)
+            if quantia > 0 {
+                troca.textoDoPreco = textoDoPreco(Saldos.decimal(vencida.minimo, casas: vencida.compra.decimals) / quantia)
+                troca.precoAuto = nil
+            }
+            let opcoes = validades(vencida.rede).compactMap(\.segundos)
+            troca.validade = opcoes.first { $0 >= vencida.registro.validFor } ?? opcoes.last ?? troca.validade
+            troca.refazer = continuar
+            troca.substitui = vencida.registro.orderID
+            troca.chaveDoAlvo = "\(troca.par)|\(troca.modo.rawValue)|\(troca.precoDeMercado != nil)"
+            troca.versaoDoValor += 1
+            troca.versaoDoPreco += 1
+        }
+        travaDasOutras.withLock { outras["refazer"] = troca }
         return troca
     }
 
@@ -1267,6 +1305,9 @@ final class Troca: @unchecked Sendable {
             let custodia: String?
             let conferencia: ConferenciaDoPreco?
             let editando: String?
+            /// Refazer quando vencer: so na CoW e com prazo.
+            let podeRefazer: Bool
+            let refazer: Bool
         }
         struct Linha: Encodable { let rotulo: String; let valor: String }
         struct Revisao: Encodable {
@@ -1439,8 +1480,15 @@ final class Troca: @unchecked Sendable {
             validades: chain.map { Self.validades($0).map { Estado.Validade(segundos: $0.segundos, titulo: $0.titulo) } } ?? [],
             validade: validade,
             semPrazo: chain.flatMap { rede in Self.validades(rede).isEmpty ? preencher(Textos.t("Na %@ a oferta não tem prazo: fica até executar ou você cancelar."), rede.name) : nil },
-            custodia: motor?.limitCustodyNote, conferencia: conferenciaDTO, editando: editando
+            custodia: motor?.limitCustodyNote, conferencia: conferenciaDTO, editando: editando,
+            podeRefazer: podeRefazer, refazer: refazer && podeRefazer
         )
+    }
+
+    /// Refazer quando vencer vale na CoW e com prazo (a ordem "ate cancelar" nao vence).
+    private var podeRefazer: Bool {
+        guard modo == .limite, validade != nil, let chain else { return false }
+        return Renovacoes.suporta(chain)
     }
 
     private func frases(_ operacao: Operacao) -> Estado.Frases {
@@ -1577,7 +1625,9 @@ final class Troca: @unchecked Sendable {
             titulo: review.title, sai: atual?.cancela == true ? nil : sai, entra: atual?.cancela == true ? nil : entra,
             enderecos: review.lines.filter(\.verbatim).map { Estado.Linha(rotulo: $0.label, valor: $0.value) },
             linhas: review.lines.filter { !$0.verbatim }.map { Estado.Linha(rotulo: $0.label, valor: $0.value) }
-                + [Estado.Linha(rotulo: Textos.t("De"), valor: carteira?.name ?? "")],
+                + [Estado.Linha(rotulo: Textos.t("De"), valor: carteira?.name ?? "")]
+                + (atual?.limite == true && refazer && podeRefazer
+                    ? [Estado.Linha(rotulo: Textos.t("Quando vencer"), valor: Textos.t("O app avisa e pergunta se refaz, com o mesmo preço"))] : []),
             avisos: review.warnings.map { Envio.textoDoAviso($0, chain: plano.chain, tipo: .tag) },
             // Na ordem limite, o aviso das duas assinaturas sai.
             transacoes: atual?.limite == true ? 1 : review.transactionCount, nota: nota, erro: erroDaRevisao
@@ -1644,6 +1694,18 @@ extension Troca {
         case "troca.encerrar":
             encerrar(pedido["alvo"]?.stringValue ?? "")
             return try Nucleo.json(["ok": true])
+        case "ordens.vencidas":
+            Nucleo.esperarSemErro { await Renovacoes.atualizar() }
+            return try Nucleo.json(["pergunta": Renovacoes.pergunta()])
+        case "ordens.adiar":
+            Renovacoes.adiar(pedido["ordem"]?.stringValue ?? "")
+            return try Nucleo.json(["pergunta": Renovacoes.pergunta()])
+        case "ordens.naoRefazer":
+            Renovacoes.esquecer(pedido["ordem"]?.stringValue ?? "")
+            return try Nucleo.json(["pergunta": Renovacoes.pergunta()])
+        case "troca.refazer":
+            guard let vencida = Renovacoes.vencida(pedido["ordem"]?.stringValue ?? "") else { throw Nucleo.Falha(erro: "troca.semOrdem") }
+            return try retrato(refazer(vencida, continuar: pedido["continuar"]?.boolValue ?? true))
         default:
             break
         }

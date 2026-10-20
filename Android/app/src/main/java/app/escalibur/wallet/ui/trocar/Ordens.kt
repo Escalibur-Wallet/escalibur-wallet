@@ -1,5 +1,13 @@
 package app.escalibur.wallet.ui.trocar
 
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.runtime.rememberCoroutineScope
+import app.escalibur.wallet.nucleo.Api
+import app.escalibur.wallet.ui.Ciclo
+import app.escalibur.wallet.ui.comp.BotaoPrimario
+import app.escalibur.wallet.ui.receber.opcional
+import kotlinx.coroutines.launch
 import android.icu.text.MeasureFormat
 import android.icu.util.Measure
 import android.icu.util.MeasureUnit
@@ -286,4 +294,67 @@ fun vencimento(vence: Long?): String {
     val formato = MeasureFormat.getInstance(Formato.locale, MeasureFormat.FormatWidth.NARROW)
     val partes = listOf(grande, pequena).filter { it.number.toLong() > 0 }
     return t("Vence em %@", formato.formatMeasures(*partes.ifEmpty { listOf(pequena) }.toTypedArray()))
+}
+
+/**
+ * A pergunta de refazer uma ordem limite vencida, por cima de qualquer aba, quando o app abre
+ * destravado. Refazer abre a ordem pronta e a revisao de sempre; nada e assinado sem o dono.
+ */
+@Composable
+fun PerguntaDasVencidas() {
+    val escopo = rememberCoroutineScope()
+    var pergunta by remember { mutableStateOf<JSONObject?>(null) }
+    var continuar by remember { mutableStateOf(true) }
+    var decidiu by remember { mutableStateOf(false) }
+    LaunchedEffect(App.estado.carteira?.id, Ciclo.vinda) {
+        // Depois da carteira aparecer: a folha por cima da tela que ainda carrega assustava.
+        delay(900)
+        pergunta = runCatching { Api.objeto("ordens.vencidas").optJSONObject("pergunta") }.getOrNull()
+    }
+    val p = pergunta ?: return
+    val id = p.getString("id")
+    fun seguir(metodo: String) {
+        escopo.launch { pergunta = runCatching { Api.objeto(metodo, JSONObject().put("ordem", id)).optJSONObject("pergunta") }.getOrNull() }
+    }
+    Folha(t("Uma ordem limite venceu"), aoFechar = {
+        // O X e o deslizar: pergunta de novo so na proxima abertura.
+        if (decidiu) decidiu = false else seguir("ordens.adiar")
+    }) { fechar ->
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
+            val vende = p.optJSONObject("vende")?.let(::AtivoDaTroca)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                LogoDaOrdem(vende, vende?.rede, vende?.redeCoingecko)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(p.optString("titulo"), style = estilo(Tipo.linha), color = Paleta.tinta)
+                    Text(p.optString("minimo"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+                }
+            }
+            Text(p.optString("texto"), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.md))
+            p.opcional("parcial")?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm)) }
+            p.opcional("abaixoDoMercado")?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.cautela, modifier = Modifier.padding(top = Espaco.sm)) }
+            Row(Modifier.padding(top = Espaco.lg).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(t("Perguntar de novo quando vencer"), style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.weight(1f))
+                Switch(continuar, { continuar = it },
+                       colors = SwitchDefaults.colors(checkedTrackColor = Paleta.acento, checkedThumbColor = Paleta.tinta,
+                                                      uncheckedTrackColor = Paleta.trilho, uncheckedThumbColor = Paleta.tintaSuave, uncheckedBorderColor = Paleta.borda))
+            }
+            Text(t("Refazer pede a sua biometria ou o PIN: sem você, ninguém assina uma ordem nova com a sua chave."), style = estilo(Tipo.nota),
+                 color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.xs))
+            BotaoPrimario(t("Refazer a ordem"), Modifier.padding(top = Espaco.lg)) {
+                decidiu = true
+                val manter = continuar
+                fechar {
+                    pergunta = null
+                    Navegacao.abrir { TelaDeRefazerOrdem(id, manter) }
+                }
+            }
+            BotaoTerciario(t("Não refazer"), Modifier.fillMaxWidth()) {
+                decidiu = true
+                fechar { seguir("ordens.naoRefazer") }
+            }
+            p.opcional("mais")?.let {
+                Text(it, style = estilo(Tipo.nota), color = Paleta.tintaApagada, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            }
+        }
+    }
 }

@@ -87,6 +87,7 @@ fun Principal() {
         }
     }
     app.escalibur.wallet.ui.avisos.VigiasDaSessao()
+    app.escalibur.wallet.ui.trocar.PerguntaDasVencidas()
     Box(Modifier.fillMaxSize().background(Paleta.vazio)) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f)) {

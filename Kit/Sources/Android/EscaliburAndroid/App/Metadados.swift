@@ -46,6 +46,8 @@ struct Metadata: Codable, Equatable {
     var activityFetched: [UUID: [String: ActivityFetch]]?
     /// Os tokens fora da lista que ja passaram por uma troca deste aparelho.
     var tradedAssets: [Asset]?
+    /// As ordens limite que o dono pediu para refazer quando vencer.
+    var limitRenewals: [LimitRenewal]?
 
     var customTokens: [Asset] { customAssets ?? [] }
 

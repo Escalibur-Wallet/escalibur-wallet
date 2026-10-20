@@ -210,6 +210,7 @@ object Vigia {
             "recebimentos" to "mais" -> t("Mais %lld recebimentos", aviso.optInt("quantos")) to t("Abra a Atividade para ver.")
             "recebimentos" to "discreto" -> t("Entrou moeda na carteira") to t("Abra a Escalibur para ver.")
             "ordens" to "executada" -> t("Sua ordem limite foi executada") to t("A troca saiu no seu preço. O saldo novo já está na carteira.")
+            "ordens" to "prazo" -> t("O prazo de uma ordem limite acabou") to t("Abra a Escalibur: se ainda faltar vender, o app pergunta se refaz com o mesmo preço.")
             "ordens" to "vence24h" -> t("Sua ordem limite vence em 24 horas") to t("Se ela ainda não executou, abra a Escalibur para ver ou mudar o preço.")
             "pontes" to "chegou" -> t("Sua ponte chegou") to t("Conferido na %@. Abra a Escalibur para ver.", aviso.optString("rede"))
             else -> t("Escalibur Wallet") to t("Abra a Escalibur para ver.")

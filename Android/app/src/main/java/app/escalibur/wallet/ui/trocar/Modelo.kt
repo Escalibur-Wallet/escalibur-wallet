@@ -125,6 +125,9 @@ class RetratoDaTroca(json: JSONObject) {
             ConferenciaDoPreco(it.getString("texto"), it.getBoolean("forte"), it.opcional("confirmacao"), it.getBoolean("confirmado"))
         }
         val editando: String? = j.opcional("editando")
+        /** Refazer quando vencer: so na CoW e com prazo. */
+        val podeRefazer: Boolean = j.optBoolean("podeRefazer")
+        val refazer: Boolean = j.optBoolean("refazer")
     }
 
     val cotacao: Cotacao? = e.optJSONObject("cotacao")?.let(::Cotacao)

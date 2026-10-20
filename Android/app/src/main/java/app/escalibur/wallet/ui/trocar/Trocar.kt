@@ -1,5 +1,11 @@
 package app.escalibur.wallet.ui.trocar
 
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import app.escalibur.wallet.nucleo.Api
+import app.escalibur.wallet.ui.avisos.rememberPermissaoDeNotificar
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -213,14 +219,40 @@ fun TelaDeTrocar() {
  */
 @Composable
 fun TelaDeEditarOrdem(ordem: String) {
-    val controle = remember { ControleDaTroca("edicao") }
+    TelaDaOrdemPronta("edicao", t("Editar ordem"), t("Mude o que quiser. Na revisão, a ordem atual é cancelada primeiro e a nova é criada em seguida.")) {
+        it.chamar("troca.editar", JSONObject().put("ordem", ordem))
+    }
+}
+
+/**
+ * Refazer uma ordem limite vencida: o que falta vender, no mesmo preco e no mesmo prazo. O dono
+ * confere e revisa como qualquer ordem; fechar sem refazer deixa a pergunta para a proxima abertura.
+ */
+@Composable
+fun TelaDeRefazerOrdem(ordem: String, continuar: Boolean) {
+    TelaDaOrdemPronta("refazer", t("Refazer a ordem"), t("O que falta vender, no mesmo preço. Confira e siga para a revisão, como qualquer ordem."),
+                      aoDesistir = { runCatching { Api.objeto("ordens.adiar", JSONObject().put("ordem", ordem)) } }) {
+        it.chamar("troca.refazer", JSONObject().put("ordem", ordem).put("continuar", continuar))
+    }
+}
+
+/** A ordem limite montada pelo nucleo (a editada ou a refeita), na tela propria. */
+@Composable
+private fun TelaDaOrdemPronta(alvo: String, titulo: String, nota: String, aoDesistir: suspend () -> Unit = {}, iniciar: suspend (ControleDaTroca) -> Boolean) {
+    val controle = remember { ControleDaTroca(alvo) }
     var escolhendoToken by remember { mutableStateOf<Boolean?>(null) }
-    DisposableEffect(Unit) { onDispose { controle.encerrar() } }
-    LaunchedEffect(Unit) { if (!controle.chamar("troca.editar", JSONObject().put("ordem", ordem))) Navegacao.fechar() }
+    var saiu by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        onDispose {
+            controle.encerrar()
+            if (!saiu) CoroutineScope(Dispatchers.IO).launch { aoDesistir() }
+        }
+    }
+    LaunchedEffect(Unit) { if (!iniciar(controle)) Navegacao.fechar() }
     OuvirEventos(controle)
     val r = controle.retrato
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().imePadding()) {
-        CabecalhoDeFolha(t("Editar ordem"), { Navegacao.fechar() })
+        CabecalhoDeFolha(titulo, { Navegacao.fechar() })
         if (r == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp) }
             return
@@ -228,12 +260,14 @@ fun TelaDeEditarOrdem(ordem: String) {
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.lg)) {
             Column(verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
                 r.limite?.editando?.let { Text(it, style = estilo(Tipo.linha), color = Paleta.tinta) }
-                Text(t("Mude o que quiser. Na revisão, a ordem atual é cancelada primeiro e a nova é criada em seguida."),
-                     style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+                Text(nota, style = estilo(Tipo.nota), color = Paleta.tintaSuave)
             }
             FormularioLimite(r, controle::definir, aoEscolherToken = { escolhendoToken = it })
         }
-        RodapeDaTroca(controle, r) { Navegacao.fechar() }
+        RodapeDaTroca(controle, r) {
+            saiu = true
+            Navegacao.fechar()
+        }
     }
     if (r == null) return
     escolhendoToken?.let { vende ->
@@ -416,6 +450,26 @@ private fun ColumnScope.FormularioLimite(r: RetratoDaTroca, mudar: (JSONObject) 
                     }
                 }
             }
+        }
+    }
+    if (limite.podeRefazer) {
+        // Sem servidor e com a chave so no celular, nada assina sozinho: o app avisa e pergunta.
+        val pedir = rememberPermissaoDeNotificar()
+        val escopo = rememberCoroutineScope()
+        Column(Modifier.padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(t("Refazer quando vencer"), style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.weight(1f))
+                Switch(
+                    limite.refazer, { novo ->
+                        mudar(JSONObject().put("refazer", novo))
+                        if (novo) escopo.launch { pedir() }
+                    },
+                    colors = SwitchDefaults.colors(checkedTrackColor = Paleta.acento, checkedThumbColor = Paleta.tinta,
+                                                   uncheckedTrackColor = Paleta.trilho, uncheckedThumbColor = Paleta.tintaSuave, uncheckedBorderColor = Paleta.borda),
+                )
+            }
+            Text(t("Quando o prazo acabar, o celular avisa e o app pergunta se refaz com o mesmo preço. Refazer pede a sua biometria ou o PIN: sem você, ninguém assina uma ordem nova com a sua chave."),
+                 style = estilo(Tipo.nota), color = Paleta.tintaApagada)
         }
     }
     limite.custodia?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.sm)) }

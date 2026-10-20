@@ -24,7 +24,7 @@ struct Aviso: Encodable {
     /// "precos", "recebimentos", "ordens" ou "pontes": o canal de notificacao do Android.
     let canal: String
     /// precos: passou, caiu, subiu, desceu, discreto, mais. recebimentos: recebeu, discreto,
-    /// mais. ordens: executada, vence24h. pontes: chegou.
+    /// mais. ordens: executada, vence24h, prazo. pontes: chegou.
     let tipo: String
     var moeda: String? = nil
     var nome: String? = nil
@@ -86,7 +86,8 @@ enum Vigias {
     /// Se a checagem do segundo plano precisa ficar na agenda.
     static var precisaDeAgenda: Bool {
         let precos = AlertasDePreco.arquivo()
-        return (precos.enabled && !precos.coins.isEmpty) || AvisoDeRecebimento.arquivo().enabled || !VigiaDeOrdens.arquivo().orders.isEmpty
+        let ordens = VigiaDeOrdens.arquivo()
+        return (precos.enabled && !precos.coins.isEmpty) || AvisoDeRecebimento.arquivo().enabled || !ordens.orders.isEmpty || !(ordens.notices?.isEmpty ?? true)
     }
 
     /// Apagar tudo (as carteiras sairam do aparelho): nenhum arquivo fica.
@@ -438,7 +439,15 @@ struct LimitOrderWatchFile: Codable, Equatable {
         var warned: Bool
     }
 
+    /// O aviso do fim do prazo das ordens que o dono pediu para refazer. So um resumo do UID e a
+    /// hora: a carteira com passphrase tambem ganha o aviso, e o arquivo nao diz de quem e a ordem.
+    struct Notice: Codable, Equatable {
+        let key: String
+        let at: Date
+    }
+
     var orders: [Order] = []
+    var notices: [Notice]?
 }
 
 enum VigiaDeOrdens {
@@ -458,7 +467,7 @@ enum VigiaDeOrdens {
         Vigias.trava.withLock {
             var valor = Vigias.ler(LimitOrderWatchFile.self, nome) ?? LimitOrderWatchFile()
             mudanca(&valor)
-            if valor.orders.isEmpty { Vigias.apagar(nome) } else { Vigias.gravar(valor, nome) }
+            if valor.orders.isEmpty, valor.notices?.isEmpty ?? true { Vigias.apagar(nome) } else { Vigias.gravar(valor, nome) }
         }
     }
 
@@ -477,6 +486,26 @@ enum VigiaDeOrdens {
         }
     }
 
+    /// O resumo do UID que o aviso do fim do prazo guarda: nao volta ao UID nem ao endereco.
+    private static func resumo(_ id: String) -> String {
+        Hex.encode(Array(Hash.sha256(Array(id.utf8)).prefix(12)))
+    }
+
+    static func marcarFimDoPrazo(_ id: String, em: Date) {
+        let chave = resumo(id)
+        mudar { arquivo in
+            var lista = arquivo.notices ?? []
+            lista.removeAll { $0.key == chave }
+            lista.append(.init(key: chave, at: em))
+            arquivo.notices = lista
+        }
+    }
+
+    static func desmarcarFimDoPrazo(_ id: String) {
+        let chave = resumo(id)
+        mudar { $0.notices?.removeAll { $0.key == chave } }
+    }
+
     /// A ordem terminou (ou o dono cancelou): sai do arquivo.
     static func esquecer(_ id: String) {
         mudar { $0.orders.removeAll { $0.id == id } }
@@ -493,14 +522,22 @@ enum VigiaDeOrdens {
     /// O aviso de 24 horas das que estao perto do fim, e a pergunta a CoW pelo andamento de cada
     /// uma. Sem resposta, fica para a proxima vez. Os avisos nao dizem ativo nem valor.
     static func conferir(agora: Date = .now) async -> [Aviso] {
-        let ordens = arquivo().orders
-        guard !ordens.isEmpty, Vigias.trava.withLock({ () -> Bool in
+        let lido = arquivo()
+        let ordens = lido.orders
+        guard !ordens.isEmpty || !(lido.notices?.isEmpty ?? true), Vigias.trava.withLock({ () -> Bool in
             guard !conferindo else { return false }
             conferindo = true
             return true
         }) else { return [] }
         defer { Vigias.trava.withLock { conferindo = false } }
         var saida: [Aviso] = []
+        // O fim do prazo das que o dono pediu para refazer: nao precisa de rede.
+        let venceram = (lido.notices ?? []).filter { $0.at <= agora }
+        if !venceram.isEmpty {
+            let chaves = Set(venceram.map(\.key))
+            mudar { $0.notices?.removeAll { chaves.contains($0.key) } }
+            saida += venceram.map { Aviso(id: "ordem-limite.prazo.\($0.key)", canal: "ordens", tipo: "prazo", ordem: "") }
+        }
         let perto = ordens.filter { !$0.warned && $0.expiresAt > agora && $0.expiresAt.timeIntervalSince(agora) <= antecedencia }
         if !perto.isEmpty {
             let ids = Set(perto.map(\.id))
