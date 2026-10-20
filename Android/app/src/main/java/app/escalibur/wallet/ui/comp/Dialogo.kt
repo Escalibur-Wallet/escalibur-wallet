@@ -23,6 +23,8 @@ import app.escalibur.wallet.ui.tema.estilo
 fun Confirmacao(
     titulo: String, mensagem: String, tituloDaAcao: String, aoConfirmar: () -> Unit, aoCancelar: () -> Unit,
     tituloDoCancelar: String = app.escalibur.wallet.ui.t("Cancelar"), destrutiva: Boolean = true,
+    /** Um aviso so de leitura: so o botao da acao ("Entendi"). */
+    soUmBotao: Boolean = false,
 ) {
     AlertDialog(
         onDismissRequest = aoCancelar,
@@ -32,7 +34,7 @@ fun Confirmacao(
         text = { Text(mensagem, style = estilo(Tipo.corpo), color = Paleta.tintaSuave) },
         confirmButton = {
             Column(Modifier.fillMaxWidth().padding(top = Espaco.xs), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                BotaoSecundario(tituloDoCancelar, acao = aoCancelar)
+                if (!soUmBotao) BotaoSecundario(tituloDoCancelar, acao = aoCancelar)
                 if (destrutiva) BotaoDestrutivo(tituloDaAcao, acao = aoConfirmar) else BotaoPrimario(tituloDaAcao, acao = aoConfirmar)
             }
         },

@@ -18,7 +18,19 @@ enum Nucleo {
         case "iniciar":
             if let pasta = pedido["pasta"]?.stringValue { MetadataStore.directory = URL(fileURLWithPath: pasta) }
             if let recursos = pedido["recursos"]?.stringValue { CoreResources.directory = recursos }
-            if case .object(let tabela)? = pedido["textos"] { Textos.instalar(tabela.compactMapValues(\.stringValue)) }
+            if case .object(let tabela)? = pedido["textos"] {
+                // A tabela do idioma do aparelho: os textos do nucleo (kitText) e os do app.
+                let textos = tabela.compactMapValues(\.stringValue)
+                Textos.instalar(textos)
+                KitText.install(textos)
+            }
+            if let numeros = pedido["numeros"], let decimal = numeros["decimal"]?.stringValue, let grupo = numeros["grupo"]?.stringValue {
+                NumberStyle.adopt(NumberStyle(
+                    decimal: decimal, groupSeparator: grupo,
+                    primaryGroup: Int(numeros["grupoPrimario"]?.doubleValue ?? 3), secondaryGroup: Int(numeros["grupoSecundario"]?.doubleValue ?? 3),
+                    dateFormat: numeros["data"]?.stringValue ?? "dd/MM/yyyy HH:mm"
+                ))
+            }
             Sessao.shared.abrirProcesso()
             return try json(Estado.agora())
         case "estado":
@@ -74,6 +86,14 @@ enum Nucleo {
             // levam a alguma (o teclado proprio apaga as outras). So o pedaco digitado.
             let digitado = pedido["digitado"]?.stringValue ?? ""
             return try json(Sugestoes(palavras: WordLexicon.completions(digitado), letras: WordLexicon.nextLetters(after: digitado).map(String.init).sorted()))
+
+        case "receber.moedas":
+            return try json(Receber.moedas())
+        case "receber.endereco":
+            return try json(try Receber.endereco(ativo: pedido["ativo"]?.stringValue ?? ""))
+
+        case let envio where envio.hasPrefix("envio."):
+            return try Envio.chamar(envio, pedido)
 
         case "saldos.mostrar":
             return try json(Saldos.shared.mostrar())
@@ -181,6 +201,10 @@ enum Nucleo {
                 tronComOutraChave: pedido["tronOutraChave"]?.boolValue ?? false, credencial: cred
             )
             return try json(CarteiraResumo(wallet, selecionada: true))
+        case "envio.assinar":
+            let cred = try credencial()
+            let passphrase = partes.isEmpty ? nil : try proxima()
+            return try Envio.assinar(cred, passphrase: passphrase, folga: pedido["folga"]?.doubleValue.map { Int($0) })
         case "carteira.remover":
             let id = try uuid(pedido["id"])
             // Remover pede a mesma presenca que ver as palavras: o cofre confere antes.
@@ -251,6 +275,14 @@ enum Nucleo {
             default:
                 saida["erro"] = .string("sessao." + String(describing: falha))
             }
+        case let espera as PortaDaPassphrase.Espera:
+            saida["erro"] = .string("passphrase.espera")
+            saida["ate"] = .number(espera.ate.timeIntervalSince1970 * 1000)
+        case let falha as Signer.Failure where falha == .passphraseMismatch:
+            saida["erro"] = .string("passphrase.errada")
+        case let falha as SendEngineError:
+            saida["erro"] = .string("envio.motor")
+            if let mensagem = falha.errorDescription { saida["mensagem"] = .string(mensagem) }
         case let fraca as BIP39.WeakChoice:
             saida["erro"] = .string("frase.fraca." + String(describing: fraca))
         case let falha as HTTPClient.Failure:

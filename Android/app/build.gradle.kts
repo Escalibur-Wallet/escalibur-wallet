@@ -166,4 +166,11 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.activity.compose)
+    // O QR do Receber e a leitura do QR do Enviar: a biblioteca de codigos, sem rede.
+    implementation(libs.zxing.core)
+    // A camera do leitor de QR do Enviar: os quadros vao para o ZXing aqui mesmo, nada e gravado.
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.compose)
+    implementation(libs.lifecycle.runtime.compose)
 }

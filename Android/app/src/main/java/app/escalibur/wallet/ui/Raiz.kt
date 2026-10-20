@@ -51,9 +51,6 @@ object Ciclo {
     }
 }
 
-/** Os textos que o nucleo grava ou mostra no sistema (nome de carteira, motivo da biometria). */
-private val textosDoNucleo = listOf("Destravar a Escalibur", "Carteira principal", "Carteira %lld", "envelope", "importada")
-
 /**
  * Prepara o nucleo uma vez por processo: as listas de palavras (do APK para a pasta do app, onde o
  * nucleo as confere por digesto), a pasta sem backup dos metadados e os textos traduzidos.
@@ -73,8 +70,14 @@ suspend fun iniciarNucleo(contexto: Context) = withContext(Dispatchers.IO) {
         marca.writeText(versao)
     }
     val pasta = File(contexto.noBackupFilesDir, "carteira").apply { mkdirs() }
-    val textos = JSONObject(Textos.tabela(textosDoNucleo))
-    App.aplicar(Api.objeto("iniciar", JSONObject().put("pasta", pasta.absolutePath).put("recursos", recursos.absolutePath).put("textos", textos)))
+    // Os separadores da regiao, os mesmos que a interface usa (Formato): a revisao que o nucleo
+    // monta e a conferencia antes de assinar comparam o mesmo texto.
+    val simbolos = android.icu.text.DecimalFormatSymbols.getInstance(Formato.locale)
+    val padrao = android.text.format.DateFormat.getBestDateTimePattern(Formato.locale, "ddMMyyyyHHmm")
+    val numeros = JSONObject().put("decimal", simbolos.decimalSeparator.toString()).put("grupo", simbolos.groupingSeparator.toString())
+        .put("grupoPrimario", 3).put("grupoSecundario", 3).put("data", padrao)
+    App.aplicar(Api.objeto("iniciar", JSONObject().put("pasta", pasta.absolutePath).put("recursos", recursos.absolutePath)
+        .put("textos", Textos.tabelaPlana()).put("numeros", numeros)))
 }
 
 @Composable
@@ -91,12 +94,16 @@ fun Raiz() {
             Crossfade(App.estado.fase, animationSpec = tween(150), label = "fase") { fase ->
                 when (fase) {
                     "onboarding" -> FluxoDeAbertura(aparelhoComBloqueio)
-                    "locked" -> TelaDeBloqueio(Ciclo.vinda)
+                    "locked" -> {
+                        LaunchedEffect(Unit) { app.escalibur.wallet.ui.enviar.PedidoDePassphrase.cancelar() }
+                        TelaDeBloqueio(Ciclo.vinda)
+                    }
                     "unlocked" -> Principal()
                     else -> Box(Modifier.fillMaxSize().background(Paleta.vazio))
                 }
             }
         }
+        app.escalibur.wallet.ui.enviar.PedidoDePassphrase.pedido?.let { app.escalibur.wallet.ui.enviar.FolhaDaPassphrase(it) }
         Autorizacao.pedido?.let { FolhaDePin(it) }
         Avisos.Camada(Modifier.align(Alignment.TopCenter))
     }

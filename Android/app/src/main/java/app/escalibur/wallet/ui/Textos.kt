@@ -42,8 +42,20 @@ object Textos {
         return idiomas.firstOrNull { it == lingua }
     }
 
-    /** A tabela inteira, para o nucleo traduzir o que ele grava (nome de carteira, motivo). */
-    fun tabela(chaves: List<String>): Map<String, String> = chaves.associateWith { t(it) }
+    /**
+     * A tabela inteira do idioma, para o nucleo traduzir o que ele escreve (nome de carteira, motivo
+     * da biometria, as recusas e revisoes dos motores). Plural vai na forma "other".
+     */
+    fun tabelaPlana(): JSONObject {
+        val plana = JSONObject()
+        for (chave in tabela.keys()) {
+            when (val valor = tabela.opt(chave)) {
+                is String -> plana.put(chave, valor)
+                is JSONObject -> valor.optString("other", null)?.let { plana.put(chave, it) }
+            }
+        }
+        return plana
+    }
 
     fun t(chave: String, vararg argumentos: Any?): String {
         val valor = tabela.opt(chave)

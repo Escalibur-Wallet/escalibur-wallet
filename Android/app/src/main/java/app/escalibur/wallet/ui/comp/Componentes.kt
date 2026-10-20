@@ -161,18 +161,18 @@ fun <T> Segmentado(opcoes: List<Pair<T, String>>, selecao: T, modifier: Modifier
 
 /** A caixa de marcar de um aceite: o dono declara, com um toque, que leu o que esta escrito. */
 @Composable
-fun Aceite(marcado: Boolean, texto: String, modifier: Modifier = Modifier, aoMudar: (Boolean) -> Unit) {
+fun Aceite(marcado: Boolean, texto: String, modifier: Modifier = Modifier, solto: Boolean = false, aoMudar: (Boolean) -> Unit) {
     val toque = toqueDeSelecao()
     Row(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(Raio.cartao))
-            .background(Paleta.corpo)
+            .background(if (solto) Color.Transparent else Paleta.corpo)
             .clickable(role = Role.Checkbox) {
                 toque()
                 aoMudar(!marcado)
             }
-            .padding(Espaco.md),
+            .padding(if (solto) Espaco.xxs else Espaco.md),
         horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
     ) {
         val forma = RoundedCornerShape(7.dp)

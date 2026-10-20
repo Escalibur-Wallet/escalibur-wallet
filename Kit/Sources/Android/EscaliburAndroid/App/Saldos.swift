@@ -340,6 +340,31 @@ final class Saldos: @unchecked Sendable {
         return saida.isEmpty ? [conta.address] : saida
     }
 
+    // MARK: O que o envio consulta
+
+    /// O saldo lido da rede, da carteira `id` (o `Portfolio.balance` do iOS).
+    func saldo(_ rede: Chain, carteira id: UUID) -> ChainBalance? {
+        trava.withLock { carteiraID == id ? saldos[rede.id] : nil }
+    }
+
+    /// As posicoes com saldo da carteira `id`, em todas as redes, menos as moedas custom que o
+    /// dono tirou da lista.
+    func posicoes(carteira id: UUID) -> [Holding] {
+        let custom = Set(Sessao.shared.metadata.customTokens.map(\.id))
+        return trava.withLock {
+            guard carteiraID == id else { return [] }
+            return Chain.all.compactMap { saldos[$0.id] }.flatMap(\.holdings)
+                .filter { !$0.amount.isZero && (!$0.asset.isCustom || custom.contains($0.asset.id)) }
+        }
+    }
+
+    func preco(_ ativo: Asset) -> Double? {
+        trava.withLock {
+            if let id = ativo.coingeckoID { return cotacoes[id]?.price }
+            return cotacoesPorContrato[ativo.id]?.price
+        }
+    }
+
     // MARK: O retrato
 
     func retratoAtual() -> Retrato {

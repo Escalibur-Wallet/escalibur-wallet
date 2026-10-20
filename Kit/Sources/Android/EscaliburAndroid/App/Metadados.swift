@@ -39,6 +39,8 @@ struct Metadata: Codable, Equatable {
     var recognizedTokens: [String: TokenIdentity]?
     var unrecognizedChecks: [String: Date]?
     var bridges: [BridgeRecord]?
+    /// As transacoes EVM transmitidas e ainda sem confirmacao, por carteira, rede e conta.
+    var pendingEVM: [String: [PendingEVMTransaction]]?
 
     var customTokens: [Asset] { customAssets ?? [] }
 
@@ -106,6 +108,7 @@ struct Settings: Codable, Equatable {
     /// do sistema pode ser de terceiros e aprender o que se digita.
     var ownKeyboard: Bool?
     var completedSends: Int?
+    var passphraseGuard: PassphraseGuard?
 
     static var regionCurrency: String {
         switch Locale.current.currency?.identifier {

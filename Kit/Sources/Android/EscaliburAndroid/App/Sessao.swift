@@ -170,6 +170,8 @@ final class Sessao: @unchecked Sendable {
             if faseAtual == .unlocked { faseAtual = .locked }
         }
         Saldos.shared.esquecer()
+        PortaDaPassphrase.encerrarFolgas()
+        Envio.encerrar()
     }
 
     /// O app foi para o segundo plano (a tela ja fica coberta pelo FLAG_SECURE).
@@ -368,6 +370,8 @@ final class Sessao: @unchecked Sendable {
             faseAtual = .onboarding
         }
         Saldos.shared.esquecer()
+        PortaDaPassphrase.encerrarFolgas()
+        Envio.encerrar()
     }
 
     // MARK: Carteira nova

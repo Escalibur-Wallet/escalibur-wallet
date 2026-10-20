@@ -59,6 +59,9 @@ object Navegacao {
     fun fechar() { if (pilha.isNotEmpty()) pilha.removeAt(pilha.lastIndex) }
 
     fun fecharTudo() { pilha.clear() }
+
+    /** So no build de depuracao: a tela pedida pelo adb, aberta uma vez depois de destrancar. */
+    var telaDeDepuracao: String? = null
 }
 
 /** O app destrancado. Sem carteira: a oferta da biometria (uma vez) e a primeira carteira. */
@@ -74,6 +77,13 @@ fun Principal() {
             AdicionarCarteira(primeira = true) { primeiraVez = false }
         }
         return
+    }
+    if (app.escalibur.wallet.BuildConfig.DEBUG) {
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            val tela = Navegacao.telaDeDepuracao ?: return@LaunchedEffect
+            Navegacao.telaDeDepuracao = null
+            if (tela.startsWith("enviar-")) Navegacao.abrir { app.escalibur.wallet.ui.enviar.FluxoDeEnviar("demo:" + tela.removePrefix("enviar-")) }
+        }
     }
     Box(Modifier.fillMaxSize().background(Paleta.vazio)) {
         Column(Modifier.fillMaxSize()) {

@@ -10,7 +10,9 @@ import app.escalibur.wallet.nucleo.Cofre
 import app.escalibur.wallet.nucleo.Nucleo
 import app.escalibur.wallet.ui.Ciclo
 import app.escalibur.wallet.ui.Raiz
+import app.escalibur.wallet.ui.SemAprendizado
 import app.escalibur.wallet.ui.Textos
+import app.escalibur.wallet.ui.principal.Navegacao
 import app.escalibur.wallet.ui.tema.TemaEscalibur
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -30,8 +32,13 @@ class MainActivity : ComponentActivity() {
         window.setHideOverlayWindows(true)
         Textos.carregar(this)
         enableEdgeToEdge()
-        setContent { TemaEscalibur { Raiz() } }
-        if (BuildConfig.DEBUG) testeDeDepuracao()
+        setContent { TemaEscalibur { SemAprendizado { Raiz() } } }
+        if (BuildConfig.DEBUG) {
+            testeDeDepuracao()
+            // Uma tela aberta direto depois de destrancar (adb, `--es tela enviar-eth`), para conferir
+            // as etapas no emulador com a carteira de teste, que nao tem saldo.
+            Navegacao.telaDeDepuracao = intent.getStringExtra("tela")
+        }
     }
 
     override fun onStart() {

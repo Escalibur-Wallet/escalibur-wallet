@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Os textos do app Android que nao tem traducao.
 
-Cada t("...") do Kotlin procura a frase em portugues no catalogo do iOS
+Cada t("...") do Kotlin, e cada Textos.t("...") do nucleo do Android, procura a frase em portugues no catalogo do iOS
 (App/EscaliburWallet/Resources/Localizable.xcstrings) e, se nao achar, na tabela do Android
 (Android/app/textos-android.json). Este script lista as frases que nao estao em nenhum dos dois,
 e as da tabela do Android sem algum dos idiomas do app.
@@ -30,6 +30,13 @@ for arquivo in sorted((RAIZ / "Android/app/src/main/java").rglob("*.kt")):
         for achado in padrao.finditer(linha):
             chave = achado.group(1).encode().decode("unicode_escape").encode("latin-1").decode("utf-8")
             chaves.setdefault(chave, f"{arquivo.relative_to(RAIZ)}:{numero}")
+
+# Textos.t("...") do nucleo do Android (Swift): a mesma tabela, passada pelo "iniciar".
+padrao_swift = re.compile(r'\bTextos\.t\(\s*"((?:[^"\\]|\\.)*)"')
+for arquivo in sorted((RAIZ / "Kit/Sources/Android").rglob("*.swift")):
+    for numero, linha in enumerate(arquivo.read_text().splitlines(), 1):
+        for achado in padrao_swift.finditer(linha):
+            chaves.setdefault(achado.group(1).replace('\\"', '"'), f"{arquivo.relative_to(RAIZ)}:{numero}")
 
 faltando = {chave: onde for chave, onde in chaves.items() if chave not in catalogo and chave not in tabela}
 incompletas = {chave: [i for i in IDIOMAS if i not in valor] for chave, valor in tabela.items()

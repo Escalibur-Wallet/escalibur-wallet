@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- So rede e a biometria do sistema. Nenhuma outra permissao: sem contatos, sem localizacao,
-         sem armazenamento. -->
+    <!-- Rede, a biometria do sistema e a camera do leitor de QR (pedida so ao tocar em Ler QR).
+         Nenhuma outra permissao: sem contatos, sem localizacao, sem armazenamento. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <!-- Esconder janelas de outros apps por cima da Escalibur (o golpe da sobreposicao). -->
     <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
 
