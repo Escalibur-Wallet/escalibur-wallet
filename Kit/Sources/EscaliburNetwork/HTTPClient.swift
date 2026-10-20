@@ -1,5 +1,8 @@
 import EscaliburChains
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// O unico ponto do app que fala com a internet.
 ///
@@ -60,10 +63,16 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
         configuration.urlCredentialStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        #if canImport(Darwin)
         configuration.waitsForConnectivity = false
+        #endif
         configuration.timeoutIntervalForRequest = 10
         configuration.timeoutIntervalForResource = 30
+        #if canImport(Darwin)
         configuration.tlsMinimumSupportedProtocolVersion = .TLSv12
+        #endif
+        // TODO(android): o URLSession do Android (FoundationNetworking, sobre a libcurl) nao tem
+        // essas duas opcoes. O TLS minimo no Android e conferido antes do app Android sair.
         configuration.httpAdditionalHeaders = ["User-Agent": Self.userAgent, "Accept-Language": "en"]
         return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
     }

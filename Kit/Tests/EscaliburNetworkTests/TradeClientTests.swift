@@ -14,7 +14,7 @@ enum TradeNetworkSupport {
     static let recordedAt = Date(timeIntervalSince1970: 1_790_391_000)
 
     static func fixture(_ name: String) throws -> Data {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let url = URL(fileURLWithPath: caminhoNoAparelho(#filePath)).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("EscaliburChainsTests/Fixtures/trade/\(name).json")
         return try Data(contentsOf: url)
     }

@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 /// As chaves que autorizam uma versao do app (docs/seguranca.md, "Versao autorizada"). Ficam

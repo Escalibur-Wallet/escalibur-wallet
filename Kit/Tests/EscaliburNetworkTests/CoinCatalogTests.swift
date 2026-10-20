@@ -10,7 +10,7 @@ import Testing
 @Suite("Busca de moedas")
 struct CoinCatalogTests {
     static func fixture(_ name: String) throws -> Data {
-        try Data(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/\(name).json"))
+        try Data(contentsOf: URL(fileURLWithPath: caminhoNoAparelho(#filePath)).deletingLastPathComponent().appendingPathComponent("Fixtures/\(name).json"))
     }
 
     @Test("Busca real: a Bonk primeiro, com posicao no mercado e logo do host do CoinGecko")

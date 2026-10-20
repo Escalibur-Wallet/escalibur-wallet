@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 // Ed25519 com chave estendida: a assinatura da Cardano (BIP32-Ed25519, Khovratovich e

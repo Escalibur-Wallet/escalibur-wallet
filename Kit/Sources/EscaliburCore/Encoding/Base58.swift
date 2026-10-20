@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 /// Base58 com o alfabeto como parametro.

@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(os)
 import os
+#else
+import EscaliburCore
+#endif
 
 /// O pouco que um motor precisa lembrar entre duas chamadas do app e que o contrato
 /// ainda nao carrega: o indice de troco de um plano UTXO ate o envio, o

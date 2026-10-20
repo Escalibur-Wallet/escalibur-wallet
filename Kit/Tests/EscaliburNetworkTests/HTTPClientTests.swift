@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import Testing
 @testable import EscaliburNetwork
 
@@ -107,7 +110,7 @@ struct HTTPClientTests {
     /// 51234 e nenhum teste viu: a XRP Ledger ficou com um servidor so no build 9.
     @Test("Todo endereco do codigo passa pela regra do HTTPClient")
     func everyCodedURLIsPermitted() throws {
-        let raiz = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let raiz = URL(fileURLWithPath: caminhoNoAparelho(#filePath)).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
         let padrao = try Regex(#""(https://[A-Za-z0-9.-]+(?::[0-9]+)?[^"\\\s]*)"#)
         var conferidos = 0

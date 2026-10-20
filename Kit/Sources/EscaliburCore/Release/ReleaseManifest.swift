@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 /// A lista de versoes autorizadas pela Escalibur, assinada por chaves de `ReleaseKeys`

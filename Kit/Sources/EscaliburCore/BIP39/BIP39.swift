@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 /// Geracao de frase e derivacao da seed BIP-39, sempre em buffer seguro.

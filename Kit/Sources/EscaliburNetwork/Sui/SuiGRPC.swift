@@ -1,6 +1,9 @@
 import EscaliburChains
 import EscaliburCore
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 // O gRPC da Sui (`sui.rpc.v2`) pelo gRPC-Web, que e um POST comum: o URLSession fala com
 // ele sem biblioteca de terceiro. A Sui Foundation desligou o JSON-RPC nos nos publicos

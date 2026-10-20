@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(Security)
 import Security
+#endif
 
 /// Quanto vale a senha de um envelope: quantos chutes um atacante gasta ate acerta-la,
 /// contado sobre os bytes, sem a senha virar `String`.

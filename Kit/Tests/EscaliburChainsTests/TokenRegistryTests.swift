@@ -92,7 +92,7 @@ struct TokenRegistryTests {
 
     @Test("Todo token tem id do CoinGecko e logo embarcado")
     func coingeckoAndLogo() throws {
-        let logos = URL(fileURLWithPath: #filePath)
+        let logos = URL(fileURLWithPath: caminhoNoAparelho(#filePath))
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("App/EscaliburWallet/Resources/Assets.xcassets/Logos")
         for token in Self.tokens {

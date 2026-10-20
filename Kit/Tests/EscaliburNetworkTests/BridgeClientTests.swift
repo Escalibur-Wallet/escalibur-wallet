@@ -9,7 +9,7 @@ import Testing
 @Suite("Ponte: clientes da Circle e do Across")
 struct BridgeClientTests {
     static func fixture(_ name: String) throws -> Data {
-        try Data(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        try Data(contentsOf: URL(fileURLWithPath: caminhoNoAparelho(#filePath)).deletingLastPathComponent()
             .appendingPathComponent("Fixtures/bridge/\(name).json"))
     }
 

@@ -25,7 +25,7 @@ Auditoria de segurança completa pedida pelo dono, com quatro revisores em paral
 | A6-12 | `versoes.swift autorizar` assina de novo a lista que está no arquivo sem conferi-la: uma versão acrescentada por quem escreve na árvore sai assinada junto. Com limiar 2, apagaria a outra assinatura. | Feito: `autorizar` recusa assinar por cima de uma lista que não confere, mostra a lista inteira antes do Touch ID e avisa quando faltam outras assinaturas. `conferir` respeita o limiar. |
 | A6-13 | Lista de versões: perder a chave, ou mudar o formato, faz o alarme de "tentativa de hack" disparar para todos; 404 ou lista que não confere também viram trava, e a tela manda o dono ao site (que, invadido, é do atacante). | Aberto: entra com o A6-01, na mesma mudança da lista. |
 | A6-14 | A regra "nenhuma dependência de fora" do `verificar.sh` passa com uma quebra de linha no `.package(`, e não procura `Package.resolved`. | Feito: qualquer `.package(` recusa, `Package.resolved` também, e o único pacote local do projeto é o Kit. |
-| A6-15 | A fronteira de rede de Núcleo, Cadeias e Chaves é lista negra incompleta (`XMLParser(contentsOf:)`, `Stream`, reflexão), no grep e no `nm`. | Feito: `simbolos.lock`, a lista de permissão dos 467 símbolos de fora que os três módulos usam; símbolo novo é revisado como host novo (`--atualizar-simbolos`). A lista de proibidos ganhou `XMLParser`, `Stream`, `CFHTTP` e reflexão. |
+| A6-15 | A fronteira de rede de Núcleo, Cadeias e Chaves é lista negra incompleta (`XMLParser(contentsOf:)`, `Stream`, reflexão), no grep e no `nm`. | Feito: `simbolos.lock`, a lista de permissão dos 304 símbolos de fora que os três módulos usam; símbolo novo é revisado como host novo (`--atualizar-simbolos`). A lista de proibidos ganhou `XMLParser`, `Stream`, `CFHTTP` e reflexão. |
 | A6-16 | Canal de relato de vulnerabilidade quebrado: 28 páginas e o `SECURITY.md` apontam para o repositório privado. | Feito: o relato vai por e-mail, no site (rodapé e suporte) e no `SECURITY.md`. Os links de código do site esperam a decisão sobre o repositório público. |
 
 ## Baixos
@@ -44,12 +44,16 @@ Rede e release: `raw.githubusercontent.com` liberado em qualquer caminho e porta
 
 A trava de porta dos baixos (só a 443) recusou os dois servidores da Ripple, que atendem JSON-RPC na 51234, a porta da documentação deles. A XRP Ledger ficou com um servidor só, e a leitura por dois servidores parou: troca, ordem limite e envio na XRP Ledger falhavam com "Menos provedores responderam" no build 9 (TestFlight). Achada na captura da loja, no mesmo dia. Conserto: a 51234 só para `s1.ripple.com` e `s2.ripple.com` (`HTTPClient.extraPorts`), qualquer outra porta segue recusada, e um teste novo confere todo endereço escrito no código do Kit e do app contra a regra do `HTTPClient` (sem a exceção, ele recusa os dois servidores). Sai no build 10.
 
+## Correção posterior (20/10/2026)
+
+O `simbolos.lock` da A6-15 contava 467 linhas, mas 162 eram os cabeçalhos que o `nm` imprime para cada arquivo `.o` e uma estava em branco: os símbolos de fora são 304. A regra ainda funcionava para símbolo novo, mas disparava também quando um arquivo novo entrava em um dos três módulos. O filtro tira os cabeçalhos e as linhas em branco, e o `simbolos.lock` tem os mesmos 304 símbolos de antes.
+
 ## Revisado sem problema
 
 O núcleo do cofre (`RootKeyVault`, `Enclave`, `WalletVault`, `Signer`), o contador de tentativas, a troca de PIN, o A1, o Super Security (abertura, cabeçalho autenticado, varredura, commit conferido), o embrulho das chaves do PIN corrigido na auditoria 5; a geração e a derivação BIP-39 e BIP-32 de todas as redes nos caminhos padrão; o envelope (Argon2id, AAD, tamanho fixo); a montagem e a assinatura em todas as redes, o `TradeValidator` com os motores diretos, a CoW, as pontes e as autorizações exatas; o `HTTPClient` (sessão efêmera, TLS, redirecionamento recusado, host exato), os hosts contra a política, as actions fixadas, as dependências travadas e o binário do build 8.
 
 ## Testes
 
-- `tools/verificar.sh --testes`: tudo conferido, 1556 testes do núcleo (três novos: as palavras coreanas de 33 bytes, a escolha fraca recusada, as diretas como uma fonte só), e os três módulos só com os 467 símbolos de `simbolos.lock`.
+- `tools/verificar.sh --testes`: tudo conferido, 1556 testes do núcleo (três novos: as palavras coreanas de 33 bytes, a escolha fraca recusada, as diretas como uma fonte só), e os três módulos só com os 304 símbolos de `simbolos.lock`.
 - Testes de interface, no simulador: os três do Super Security, com o rosto aprovado em laço, incluindo o novo de ligar já em "Bloquear" (frase inteira antes do PIN); criar carteira, importar, teclado da importação, receber, passphrase, Safe Keyboard e envelope, 25 testes, todos passando (os dois da busca de Receber, que pedem rede, rodaram com ela); e o novo da busca com cara de frase, que fica no iPhone.
 - `versoes.swift`: uma lista mexida depois de assinada é recusada antes do Touch ID; `conferir-app` aceita o app de agora (1.0.0 build 8, com a lista dentro) e recusa o build 8 enviado, que ainda não levava a lista.

@@ -1,4 +1,10 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Android)
+import Android
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 /// Um buffer para segredo: senha, chave derivada, frase em claro.
@@ -50,6 +56,7 @@ public final class SecureBytes: @unchecked Sendable {
         // Uma pagina de guarda antes, uma depois.
         let regionSize = (payloadPages + 2) * pageSize
 
+        #if canImport(Darwin)
         guard
             let region = mmap(
                 nil, regionSize,
@@ -60,6 +67,14 @@ public final class SecureBytes: @unchecked Sendable {
         else {
             fatalError("SecureBytes: mmap falhou")
         }
+        #else
+        // Android: o mmap devolve o ponteiro sem opcional, e o MAP_FAILED do C, (void *)-1,
+        // nao vem para o Swift.
+        let region: UnsafeMutableRawPointer = mmap(nil, regionSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0)
+        guard region != UnsafeMutableRawPointer(bitPattern: -1) else {
+            fatalError("SecureBytes: mmap falhou")
+        }
+        #endif
 
         // As guardas ficam sem permissao nenhuma: encostar nelas e sinal, nao
         // corrupcao silenciosa. E o retorno e conferido: um mprotect que falha em

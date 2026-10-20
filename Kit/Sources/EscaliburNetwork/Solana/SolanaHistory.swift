@@ -1,7 +1,9 @@
 import EscaliburChains
 import EscaliburCore
 import Foundation
+#if canImport(os)
 import os
+#endif
 
 // Historico da conta: o efeito liquido de cada transacao sobre o dono.
 //

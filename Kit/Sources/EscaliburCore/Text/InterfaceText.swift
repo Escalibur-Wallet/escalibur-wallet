@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(os)
 import os
+#endif
 
 /// Texto de interface montado no Kit: linhas e titulos da revisao, recusas, avisos.
 ///
@@ -9,9 +11,76 @@ import os
 ///
 /// So texto compilado passa por aqui. Nada que venha de provedor vira chave de traducao,
 /// e o que entra por interpolacao (nome da rede, valor ja formatado) entra como valor.
+#if canImport(Darwin)
 public func kitText(_ value: String.LocalizationValue) -> String {
     String(localized: value, bundle: .main)
 }
+#else
+/// Android: a mesma chave que a Apple monta para o catalogo (o texto com `%@` no lugar de
+/// texto e `%lld` no lugar de inteiro), procurada na traducao que o app instala
+/// (`KitText.translate`, lida do mesmo `Localizable.xcstrings`). Sem traducao, o original.
+public struct KitText: ExpressibleByStringInterpolation, Sendable {
+    public let key: String
+    public let arguments: [String]
+
+    public init(stringLiteral value: String) {
+        key = value
+        arguments = []
+    }
+
+    public init(stringInterpolation: Interpolation) {
+        key = stringInterpolation.key
+        arguments = stringInterpolation.arguments
+    }
+
+    public struct Interpolation: StringInterpolationProtocol {
+        var key = ""
+        var arguments: [String] = []
+        public init(literalCapacity: Int, interpolationCount: Int) {}
+        public mutating func appendLiteral(_ literal: String) { key += literal.replacingOccurrences(of: "%", with: "%%") }
+        public mutating func appendInterpolation(_ value: Int) { key += "%lld"; arguments.append(String(value)) }
+        public mutating func appendInterpolation(_ value: UInt) { key += "%llu"; arguments.append(String(value)) }
+        public mutating func appendInterpolation(_ value: Double) { key += "%lf"; arguments.append(String(value)) }
+        public mutating func appendInterpolation<T>(_ value: T) { key += "%@"; arguments.append(String(describing: value)) }
+    }
+
+    /// A traducao instalada pelo app: chave do catalogo para o texto no idioma do aparelho.
+    public static func install(_ table: [String: String]) { translations.withLock { $0 = table } }
+    private static let translations = OSAllocatedUnfairLock<[String: String]>(initialState: [:])
+
+    func resolved() -> String {
+        let format = Self.translations.withLock { $0[key] } ?? key
+        return Self.fill(format, arguments)
+    }
+
+    /// Troca os marcadores (`%@`, `%lld`, `%lf`, `%llu`, e os posicionais `%1$@`) pelos
+    /// valores, e `%%` por `%`.
+    static func fill(_ format: String, _ arguments: [String]) -> String {
+        var out = ""
+        var next = 0
+        var i = format.startIndex
+        while i < format.endIndex {
+            let c = format[i]
+            guard c == "%" else { out.append(c); i = format.index(after: i); continue }
+            var j = format.index(after: i)
+            if j < format.endIndex, format[j] == "%" { out.append("%"); i = format.index(after: j); continue }
+            var position: Int?
+            var digits = ""
+            while j < format.endIndex, format[j].isNumber { digits.append(format[j]); j = format.index(after: j) }
+            if j < format.endIndex, format[j] == "$", let n = Int(digits) { position = n - 1; j = format.index(after: j) } else if !digits.isEmpty { j = format.index(i, offsetBy: 1) }
+            while j < format.endIndex, "lh".contains(format[j]) { j = format.index(after: j) }
+            guard j < format.endIndex else { break }
+            let index = position ?? next
+            if position == nil { next += 1 }
+            out += index < arguments.count ? arguments[index] : ""
+            i = format.index(after: j)
+        }
+        return out
+    }
+}
+
+public func kitText(_ value: KitText) -> String { value.resolved() }
+#endif
 
 /// Os separadores dos numeros que o Kit e o app escrevem: valores da revisao, taxas,
 /// percentuais, saldos.

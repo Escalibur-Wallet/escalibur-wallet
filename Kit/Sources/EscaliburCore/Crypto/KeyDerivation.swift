@@ -1,6 +1,8 @@
 import Foundation
 import CArgon2
+#if canImport(os)
 import os
+#endif
 
 /// Os parametros do Argon2id de um cofre.
 ///

@@ -1,6 +1,9 @@
 import EscaliburChains
 import EscaliburCore
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import Testing
 @testable import EscaliburNetwork
 

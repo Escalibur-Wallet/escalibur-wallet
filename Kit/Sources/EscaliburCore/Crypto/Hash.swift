@@ -1,5 +1,11 @@
+#if canImport(CommonCrypto)
 import CommonCrypto
+#endif
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 /// As funcoes de hash e de derivacao que as redes usam, num lugar so.

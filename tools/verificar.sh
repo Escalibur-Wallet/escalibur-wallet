@@ -147,13 +147,13 @@ achados=$(find . \( -name "*.xcframework" -o -name "*.framework" -o -name "*.a" 
 secao "fontes e build"
 # Caminhos separados por espaco; a lista so vale para .metal.
 metal_permitidos=""
-achados=$(find App Kit/Sources Kit/Tests -type f \( "${nao_swift[@]}" \) -not -path "Kit/Sources/CArgon2/*" -not -path "Kit/Sources/CSecp256k1/*" 2>/dev/null \
+achados=$(find App Kit/Sources Kit/Tests -type f \( "${nao_swift[@]}" \) -not -path "Kit/Sources/CArgon2/*" -not -path "Kit/Sources/CSecp256k1/*" -not -path "Kit/Sources/SwiftCrypto/*" 2>/dev/null \
     | while read -r fonte; do
         [[ "$fonte" == *.metal ]] && printf '%s\n' $metal_permitidos | grep -qxF "$fonte" && continue
         echo "$fonte"
     done)
-[ -n "$achados" ] && { aviso "fonte que nao e Swift fora do C vendorizado (CArgon2 e CSecp256k1)"; echo "$achados"; } \
-    || ok "fora do C vendorizado (CArgon2 e CSecp256k1), todo fonte e Swift"
+[ -n "$achados" ] && { aviso "fonte que nao e Swift fora do C vendorizado (CArgon2, CSecp256k1 e SwiftCrypto)"; echo "$achados"; } \
+    || ok "fora do C vendorizado (CArgon2, CSecp256k1 e SwiftCrypto), todo fonte e Swift"
 # Nada roda nem entra no binario por fora do fonte: fase de script de build (shell a cada
 # build, com o repositorio e a rede na mao), acao de esquema, plugin do SwiftPM, framework
 # ou biblioteca que nao e do SDK, flag de linker (carregaria codigo de fora). Hoje nao ha
@@ -213,6 +213,13 @@ conferir_lock() {
 }
 conferir_lock secp256k1.lock Kit/Sources/CSecp256k1/upstream secp256k1
 conferir_lock argon2.lock Kit/Sources/CArgon2 argon2
+# A swift-crypto (so no build Android): cada arquivo igual ao do commit da versao, e nenhum a
+# mais na pasta.
+conferir_lock swift-crypto.lock Kit/Sources/SwiftCrypto swift-crypto
+fora_da_swift_crypto=$(comm -23 <(cd Kit/Sources/SwiftCrypto && find . -type f | sed 's#^\./##' | sort) \
+    <(sed -n 's/^    "\([^"]*\)": "[0-9a-f]\{64\}".*/\1/p' swift-crypto.lock | sort))
+[ -n "$fora_da_swift_crypto" ] && { aviso "arquivo na swift-crypto fora do swift-crypto.lock"; echo "$fora_da_swift_crypto"; } \
+    || ok "a pasta da swift-crypto so tem o que o swift-crypto.lock lista"
 conferir_lock modelos.lock App/EscaliburWallet/Resources/Moeda3D "moeda 3D"
 fora_do_lock=$(comm -23 <(ls App/EscaliburWallet/Resources/Moeda3D | sort) <(sed -n 's/^    "\([^"]*\)": "[0-9a-f]\{64\}".*/\1/p' modelos.lock | sort))
 [ -n "$fora_do_lock" ] && { aviso "arquivo na moeda 3D fora do modelos.lock"; echo "$fora_do_lock"; } || ok "a pasta da moeda 3D so tem o que o modelos.lock lista"
@@ -557,7 +564,9 @@ fi
 # XMLParser(contentsOf:) nem Stream; aqui um simbolo novo e revisado como um host novo.
 simbolos_do_binario() {
     for modulo in EscaliburKeys EscaliburChains EscaliburCore; do nm -u Kit/.build/debug/$modulo.build/*.o 2>/dev/null; done \
-        | sed 's/^_//' | grep -vE '^\$ss|^\$sS[^oC]|^\$s12_Concurrency|^\$s[0-9]+Escalibur|^_?swift|^_' | sort -u
+        | sed 's/^_//' | grep -vE '^\$ss|^\$sS[^oC]|^\$s12_Concurrency|^\$s[0-9]+Escalibur|^_?swift|^_|\.o:$|^$' | sort -u
+    # Sem os cabecalhos que o nm imprime para cada .o e sem linha em branco: so simbolos. Um
+    # arquivo novo (o ForaDaApple.swift, vazio no Mac) nao conta como simbolo novo.
 }
 if [ "${1:-}" = "--atualizar-simbolos" ]; then
     (cd Kit && swift build >/dev/null 2>&1) || { echo "  ✗ o Kit nao compilou"; exit 1; }

@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 import Testing
 @testable import EscaliburCore
@@ -91,7 +95,7 @@ struct ReleaseManifestTests {
     /// mesmo codigo que o app usa, com as chaves compiladas, e autoriza a versao do projeto.
     @Test("A lista do site confere com as chaves do app")
     func listaDoSite() throws {
-        let raiz = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let raiz = URL(fileURLWithPath: caminhoNoAparelho(#filePath)).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
         let arquivo = raiz.appendingPathComponent("site/versoes.json")
         guard let data = try? Data(contentsOf: arquivo) else { return }
@@ -112,10 +116,11 @@ struct ReleaseManifestTests {
     /// 7 a 10, que so conhecem o nome antigo da mesma chave publica.
     @Test("Lista do app e do site: o nome novo para o app, o antigo ainda vale no site")
     func listasComONomeNovo() throws {
-        let raiz = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let raiz = URL(fileURLWithPath: caminhoNoAparelho(#filePath)).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
-        let doApp = try Data(contentsOf: raiz.appendingPathComponent("App/EscaliburWallet/Resources/Versoes/versoes.json"))
-        let doSite = try Data(contentsOf: raiz.appendingPathComponent("site/versoes.json"))
+        // Fora do repositorio (os testes rodando num aparelho Android), nao ha o que conferir.
+        guard let doApp = try? Data(contentsOf: raiz.appendingPathComponent("App/EscaliburWallet/Resources/Versoes/versoes.json")),
+              let doSite = try? Data(contentsOf: raiz.appendingPathComponent("site/versoes.json")) else { return }
         #expect(try ReleaseManifest.verified(doApp, app: Self.app).signedBy == Set(ReleaseKeys.published.keys))
         #expect(!String(decoding: doApp, as: UTF8.self).contains("mac-thomaz"), "a lista do app leva o nome antigo")
         let publica = try #require(ReleaseKeys.trusted["escalibur-mac-1"])

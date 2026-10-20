@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 // O arquivo `.esclbr` v1 do Escalibur, na parte que a carteira usa: lacrar a partir de

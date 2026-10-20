@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 /// Ed25519 sobre o CryptoKit. Solana, Stellar e TON.

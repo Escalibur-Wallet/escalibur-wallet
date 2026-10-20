@@ -1,7 +1,11 @@
 import EscaliburChains
 import EscaliburNetwork
 import Foundation
+#if canImport(os)
 import os
+#else
+import EscaliburCore
+#endif
 
 /// A varredura de uma conta UTXO, guardada para o envio e para a Atividade.
 ///
