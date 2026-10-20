@@ -41,6 +41,9 @@ struct Metadata: Codable, Equatable {
     var bridges: [BridgeRecord]?
     /// As transacoes EVM transmitidas e ainda sem confirmacao, por carteira, rede e conta.
     var pendingEVM: [String: [PendingEVMTransaction]]?
+    /// O ultimo historico lido de cada carteira, e quando cada rede foi lida.
+    var activityCache: [UUID: [CachedActivity]]?
+    var activityFetched: [UUID: [String: ActivityFetch]]?
 
     var customTokens: [Asset] { customAssets ?? [] }
 

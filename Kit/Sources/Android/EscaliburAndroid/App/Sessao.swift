@@ -170,6 +170,7 @@ final class Sessao: @unchecked Sendable {
             if faseAtual == .unlocked { faseAtual = .locked }
         }
         Saldos.shared.esquecer()
+        Atividade.shared.esquecer()
         PortaDaPassphrase.encerrarFolgas()
         Envio.encerrar()
         Silencio.ligar(false)
@@ -371,6 +372,7 @@ final class Sessao: @unchecked Sendable {
             faseAtual = .onboarding
         }
         Saldos.shared.esquecer()
+        Atividade.shared.esquecer()
         PortaDaPassphrase.encerrarFolgas()
         Envio.encerrar()
         Silencio.ligar(false)

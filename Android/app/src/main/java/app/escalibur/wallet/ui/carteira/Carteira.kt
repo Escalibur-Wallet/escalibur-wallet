@@ -104,6 +104,8 @@ fun TelaDaCarteira() {
         Redes.carregar()
         Saldos.mostrar()
         Saldos.atualizar(forcar = false)
+        // O historico comeca a ser lido logo depois do saldo: a Atividade so mostra o que ja chegou.
+        runCatching { Api.objeto("atividade.atualizar", JSONObject().put("forcar", false)) }
     }
 
     // A unidade escolhida, se ha cotacao para ela agora; senao a moeda do app.

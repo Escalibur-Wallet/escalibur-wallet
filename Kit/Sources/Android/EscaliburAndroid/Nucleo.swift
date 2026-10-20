@@ -144,6 +144,17 @@ enum Nucleo {
         case let envio where envio.hasPrefix("envio."):
             return try Envio.chamar(envio, pedido)
 
+        case "atividade.mostrar":
+            return try json(Atividade.shared.mostrar())
+        case "atividade.atualizar":
+            let forcar = pedido["forcar"]?.boolValue ?? false
+            esperarSemErro { await Atividade.shared.atualizar(forcar: forcar) }
+            return try json(Atividade.shared.mostrar())
+        case "atividade.conferir":
+            let id = pedido["id"]?.stringValue ?? ""
+            let (resultado, confirmacoes) = try esperar { await Atividade.shared.conferir(id) }
+            return try json(Conferencia(resultado: resultado, confirmacoes: confirmacoes))
+
         case "saldos.mostrar":
             return try json(Saldos.shared.mostrar())
         case "saldos.atualizar":
@@ -422,6 +433,8 @@ enum Nucleo {
     struct Versao: Encodable { let nucleo: String; let redes: Int }
 
     struct Revelado: Encodable { let palavras: Int; let passphrase: Bool }
+
+    struct Conferencia: Encodable { let resultado: String; let confirmacoes: UInt64? }
 
     struct Sugestoes: Encodable { let palavras: [String]; let letras: [String] }
 
