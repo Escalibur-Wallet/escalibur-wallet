@@ -83,7 +83,9 @@ for destino in "$NOVO" "$ANTIGO"; do
     mudou=1
     echo "$destino:"; git -C "$destino" diff --cached --stat | tail -2
     if [ "${1:-}" = "--enviar" ]; then
-        git -C "$destino" commit -q -m "Site da Escalibur Wallet, do commit $(git rev-parse --short HEAD)"
+        # Sempre em nome da Escalibur, nunca com a identidade do git deste Mac.
+        git -C "$destino" -c user.name="Escalibur" -c user.email="support@escaliburwallet.com" \
+            commit -q -m "Site da Escalibur Wallet, do commit $(git rev-parse --short HEAD)"
         git -C "$destino" push -q origin main
     fi
 done
