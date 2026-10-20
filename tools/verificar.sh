@@ -597,6 +597,15 @@ grep -q '<verify-metadata>true</verify-metadata>' Android/gradle/verification-me
     && grep -q '<sha256 ' Android/gradle/verification-metadata.xml && grep -q '^distributionSha256Sum=' Android/gradle/wrapper/gradle-wrapper.properties \
     && ok "dependencias do Android conferidas pelo digesto ($(grep -c '<component ' Android/gradle/verification-metadata.xml) componentes) e o Gradle pela distribuicao" \
     || aviso "Android sem verification-metadata.xml ou sem o digesto do Gradle"
+# A Google Play recusa biblioteca nativa sem alinhamento de 16 KB (Android 15 em diante).
+readelf=$(ls ~/Library/Android/android-ndk-*/toolchains/llvm/prebuilt/*/bin/llvm-readelf 2>/dev/null | tail -1)
+if [ -n "$readelf" ] && ls Android/app/src/main/jniLibs/arm64-v8a/*.so >/dev/null 2>&1; then
+    curtas=""
+    for so in Android/app/src/main/jniLibs/arm64-v8a/*.so; do
+        "$readelf" -lW "$so" | awk '/LOAD/ {print $NF}' | grep -Eqv '^0x(4000|10000)$' && curtas="$curtas $(basename "$so")"
+    done
+    [ -n "$curtas" ] && aviso "biblioteca nativa sem alinhamento de 16 KB:$curtas" || ok "bibliotecas nativas do Android alinhadas a 16 KB"
+fi
 # Todo metodo que o nucleo procura pelo JNI tem regra no ProGuard: sem ela, o R8 renomeia o metodo no
 # release e a ligacao inteira falha (sem rede e sem cofre).
 faltando=$(python3 - <<'PY'

@@ -19,7 +19,11 @@ let saida = URL(fileURLWithPath: args[4])
 try FileManager.default.createDirectory(at: saida, withIntermediateDirectories: true)
 let legendas = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: args[1]))) as! [[String: Any]]
 
-let largura = 1320.0, altura = 2868.0
+// ESCALIBUR_PLATAFORMA=android: as imagens da Google Play, em 9:16 (a Play recusa mais alto que 2:1),
+// com a captura do Android (1080x2400). Desenha em 1320 de largura e grava em 1080x1920.
+let android = ProcessInfo.processInfo.environment["ESCALIBUR_PLATAFORMA"] == "android"
+let largura = 1320.0, altura = android ? 1320.0 * 16 / 9 : 2868.0
+let saidaLargura = android ? 1080 : Int(largura), saidaAltura = android ? 1920 : Int(altura)
 func cor(_ hex: UInt32, _ alfa: Double = 1) -> NSColor {
     NSColor(srgbRed: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255, blue: Double(hex & 0xFF) / 255, alpha: alfa)
 }
@@ -44,7 +48,7 @@ func texto(_ s: String, tamanho: Double, peso: NSFont.Weight, cor: NSColor, trac
 func aparelho(_ captura: NSImage, x: Double, topo: Double, w: Double) {
     let borda = w * 0.034
     let telaW = w - 2 * borda
-    let telaH = telaW * 2622 / 1206
+    let telaH = telaW * proporcao(captura)
     let h = telaH + 2 * borda
     let y = altura - topo - h
     let fora = NSRect(x: x, y: y, width: w, height: h)
@@ -91,6 +95,12 @@ func aparelho(_ captura: NSImage, x: Double, topo: Double, w: Double) {
     NSGraphicsContext.restoreGraphicsState()
 }
 
+/// Altura sobre largura da captura: a do iPhone 17 (2622/1206) ou a do Android (2400/1080).
+func proporcao(_ captura: NSImage) -> Double {
+    guard let rep = captura.representations.first, rep.pixelsWide > 0 else { return 2622.0 / 1206 }
+    return Double(rep.pixelsHigh) / Double(rep.pixelsWide)
+}
+
 /// A captura do `simctl` traz a ilha dinamica pintada de preto; a do XCUITest, nao. Para as
 /// sete sairem iguais (e como no site), a area da ilha recebe a cor do fundo da barra de
 /// status. So na captura do iPhone 17 (1206 de largura), onde a ilha fica em x 415-790,
@@ -120,7 +130,8 @@ func semIlha(_ imagem: NSImage) -> NSImage {
 func redes(centro: CGPoint) {
     let raiz = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let logos = raiz.appendingPathComponent("App/EscaliburWallet/Resources/Assets.xcassets/Logos")
-    let dentro = 600.0, fora = 1000.0
+    let escalaDasOrbitas = android ? 0.8 : 1.0
+    let dentro = 600.0 * escalaDasOrbitas, fora = 1000.0 * escalaDasOrbitas
     let orbita = NSBezierPath(ovalIn: NSRect(x: centro.x - dentro, y: centro.y - dentro, width: dentro * 2, height: dentro * 2))
     orbita.lineWidth = 3
     cor(0x3A3A40).setStroke()
@@ -139,7 +150,8 @@ func redes(centro: CGPoint) {
         ("avalanche-2", fora, 90, 150), ("cardano", fora, 70, 116), ("near", fora, 110, 116),
         ("sui", fora, 52, 108), ("dogecoin", fora, 128, 108),
     ]
-    for (id, raio, angulo, tamanho) in moedas {
+    for (id, raio, angulo, tamanhoCheio) in moedas {
+        let tamanho = tamanhoCheio * escalaDasOrbitas
         let pasta = logos.appendingPathComponent("logo-\(id).imageset")
         guard let nome = (try? FileManager.default.contentsOfDirectory(atPath: pasta.path))?.first(where: { $0.hasSuffix(".png") || $0.hasSuffix(".jpg") }),
               let logo = NSImage(contentsOf: pasta.appendingPathComponent(nome)) else { print("sem logo: \(id)"); continue }
@@ -213,21 +225,22 @@ for item in legendas {
 
     if tipo == "redes" {
         // O aparelho menor e mais abaixo, no meio das orbitas.
-        let w = 800.0, topo = 800.0
-        let h = (w - 2 * w * 0.034) * 2622 / 1206 + 2 * w * 0.034
+        let w = android ? 620.0 : 800.0, topo = android ? 760.0 : 800.0
+        let h = (w - 2 * w * 0.034) * proporcao(captura) + 2 * w * 0.034
         if topoTexto + hTexto > 640 { print("aviso: \(saidaNome) em \(idioma) com \(linhasUsadas) linhas encosta na orbita") }
         redes(centro: CGPoint(x: largura / 2, y: altura - topo - h / 2))
         aparelho(captura, x: (largura - w) / 2, topo: topo, w: w)
     } else {
-        let w = 980.0
-        if topoTexto + hTexto > 640 - 70 { print("aviso: \(saidaNome) em \(idioma) com \(linhasUsadas) linhas encosta no aparelho") }
-        aparelho(captura, x: (largura - w) / 2, topo: 640, w: w)
+        let w = android ? 820.0 : 980.0, topo = android ? 560.0 : 640.0
+        if topoTexto + hTexto > topo - 70 { print("aviso: \(saidaNome) em \(idioma) com \(linhasUsadas) linhas encosta no aparelho") }
+        aparelho(captura, x: (largura - w) / 2, topo: topo, w: w)
     }
     NSGraphicsContext.restoreGraphicsState()
 
     // A App Store recusa PNG com transparencia: sai sem o canal alfa.
-    let opaco = CGContext(data: nil, width: Int(largura), height: Int(altura), bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-    opaco.draw(rep.cgImage!, in: CGRect(x: 0, y: 0, width: largura, height: altura))
+    let opaco = CGContext(data: nil, width: saidaLargura, height: saidaAltura, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    opaco.interpolationQuality = .high
+    opaco.draw(rep.cgImage!, in: CGRect(x: 0, y: 0, width: saidaLargura, height: saidaAltura))
     let destino = CGImageDestinationCreateWithURL(saida.appendingPathComponent("\(saidaNome).png") as CFURL, "public.png" as CFString, 1, nil)!
     CGImageDestinationAddImage(destino, opaco.makeImage()!, nil)
     guard CGImageDestinationFinalize(destino) else { print("nao gravou: \(saidaNome)"); exit(1) }

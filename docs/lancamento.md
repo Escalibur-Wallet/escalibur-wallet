@@ -192,8 +192,82 @@ e-mail.
 
 ## Play Store
 
-Não existe app Android. Antes de qualquer formulário: o app (Kotlin, ou o núcleo em Swift
-pelo SDK de Swift para Android), conta do Google Play como organização com D-U-N-S, API 36
-como alvo, Android App Bundle com Play App Signing, a declaração de recursos financeiros
-("software wallet": carteira sem custódia fica fora da regra de licença) e o formulário de
-Segurança dos dados.
+O app Android está pronto em `Android/` (docs/android.md). O envio depende de duas coisas que
+são só suas:
+
+1. **A conta do Play Console** da organização (e-mail da conta de desenvolvedor, D-U-N-S da
+   X Tech, nome de desenvolvedor "Escalibur"). Conta de organização não passa pelo teste
+   fechado obrigatório de 12 testadores por 14 dias, que vale só para conta pessoal.
+2. **A autorização da versão**, no Mac (pede o Touch ID), antes de gerar o pacote:
+   `swift tools/versoes/versoes.swift autorizar 1.0.0 1001 escalibur-mac-1`, depois
+   `swift tools/versoes/versoes.swift conferir` e o commit do `site/versoes.json` com o do
+   app. Só então `tools/android/gerar-aab.sh`, que recusa gerar sem isso.
+
+O site também precisa sair com a página `/privacidade/android/` (a URL da política na Play).
+
+**Ficha da loja**
+- Nome: Escalibur Wallet
+- Descrição curta (até 80): Carteira cripto sem custódia. Só você tem as chaves.
+  - en-US: Non-custodial crypto wallet. Only you hold the keys.
+- Descrição completa: a mesma da App Store, trocando iPhone por celular e "Secure Enclave e
+  PIN, fora do backup do iCloud" por "Android Keystore e PIN, fora do backup do Google".
+  Sem preço, sem promessa de ganho e sem nome de outra carteira.
+- Categoria: Finanças. Tags: Carteira de criptomoedas.
+- E-mail de contato: support@escaliburwallet.com. Site: https://escalibur-wallet.github.io/
+- Política de privacidade: https://escalibur-wallet.github.io/privacidade/android/
+- Imagens: `swift tools/loja/destaque-android.swift` (ícone de 512 e destaque 1024x500, em
+  `build/loja-android/grafico`); as 7 telas de celular em pt-BR e en-US com
+  `ESCALIBUR_PLATAFORMA=android swift tools/loja/compor.swift tools/loja/legendas-android.json
+  <idioma> <capturas> <saída>` (1080x1920, das capturas do emulador).
+
+**Conteúdo do app**
+- Acesso ao app: nenhum login. Instruções para a revisão abaixo.
+- Anúncios: não.
+- Classificação de conteúdo (IARC): categoria "Todos os outros tipos de app"; tudo "Não"
+  (violência, sexo, linguagem, drogas, jogo a dinheiro, interação entre usuários, local,
+  compras digitais). Resultado esperado: Livre / PEGI 3 / Everyone.
+- Público-alvo: 18 anos ou mais. Não é app para crianças.
+- App de notícias, de saúde, governamental: não.
+- Recursos financeiros: "Carteira de criptomoedas sem custódia (software wallet)". Sem
+  câmbio, sem custódia, sem empréstimo, sem moeda fiduciária. Se a Play pedir licença no
+  país, a resposta é a mesma da 3.1.5(iii) da Apple (acima): a Escalibur entrega software de
+  autocustódia e não opera exchange.
+- Permissões: nenhuma das sensíveis (sem SMS, registro de chamadas, todos os arquivos,
+  localização, acessibilidade como serviço, alarme exato ou serviço em primeiro plano).
+  A câmera só abre ao tocar em Ler QR; as notificações são pedidas ao ligar os avisos.
+
+**Segurança dos dados** (o formulário pede o que sai do aparelho, inclusive para provedores):
+- Coleta: sim, só "Informações financeiras > Outras": endereços públicos e transações da
+  carteira, enviados aos serviços de cada rede para mostrar saldo e enviar. Finalidade:
+  funcionalidade do app. Obrigatório para usar. Não é compartilhado com terceiros para outra
+  finalidade (os serviços de rede agem como provedores do app). Criptografado em trânsito:
+  sim. A Escalibur não guarda, mas o provedor Alchemy guarda o registro das consultas feitas
+  com a chave da Escalibur por até 10 dias, por isso não marcar "processado de forma efêmera".
+- Exclusão: não há conta. Desinstalar apaga tudo do aparelho; o registro da Alchemy some
+  sozinho em até 10 dias.
+- Nenhum outro tipo: sem nome, e-mail, contatos, local, mensagens, fotos, identificadores do
+  aparelho, histórico de uso ou relatório de falha. O e-mail do suporte sai pelo app de
+  e-mail do próprio usuário e não é coletado pelo app.
+
+**Notas para a revisão** (em inglês, em "Instruções de acesso ao app"):
+
+> Escalibur Wallet is a non-custodial cryptocurrency wallet published by X TECH A.I FUND
+> HOLDING E PARTICIPACOES LTDA. No account, no login and no server of ours. Keys are
+> generated and kept only on this device (Android Keystore, outside the Google backup).
+>
+> The device needs a screen lock (PIN, pattern or password); without one, Android does not
+> protect the keys and the first screen says so. Screens that show the recovery phrase block
+> screenshots and screen recording.
+>
+> Create a wallet: Get started, choose a 6-digit PIN, Create new wallet, write down the 12
+> words, confirm them. To see balances without funds: Settings, Wallets, Add wallet, Just
+> watch an address, and paste 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 (watch-only).
+> Sending and swapping need funds; without funds, typing an amount shows a live quote and
+> the main button becomes "Receive".
+>
+> Swaps, limit orders and bridge are signed on the device and sent directly to public
+> non-custodial protocols (CoW Protocol, Uniswap, PancakeSwap, ShibaSwap, KyberSwap, Velora,
+> LI.FI, De1 (OpenOcean), Jupiter, the XRP Ledger and Stellar order books, Circle CCTP, Across
+> and Tether's USDT0). No fiat, no card payment, no
+> in-app purchase and no fee charged by us. Price, incoming-payment and limit-order alerts
+> are local notifications computed on the device; there is no push server.

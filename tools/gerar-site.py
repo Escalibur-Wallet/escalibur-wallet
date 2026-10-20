@@ -52,6 +52,9 @@ PLAY_STORE_URL = None
 TEXTOS = [
     (LEGAL / "privacidade.md", "privacidade", "Privacidade", "O que a Escalibur Wallet guarda, onde guarda e com quem fala.", "Legal"),
     (LEGAL / "termos.md", "termos", "Termos", "Os termos de uso da Escalibur Wallet.", "Legal"),
+    # A do app Android, do mesmo arquivo que ele mostra: a URL cadastrada na Google Play.
+    (RAIZ / "Android/app/src/main/assets/legal/privacidade.md", "privacidade/android", "Privacidade no Android",
+     "O que a Escalibur Wallet para Android guarda, onde guarda e com quem fala.", "Legal"),
 ]
 
 EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")

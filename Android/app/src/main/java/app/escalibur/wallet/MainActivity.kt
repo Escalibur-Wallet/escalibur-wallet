@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import app.escalibur.wallet.nucleo.Cofre
@@ -33,7 +34,12 @@ class MainActivity : ComponentActivity() {
         window.setHideOverlayWindows(true)
         Textos.carregar(this)
         Vigia.receber(intent)
-        enableEdgeToEdge()
+        // O app e escuro sempre: a barra de status e a de navegacao com icones claros, mesmo com o
+        // aparelho no tema claro (o padrao seguia o tema do sistema e os icones sumiam no fundo).
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         setContent { TemaEscalibur { SemAprendizado { Raiz() } } }
         if (BuildConfig.DEBUG) {
             testeDeDepuracao()

@@ -272,7 +272,7 @@ fun TelaDosAlertas() {
         }
         if (e.ligado) {
             SecaoDeAjustes(t("Quando avisar")) {
-                LinhaComInterruptor(Icones.alvo, t("Números redondos"), e.redondos, detalhe = t("Ex.: Bitcoin passou de %@", exemplo(mercado, e.unidade))) {
+                LinhaComInterruptor(Icones.alvo, t("Números redondos"), e.redondos, detalhe = t("Ex.: Bitcoin passou de %@", exemplo(mercado, App.estado.moeda))) {
                     mudar(JSONObject().put("redondos", it))
                 }
                 LinhaComInterruptor(Icones.altaEQueda, t("Alta ou queda forte"), e.variacao != null, detalhe = t("Variação em 24 h acima do limite")) {
@@ -339,7 +339,7 @@ fun TelaDosAlertas() {
     }
 }
 
-/** "R$ 600.000": o numero redondo logo abaixo do preco do Bitcoin de agora. */
+/** "R$ 600.000": o numero redondo logo abaixo do preco do Bitcoin de agora, na moeda da lista do Mercado. */
 private fun exemplo(mercado: List<JSONObject>, unidade: String): String {
     val preco = mercado.firstOrNull { it.optString("id") == "bitcoin" }?.optDouble("preco") ?: if (unidade == "brl") 600_000.0 else 110_000.0
     val expoente = kotlin.math.floor(kotlin.math.log10(preco)).toInt() - 1
