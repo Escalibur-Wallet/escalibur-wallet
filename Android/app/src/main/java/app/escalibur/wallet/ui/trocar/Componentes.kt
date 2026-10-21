@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.trocar
 
+import app.escalibur.wallet.ui.comp.Girando
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -32,7 +33,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -407,7 +407,7 @@ private fun RelogioDaCotacao(segundos: Int, buscando: Boolean) {
             drawArc(Paleta.cautela, -90f, 360f * fracao, false, topLeft = Offset(traco / 2, traco / 2),
                     size = Size(size.width - traco, size.height - traco), style = Stroke(traco, cap = StrokeCap.Round))
         }
-        if (buscando) CircularProgressIndicator(color = Paleta.cautela, strokeWidth = 1.5.dp, modifier = Modifier.size(12.dp))
+        if (buscando) Girando(Paleta.cautela, 12.dp)
         else Text("$segundos", color = Paleta.cautela, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
     }
 }
@@ -494,7 +494,7 @@ internal fun FolhaDeTokens(controle: ControleDaTroca, vende: Boolean, r: Retrato
         val fora = lista.filter { it.fora }
         LazyColumn(Modifier.fillMaxWidth().heightIn(min = 320.dp).padding(top = Espaco.xs, bottom = Espaco.md)) {
             if (opcoes == null) item {
-                Box(Modifier.fillMaxWidth().padding(Espaco.lg), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp) }
+                Box(Modifier.fillMaxWidth().padding(Espaco.lg), contentAlignment = Alignment.Center) { Girando(Paleta.tintaSuave, 20.dp) }
             }
             if (fora.isNotEmpty() && conferidas.isNotEmpty()) item { Secao(t("Verificadas")) }
             items(conferidas, key = { it.ativo.id }) { opcao -> LinhaDoToken(opcao) { fechar { aoEscolher(opcao.ativo.id) } } }

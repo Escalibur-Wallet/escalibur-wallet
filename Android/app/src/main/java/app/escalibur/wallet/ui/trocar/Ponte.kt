@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.trocar
 
+import app.escalibur.wallet.ui.comp.Girando
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -24,7 +25,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -314,7 +314,7 @@ private fun LinhaDaPonte(ponte: RetratoDaPonte.LinhaDaPonte, acao: () -> Unit) {
             Text(ponte.valor, style = estilo(Tipo.linha), color = Paleta.tinta)
             Text(ponte.titulo, style = estilo(Tipo.nota), color = if (ponte.chegou) Paleta.alta else Paleta.tintaSuave)
         }
-        if (!ponte.feito) CircularProgressIndicator(color = Paleta.acento, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+        if (!ponte.feito) Girando(Paleta.acento, 18.dp)
     }
 }
 
@@ -324,7 +324,7 @@ private fun PainelDaPonte(ponte: RetratoDaPonte.LinhaDaPonte) {
     val contexto = LocalContext.current
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
         if (ponte.feito) Icone(if (ponte.chegou) Icones.vistoCheio else Icones.atualizar, if (ponte.chegou) Paleta.alta else Paleta.tintaSuave, tamanho = 40.dp)
-        else CircularProgressIndicator(color = Paleta.acento, strokeWidth = 3.dp, modifier = Modifier.size(36.dp))
+        else Girando(Paleta.acento, 36.dp)
         Text(ponte.titulo, style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.xs))
         Text(ponte.detalhe, style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
         ponte.deposito?.let { url ->
@@ -512,7 +512,7 @@ private fun DirecaoDaPonte(r: RetratoDaPonte, sai: String?, entra: String?) {
             val (ativo, quantia) = par
             if (indice == 1) {
                 Box(Modifier.width(36.dp).heightIn(min = 52.dp), contentAlignment = Alignment.Center) {
-                    if (sai == null && entra == null) CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    if (sai == null && entra == null) Girando(Paleta.tintaSuave, 20.dp)
                     else Icone(Icones.avancar, Paleta.tintaSuave, tamanho = 18.dp)
                 }
             }

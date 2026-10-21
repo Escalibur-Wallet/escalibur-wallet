@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.draw.clip
@@ -177,6 +178,14 @@ fun Principal() {
             val tela = Navegacao.telaDeDepuracao ?: return@LaunchedEffect
             Navegacao.telaDeDepuracao = null
             if (tela.startsWith("enviar-")) Navegacao.cobrir { app.escalibur.wallet.ui.enviar.FluxoDeEnviar("demo:" + tela.removePrefix("enviar-")) }
+            when (tela) {
+                "checagem" -> Navegacao.cobrir { app.escalibur.wallet.ui.novacarteira.VerificacaoDoAparelho(t("Deslize para digitar as palavras"), criando = false) { Navegacao.fechar() } }
+                "receber" -> Navegacao.folha { app.escalibur.wallet.ui.receber.FluxoDeReceber() }
+                "mercado" -> Navegacao.aba = Aba.mercado
+                "trocar" -> Navegacao.aba = Aba.trocar
+                "atividade" -> Navegacao.aba = Aba.atividade
+                "ajustes" -> Navegacao.aba = Aba.ajustes
+            }
         }
     }
     app.escalibur.wallet.ui.avisos.VigiasDaSessao()
@@ -208,6 +217,9 @@ fun Principal() {
                                 }
                             }
                             Camadas(pilha, largura, altura)
+                            // A faixa da barra de status leva o fundo da tela, chapado: o conteudo rolado
+                            // some por baixo do relogio e da bateria, como no iOS.
+                            Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(Paleta.vazio))
                         }
                     }
                 }

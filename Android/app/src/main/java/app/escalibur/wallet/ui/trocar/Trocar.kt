@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.trocar
 
+import app.escalibur.wallet.ui.comp.Girando
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import app.escalibur.wallet.nucleo.Api
@@ -43,7 +44,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -171,7 +171,7 @@ fun TelaDeTrocar() {
             if (rede != null && r.redes.isNotEmpty() && !controle.naPonte) PilulaDaRede(rede) { escolhendoRede = true }
         }
         if (r == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp) }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Girando(Paleta.tintaSuave, 20.dp) }
             return
         }
         if (r.redes.isEmpty()) {
@@ -254,7 +254,7 @@ private fun TelaDaOrdemPronta(alvo: String, titulo: String, nota: String, aoDesi
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().imePadding()) {
         CabecalhoDeFolha(titulo, { Navegacao.fechar() })
         if (r == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp) }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Girando(Paleta.tintaSuave, 20.dp) }
             return
         }
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.lg)) {

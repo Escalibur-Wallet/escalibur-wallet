@@ -1,5 +1,40 @@
 package app.escalibur.wallet.ui.novacarteira
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.unit.sp
+import app.escalibur.wallet.ui.Formato
+import app.escalibur.wallet.ui.comp.PixelsCifrando
+import app.escalibur.wallet.ui.comp.movimentoReduzido
+import app.escalibur.wallet.ui.comp.relogio
+import app.escalibur.wallet.ui.comp.suave
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.floor
+import kotlin.math.roundToInt
+import kotlin.math.sin
+import app.escalibur.wallet.ui.comp.DeslizeParaSeguir
+import app.escalibur.wallet.ui.comp.Girando
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.KeyguardManager
 import android.content.ClipboardManager
@@ -34,7 +69,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -209,6 +243,9 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
         }
 
         /** So pergunta se ha algo copiado: nunca le o conteudo. */
+        /** A ultima conferencia terminada nesta abertura do app. */
+        var ultimaConferencia: Date? = null
+
         fun copia(contexto: Context): Checagem {
             val ha = runCatching { contexto.getSystemService(ClipboardManager::class.java).hasPrimaryClip() }.getOrDefault(false)
             return if (ha) Checagem("copia", t("Há algo copiado"), Resultado.Cautela(t("Se for a senha da carteira, apague depois de colar: outros apps podem ler a área de transferência.")))
@@ -219,55 +256,67 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
 
 /**
  * A checagem, antes das palavras: cada item roda na hora em que a linha dele gira, com o resultado
- * ao lado, e no fim o horario exato. Uma checagem que falha pede o "estou ciente" do dono; sem
- * bloqueio de tela, nao segue.
+ * logo ao lado, e no fim o horario exato da conferencia. Quem volta desta tela e entra de novo ve
+ * "Conferindo de novo", com o horario da anterior: e uma checagem nova, feita naquele instante. Uma
+ * checagem que falha pede o "estou ciente" do dono; sem bloqueio de tela, nao segue.
  */
 @Composable
 fun VerificacaoDoAparelho(tituloDoDeslize: String, criando: Boolean, aoSeguir: () -> Unit) {
     val contexto = LocalContext.current
+    val parado = movimentoReduzido()
     val passos = remember { Checagem.passos() }
     val resultados = remember { mutableStateListOf<Checagem>() }
+    var anterior by remember { mutableStateOf<Date?>(null) }
     var conferidoAs by remember { mutableStateOf<Date?>(null) }
     var ciente by remember { mutableStateOf(false) }
-    var rodada by remember { mutableStateOf(0) }
+    var rodada by remember { mutableIntStateOf(0) }
     val terminou = resultados.size >= passos.size
     val bloqueantes = resultados.filter { it.resultado is Checagem.Resultado.Falhou }
     val impede = bloqueantes.any { it.id == "bloqueio" }
     val podeSeguir = terminou && !impede && (bloqueantes.isEmpty() || ciente)
 
     LaunchedEffect(rodada) {
-        resultados.clear()
-        ciente = false
+        anterior = Checagem.ultimaConferencia
         conferidoAs = null
+        ciente = false
+        resultados.clear()
         for (passo in passos) {
-            delay(520)
+            delay(if (parado) 60 else 520)
+            // A verificacao roda aqui, no instante em que a linha dela termina de girar.
             resultados += passo.rodar(contexto)
         }
-        conferidoAs = Date()
+        val agora = Date()
+        conferidoAs = agora
+        Checagem.ultimaConferencia = agora
     }
 
     Column(Modifier.fillMaxSize().background(Paleta.vazio)) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.lg)) {
-            AnelDaChecagem(resultados.size.toFloat() / passos.size, terminou, terminou && bloqueantes.isNotEmpty(), Modifier.fillMaxWidth().height(200.dp))
+            AnelDaChecagem(if (passos.isEmpty()) 0f else resultados.size.toFloat() / passos.size, terminou, terminou && bloqueantes.isNotEmpty(),
+                           Modifier.fillMaxWidth().height(220.dp))
+            // Titulo, subtitulo e horario no centro, embaixo do anel.
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
+                AnimatedContent(
                     when {
                         terminou && bloqueantes.isEmpty() -> t("Aparelho conferido")
                         terminou -> t("Atenção antes de seguir")
-                        else -> t("Conferindo este celular")
+                        anterior == null -> t("Conferindo este celular")
+                        else -> t("Conferindo de novo")
                     },
-                    style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm),
-                )
+                    transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) }, label = "titulo",
+                ) { titulo ->
+                    Text(titulo, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
+                }
                 Text(
                     if (terminou) t("Tudo foi checado aqui, sem internet, e nada sai do aparelho.")
                     else passos.getOrNull(resultados.size)?.let { t("Checando: %@", it.titulo) } ?: t("Preparando a checagem"),
                     style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xxs),
                 )
-                conferidoAs?.takeIf { terminou }?.let {
-                    Row(Modifier.padding(top = Espaco.xs), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icone(Icones.relogio, Paleta.tintaSuave, tamanho = 13.dp)
-                        Text(t("Conferido às %@", SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(it)), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
-                    }
+                val antes = anterior
+                if (antes != null && !terminou) Carimbo(t("A anterior foi às %@. Esta é nova, item por item, agora.", relogio(antes)), Icones.atualizar)
+                val agora = conferidoAs
+                if (agora != null && terminou) {
+                    Carimbo(if (antes == null) t("Conferido às %@", relogio(agora)) else t("Conferido de novo às %@", relogio(agora)), Icones.relogio)
                 }
             }
             Column(Modifier.padding(top = Espaco.md)) {
@@ -275,6 +324,8 @@ fun VerificacaoDoAparelho(tituloDoDeslize: String, criando: Boolean, aoSeguir: (
                     LinhaDaChecagem(passo, resultados.getOrNull(indice), rodando = indice == resultados.size && !terminou)
                 }
             }
+            // Uma checagem falhou e da para seguir: o dono declara, marcando, que sabe o que falhou e o
+            // que isso arrisca.
             if (terminou && bloqueantes.isNotEmpty() && !impede) {
                 Aceite(
                     ciente,
@@ -284,7 +335,12 @@ fun VerificacaoDoAparelho(tituloDoDeslize: String, criando: Boolean, aoSeguir: (
                 ) { ciente = it }
             }
         }
-        if (terminou) {
+        // O deslizar so aparece quando a conferencia termina.
+        AnimatedVisibility(
+            terminou,
+            enter = slideInVertically(spring(dampingRatio = 0.85f, stiffness = 250f)) { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+        ) {
             Rodape {
                 if (impede) BotaoSecundario(t("Checar de novo")) { rodada++ }
                 DeslizeParaSeguir(tituloDoDeslize, podeSeguir, aoSeguir)
@@ -293,18 +349,36 @@ fun VerificacaoDoAparelho(tituloDoDeslize: String, criando: Boolean, aoSeguir: (
     }
 }
 
+private fun relogio(data: Date): String =
+    SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(Formato.locale, "jjmmss"), Formato.locale).format(data)
+
+/** O icone vai dentro do texto, no comeco da primeira linha. */
+@Composable
+private fun Carimbo(texto: String, icone: ImageVector) {
+    Text(
+        buildAnnotatedString {
+            appendInlineContent("icone", "[i]")
+            append(" ")
+            append(texto)
+        },
+        style = estilo(Tipo.nota).copy(fontFeatureSettings = "tnum"), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
+        modifier = Modifier.padding(top = Espaco.xs).semantics { contentDescription = texto },
+        inlineContent = mapOf("icone" to InlineTextContent(Placeholder(13.sp, 13.sp, PlaceholderVerticalAlign.TextCenter)) {
+            Icone(icone, Paleta.tintaSuave, tamanho = 12.dp)
+        }),
+    )
+}
+
 @Composable
 private fun LinhaDaChecagem(passo: Checagem.Passo, resultado: Checagem?, rodando: Boolean) {
     Row(Modifier.fillMaxWidth().padding(vertical = Espaco.xs), horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
         Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
             when {
                 resultado?.resultado is Checagem.Resultado.Passou -> Icone(Icones.vistoCheio, Paleta.sucesso, tamanho = 21.dp)
-                resultado?.resultado is Checagem.Resultado.Cautela -> Icone(Icones.alerta, Paleta.cautela, tamanho = 20.dp)
-                resultado?.resultado is Checagem.Resultado.Falhou -> Icone(Icones.falha, Paleta.baixa, tamanho = 20.dp)
-                rodando -> CircularProgressIndicator(color = Paleta.sucesso, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
-                else -> Box(Modifier.size(20.dp).clip(CircleShape).background(Paleta.vazio)) {
-                    Canvas(Modifier.fillMaxSize()) { drawCircle(Paleta.borda, style = Stroke(1.5.dp.toPx())) }
-                }
+                resultado?.resultado is Checagem.Resultado.Cautela -> Icone(Icones.exclamacaoCheia, Paleta.cautela, tamanho = 21.dp)
+                resultado?.resultado is Checagem.Resultado.Falhou -> Icone(Icones.falha, Paleta.baixa, tamanho = 21.dp)
+                rodando -> Girando(Paleta.sucesso, 20.dp)
+                else -> Canvas(Modifier.size(20.dp)) { drawCircle(Paleta.borda, radius = size.minDimension / 2 - 0.75.dp.toPx(), style = Stroke(1.5.dp.toPx())) }
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -318,88 +392,124 @@ private fun LinhaDaChecagem(passo: Checagem.Passo, resultado: Checagem?, rodando
     }
 }
 
-/** Um anel de pixels que acende em verde conforme cada item fica pronto, com o escudo no fim. */
+/**
+ * O escaneamento em pixels, no estilo do deslizar: por fora, um anel de pixels que acende em verde, em
+ * ordem, conforme cada item fica pronto (cada pixel cresce devagar, um depois do outro); por dentro,
+ * pixels cinza cifrando, com uma passada clara girando enquanto a checagem corre. No fim, o escudo
+ * com o resultado, e o fundo do circulo em pixels verdes que se espalham do centro e respiram.
+ */
 @Composable
 private fun AnelDaChecagem(progresso: Float, pronto: Boolean, alerta: Boolean, modifier: Modifier) {
-    val giro = rememberInfiniteTransition(label = "varredura")
-    val angulo by giro.animateFloat(0f, 360f, infiniteRepeatable(tween(1800, easing = LinearEasing)), label = "angulo")
-    val brilho by giro.animateFloat(0.35f, 0.75f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "brilho")
-    Box(modifier, contentAlignment = Alignment.Center) {
-        Canvas(Modifier.size(180.dp)) {
-            val pixels = 48
-            val raio = size.minDimension / 2 - 6.dp.toPx()
-            val lado = 7.dp.toPx()
-            for (i in 0 until pixels) {
-                val fracao = i / pixels.toFloat()
-                val a = Math.toRadians((fracao * 360 - 90).toDouble())
-                val centro = Offset(center.x + raio * Math.cos(a).toFloat(), center.y + raio * Math.sin(a).toFloat())
-                val aceso = fracao < progresso
-                val cor = when {
-                    alerta && pronto -> Paleta.cautela
-                    aceso -> Paleta.sucesso
-                    else -> Paleta.controle
-                }
-                drawRect(cor.copy(alpha = if (aceso || pronto) 1f else 0.9f), Offset(centro.x - lado / 2, centro.y - lado / 2), Size(lado, lado))
-            }
-            if (!pronto) {
-                val interno = raio - 22.dp.toPx()
-                for (linha in -4..4) for (coluna in -4..4) {
-                    val x = center.x + coluna * 12.dp.toPx()
-                    val y = center.y + linha * 12.dp.toPx()
-                    if ((x - center.x) * (x - center.x) + (y - center.y) * (y - center.y) > interno * interno) continue
-                    val fase = ((linha * 7 + coluna * 13 + 64) % 9) / 9f
-                    val tom = 0.18f + 0.22f * ((brilho + fase) % 1f)
-                    drawRect(Color(tom, tom, tom + 0.02f), Offset(x - 4.dp.toPx(), y - 4.dp.toPx()), Size(8.dp.toPx(), 8.dp.toPx()))
-                }
-                drawArc(Paleta.sucesso.copy(alpha = 0.5f), angulo, 40f, false, Offset(center.x - interno, center.y - interno), Size(interno * 2, interno * 2), style = Stroke(2.dp.toPx()))
-            }
+    val parado = movimentoReduzido()
+    val agora by relogio(parado)
+    // Quando cada pixel de fora acendeu, para o brilho de chegada; e quando a checagem terminou.
+    val acesoEm = remember { HashMap<Int, Float>() }
+    var acesos by remember { mutableIntStateOf(0) }
+    var prontoEm by remember { mutableStateOf<Float?>(null) }
+    val externos = 56
+    val internos = 40
+    LaunchedEffect(progresso) {
+        val novo = (progresso * externos).toInt()
+        if (novo < acesos) acesoEm.clear()
+        else if (novo > acesos) {
+            // Na fila: um passo novo comeca onde o anterior parou, num ritmo constante.
+            val fila = acesoEm.values.maxOrNull()?.plus(PASSO_DO_PIXEL) ?: 0f
+            val inicio = maxOf(agora, fila)
+            for (i in acesos until novo) acesoEm[i] = inicio + (i - acesos) * PASSO_DO_PIXEL
         }
-        if (pronto) Icone(if (alerta) Icones.alerta else Icones.escudo, if (alerta) Paleta.cautela else Paleta.sucesso, tamanho = 56.dp)
+        acesos = novo
+    }
+    LaunchedEffect(pronto) { prontoEm = if (pronto) agora else null }
+    val escala by animateFloatAsState(if (pronto) 1.08f else 1f, spring(dampingRatio = 0.55f, stiffness = 190f), label = "escudo")
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val centro = center
+            val relogio = if (parado || pronto) 0f else agora
+            val cor = if (alerta) Paleta.cautela else Paleta.sucesso
+            // Por fora: o progresso.
+            for (i in 0 until externos) {
+                val angulo = i.toDouble() / externos * 2 * PI - PI / 2
+                val ponto = Offset(centro.x + 84.dp.toPx() * cos(angulo).toFloat(), centro.y + 84.dp.toPx() * sin(angulo).toFloat())
+                val lado = 6.5.dp.toPx()
+                val idade = if (i < acesos) (acesoEm[i]?.let { agora - it } ?: 10f) else -1f
+                val revela = if (parado) (if (i < acesos) 1f else 0f) else suave(idade / 0.32f)
+                if (revela < 1f) drawRoundRect(PixelsCifrando.cinza(tom(i, 0, relogio)), Offset(ponto.x - lado / 2, ponto.y - lado / 2), Size(lado, lado), CornerRadius(1.6.dp.toPx()))
+                if (revela > 0f) {
+                    val e = 0.55f + 0.45f * revela
+                    drawRoundRect(cor.copy(alpha = revela), Offset(ponto.x - lado / 2 * e, ponto.y - lado / 2 * e), Size(lado * e, lado * e), CornerRadius(1.6.dp.toPx() * e))
+                }
+            }
+            // Por dentro: a cifra, com a passada girando.
+            val passada = ((relogio / 1.6f) % 1f) * 2 * PI.toFloat()
+            for (i in 0 until internos) {
+                val angulo = i.toFloat() / internos * 2 * PI.toFloat() - PI.toFloat() / 2
+                var distancia = abs(angulo + PI.toFloat() / 2 - passada)
+                distancia = minOf(distancia, 2 * PI.toFloat() - distancia)
+                val brilho = if (pronto) 0f else exp(-(distancia / 0.5f) * (distancia / 0.5f))
+                val ponto = Offset(centro.x + 66.dp.toPx() * cos(angulo), centro.y + 66.dp.toPx() * sin(angulo))
+                val lado = 4.8.dp.toPx()
+                val preenchimento = if (pronto) cor.copy(alpha = (0.35 + 0.25 * tom(i, 1, 0f)).toFloat()) else PixelsCifrando.cinza(tom(i, 1, relogio) + 0.4 * brilho)
+                drawRoundRect(preenchimento, Offset(ponto.x - lado / 2, ponto.y - lado / 2), Size(lado, lado), CornerRadius(1.2.dp.toPx()))
+            }
+            // No fim, o fundo do circulo em pixels verdes que se espalham do centro.
+            val desde = if (parado) 10f else prontoEm?.let { agora - it }
+            if (pronto && desde != null) brilhoDoFim(centro, desde, cor, parado)
+        }
+        Icone(
+            when { !pronto -> Icones.escudoMetade; alerta -> Icones.escudoAlertaCheio; else -> Icones.escudoVistoCheio },
+            when { !pronto -> Paleta.tinta; alerta -> Paleta.cautela; else -> Paleta.sucesso },
+            tamanho = 62.dp, modifier = Modifier.graphicsLayer { scaleX = escala; scaleY = escala },
+        )
     }
 }
 
+private const val PASSO_DO_PIXEL = 0.035f
+
+/** O tom cifrado de um pixel agora, como no deslizar. */
+private fun tom(indice: Int, anel: Int, relogio: Float): Double {
+    val fase = PixelsCifrando.ruido(indice, anel, 0x2B7F)
+    val batida = relogio * 6 * (0.6 + 0.8 * fase) + fase * 8
+    val degrau = floor(batida)
+    val t = batida - degrau
+    val mistura = t * t * (3 - 2 * t)
+    val a = PixelsCifrando.ruido(indice, anel, degrau.toLong())
+    val b = PixelsCifrando.ruido(indice, anel, degrau.toLong() + 1)
+    return 0.16 + 0.22 * (a + (b - a) * mistura)
+}
+
 /**
- * Deslizar para seguir: o trilho com o cadeado que o dedo leva ate o fim. Para passos que pedem
- * atencao: um toque sem querer nao segue. Soltou antes do fim, volta.
+ * Terminado: o fundo do circulo em pixels verdes, fracos, do centro para a borda de dentro, em aneis
+ * concentricos como os de fora. Assentados, os pixels respiram, cada um no seu tempo, e uma onda sai
+ * do centro de tempos em tempos. `desde`: segundos desde o fim.
  */
-@Composable
-fun DeslizeParaSeguir(titulo: String, ligado: Boolean, aoSeguir: () -> Unit) {
-    val haptico = LocalHapticFeedback.current
-    val escopo = rememberCoroutineScope()
-    val posicao = remember { Animatable(0f) }
-    var feito by remember { mutableStateOf(false) }
-    val densidade = LocalDensity.current
-    BoxWithConstraints(
-        Modifier.fillMaxWidth().height(Altura.primaria).clip(CircleShape).background(if (ligado) Paleta.trilho else Paleta.corpo),
-    ) {
-        val pegador = Altura.primaria - 8.dp
-        val curso = with(densidade) { (maxWidth - pegador - 8.dp).toPx() }
-        Box(Modifier.fillMaxSize().padding(start = pegador), contentAlignment = Alignment.Center) {
-            Text(titulo, style = estilo(Tipo.acao), color = if (ligado) Paleta.tintaSuave.copy(alpha = 1f - posicao.value / maxOf(curso, 1f)) else Paleta.tintaApagada, maxLines = 1)
-        }
-        Box(
-            Modifier.padding(4.dp).offset { IntOffset(posicao.value.toInt(), 0) }.size(pegador).clip(CircleShape)
-                .background(if (ligado) Paleta.acento else Paleta.controle)
-                .pointerInput(ligado) {
-                    if (!ligado) return@pointerInput
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            escopo.launch {
-                                if (posicao.value >= curso * 0.92f && !feito) {
-                                    feito = true
-                                    posicao.animateTo(curso, tween(120))
-                                    haptico.performHapticFeedback(HapticFeedbackType.Confirm)
-                                    aoSeguir()
-                                } else {
-                                    posicao.animateTo(0f, spring(dampingRatio = 0.7f))
-                                }
-                            }
-                        },
-                    ) { _, arrasto -> escopo.launch { posicao.snapTo((posicao.value + arrasto).coerceIn(0f, curso)) } }
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icone(Icones.cadeadoCheio, if (ligado) Paleta.sobreAcento else Paleta.tintaApagada, tamanho = 20.dp)
+private fun DrawScope.brilhoDoFim(centro: Offset, desde: Float, cor: Color, parado: Boolean) {
+    val raio = 52.dp.toPx()
+    val espaco = 6.5.dp.toPx()
+    var indice = 0
+    for (anel in 0..(raio / espaco).toInt()) {
+        val r = anel * espaco
+        val quantos = if (anel == 0) 1 else maxOf(6, (2 * PI * r / espaco).roundToInt())
+        // Aneis alternados meio passo girados: o desenho fica tramado, nao em raios.
+        val giro = if (anel % 2 == 0) 0.0 else PI / quantos
+        for (vaga in 0 until quantos) {
+            val angulo = vaga.toDouble() / quantos * 2 * PI + giro
+            val x = centro.x + (r * cos(angulo)).toFloat()
+            val y = centro.y + (r * sin(angulo)).toFloat()
+            val chegou = suave((desde - r / raio * 0.5f) / 0.3f)
+            val ruido = PixelsCifrando.ruido(indice, 7, 0x5D1).toFloat()
+            var nivel = 0.10f + 0.14f * ruido
+            if (!parado && desde > 0.8f) {
+                // Respira: cada pixel no seu ritmo; e a onda passa do centro para a borda.
+                val respira = 0.5f + 0.5f * sin(desde * (1.1f + 0.9f * ruido) + ruido * 6.28f)
+                val frente = (desde / 2.8f) % 1f * 1.3f
+                val onda = exp(-((r / raio - frente) / 0.12f) * ((r / raio - frente) / 0.12f))
+                nivel = nivel * (0.65f + 0.55f * respira) + 0.22f * onda
+            }
+            // A borda some devagar: o contorno fica redondo.
+            val beira = suave((raio - r) / 8.dp.toPx())
+            val lado = 3.2.dp.toPx()
+            drawRoundRect(cor.copy(alpha = minOf(nivel, 0.6f) * chegou * (0.35f + 0.65f * beira)), Offset(x - lado / 2, y - lado / 2), Size(lado, lado), CornerRadius(0.8.dp.toPx()))
+            indice++
         }
     }
 }

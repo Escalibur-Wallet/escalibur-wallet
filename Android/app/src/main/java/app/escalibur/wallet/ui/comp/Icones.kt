@@ -34,6 +34,7 @@ object Icones {
             for (caminho in caminhos) addPath(PathParser().parsePathString(caminho).toNodes(), fill = SolidColor(Color.Black), pathFillType = androidx.compose.ui.graphics.PathFillType.EvenOdd)
         }.build()
 
+    val chevronsDireita = traco("chevronsDireita", "M5.5 6 L11.5 12 L5.5 18 M12.5 6 L18.5 12 L12.5 18", espessura = 2.6f)
     val voltar = traco("voltar", "M15 4.5 L7.5 12 L15 19.5", espessura = 2.2f)
     val avancar = traco("avancar", "M9 4.5 L16.5 12 L9 19.5", espessura = 2.2f)
     val abaixo = traco("abaixo", "M5 9 L12 16 L19 9", espessura = 2.2f)
@@ -134,6 +135,17 @@ object Icones {
             "L10.42 1.52 L13.58 1.52 L13.96 3.83 L14.6 4.01 L15.21 4.24 L15.81 4.52 L16.39 4.84 L18.3 3.47 L20.53 5.7 L19.16 7.61 L19.48 8.19 " +
             "L19.76 8.79 L19.99 9.4 Z M15.5 12 A3.5 3.5 0 1 0 8.5 12 A3.5 3.5 0 1 0 15.5 12 Z",
     )
+    /** O escudo da checagem do aparelho: a metade esquerda cheia enquanto confere. */
+    val escudoMetade = ImageVector.Builder("escudoMetade", 24.dp, 24.dp, 24f, 24f).apply {
+        addPath(PathParser().parsePathString("M12 2.5 L20 5.6 V11.3 C20 16.3 16.6 20.1 12 21.7 C7.4 20.1 4 16.3 4 11.3 V5.6 Z").toNodes(),
+                stroke = SolidColor(Color.Black), strokeLineWidth = 1.9f, strokeLineJoin = StrokeJoin.Round)
+        addPath(PathParser().parsePathString("M12 2.5 L4 5.6 V11.3 C4 16.3 7.4 20.1 12 21.7 Z").toNodes(), fill = SolidColor(Color.Black))
+    }.build()
+    val escudoVistoCheio = cheio("escudoVistoCheio",
+        "M12 2.5 L20 5.6 V11.3 C20 16.3 16.6 20.1 12 21.7 C7.4 20.1 4 16.3 4 11.3 V5.6 Z M10.6 15.6 L16.9 9.3 L15.5 7.9 L10.6 12.8 L8.4 10.6 L7 12 Z")
+    val escudoAlertaCheio = cheio("escudoAlertaCheio",
+        "M12 2.5 L20 5.6 V11.3 C20 16.3 16.6 20.1 12 21.7 C7.4 20.1 4 16.3 4 11.3 V5.6 Z M11 7.2 H13 V13.2 H11 Z M11 15.1 H13 V17.1 H11 Z")
+    val exclamacaoCheia = cheio("exclamacaoCheia", "M12 2 A10 10 0 1 1 12 22 A10 10 0 1 1 12 2 Z M11 6.5 H13 V13.5 H11 Z M11 15.5 H13 V17.5 H11 Z")
     val cadeadoCheio = cheio("cadeadoCheio", "M7 10 V7.5 A5 5 0 0 1 17 7.5 V10 H17.5 A2 2 0 0 1 19.5 12 V19 A2 2 0 0 1 17.5 21 H6.5 A2 2 0 0 1 4.5 19 V12 A2 2 0 0 1 6.5 10 Z M9 10 H15 V7.5 A3 3 0 0 0 9 7.5 Z")
 }
 

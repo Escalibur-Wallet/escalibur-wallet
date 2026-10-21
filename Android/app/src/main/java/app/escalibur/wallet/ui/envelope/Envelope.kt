@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.envelope
 
+import app.escalibur.wallet.ui.comp.Girando
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Base64
@@ -37,7 +38,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -732,7 +732,7 @@ fun FluxoDeAbrirEnvelope(aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerm
                 Spacer(Modifier.weight(1f))
                 Column(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem), horizontalAlignment = Alignment.CenterHorizontally,
                        verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                    CircularProgressIndicator(color = Paleta.tinta, strokeWidth = 3.dp, modifier = Modifier.size(48.dp))
+                    Girando(Paleta.tinta, 48.dp)
                     Text(t("Abrindo o envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.md))
                     Text(t("Leva %@, e cada tentativa custa o mesmo para quem tentar adivinhar.", cercaDe(segundos)), style = estilo(Tipo.corpo),
                          color = Paleta.tintaSuave, textAlign = TextAlign.Center)

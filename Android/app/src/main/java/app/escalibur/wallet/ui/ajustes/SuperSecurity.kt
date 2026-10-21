@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.ajustes
 
+import app.escalibur.wallet.ui.comp.DeslizeParaSeguir
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -60,7 +61,6 @@ import app.escalibur.wallet.ui.comp.Rodape
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
 import app.escalibur.wallet.ui.importar.EntradaDaFrase
 import app.escalibur.wallet.ui.importar.TelaDaFrase
-import app.escalibur.wallet.ui.novacarteira.DeslizeParaSeguir
 import app.escalibur.wallet.ui.objetos
 import app.escalibur.wallet.ui.principal.Navegacao
 import app.escalibur.wallet.ui.receber.opcional

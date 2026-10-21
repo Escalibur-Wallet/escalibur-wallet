@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.enviar
 
+import app.escalibur.wallet.ui.comp.Girando
 import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
@@ -36,7 +37,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -157,7 +157,7 @@ fun FluxoDeEnviar(ativo: String?) {
         when {
             escolhido == null -> EscolhaDoAtivo(aoBloquear = { simbolo, motivo -> recusa = t("Envio de %@ indisponível", simbolo) to motivo }) { escolhido = it }
             retrato == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp)
+                Girando(Paleta.tintaSuave, 20.dp)
             }
             else -> Etapas(controle, retrato, voltarParaEscolha = if (ativo == null) ({ controle.encerrar(); escolhido = null }) else null)
         }
@@ -900,7 +900,7 @@ private fun ColumnScope.EtapaDoStatus(controle: ControleDoEnvio, r: RetratoDoEnv
     Spacer(Modifier.weight(1f))
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         if (r.etapa == "enviando") {
-            CircularProgressIndicator(color = Paleta.acento, strokeWidth = 3.dp, modifier = Modifier.size(56.dp))
+            Girando(Paleta.acento, 56.dp)
             Text(t("Enviando"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.lg))
             Text(r.linhaDoEnvio, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
         } else if (resultado?.situacao == "falhou") {
@@ -916,7 +916,7 @@ private fun ColumnScope.EtapaDoStatus(controle: ControleDoEnvio, r: RetratoDoEnv
                     Icone(Icones.vistoCheio, Paleta.alta, tamanho = 15.dp)
                     Text(resultado.detalhe ?: t("Confirmado na rede."), style = estilo(Tipo.nota), color = Paleta.tinta)
                 } else {
-                    CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
+                    Girando(Paleta.tintaSuave, 14.dp)
                     Text(
                         when {
                             r.familia == "utxo" -> t("A primeira confirmação leva cerca de %lld minutos. Pode fechar o app.", r.tempoDeConfirmacao / 60)

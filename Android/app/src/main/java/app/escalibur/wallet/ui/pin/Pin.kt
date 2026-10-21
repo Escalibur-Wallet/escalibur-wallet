@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.pin
 
+import app.escalibur.wallet.ui.comp.Girando
 import app.escalibur.wallet.ui.comp.seguraToques
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
@@ -25,7 +26,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -245,7 +245,7 @@ fun TelaDoPin(
         Spacer(Modifier.weight(0.6f).heightIn(min = Espaco.sm))
         Box(Modifier.height(24.dp), contentAlignment = Alignment.Center) {
             if (trabalhando) {
-                CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                Girando(Paleta.tintaSuave, 20.dp)
             } else {
                 PontosDoPin(entrada.quantos, entrada.tamanho, entrada.erro != null && entrada.quantos == 0, entrada.tremida)
             }

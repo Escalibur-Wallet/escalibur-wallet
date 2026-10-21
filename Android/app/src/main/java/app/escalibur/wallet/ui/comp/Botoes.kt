@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -82,7 +81,7 @@ fun BotaoPrimario(
         contentAlignment = Alignment.Center,
     ) {
         if (carregando) {
-            CircularProgressIndicator(color = texto, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+            Girando(texto, 22.dp)
         } else {
             Text(titulo, style = estilo(Tipo.acao), color = texto, textAlign = TextAlign.Center, maxLines = 1)
         }

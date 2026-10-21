@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.carteira
 
+import app.escalibur.wallet.ui.comp.Girando
 import app.escalibur.wallet.ui.comp.LocalEspacoDaBarra
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -23,7 +24,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -279,7 +279,7 @@ private fun Ativos(retrato: Retrato, oculto: Boolean, unidade: String, taxa: Dou
         Row(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem), verticalAlignment = Alignment.CenterVertically) {
             Text(t("Ativos"), style = estilo(Tipo.cabecalho), color = Paleta.tinta)
             if (retrato.carregando) {
-                CircularProgressIndicator(color = Paleta.tintaApagada, strokeWidth = 1.5.dp, modifier = Modifier.padding(start = Espaco.xs).size(14.dp))
+                Girando(Paleta.tintaApagada, 16.dp, Modifier.padding(start = Espaco.xs))
             }
         }
         when {

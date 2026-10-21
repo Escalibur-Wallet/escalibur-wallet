@@ -13,24 +13,28 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
@@ -47,7 +51,9 @@ import app.escalibur.wallet.ui.tema.estilo
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 import java.util.Date
+import kotlin.math.PI
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 data class PontoDePreco(val tempo: Date, val preco: Double)
 
@@ -160,7 +166,7 @@ fun GraficoDePreco(
     var indice by remember(mostrados) { mutableStateOf<Int?>(null) }
     Box(modifier.fillMaxWidth().height(248.dp), contentAlignment = Alignment.Center) {
         when {
-            carregando -> CircularProgressIndicator(color = Paleta.tintaApagada, strokeWidth = 2.dp)
+            carregando -> GraficoCarregando()
             mostrados.size < 2 -> if (!falhou) Text(t("Sem histórico de preço neste período"), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
             else -> {
                 val precos = mostrados.map { it.preco }
@@ -238,6 +244,49 @@ fun GraficoDePreco(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * O grafico carregando, como no iOS: uma linha fantasma cinza que ondula devagar, com um brilho que
+ * corre da esquerda para a direita. Cinza e sem rotulos, para nunca passar por dado. Com as animacoes
+ * do sistema desligadas, fica parada. O Mercado sem fonte usa a mesma linha.
+ */
+@Composable
+fun GraficoCarregando(modifier: Modifier = Modifier) {
+    val parado = LocalContext.current.let { android.provider.Settings.Global.getFloat(it.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }
+    var tempo by remember { mutableFloatStateOf(0f) }
+    if (!parado) LaunchedEffect(Unit) {
+        val inicio = withFrameNanos { it }
+        while (true) withFrameNanos { tempo = (it - inicio) / 1e9f }
+    }
+    Canvas(modifier.fillMaxSize()) {
+        val margem = Espaco.margem.toPx()
+        val folga = 26.dp.toPx()
+        val largura = size.width - margem * 2
+        val altura = size.height - folga * 2
+        val linha = Path()
+        val passos = 90
+        for (passo in 0..passos) {
+            val x = passo / passos.toFloat()
+            val onda = 0.5f + 0.16f * sin(x * 2 * PI.toFloat() * 1.2f + tempo * 0.9f) + 0.08f * sin(x * 2 * PI.toFloat() * 2.9f - tempo * 1.3f)
+            val px = margem + largura * x
+            val py = folga + altura - altura * onda
+            if (passo == 0) linha.moveTo(px, py) else linha.lineTo(px, py)
+        }
+        val traco = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        drawPath(linha, Paleta.bordaForte, style = traco)
+        if (parado) return@Canvas
+        // O brilho: uma janela que atravessa a linha, mais clara no meio.
+        val fase = (tempo % 1.8f) / 1.8f
+        val janela = largura * 0.28f
+        val centro = margem - janela / 2 + (largura + janela) * fase
+        clipRect(left = centro - janela / 2, right = centro + janela / 2) {
+            drawPath(linha, Brush.horizontalGradient(
+                0f to Paleta.tintaSuave.copy(alpha = 0f), 0.5f to Paleta.tintaSuave, 1f to Paleta.tintaSuave.copy(alpha = 0f),
+                startX = centro - janela / 2, endX = centro + janela / 2,
+            ), style = traco)
         }
     }
 }

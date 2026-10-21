@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.trocar
 
+import app.escalibur.wallet.ui.comp.Girando
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -25,7 +26,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -113,7 +113,7 @@ fun RevisaoDaTroca(controle: ControleDaTroca, encerra: Boolean = false, aoSair: 
             val frases = r?.frases
             if (r == null || frases == null) {
                 Spacer(Modifier.weight(1f))
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp) }
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Girando(Paleta.tintaSuave, 20.dp) }
                 Spacer(Modifier.weight(1f))
                 return@Column
             }
@@ -163,7 +163,7 @@ private fun Direcao(r: RetratoDaTroca, sai: String?, entra: String?) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         LadoDaDirecao(r.revisaoVende, sai, Modifier.weight(1f))
         Box(Modifier.width(36.dp).heightIn(min = 52.dp), contentAlignment = Alignment.Center) {
-            if (esperando) CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+            if (esperando) Girando(Paleta.tintaSuave, 20.dp)
             else Icone(Icones.avancar, Paleta.tintaSuave, tamanho = 18.dp)
         }
         LadoDaDirecao(r.revisaoCompra, entra, Modifier.weight(1f))

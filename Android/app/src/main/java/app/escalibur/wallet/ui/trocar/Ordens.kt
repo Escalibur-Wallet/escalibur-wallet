@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.trocar
 
+import app.escalibur.wallet.ui.comp.Girando
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.rememberCoroutineScope
@@ -27,7 +28,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -103,7 +103,7 @@ fun OrdensAbertas(soComOrdens: Boolean, modifier: Modifier = Modifier) {
         when {
             o == null || o.carregando -> Row(Modifier.heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically,
                                              horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                Girando(Paleta.tintaSuave, 16.dp)
                 Text(t("Lendo as ordens na rede."), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
             }
             o.falha != null && o.ordens.isEmpty() -> Column {

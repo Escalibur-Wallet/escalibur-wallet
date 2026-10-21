@@ -3,7 +3,24 @@ package app.escalibur.wallet.ui.atividade
 import app.escalibur.wallet.ui.comp.LocalEspacoDaBarra
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.zIndex
+import app.escalibur.wallet.ui.carteira.Redes
+import app.escalibur.wallet.ui.comp.Girando
+import app.escalibur.wallet.ui.comp.movimentoReduzido
+import app.escalibur.wallet.ui.comp.relogio
+import app.escalibur.wallet.ui.comp.saltoDeSaida
+import kotlin.math.PI
+import kotlin.math.sin
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -122,6 +139,7 @@ private class RetratoDaAtividade(j: JSONObject) {
     val suspeitas = j.optInt("suspeitas")
     val itens = j.optJSONArray("itens").objetos().map(::Movimento)
     val redes = j.optInt("redes")
+    val restantes = j.optInt("restantes")
 }
 
 /** "Stellar", "Stellar e Dogecoin", "Stellar, Dogecoin e mais 2 redes". */
@@ -161,6 +179,7 @@ fun TelaDeAtividade() {
     val pendentes = r?.itens?.filter { it.situacao == "pendente" }.orEmpty()
     val feitos = r?.itens?.filter { it.situacao != "pendente" }.orEmpty()
     val carregandoPrimeiraVez = r == null || (r.itens.isEmpty() && (r.carregando || !r.lidaUmaVez))
+    val alturaDaTela = LocalConfiguration.current.screenHeightDp.dp
 
     PullToRefreshBox(
         isRefreshing = puxando,
@@ -179,27 +198,30 @@ fun TelaDeAtividade() {
                       Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm), tituloDaAcao = t("Tentar de novo")) { atualizar(true) }
             }
             when {
-                carregandoPrimeiraVez -> Column(Modifier.fillMaxWidth().padding(top = Espaco.xxl), horizontalAlignment = Alignment.CenterHorizontally,
-                                               verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                    CircularProgressIndicator(color = Paleta.tintaSuave, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
-                    Text(t("Lendo o histórico"), style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.sm))
-                    Text(if ((r?.redes ?: 0) > 1) t("%lld redes, cada uma direto dos provedores públicos.", r?.redes ?: 0) else t("Direto dos provedores públicos da rede."),
-                         style = estilo(Tipo.nota), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
-                }
-                r != null && r.itens.isEmpty() -> Column(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem).padding(top = Espaco.xl),
-                                                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                    Box(Modifier.size(96.dp).clip(CircleShape).background(Paleta.corpo), contentAlignment = Alignment.Center) {
-                        Icone(Icones.atividade, Paleta.tintaApagada, tamanho = 36.dp)
-                    }
+                // O carregando fica por cima da lista, no meio da tela (abaixo).
+                carregandoPrimeiraVez -> Unit
+                r != null && r.itens.isEmpty() -> Column(Modifier.fillMaxWidth().heightIn(min = alturaDaTela * 0.8f).padding(horizontal = Espaco.margem),
+                                                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    ArteDaAtividadeVazia(230.dp)
                     Text(t("Sua atividade aparece aqui"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.md))
-                    Text(t("Envios, recebimentos, trocas e ordens, cada um com o seu status."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
-                    BotaoPrimario(t("Receber"), Modifier.padding(top = Espaco.md)) { Navegacao.folha { FluxoDeReceber() } }
+                    Text(t("Envios, recebimentos, trocas e ordens, cada um com o seu status."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave,
+                         textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
+                    BotaoPrimario(t("Receber"), Modifier.padding(top = Espaco.lg)) { Navegacao.folha { FluxoDeReceber() } }
                 }
                 else -> {
                     if (pendentes.isNotEmpty()) Secao(t("Pendentes"), pendentes, oculto)
+                    if (r != null && r.carregando && r.restantes > 0) {
+                        Row(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                            Girando(Paleta.tintaSuave, 14.dp)
+                            Text(if (r.restantes == 1) t("Lendo mais 1 rede") else t("Lendo mais %lld redes", r.restantes), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+                        }
+                    }
                     for ((titulo, itens) in porDia(feitos.take(visiveis))) Secao(titulo, itens, oculto)
                     if (feitos.size > visiveis) {
-                        BotaoSecundario(t("Mostrar mais"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md)) { visiveis += 20 }
+                        // Chegar ao fim da lista ja traz as proximas 20; o botao fica para quem navega pelo leitor de tela.
+                        BotaoSecundario(t("Mostrar mais"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md)
+                            .onGloballyPositioned { visiveis += 20 }) { visiveis += 20 }
                     }
                 }
             }
@@ -227,6 +249,84 @@ fun TelaDeAtividade() {
                     else t("%lld recebimentos suspeitos escondidos. São envios de valor zero ou de tokens fora da lista, muitas vezes de endereços parecidos com os seus.", r.suspeitas),
                     style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg),
                 )
+            }
+        }
+        if (carregandoPrimeiraVez) {
+            val ligadas = Redes.todas.filter { it.id !in App.estado.redesDesligadas }
+            CarregandoAtividade(ligadas.take(7).map { it.id to it.coingecko }, r?.redes ?: ligadas.size, Modifier.align(Alignment.Center))
+        }
+    }
+}
+
+/**
+ * Enquanto o historico chega: as redes da carteira acendendo uma de cada vez, no meio da tela. Com
+ * o movimento reduzido, parado.
+ */
+@Composable
+private fun CarregandoAtividade(redes: List<Pair<String, String>>, total: Int, modifier: Modifier = Modifier) {
+    val tempo by relogio()
+    Column(modifier.fillMaxWidth().padding(horizontal = Espaco.margem), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
+            redes.forEachIndexed { indice, (rede, coingecko) ->
+                val fase = tempo / 1.6f - indice / maxOf(redes.size, 1).toFloat()
+                val onda = (sin(fase * 2 * PI.toFloat()) + 1) / 2
+                SeloDaRede(rede, coingecko, 36.dp, Paleta.vazio, Modifier.zIndex(onda).graphicsLayer {
+                    val escala = 0.9f + 0.12f * onda
+                    scaleX = escala
+                    scaleY = escala
+                    alpha = 0.45f + 0.55f * onda
+                })
+            }
+        }
+        Text(t("Lendo o histórico"), style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.md))
+        Text(if (total > 1) t("%lld redes, cada uma direto dos provedores públicos.", total) else t("Direto dos provedores públicos da rede."),
+             style = estilo(Tipo.nota), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xxs))
+    }
+}
+
+/**
+ * Atividade vazia: tres cartoes de atividade entram um a um (receber, enviar, trocar, cada um com a
+ * sua rede), com o status girando como pendente ate virar o visto verde de confirmado. E o que a tela
+ * vai mostrar quando houver movimento. Ciclo de 6 s; com o movimento reduzido, os tres aparecem
+ * confirmados e parados.
+ */
+@Composable
+private fun ArteDaAtividadeVazia(altura: Dp) {
+    val parado = movimentoReduzido()
+    val agora by relogio(parado)
+    val t = if (parado) 4.5f else agora % 6f
+    val some = if (parado) 1f else 1f - ((t - 5.3f) / 0.6f).coerceIn(0f, 1f)
+    val itens = listOf(Triple(Icones.receber, "bitcoin" to "bitcoin", 0.62f), Triple(Icones.enviar, "ethereum" to "ethereum", 0.48f),
+                       Triple(Icones.trocar, "solana" to "solana", 0.7f))
+    Box(Modifier.fillMaxWidth().height(altura), contentAlignment = Alignment.Center) {
+        Column(Modifier.width(290.dp), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+            itens.forEachIndexed { indice, (icone, rede, largura) ->
+                val aparece = ((t - (0.3f + indice * 0.45f)) / 0.4f).coerceIn(0f, 1f) * some
+                val confirmado = ((t - (2.0f + indice * 0.55f)) / 0.3f).coerceIn(0f, 1f)
+                Row(
+                    Modifier.fillMaxWidth().height(62.dp)
+                        .graphicsLayer { alpha = aparece; translationY = (1 - aparece) * 16.dp.toPx() }
+                        .clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(horizontal = Espaco.sm),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
+                ) {
+                    Box(Modifier.size(43.dp)) {
+                        Box(Modifier.size(40.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) { Icone(icone, Paleta.tinta, tamanho = 17.dp) }
+                        SeloDaRede(rede.first, rede.second, 16.dp, Paleta.corpo, Modifier.align(Alignment.BottomEnd))
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Box(Modifier.width(150.dp * largura).height(9.dp).clip(CircleShape).background(Paleta.bordaForte))
+                        Box(Modifier.width(90.dp * largura).height(7.dp).clip(CircleShape).background(Paleta.controle))
+                    }
+                    Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                        Canvas(Modifier.size(18.dp).graphicsLayer { alpha = 1 - confirmado; rotationZ = if (parado) 0f else agora * 360f }) {
+                            drawArc(Paleta.tintaApagada, -90f, 252f, false, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round))
+                        }
+                        Box(Modifier.size(22.dp).graphicsLayer { val e = saltoDeSaida(confirmado); scaleX = e; scaleY = e }
+                            .clip(CircleShape).background(Paleta.sucesso), contentAlignment = Alignment.Center) {
+                            Icone(Icones.visto, Paleta.vazio, tamanho = 11.dp)
+                        }
+                    }
+                }
             }
         }
     }
