@@ -668,20 +668,6 @@
   "vi": "Sinh trắc học",
   "ar": "المصادقة الحيوية"
  },
- "Com a biometria ligada, ver as palavras e remover carteira pedem o PIN e a biometria. Depois de reiniciar o celular, a biometria só volta a valer depois do PIN digitado uma vez.": {
-  "en": "With biometrics on, viewing the words and removing a wallet need the PIN and biometrics. After the phone restarts, biometrics only work again once the PIN has been entered.",
-  "es": "Con la biometría activada, ver las palabras y quitar una billetera piden el PIN y la biometría. Tras reiniciar el teléfono, la biometría solo vuelve a valer después de escribir el PIN una vez.",
-  "fr": "Avec la biométrie activée, voir les mots et retirer un portefeuille demandent le PIN et la biométrie. Après un redémarrage du téléphone, la biométrie ne refonctionne qu’une fois le PIN saisi.",
-  "de": "Mit eingeschalteter Biometrie brauchen das Anzeigen der Wörter und das Entfernen einer Wallet die PIN und die Biometrie. Nach einem Neustart des Smartphones gilt die Biometrie erst wieder, wenn die PIN einmal eingegeben wurde.",
-  "hi": "बायोमेट्रिक चालू होने पर शब्द देखने और वॉलेट हटाने के लिए PIN और बायोमेट्रिक दोनों चाहिए। फ़ोन रीस्टार्ट होने के बाद बायोमेट्रिक तभी काम करेगा जब एक बार PIN डाला जाएगा।",
-  "id": "Saat biometrik aktif, melihat kata-kata dan menghapus dompet memerlukan PIN dan biometrik. Setelah ponsel dimulai ulang, biometrik baru berlaku lagi setelah PIN dimasukkan sekali.",
-  "ja": "生体認証がオンのとき、単語の表示とウォレットの削除には PIN と生体認証の両方が必要です。スマートフォンの再起動後は、PIN を一度入力するまで生体認証は使えません。",
-  "ko": "생체 인증이 켜져 있으면 단어 보기와 지갑 제거에 PIN과 생체 인증이 모두 필요합니다. 휴대폰을 다시 시작하면 PIN을 한 번 입력한 뒤에야 생체 인증을 다시 쓸 수 있습니다.",
-  "tr": "Biyometri açıkken kelimeleri görmek ve cüzdan kaldırmak PIN ve biyometri ister. Telefon yeniden başladıktan sonra biyometri, PIN bir kez girilene kadar geçerli olmaz.",
-  "zh-Hans": "开启生物识别后，查看单词和移除钱包需要 PIN 和生物识别。手机重启后，需先输入一次 PIN，生物识别才会恢复。",
-  "vi": "Khi bật sinh trắc học, xem các từ và gỡ ví cần mã PIN và sinh trắc học. Sau khi điện thoại khởi động lại, sinh trắc học chỉ có hiệu lực lại sau khi nhập mã PIN một lần.",
-  "ar": "عند تشغيل المصادقة الحيوية، يتطلب عرض الكلمات وإزالة محفظة رمز PIN والمصادقة الحيوية. بعد إعادة تشغيل الهاتف، لا تعمل المصادقة الحيوية إلا بعد إدخال رمز PIN مرة واحدة."
- },
  "Para usar a biometria aqui, cadastre uma digital ou o rosto nas configurações do celular.": {
   "en": "To use biometrics here, add a fingerprint or face in the phone’s settings.",
   "es": "Para usar la biometría aquí, registra una huella o tu rostro en los ajustes del teléfono.",
@@ -695,20 +681,6 @@
   "zh-Hans": "要在这里使用生物识别，请在手机设置中添加指纹或面容。",
   "vi": "Để dùng sinh trắc học ở đây, hãy thêm vân tay hoặc khuôn mặt trong cài đặt điện thoại.",
   "ar": "لاستخدام المصادقة الحيوية هنا، أضف بصمة أو وجهًا من إعدادات الهاتف."
- },
- "Todo envio e troca pede a biometria ou o PIN.": {
-  "en": "Every send and swap needs biometrics or the PIN.",
-  "es": "Cada envío e intercambio pide la biometría o el PIN.",
-  "fr": "Chaque envoi et échange demande la biométrie ou le PIN.",
-  "de": "Jede Sendung und jeder Tausch braucht Biometrie oder PIN.",
-  "hi": "हर भेजने और स्वैप के लिए बायोमेट्रिक या PIN चाहिए।",
-  "id": "Setiap pengiriman dan penukaran memerlukan biometrik atau PIN.",
-  "ja": "送金とスワップのたびに、生体認証か PIN が必要です。",
-  "ko": "모든 송금과 스왑에 생체 인증이나 PIN이 필요합니다.",
-  "tr": "Her gönderim ve takas biyometri veya PIN ister.",
-  "zh-Hans": "每次发送和兑换都需要生物识别或 PIN。",
-  "vi": "Mỗi lần gửi và hoán đổi đều cần sinh trắc học hoặc mã PIN.",
-  "ar": "يتطلب كل إرسال ومبادلة المصادقة الحيوية أو رمز PIN."
  },
  "Para ligar a biometria.": {
   "en": "To turn on biometrics.",
@@ -2737,5 +2709,47 @@
   "zh-Hans": "%@",
   "vi": "Ngày %@",
   "ar": "في %@"
+ },
+ "Com a biometria ligada, ver as palavras, lacrar um envelope e remover carteira pedem o PIN e a biometria. Depois de reiniciar o celular, a biometria só volta a valer depois do PIN digitado uma vez.": {
+  "en": "With biometrics on, viewing the words, sealing an envelope and removing a wallet need the PIN and biometrics. After the phone restarts, biometrics only work again once the PIN has been entered.",
+  "es": "Con la biometría activada, ver las palabras, sellar un sobre y quitar una billetera piden el PIN y la biometría. Tras reiniciar el teléfono, la biometría solo vuelve a valer después de escribir el PIN una vez.",
+  "fr": "Avec la biométrie activée, voir les mots, sceller une enveloppe et retirer un portefeuille demandent le PIN et la biométrie. Après un redémarrage du téléphone, la biométrie ne refonctionne qu’une fois le PIN saisi.",
+  "de": "Mit eingeschalteter Biometrie brauchen das Anzeigen der Wörter, das Versiegeln eines Umschlags und das Entfernen einer Wallet die PIN und die Biometrie. Nach einem Neustart des Smartphones gilt die Biometrie erst wieder, wenn die PIN einmal eingegeben wurde.",
+  "hi": "बायोमेट्रिक चालू होने पर शब्द देखने, लिफ़ाफ़ा सील करने और वॉलेट हटाने के लिए PIN और बायोमेट्रिक दोनों चाहिए। फ़ोन रीस्टार्ट होने के बाद बायोमेट्रिक तभी काम करेगा जब एक बार PIN डाला जाएगा।",
+  "id": "Saat biometrik aktif, melihat kata-kata, menyegel amplop, dan menghapus dompet memerlukan PIN dan biometrik. Setelah ponsel dimulai ulang, biometrik baru berlaku lagi setelah PIN dimasukkan sekali.",
+  "ja": "生体認証がオンのとき、単語の表示、エンベロープの封印、ウォレットの削除には PIN と生体認証の両方が必要です。スマートフォンの再起動後は、PIN を一度入力するまで生体認証は使えません。",
+  "ko": "생체 인증이 켜져 있으면 단어 보기, 봉투 봉인, 지갑 제거에 PIN과 생체 인증이 모두 필요합니다. 휴대폰을 다시 시작하면 PIN을 한 번 입력한 뒤에야 생체 인증을 다시 쓸 수 있습니다.",
+  "tr": "Biyometri açıkken kelimeleri görmek, zarf mühürlemek ve cüzdan kaldırmak PIN ve biyometri ister. Telefon yeniden başladıktan sonra biyometri, PIN bir kez girilene kadar geçerli olmaz.",
+  "zh-Hans": "开启生物识别后，查看单词、封存信封和移除钱包需要 PIN 和生物识别。手机重启后，需先输入一次 PIN，生物识别才会恢复。",
+  "vi": "Khi bật sinh trắc học, xem các từ, niêm phong phong bì và gỡ ví cần mã PIN và sinh trắc học. Sau khi điện thoại khởi động lại, sinh trắc học chỉ có hiệu lực lại sau khi nhập mã PIN một lần.",
+  "ar": "عند تشغيل المصادقة الحيوية، يتطلب عرض الكلمات وختم مغلف وإزالة محفظة رمز PIN والمصادقة الحيوية. بعد إعادة تشغيل الهاتف، لا تعمل المصادقة الحيوية إلا بعد إدخال رمز PIN مرة واحدة."
+ },
+ "Todo envio, troca e ordem pede a biometria ou o PIN.": {
+  "en": "Every send, swap and order needs biometrics or the PIN.",
+  "es": "Cada envío, intercambio y orden pide la biometría o el PIN.",
+  "fr": "Chaque envoi, échange et ordre demande la biométrie ou le PIN.",
+  "de": "Jede Sendung, jeder Tausch und jede Order braucht Biometrie oder PIN.",
+  "hi": "हर भेजने, स्वैप और ऑर्डर के लिए बायोमेट्रिक या PIN चाहिए।",
+  "id": "Setiap pengiriman, penukaran, dan order memerlukan biometrik atau PIN.",
+  "ja": "送金、スワップ、注文のたびに、生体認証か PIN が必要です。",
+  "ko": "모든 송금, 스왑, 주문에 생체 인증이나 PIN이 필요합니다.",
+  "tr": "Her gönderim, takas ve emir biyometri veya PIN ister.",
+  "zh-Hans": "每次发送、兑换和下单都需要生物识别或 PIN。",
+  "vi": "Mỗi lần gửi, hoán đổi và đặt lệnh đều cần sinh trắc học hoặc mã PIN.",
+  "ar": "يتطلب كل إرسال ومبادلة وأمر المصادقة الحيوية أو رمز PIN."
+ },
+ "Super Security: abrir o app e todo envio, troca e ordem pedem o PIN e a biometria.": {
+  "en": "Super Security: opening the app and every send, swap and order need the PIN and biometrics.",
+  "es": "Super Security: abrir la app y cada envío, intercambio y orden piden el PIN y la biometría.",
+  "fr": "Super Security : ouvrir l’app et chaque envoi, échange et ordre demandent le PIN et la biométrie.",
+  "de": "Super Security: Das Öffnen der App und jede Sendung, jeder Tausch und jede Order brauchen PIN und Biometrie.",
+  "hi": "Super Security: ऐप खोलने और हर भेजने, स्वैप और ऑर्डर के लिए PIN और बायोमेट्रिक दोनों चाहिए।",
+  "id": "Super Security: membuka aplikasi dan setiap pengiriman, penukaran, dan order memerlukan PIN dan biometrik.",
+  "ja": "Super Security：アプリを開くときと、送金・スワップ・注文のたびに、PIN と生体認証の両方が必要です。",
+  "ko": "Super Security: 앱을 열 때와 모든 송금, 스왑, 주문에 PIN과 생체 인증이 모두 필요합니다.",
+  "tr": "Super Security: Uygulamayı açmak ve her gönderim, takas ve emir PIN ve biyometri ister.",
+  "zh-Hans": "Super Security：打开应用以及每次发送、兑换和下单都需要 PIN 和生物识别。",
+  "vi": "Super Security: mở ứng dụng và mỗi lần gửi, hoán đổi và đặt lệnh đều cần mã PIN và sinh trắc học.",
+  "ar": "Super Security: يتطلب فتح التطبيق وكل إرسال ومبادلة وأمر رمز PIN والمصادقة الحيوية."
  }
 }

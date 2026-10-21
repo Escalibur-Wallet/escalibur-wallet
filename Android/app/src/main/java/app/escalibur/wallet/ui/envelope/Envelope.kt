@@ -365,7 +365,7 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
                             verticalArrangement = Arrangement.spacedBy(Espaco.md),
                         ) {
                             PontoDoEnvelope(Icones.documentoCadeado, t("A senha da carteira vira um arquivo criptografado, aqui no celular."))
-                            PontoDoEnvelope(Icones.chave, t("Só você cria a senha do arquivo. Ela nunca sai deste celular."))
+                            PontoDoEnvelope(Icones.chaveEmPe, t("Só você cria a senha do arquivo. Ela nunca sai deste celular."))
                             PontoDoEnvelope(Icones.olhoRiscado, t("O arquivo não passa por nós. Sem a sua senha, ninguém abre. Só você."))
                             PontoDoEnvelope(Icones.disco, t("Guarde onde quiser: sem a sua senha, o arquivo criptografado não abre."))
                         }

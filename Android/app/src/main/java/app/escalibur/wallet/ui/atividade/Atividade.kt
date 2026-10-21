@@ -184,7 +184,10 @@ fun TelaDeAtividade() {
             .map { evento -> runCatching { RetratoDaAtividade(JSONObject(evento.json)) }.getOrNull() }
             .flowOn(kotlinx.coroutines.Dispatchers.Default)
             .conflate()
-            .collect { novo -> if (novo != null) retrato = novo }
+            .collect { novo ->
+                if (novo != null) retrato = novo
+                kotlinx.coroutines.delay(200)
+            }
     }
 
     val r = retrato

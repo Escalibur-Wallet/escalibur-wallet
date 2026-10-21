@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.carteira
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -20,12 +21,14 @@ import org.json.JSONObject
 import java.util.Date
 
 /** Uma rede onde a carteira tem o ativo da linha. */
+@Immutable
 data class Posicao(
     val rede: String, val redeNome: String, val ativo: String, val quantidade: String, val disponivel: String,
     val casas: Int, val contrato: String?,
 )
 
 /** Um ativo na lista: o mesmo ativo em varias redes vira uma linha so. */
+@Immutable
 data class Linha(
     val id: String, val simbolo: String, val nome: String, val coingecko: String?, val estavel: Boolean,
     val posicoes: List<Posicao>, val preco: Double?, val variacao24h: Double?, val valor: Double?, val casas: Int,
@@ -33,11 +36,13 @@ data class Linha(
 )
 
 /** Um token fora da lista conferida. */
+@Immutable
 data class Outro(
     val id: String, val simbolo: String, val nome: String, val rede: String, val quantidade: String, val casas: Int,
     val preco: Double?, val valor: Double?, val suspeito: Boolean,
 )
 
+@Immutable
 data class Retrato(
     val carteira: String?, val linhas: List<Linha>, val todasAsLinhas: List<Linha>, val outros: List<Outro>, val suspeitos: List<Outro>,
     val total: Double, val variacao24h: Double, val variacao24hPct: Double, val carregando: Boolean, val falhas: List<String>,
@@ -111,7 +116,12 @@ object Saldos {
                 .map { evento -> runCatching { Retrato.de(JSONObject(evento.json)) }.getOrNull() }
                 .flowOn(Dispatchers.Default)
                 .conflate()
-                .collect { novo -> if (novo != null) retrato = novo }
+                .collect { novo ->
+                    if (novo != null) retrato = novo
+                    // No maximo uns cinco retratos por segundo: cada um redesenha a carteira inteira,
+                    // e com muitas redes chegando juntas a linha principal nao respirava.
+                    kotlinx.coroutines.delay(200)
+                }
         }
     }
 

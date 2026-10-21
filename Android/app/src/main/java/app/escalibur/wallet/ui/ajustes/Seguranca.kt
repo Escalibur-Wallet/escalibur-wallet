@@ -55,27 +55,34 @@ fun TelaDeSeguranca() {
     }
 
     Subtela(t("Segurança")) {
+        // Na ordem do iOS: o PIN, o Super Security, a biometria (escondida no Super Security, que ja a
+        // inclui) e o bloqueio; depois a carteira com passphrase e o apagar.
         GrupoDeAjustes(Modifier.padding(top = Espaco.md)) {
-            LinhaDeAjuste(Icones.teclado, t("Mudar o PIN")) { Navegacao.cobrir { TrocarPin() } }
-            // No Super Security a biometria faz parte do modo: desliga junto com ele.
-            LinhaComInterruptor(Icones.digital, t("Biometria"), estado.biometriaLigada || estado.reforcado, habilitado = disponivel && !estado.reforcado,
-                                detalhe = if (estado.reforcado) t("Faz parte do Super Security.") else null) { ligar ->
-                if (ligar) Navegacao.cobrir { LigarBiometria() } else desligarBiometria()
+            LinhaDeAjuste(Icones.gradeDoPin, t("Mudar o PIN")) { Navegacao.cobrir { TrocarPin() } }
+            LinhaDeAjuste(Icones.escudoCadeado, t("Super Security"), if (estado.reforcado) t("Ligado") else t("Desligado")) { Navegacao.abrir { TelaDoSuperSecurity() } }
+            if (!estado.reforcado) {
+                LinhaComInterruptor(Icones.digital, t("Biometria"), estado.biometriaLigada, habilitado = disponivel) { ligar ->
+                    if (ligar) Navegacao.cobrir { LigarBiometria() } else desligarBiometria()
+                }
             }
-            LinhaDeAjuste(Icones.relogio, t("Bloquear o app"), rotuloDoBloqueio(estado.autoTravar)) { Navegacao.abrir { BloquearApp() } }
+            LinhaDeAjuste(Icones.cadeadoGirando, t("Bloquear o app"), rotuloDoBloqueio(estado.autoTravar)) { Navegacao.abrir { BloquearApp() } }
         }
         NotaDeAjuste(
-            erro ?: if (disponivel) t("Com a biometria ligada, ver as palavras e remover carteira pedem o PIN e a biometria. Depois de reiniciar o celular, a biometria só volta a valer depois do PIN digitado uma vez.")
+            erro ?: if (disponivel) t("Com a biometria ligada, ver as palavras, lacrar um envelope e remover carteira pedem o PIN e a biometria. Depois de reiniciar o celular, a biometria só volta a valer depois do PIN digitado uma vez.")
             else t("Para usar a biometria aqui, cadastre uma digital ou o rosto nas configurações do celular."),
             cor = if (erro == null) Paleta.tintaApagada else Paleta.baixa,
         )
-        GrupoDeAjustes(Modifier.padding(top = Espaco.lg)) {
-            LinhaDeAjuste(Icones.escudo, t("Super Security"), if (estado.reforcado) t("Ligado") else t("Desligado")) { Navegacao.abrir { TelaDoSuperSecurity() } }
+        estado.carteira?.takeIf { !it.observacao }?.let { carteira ->
+            GrupoDeAjustes(Modifier.padding(top = Espaco.lg)) {
+                LinhaDeAjuste(Icones.chave, t("Carteira com passphrase")) { Navegacao.abrir { FluxoDaCarteiraComPassphrase(carteira) } }
+            }
+            NotaDeAjuste(t("Outra carteira, aberta pela senha de %@ com uma passphrase que só você sabe.", carteira.nome))
         }
         GrupoDeAjustes(Modifier.padding(top = Espaco.lg)) {
             LinhaDeAjuste(Icones.lixeira, t("Apagar depois de PINs errados"), rotuloDoApagar(estado.apagarDepois)) { Navegacao.abrir { ApagarDepois() } }
         }
-        Text(t("Todo envio e troca pede a biometria ou o PIN."), style = estilo(Tipo.nota), color = Paleta.tintaSuave,
+        Text(if (estado.reforcado) t("Super Security: abrir o app e todo envio, troca e ordem pedem o PIN e a biometria.")
+             else t("Todo envio, troca e ordem pede a biometria ou o PIN."), style = estilo(Tipo.nota), color = Paleta.tintaSuave,
              modifier = Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg))
     }
 }

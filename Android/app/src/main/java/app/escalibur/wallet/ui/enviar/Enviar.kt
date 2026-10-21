@@ -245,7 +245,7 @@ private fun ColumnScope.Etapas(controle: ControleDoEnvio, r: RetratoDoEnvio, vol
     BackHandler(enabled = !enviando) { voltar?.invoke() ?: Navegacao.fechar() }
     // Como no iOS, so o fechar no alto; o voltar do sistema volta uma etapa.
     CabecalhoDeFolha("", if (enviando) null else ({ Navegacao.fechar() }))
-    Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs)) {
+    Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = Espaco.margem).padding(top = Espaco.md, bottom = Espaco.xs)) {
         when (r.etapa) {
             "destino" -> EtapaDoDestino(controle, r)
             "tag" -> EtapaDaTag(controle, r)
@@ -328,7 +328,9 @@ private fun ColumnScope.EtapaDoDestino(controle: ControleDoEnvio, r: RetratoDoEn
                 )
             }
             Row(Modifier.padding(top = Espaco.xs), horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                Pilula(t("Colar"), Icones.colar) {
+                // O colar do iOS: so o texto, apagado quando nao ha nada para colar.
+                val temTexto = remember { contexto.getSystemService(ClipboardManager::class.java).hasPrimaryClip() }
+                Pilula(t("Colar"), null, ligado = temTexto) {
                     val gerente = contexto.getSystemService(ClipboardManager::class.java)
                     val colado = runCatching { gerente.primaryClip?.getItemAt(0)?.coerceToText(contexto)?.toString() }.getOrNull().orEmpty()
                     if (colado.isNotEmpty()) mudar("envio.link", JSONObject().put("texto", colado))
@@ -512,13 +514,13 @@ private fun CampoDaTag(texto: String, dica: String, numerico: Boolean, altura: D
 }
 
 @Composable
-private fun Pilula(titulo: String, icone: ImageVector, acao: () -> Unit) {
+private fun Pilula(titulo: String, icone: ImageVector?, ligado: Boolean = true, acao: () -> Unit) {
     Row(
-        Modifier.height(34.dp).clip(CircleShape).background(Paleta.trilho).clickable(onClick = acao).padding(horizontal = Espaco.sm),
+        Modifier.height(34.dp).clip(CircleShape).background(Paleta.trilho).clickable(enabled = ligado, onClick = acao).padding(horizontal = Espaco.sm),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icone(icone, Paleta.tinta, tamanho = 15.dp)
-        Text(titulo, style = estilo(Tipo.rotulo), color = Paleta.tinta)
+        if (icone != null) Icone(icone, Paleta.tinta, tamanho = 15.dp)
+        Text(titulo, style = estilo(Tipo.rotulo), color = if (ligado) Paleta.tinta else Paleta.tintaApagada)
     }
 }
 

@@ -129,6 +129,20 @@ object Icones {
                         "M10.2 3 V5 M13 3 V5 M10.2 19 V21 M13 19 V21", espessura = 1.8f)
     /** O circulo cheio com o menos vazado (o minus.circle.fill do iOS). */
     val menosCirculoCheio = cheio("menosCirculoCheio", "M12 2.5 A9.5 9.5 0 1 1 11.99 2.5 Z M7.6 11.05 H16.4 A0.95 0.95 0 0 1 16.4 12.95 H7.6 A0.95 0.95 0 0 1 7.6 11.05 Z")
+    /** Os nove pontos do teclado do PIN (o circle.grid.3x3 do iOS). */
+    val gradeDoPin = cheio("gradeDoPin", (0..8).joinToString(" ") { i ->
+        val x = 5.4f + (i % 3) * 6.6f
+        val y = 5.4f + (i / 3) * 6.6f
+        "M${x - 2f} $y A2 2 0 1 0 ${x + 2f} $y A2 2 0 1 0 ${x - 2f} $y Z"
+    })
+    /** O escudo com o cadeado (o lock.shield do iOS). */
+    val escudoCadeado = tracoComPonta("escudoCadeado", "M12 3 L19.5 6 V11.5 C19.5 16 16.3 19.4 12 21 C7.7 19.4 4.5 16 4.5 11.5 V6 Z M10.3 11.2 V10 A1.7 1.7 0 0 1 13.7 10 V11.2",
+                                      "M9.3 11.2 H14.7 V15.4 H9.3 Z", 1.8f)
+    /** O cadeado com a seta em volta (o lock.rotation do iOS): o app que se tranca sozinho. */
+    val cadeadoGirando = tracoComPonta("cadeadoGirando", "M19.5 12 A7.5 7.5 0 1 1 17.3 6.7 M19.5 4 V8.5 H15 M10.6 11.6 V10.5 A1.4 1.4 0 0 1 13.4 10.5 V11.6",
+                                       "M9.7 11.6 H14.3 V15.4 H9.7 Z", 1.8f)
+    /** A chave em pe (o key do iOS). */
+    val chaveEmPe = traco("chaveEmPe", "M12 3.5 A3.75 3.75 0 1 1 11.99 3.5 Z", "M12 11 V20.5 M12 15.5 H14.5 M12 18.5 H14")
     val alvo = traco("alvo", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M12 16 A4 4 0 1 0 12 8 A4 4 0 1 0 12 16 Z")
     val altaEQueda = traco("altaEQueda", "M8 19 V5 M4.5 8.5 L8 5 L11.5 8.5", "M16 5 V19 M12.5 15.5 L16 19 L19.5 15.5")
     val estrela = traco("estrela", "M12 3.5 L14.6 8.9 L20.5 9.6 L16.2 13.7 L17.3 19.6 L12 16.8 L6.7 19.6 L7.8 13.7 L3.5 9.6 L9.4 8.9 Z")
