@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.carteira
 
+import app.escalibur.wallet.ui.comp.LocalEspacoDaBarra
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -127,7 +128,7 @@ fun TelaDaCarteira() {
         },
         modifier = Modifier.fillMaxSize(),
     ) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(bottom = Espaco.xl)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(bottom = Espaco.xl + LocalEspacoDaBarra.current)) {
             // Cabecalho: a carteira (abre a lista) e o olho.
             Row(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem), verticalAlignment = Alignment.CenterVertically) {
                 Row(
@@ -168,9 +169,9 @@ fun TelaDaCarteira() {
 
             Row(Modifier.fillMaxWidth().padding(horizontal = Espaco.xs).padding(top = Espaco.lg)) {
                 if (!carteira.observacao) {
-                    AcaoRapida(t("Enviar"), Icones.enviar, Modifier.weight(1f)) { Navegacao.abrir { app.escalibur.wallet.ui.enviar.FluxoDeEnviar(null) } }
+                    AcaoRapida(t("Enviar"), Icones.enviar, Modifier.weight(1f)) { Navegacao.cobrir { app.escalibur.wallet.ui.enviar.FluxoDeEnviar(null) } }
                 }
-                AcaoRapida(t("Receber"), Icones.receber, Modifier.weight(1f)) { Navegacao.abrir { FluxoDeReceber() } }
+                AcaoRapida(t("Receber"), Icones.receber, Modifier.weight(1f)) { Navegacao.folha { FluxoDeReceber() } }
                 if (!carteira.observacao) {
                     AcaoRapida(t("Trocar"), Icones.trocar, Modifier.weight(1f)) { Navegacao.aba = Aba.trocar }
                 }
@@ -183,7 +184,7 @@ fun TelaDaCarteira() {
                 Faixa(
                     TipoDeFaixa.cautela, titulo, Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg), mensagem = mensagem,
                     tituloDaAcao = if (carteira.palavrasConfirmadas) t("Conferir agora") else t("Gravar agora"),
-                    acao = { Navegacao.abrir { CopiaAgora(carteira) } },
+                    acao = { Navegacao.cobrir { CopiaAgora(carteira) } },
                 )
             }
             AvisosDeEstado(retrato)
@@ -341,7 +342,7 @@ private fun CarteiraVazia() {
         }
         Text(t("No XRP Ledger e na Stellar, a conta passa a existir no primeiro recebimento de 1 XRP ou 1 XLM, que ficam reservados pela rede."),
              style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.md))
-        BotaoSecundario(t("Receber"), Modifier.padding(top = Espaco.md)) { Navegacao.abrir { FluxoDeReceber() } }
+        BotaoSecundario(t("Receber"), Modifier.padding(top = Espaco.md)) { Navegacao.folha { FluxoDeReceber() } }
     }
 }
 

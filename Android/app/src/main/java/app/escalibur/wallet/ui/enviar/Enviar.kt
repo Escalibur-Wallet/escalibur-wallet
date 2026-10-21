@@ -192,7 +192,7 @@ private fun ColumnScope.EscolhaDoAtivo(aoBloquear: (String, String) -> Unit, aoE
             Spacer(Modifier.weight(1f))
             BotaoPrimario(t("Receber")) {
                 Navegacao.fechar()
-                Navegacao.abrir { FluxoDeReceber() }
+                Navegacao.folha { FluxoDeReceber() }
             }
         }
         return
@@ -331,7 +331,7 @@ private fun ColumnScope.EtapaDoDestino(controle: ControleDoEnvio, r: RetratoDoEn
                     if (colado.isNotEmpty()) mudar("envio.link", JSONObject().put("texto", colado))
                 }
                 Pilula(t("Ler QR"), Icones.qr) {
-                    Navegacao.abrir {
+                    Navegacao.folha {
                         LeitorDeQR(aoFechar = { Navegacao.fechar() }) { lido ->
                             Navegacao.fechar()
                             mudar("envio.link", JSONObject().put("texto", lido))

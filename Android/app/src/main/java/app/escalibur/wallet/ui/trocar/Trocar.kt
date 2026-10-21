@@ -281,10 +281,10 @@ private fun RodapeDaTroca(controle: ControleDaTroca, r: RetratoDaTroca, aoSair: 
     Rodape {
         val vende = r.vende
         if (!r.temSaldo && vende != null && !r.observa) {
-            BotaoDeDestaque(t("Receber %@", vende.simbolo), icone = Icones.receber) { Navegacao.abrir { FluxoDeReceber(vende.id) } }
+            BotaoDeDestaque(t("Receber %@", vende.simbolo), icone = Icones.receber) { Navegacao.folha { FluxoDeReceber(vende.id) } }
         } else {
             BotaoPrimario(r.botao, ligado = r.botaoLigado && !r.observa, carregando = controle.buscando && r.cotacao == null && r.podeCotar) {
-                Navegacao.abrir { RevisaoDaTroca(controle, aoSair = aoSair) { it.trabalhar("troca.revisar") } }
+                Navegacao.cobrir { RevisaoDaTroca(controle, aoSair = aoSair) { it.trabalhar("troca.revisar") } }
             }
         }
     }

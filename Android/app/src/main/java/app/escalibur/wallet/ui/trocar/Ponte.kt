@@ -295,7 +295,7 @@ fun RodapeDaPonte() {
     val r = ControleDaPonte.retrato ?: return
     Rodape {
         BotaoPrimario(r.botao, ligado = r.botaoLigado && !r.observa, carregando = r.cotando && r.chegaTexto.isEmpty() && r.podeCotar) {
-            Navegacao.abrir { RevisaoDaPonte() }
+            Navegacao.cobrir { RevisaoDaPonte() }
         }
     }
 }

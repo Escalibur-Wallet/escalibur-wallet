@@ -1,7 +1,9 @@
 package app.escalibur.wallet.ui.comp
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -151,7 +154,7 @@ fun Rodape(modifier: Modifier = Modifier, conteudo: @Composable ColumnScope.() -
         modifier
             .fillMaxWidth()
             .background(Paleta.vazio)
-            .navigationBarsPadding()
+            .then(if (LocalEspacoDaBarra.current > 0.dp) Modifier.padding(bottom = LocalEspacoDaBarra.current - Espaco.md) else Modifier.navigationBarsPadding())
             .padding(start = Espaco.margem, end = Espaco.margem, top = Espaco.sm, bottom = Espaco.xs),
         verticalArrangement = Arrangement.spacedBy(Espaco.sm),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -201,18 +204,46 @@ fun BotaoDeDestaque(titulo: String, modifier: Modifier = Modifier, icone: ImageV
     }
 }
 
-/** O botao redondo de voltar ou fechar no canto. */
+/**
+ * O botao redondo de voltar ou fechar no canto: um circulo de vidro, como os botoes da barra do
+ * iOS 26. Apertado, o vidro cresce um pouco.
+ */
 @Composable
 fun BotaoDeCanto(icone: ImageVector, descricao: String, modifier: Modifier = Modifier, ligado: Boolean = true, acao: () -> Unit) {
+    val toque = remember { MutableInteractionSource() }
+    val apertado by toque.collectIsPressedAsState()
+    val escala by animateFloatAsState(if (apertado) 1.12f else 1f, spring(dampingRatio = 0.6f, stiffness = 600f), label = "escala")
     Box(
         modifier
             .size(Altura.toque)
-            .clip(RoundedCornerShape(22.dp))
-            .clickable(enabled = ligado, role = Role.Button, onClickLabel = descricao, onClick = acao),
+            .graphicsLayer { scaleX = escala; scaleY = escala }
+            .vidro(CircleShape, Vidros.barra)
+            .clip(CircleShape)
+            .clickable(toque, indication = null, enabled = ligado, role = Role.Button, onClickLabel = descricao, onClick = acao),
         contentAlignment = Alignment.Center,
     ) {
-        Icone(icone, Paleta.tintaSuave, tamanho = 20.dp, descricao = descricao)
+        Icone(icone, if (ligado) Paleta.tinta else Paleta.tintaApagada, tamanho = 20.dp, descricao = descricao)
     }
+}
+
+/** Varios botoes num vidro so, como o grupo da direita na barra do iOS 26 (o sino e o favorito). */
+@Composable
+fun GrupoDeVidro(modifier: Modifier = Modifier, conteudo: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier.height(Altura.toque).vidro(CircleShape, Vidros.barra).padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = conteudo,
+    )
+}
+
+/** Um botao de dentro do `GrupoDeVidro`. */
+@Composable
+fun BotaoDoGrupo(icone: ImageVector, descricao: String, cor: Color = Paleta.tinta, acao: () -> Unit) {
+    Box(
+        Modifier.size(width = 42.dp, height = Altura.toque).clip(CircleShape)
+            .clickable(role = Role.Button, onClickLabel = descricao, onClick = acao),
+        contentAlignment = Alignment.Center,
+    ) { Icone(icone, cor, tamanho = 21.dp, descricao = descricao) }
 }
 
 /** O toque leve de selecao, como o `sensoryFeedback(.selection)` do iOS. */

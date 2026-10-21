@@ -138,8 +138,8 @@ fun DetalheDoAtivo(id: String) {
             var podeTrocar by remember(id) { mutableStateOf(false) }
             LaunchedEffect(id) { podeTrocar = ControleDaTroca.permite(linha.posicoes.map { it.ativo }) }
             Row(Modifier.padding(horizontal = Espaco.margem).padding(vertical = Espaco.xs), horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                BotaoSecundario(t("Enviar"), Modifier.weight(1f), altura = Altura.primaria) { Navegacao.abrir { FluxoDeEnviar(linha.posicoes.firstOrNull()?.ativo) } }
-                BotaoSecundario(t("Receber"), Modifier.weight(1f), altura = Altura.primaria) { Navegacao.abrir { FluxoDeReceber(linha.posicoes.firstOrNull()?.ativo) } }
+                BotaoSecundario(t("Enviar"), Modifier.weight(1f), altura = Altura.primaria) { Navegacao.cobrir { FluxoDeEnviar(linha.posicoes.firstOrNull()?.ativo) } }
+                BotaoSecundario(t("Receber"), Modifier.weight(1f), altura = Altura.primaria) { Navegacao.folha { FluxoDeReceber(linha.posicoes.firstOrNull()?.ativo) } }
                 val ativo = linha.posicoes.firstOrNull()?.ativo
                 if (podeTrocar && ativo != null) {
                     BotaoPrimario(t("Trocar"), Modifier.weight(1f)) {

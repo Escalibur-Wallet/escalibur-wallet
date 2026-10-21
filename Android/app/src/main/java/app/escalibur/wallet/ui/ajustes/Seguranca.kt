@@ -56,11 +56,11 @@ fun TelaDeSeguranca() {
 
     Subtela(t("Segurança")) {
         GrupoDeAjustes(Modifier.padding(top = Espaco.md)) {
-            LinhaDeAjuste(Icones.teclado, t("Mudar o PIN")) { Navegacao.abrir { TrocarPin() } }
+            LinhaDeAjuste(Icones.teclado, t("Mudar o PIN")) { Navegacao.cobrir { TrocarPin() } }
             // No Super Security a biometria faz parte do modo: desliga junto com ele.
             LinhaComInterruptor(Icones.digital, t("Biometria"), estado.biometriaLigada || estado.reforcado, habilitado = disponivel && !estado.reforcado,
                                 detalhe = if (estado.reforcado) t("Faz parte do Super Security.") else null) { ligar ->
-                if (ligar) Navegacao.abrir { LigarBiometria() } else desligarBiometria()
+                if (ligar) Navegacao.cobrir { LigarBiometria() } else desligarBiometria()
             }
             LinhaDeAjuste(Icones.relogio, t("Bloquear o app"), rotuloDoBloqueio(estado.autoTravar)) { Navegacao.abrir { BloquearApp() } }
         }

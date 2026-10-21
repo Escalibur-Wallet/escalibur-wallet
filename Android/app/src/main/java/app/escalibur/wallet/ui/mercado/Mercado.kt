@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.mercado
 
+import app.escalibur.wallet.ui.comp.LocalEspacoDaBarra
 import app.escalibur.wallet.ui.avisos.SinoDoAlerta
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -140,7 +141,7 @@ fun TelaDoMercado() {
     val marcadas = favoritas.mapNotNull { id -> filtradas.firstOrNull { it.id == id } }.let { if (ordem == Ordem.relevancia) it else ordem.ordenar(it) }
     val outras = ordem.ordenar(filtradas.filter { it.id !in favoritas })
 
-    LazyColumn(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding()) {
+    LazyColumn(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = LocalEspacoDaBarra.current)) {
         item { TituloDeAba(t("Mercado")) }
         item { CampoDeBusca(busca, t("Buscar moeda"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm)) { busca = it } }
         item {

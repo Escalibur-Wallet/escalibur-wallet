@@ -172,7 +172,7 @@ fun TelaDoSuperSecurity() {
         r = runCatching { RetratoDoReforco(Api.objeto("reforco.estado")) }.getOrNull()
         r?.let { if (it.ligado && it.politica != null) escolhida = it.politica }
     }
-    LaunchedEffect(Navegacao.pilha.size, Ciclo.vinda, App.estado.biometriaLigada) { recarregar() }
+    LaunchedEffect(Navegacao.pilha.size, Navegacao.sobre.size, Ciclo.vinda, App.estado.biometriaLigada) { recarregar() }
 
     fun desligar() {
         mensagem = null
@@ -247,7 +247,7 @@ fun TelaDoSuperSecurity() {
                               e.faltaCopia?.let { t("Cópia de %@ conferida", it) } ?: t("Cópia de todas as carteiras conferida"),
                               if (e.faltaCopia == null) t("Pronto") else t("No Super Security, a cópia é o único caminho de volta."),
                               acao = e.faltaCopiaID?.let { id -> App.estado.carteiras.firstOrNull { it.id == id } }?.let { carteira ->
-                                  t("Gravar agora") to { Navegacao.abrir { CopiaAgora(carteira) } }
+                                  t("Gravar agora") to { Navegacao.cobrir { CopiaAgora(carteira) } }
                               })
                 }
             }
@@ -264,7 +264,7 @@ fun TelaDoSuperSecurity() {
                     mensagem = null
                     val politica = escolhida
                     val aceito = aceitouBloqueio
-                    Navegacao.abrir { FluxoDeLigar(politica, aceito) }
+                    Navegacao.cobrir { FluxoDeLigar(politica, aceito) }
                 }
             }
         }
@@ -275,9 +275,9 @@ fun TelaDoSuperSecurity() {
             escolhendo = false
             if (nova == escolhida || e == null) return@FolhaDaPolitica
             if (e.ligado) {
-                Navegacao.abrir { FluxoDaPolitica(nova) }
+                Navegacao.cobrir { FluxoDaPolitica(nova) }
             } else if (nova == Politica.bloquear) {
-                Navegacao.abrir {
+                Navegacao.cobrir {
                     AceiteDoBloqueio { aceito ->
                         Navegacao.fechar()
                         if (aceito) {
@@ -565,7 +565,7 @@ private fun FluxoDeLigar(inicial: Politica, aceitoInicial: Boolean) {
             mensagem = null
             palavrasProntas = false
             if (nova == Politica.bloquear) {
-                Navegacao.abrir {
+                Navegacao.cobrir {
                     AceiteDoBloqueio { ok ->
                         Navegacao.fechar()
                         if (ok) {

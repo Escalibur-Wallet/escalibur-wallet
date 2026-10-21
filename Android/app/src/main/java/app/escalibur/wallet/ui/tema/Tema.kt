@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.tema
 
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -8,13 +9,18 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import app.escalibur.wallet.R
+import kotlin.math.exp
+import kotlin.math.roundToInt
 
 /**
  * A paleta da carteira, a mesma do iOS (App/EscaliburWallet/Design/Palette.swift): tudo hex
@@ -138,6 +144,41 @@ enum class Tipo(val base: Float, val peso: FontWeight, val tracking: Float, val 
 }
 
 /**
+ * A letra do app: a Inter, a mais proxima da SF Pro do iPhone que pode ir num app Android (a SF Pro
+ * so pode ser usada nos aparelhos da Apple). Variavel: o peso e o tamanho otico (o "Display" a
+ * partir de 20 pontos, como a SF Pro) saem do mesmo arquivo.
+ */
+object Letra {
+    private val familias = HashMap<Long, FontFamily>()
+
+    @OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+    fun familia(peso: FontWeight, tamanho: Float): FontFamily {
+        val otico = tamanho.coerceIn(14f, 32f).roundToInt()
+        val chave = peso.weight.toLong() * 100 + otico
+        return synchronized(familias) {
+            familias.getOrPut(chave) {
+                FontFamily(Font(R.font.inter, peso, variationSettings = FontVariation.Settings(
+                    FontVariation.weight(peso.weight), FontVariation.Setting("opsz", otico.toFloat()))))
+            }
+        }
+    }
+
+    /**
+     * O espaco entre letras que a SF Pro ja traz por tamanho, na formula da Inter (em em): sem
+     * ele, a Inter sai mais aberta que o iPhone nos titulos.
+     */
+    fun espacoNatural(tamanho: Float): Float = -0.0223f + 0.185f * exp(-0.1745f * tamanho)
+
+    /** Para texto sem estilo proprio: todos os pesos, no tamanho otico do corpo. */
+    @OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+    val padrao: FontFamily by lazy {
+        FontFamily((1..9).map { FontWeight(it * 100) }.map { peso ->
+            Font(R.font.inter, peso, variationSettings = FontVariation.Settings(FontVariation.weight(peso.weight), FontVariation.Setting("opsz", 15f)))
+        })
+    }
+}
+
+/**
  * O estilo no tamanho de texto que o dono escolheu no Android, com o mesmo teto do iOS: saldo e
  * titulo grandes crescem menos.
  */
@@ -149,8 +190,9 @@ fun estilo(tipo: Tipo): TextStyle {
     return TextStyle(
         fontSize = tamanho.sp,
         fontWeight = tipo.peso,
-        fontFamily = if (tipo.monoespacado) FontFamily.Monospace else FontFamily.Default,
-        letterSpacing = if (tipo.tracking == 0f) 0.sp else (tipo.tracking / tipo.base).em,
+        fontFamily = if (tipo.monoespacado) FontFamily.Monospace else Letra.familia(tipo.peso, tipo.base),
+        letterSpacing = if (tipo.monoespacado) (tipo.tracking / tipo.base).em
+                        else (Letra.espacoNatural(tipo.base) + tipo.tracking / tipo.base).em,
         lineHeight = (tamanho * 1.22f + tipo.linhaExtra).sp,
         lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
         fontFeatureSettings = if (tipo.digitosFixos) "tnum" else null,
@@ -174,7 +216,9 @@ private val esquemaEscuro = darkColorScheme(
 @Composable
 fun TemaEscalibur(conteudo: @Composable () -> Unit) {
     MaterialTheme(colorScheme = esquemaEscuro) {
-        CompositionLocalProvider(content = conteudo)
+        // Texto sem estilo proprio tambem sai na letra do app.
+        CompositionLocalProvider(LocalTextStyle provides TextStyle(fontFamily = Letra.padrao, letterSpacing = Letra.espacoNatural(15f).em),
+                                 content = conteudo)
     }
 }
 

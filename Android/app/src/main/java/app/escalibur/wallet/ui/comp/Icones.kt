@@ -45,7 +45,8 @@ object Icones {
 
     val enviar = traco("enviar", "M12 20 V4.5 M5.5 11 L12 4.5 L18.5 11", espessura = 2.1f)
     val receber = traco("receber", "M12 4 V19.5 M5.5 13 L12 19.5 L18.5 13", espessura = 2.1f)
-    val trocar = traco("trocar", "M4 8 H19 M15 4 L19 8 L15 12 M20 16 H5 M9 12 L5 16 L9 20")
+    // A seta da esquerda em cima e a da direita embaixo, como o arrow.left.arrow.right do iOS.
+    val trocar = traco("trocar", "M20 8 H5 M9 4 L5 8 L9 12 M4 16 H19 M15 12 L19 16 L15 20")
     val trocarVertical = traco("trocarVertical", "M8 20 V5 M4 9 L8 5 L12 9 M16 4 V19 M12 15 L16 19 L20 15")
     val setaDiagonal = traco("setaDiagonal", "M7 17 L17 7 M9 7 H17 V15")
     val atualizar = traco("atualizar", "M19.5 12 A7.5 7.5 0 1 1 17.3 6.7 M19.5 4 V8.5 H15")
@@ -101,7 +102,7 @@ object Icones {
         "M10.3 3.5 H13.7 L14.2 5.9 L15.8 6.8 L18.1 6 L19.8 8.9 L18 10.6 V12.4 V13.4 L19.8 15.1 L18.1 18 L15.8 17.2 L14.2 18.1 L13.7 20.5 H10.3 L9.8 18.1 L8.2 17.2 L5.9 18 L4.2 15.1 L6 13.4 V10.6 L4.2 8.9 L5.9 6 L8.2 6.8 L9.8 5.9 Z",
     )
     val carteira = traco("carteira", "M4.5 7 H18 A1.5 1.5 0 0 1 19.5 8.5 V18 A1.5 1.5 0 0 1 18 19.5 H6 A1.5 1.5 0 0 1 4.5 18 V7 Z M4.5 7 V6 A1.5 1.5 0 0 1 6 4.5 H16", "M15 12 H19.5 V15 H15 A1.5 1.5 0 0 1 15 12 Z")
-    val mercado = traco("mercado", "M3.5 17.5 L9 11.5 L13 15 L20.5 7", "M15.5 7 H20.5 V12", "M3.5 20.5 H20.5")
+    val mercado = traco("mercado", "M3.5 3.5 V20.5 H20.5", "M7 16 L11 11.5 L14 14.5 L20 8", "M16 8 H20 V12")
     val atividade = traco("atividade", "M4 12 A8 8 0 1 0 6.3 6.3", "M3.5 4 V7.5 H7", "M12 8 V12 L14.5 14.5")
     val envelope = traco("envelope", "M4.5 6 H19.5 A1.5 1.5 0 0 1 21 7.5 V16.5 A1.5 1.5 0 0 1 19.5 18 H4.5 A1.5 1.5 0 0 1 3 16.5 V7.5 A1.5 1.5 0 0 1 4.5 6 Z", "M3.5 7 L12 13 L20.5 7")
     val envelopeAberto = traco("envelopeAberto", "M3 10 L12 4 L21 10 V19 A1.5 1.5 0 0 1 19.5 20.5 H4.5 A1.5 1.5 0 0 1 3 19 Z", "M3.5 10.5 L12 15.5 L20.5 10.5")
@@ -115,6 +116,24 @@ object Icones {
     val falha = cheio("falha", "M8.3 2.5 H15.7 L21.5 8.3 V15.7 L15.7 21.5 H8.3 L2.5 15.7 V8.3 Z M8.5 7.1 L7.1 8.5 L10.6 12 L7.1 15.5 L8.5 16.9 L12 13.4 L15.5 16.9 L16.9 15.5 L13.4 12 L16.9 8.5 L15.5 7.1 L12 10.6 Z")
     val vistoCheio = cheio("vistoCheio", "M12 2 A10 10 0 1 1 12 22 A10 10 0 1 1 12 2 Z M10.6 15.8 L17.3 9.1 L15.9 7.7 L10.6 13 L8.1 10.5 L6.7 11.9 Z")
     val fecharCheio = cheio("fecharCheio", "M12 2 A10 10 0 1 1 12 22 A10 10 0 1 1 12 2 Z M8.5 7.1 L7.1 8.5 L10.6 12 L7.1 15.5 L8.5 16.9 L12 13.4 L15.5 16.9 L16.9 15.5 L13.4 12 L16.9 8.5 L15.5 7.1 L12 10.6 Z")
+    /** As da barra de abas, cheias como as do iOS 26. */
+    val carteiraCheia = cheio(
+        "carteiraCheia",
+        "M5.2 6.5 H17.3 A3.2 3.2 0 0 1 20.5 9.7 V17.3 A3.2 3.2 0 0 1 17.3 20.5 H5.2 A3.2 3.2 0 0 1 2 17.3 V9.7 A3.2 3.2 0 0 1 5.2 6.5 Z " +
+            "M6.05 2.9 H16.45 A1.45 1.45 0 0 1 17.9 4.35 A1.45 1.45 0 0 1 16.45 5.8 H6.05 A1.45 1.45 0 0 1 4.6 4.35 A1.45 1.45 0 0 1 6.05 2.9 Z " +
+            "M15.8 10.1 H16.8 A3.7 3.7 0 0 1 16.8 17.5 H15.8 A3.7 3.7 0 0 1 15.8 10.1 Z " +
+            "M15.8 11.3 H18 A2.5 2.5 0 0 1 18 16.3 H15.8 A2.5 2.5 0 0 1 15.8 11.3 Z " +
+            "M17.5 13.8 A1.2 1.2 0 1 0 15.1 13.8 A1.2 1.2 0 1 0 17.5 13.8 Z",
+    )
+    val engrenagemCheia = cheio(
+        "engrenagemCheia",
+        "M20.17 10.04 L22.48 10.42 L22.48 13.58 L20.17 13.96 L19.99 14.6 L19.76 15.21 L19.48 15.81 L19.16 16.39 L20.53 18.3 L18.3 20.53 " +
+            "L16.39 19.16 L15.81 19.48 L15.21 19.76 L14.6 19.99 L13.96 20.17 L13.58 22.48 L10.42 22.48 L10.04 20.17 L9.4 19.99 L8.79 19.76 " +
+            "L8.19 19.48 L7.61 19.16 L5.7 20.53 L3.47 18.3 L4.84 16.39 L4.52 15.81 L4.24 15.21 L4.01 14.6 L3.83 13.96 L1.52 13.58 L1.52 10.42 " +
+            "L3.83 10.04 L4.01 9.4 L4.24 8.79 L4.52 8.19 L4.84 7.61 L3.47 5.7 L5.7 3.47 L7.61 4.84 L8.19 4.52 L8.79 4.24 L9.4 4.01 L10.04 3.83 " +
+            "L10.42 1.52 L13.58 1.52 L13.96 3.83 L14.6 4.01 L15.21 4.24 L15.81 4.52 L16.39 4.84 L18.3 3.47 L20.53 5.7 L19.16 7.61 L19.48 8.19 " +
+            "L19.76 8.79 L19.99 9.4 Z M15.5 12 A3.5 3.5 0 1 0 8.5 12 A3.5 3.5 0 1 0 15.5 12 Z",
+    )
     val cadeadoCheio = cheio("cadeadoCheio", "M7 10 V7.5 A5 5 0 0 1 17 7.5 V10 H17.5 A2 2 0 0 1 19.5 12 V19 A2 2 0 0 1 17.5 21 H6.5 A2 2 0 0 1 4.5 19 V12 A2 2 0 0 1 6.5 10 Z M9 10 H15 V7.5 A3 3 0 0 0 9 7.5 Z")
 }
 

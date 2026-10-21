@@ -134,7 +134,7 @@ fun TelaDeContatos() {
                 }
             }
         }
-        Rodape { BotaoPrimario(t("Salvar um endereço")) { Navegacao.abrir { NovoContato() } } }
+        Rodape { BotaoPrimario(t("Salvar um endereço")) { Navegacao.folha { NovoContato() } } }
     }
     removendo?.let { contato ->
         Confirmacao(
@@ -280,7 +280,7 @@ private fun NovoContato() {
                                 endereco = runCatching { gerente.primaryClip?.getItemAt(0)?.coerceToText(contexto)?.toString() }.getOrNull().orEmpty().trim().take(512)
                             }, contentAlignment = Alignment.Center) { Icone(Icones.colar, Paleta.tintaSuave, tamanho = 16.dp, descricao = t("Colar")) }
                             Box(Modifier.size(Altura.toque).clickable {
-                                Navegacao.abrir {
+                                Navegacao.folha {
                                     LeitorDeQR(aoFechar = { Navegacao.fechar() }) { lido ->
                                         Navegacao.fechar()
                                         // O mesmo leitor do envio: frase nunca entra, link de outra rede tambem nao, e a tag vem junto.

@@ -17,6 +17,7 @@
     <!-- Sem backup (nem do Google nem de aparelho para aparelho): as chaves ficam so neste
          aparelho, como no iOS. Sem trafego em texto puro. -->
     <application
+        android:enableOnBackInvokedCallback="true"
         android:name=".EscaliburApp"
         android:allowBackup="false"
         android:fullBackupContent="false"

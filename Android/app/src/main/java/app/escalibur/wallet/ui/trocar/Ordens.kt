@@ -135,7 +135,7 @@ fun OrdensAbertas(soComOrdens: Boolean, modifier: Modifier = Modifier) {
     }
     detalhe?.let { ordem ->
         FolhaDaOrdem(ordem, o?.podeAssinar == true, aoFechar = { detalhe = null }, aoEditar = {
-            Navegacao.abrir { TelaDeEditarOrdem(ordem.id) }
+            Navegacao.cobrir { TelaDeEditarOrdem(ordem.id) }
         }, aoCancelar = { cancelando = ordem })
     }
     // O cancelamento pergunta num popup, no meio da tela.
@@ -144,7 +144,7 @@ fun OrdensAbertas(soComOrdens: Boolean, modifier: Modifier = Modifier) {
             t("Cancelar esta ordem?"), ordem.explicacao, t("Cancelar a ordem"),
             aoConfirmar = {
                 cancelando = null
-                Navegacao.abrir { RevisaoDoCancelamento(ordem.id) }
+                Navegacao.cobrir { RevisaoDoCancelamento(ordem.id) }
             },
             aoCancelar = { cancelando = null }, tituloDoCancelar = t("Manter a ordem"),
         )
@@ -345,7 +345,7 @@ fun PerguntaDasVencidas() {
                 val manter = continuar
                 fechar {
                     pergunta = null
-                    Navegacao.abrir { TelaDeRefazerOrdem(id, manter) }
+                    Navegacao.cobrir { TelaDeRefazerOrdem(id, manter) }
                 }
             }
             BotaoTerciario(t("Não refazer"), Modifier.fillMaxWidth()) {

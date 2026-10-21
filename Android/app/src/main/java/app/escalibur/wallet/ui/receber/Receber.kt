@@ -163,7 +163,7 @@ private fun AntesDaCopia(carteira: Carteira) {
         Spacer(Modifier.weight(1f))
         BotaoPrimario(if (passphrase) t("Conferir agora") else t("Gravar agora")) {
             Navegacao.fechar()
-            Navegacao.abrir { CopiaAgora(carteira) }
+            Navegacao.cobrir { CopiaAgora(carteira) }
         }
         BotaoSecundario(t("Agora não"), Modifier.padding(top = Espaco.sm)) { Navegacao.fechar() }
     }

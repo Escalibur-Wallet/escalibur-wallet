@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.atividade
 
+import app.escalibur.wallet.ui.comp.LocalEspacoDaBarra
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -171,7 +172,7 @@ fun TelaDeAtividade() {
         },
         modifier = Modifier.fillMaxSize().background(Paleta.vazio),
     ) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(bottom = Espaco.xl)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(bottom = Espaco.xl + LocalEspacoDaBarra.current)) {
             TituloDeAba(t("Atividade"))
             if (r != null && r.falhas.isNotEmpty()) {
                 Faixa(TipoDeFaixa.neutra, t("%@ não atualizou agora. Mostrando o que já estava salvo.", nomes(r.falhas)),
@@ -192,7 +193,7 @@ fun TelaDeAtividade() {
                     }
                     Text(t("Sua atividade aparece aqui"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.md))
                     Text(t("Envios, recebimentos, trocas e ordens, cada um com o seu status."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
-                    BotaoPrimario(t("Receber"), Modifier.padding(top = Espaco.md)) { Navegacao.abrir { FluxoDeReceber() } }
+                    BotaoPrimario(t("Receber"), Modifier.padding(top = Espaco.md)) { Navegacao.folha { FluxoDeReceber() } }
                 }
                 else -> {
                     if (pendentes.isNotEmpty()) Secao(t("Pendentes"), pendentes, oculto)

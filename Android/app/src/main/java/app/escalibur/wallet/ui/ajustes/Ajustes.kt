@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.ajustes
 
+import app.escalibur.wallet.ui.comp.LocalEspacoDaBarra
 import app.escalibur.wallet.ui.Ciclo
 import app.escalibur.wallet.ui.avisos.TelaDoRecebimento
 import app.escalibur.wallet.ui.avisos.TelaDosAlertas
@@ -84,17 +85,17 @@ fun TelaDeAjustes() {
     var alertas by remember { mutableStateOf<String?>(null) }
     var recebimento by remember { mutableStateOf<String?>(null) }
     // Ao voltar de uma subtela: o resumo de agora.
-    LaunchedEffect(Navegacao.pilha.size, Ciclo.vinda) {
+    LaunchedEffect(Navegacao.pilha.size, Navegacao.sobre.size, Ciclo.vinda) {
         alertas = resumoDosAlertas()
         recebimento = resumoDoRecebimento()
     }
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = Espaco.xl)) {
+    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = Espaco.xl + LocalEspacoDaBarra.current)) {
         TituloDeAba(t("Ajustes"))
         GrupoDeAjustes(Modifier.padding(top = Espaco.lg)) {
             LinhaDeAjuste(Icones.carteira, t("Carteiras"), "${estado.carteiras.size}") { Navegacao.abrir { TelaDeCarteiras() } }
             LinhaDeAjuste(Icones.cadeado, t("Segurança")) { Navegacao.abrir { TelaDeSeguranca() } }
             LinhaDeAjuste(Icones.pessoas, t("Endereços salvos"), estado.contatos.takeIf { it > 0 }?.toString()) { Navegacao.abrir { TelaDeContatos() } }
-            LinhaDeAjuste(Icones.envelopeAberto, t("Abrir um envelope")) { Navegacao.abrir { FluxoDeAbrirEnvelope() } }
+            LinhaDeAjuste(Icones.envelopeAberto, t("Abrir um envelope")) { Navegacao.cobrir { FluxoDeAbrirEnvelope() } }
         }
         SecaoDeAjustes(t("Preferências")) {
             val ligadas = (Redes.todas.size - estado.redesDesligadas.size).coerceAtLeast(0)
@@ -143,7 +144,7 @@ fun TelaDeCarteiras() {
             }
         }
         BotaoSecundario(t("Adicionar carteira"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg)) {
-            Navegacao.abrir { AdicionarCarteira(primeira = false) { Navegacao.fechar() } }
+            Navegacao.cobrir { AdicionarCarteira(primeira = false) { Navegacao.fechar() } }
         }
     }
 }
@@ -173,7 +174,7 @@ fun AjustesDaCarteira(id: String) {
         escopo.launch { runCatching { App.aplicar(Api.objeto("carteira.renomear", JSONObject().put("id", carteira.id).put("nome", limpo))) } }
     }
 
-    fun revelar() { Navegacao.abrir { FluxoDeRevelar(carteira, copia = !carteira.palavrasConfirmadas) { Navegacao.fechar() } } }
+    fun revelar() { Navegacao.cobrir { FluxoDeRevelar(carteira, copia = !carteira.palavrasConfirmadas) { Navegacao.fechar() } } }
 
     // Ligar e na hora; desligar pede a passphrase e o PIN, e o cofre confere a passphrase.
     fun pedirPassphrase(ligar: Boolean) {
@@ -222,11 +223,11 @@ fun AjustesDaCarteira(id: String) {
                         Icones.chave, t("Passphrase"),
                         carteira.passphraseConferidaEm?.let { t("conferida em %@", dia(it)) } ?: t("não conferida"),
                         corDoValor = if (carteira.passphraseConfirmada) Paleta.tintaSuave else Paleta.cautela,
-                    ) { if (carteira.passphraseConfirmada) revelar() else Navegacao.abrir { CopiaAgora(carteira) } }
+                    ) { if (carteira.passphraseConfirmada) revelar() else Navegacao.cobrir { CopiaAgora(carteira) } }
                 }
                 if (carteira.palavras != null) {
                     LinhaDeAjuste(Icones.envelope, t("Envelope Escalibur"), carteira.envelopeLacradoEm?.let { t("lacrado em %@", dia(it)) } ?: t("nenhum")) {
-                        Navegacao.abrir { FluxoDeLacrar(carteira) }
+                        Navegacao.cobrir { FluxoDeLacrar(carteira) }
                     }
                 }
             }
@@ -244,7 +245,7 @@ fun AjustesDaCarteira(id: String) {
             GrupoDeAjustes(Modifier.padding(top = Espaco.lg)) {
                 LinhaDeAjuste(Icones.olho, t("Ver a senha da carteira")) { revelar() }
                 if (carteira.palavras != null) {
-                    LinhaDeAjuste(Icones.cadeado, t("Criptografar a senha da carteira")) { Navegacao.abrir { FluxoDeLacrar(carteira) } }
+                    LinhaDeAjuste(Icones.cadeado, t("Criptografar a senha da carteira")) { Navegacao.cobrir { FluxoDeLacrar(carteira) } }
                     LinhaDeAjuste(Icones.chave, t("Abrir ou criar com passphrase")) { Navegacao.abrir { FluxoDaCarteiraComPassphrase(carteira) } }
                 }
             }
@@ -255,7 +256,7 @@ fun AjustesDaCarteira(id: String) {
                     Icones.alerta,
                     if (carteira.palavrasConfirmadas) t("Confira a passphrase para ver os endereços") else t("Grave as palavras para ver os endereços"),
                     corDoTitulo = Paleta.cautela,
-                ) { Navegacao.abrir { CopiaAgora(carteira) } }
+                ) { Navegacao.cobrir { CopiaAgora(carteira) } }
             }
         } else {
             SecaoDeAjustes(t("Endereços")) {

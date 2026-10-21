@@ -211,7 +211,7 @@ fun SeletorDeCarteiras(aoFechar: () -> Unit) {
                 }
             }
             BotaoPrimario(t("Adicionar carteira"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md, bottom = Espaco.xs)) {
-                fechar { Navegacao.abrir { AdicionarCarteira(primeira = false) { Navegacao.fechar() } } }
+                fechar { Navegacao.cobrir { AdicionarCarteira(primeira = false) { Navegacao.fechar() } } }
             }
         }
     }

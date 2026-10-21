@@ -308,7 +308,7 @@ fun TelaDosAlertas() {
                 val cheia = e.moedas.size >= e.maximo
                 Box(Modifier.alpha(if (cheia) 0.4f else 1f)) {
                     LinhaDeAjuste(Icones.mais, t("Adicionar moeda"), t("%lld de %lld", e.moedas.size, e.maximo)) {
-                        if (!cheia) Navegacao.abrir { EscolherMoedas(mercado) { escopo.launch { estado = runCatching { EstadoDosAlertas(Api.objeto("alertas.estado")) }.getOrNull() } } }
+                        if (!cheia) Navegacao.folha { EscolherMoedas(mercado) { escopo.launch { estado = runCatching { EstadoDosAlertas(Api.objeto("alertas.estado")) }.getOrNull() } } }
                     }
                 }
             }

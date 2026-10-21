@@ -332,3 +332,9 @@ private fun t(chave: String) = app.escalibur.wallet.ui.t(chave)
 fun Modifier.seguraToques(): Modifier = pointerInput(Unit) {
     awaitPointerEventScope { while (true) awaitPointerEvent() }
 }
+
+/**
+ * Quanto o fim de cada aba precisa deixar livre embaixo: a barra de abas flutua por cima do
+ * conteudo, e o ultimo item nao pode ficar atras dela. Zero fora das abas.
+ */
+val LocalEspacoDaBarra = androidx.compose.runtime.staticCompositionLocalOf { 0.dp }
