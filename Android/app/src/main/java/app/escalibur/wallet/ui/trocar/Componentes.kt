@@ -1,5 +1,9 @@
 package app.escalibur.wallet.ui.trocar
 
+import androidx.compose.foundation.layout.fillMaxSize
+import app.escalibur.wallet.ui.principal.FolhaDoIos
+import app.escalibur.wallet.ui.comp.ControleDaFolha
+import app.escalibur.wallet.ui.comp.CabecalhoDaFolha
 import app.escalibur.wallet.ui.carteira.TipoDeSelo
 import app.escalibur.wallet.ui.comp.Girando
 import androidx.compose.animation.animateContentSize
@@ -438,24 +442,16 @@ fun LogoDoProvedor(nome: String, tamanho: Dp, modifier: Modifier = Modifier) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun Folha(titulo: String, aoFechar: () -> Unit, conteudo: @Composable (fechar: (() -> Unit) -> Unit) -> Unit) {
-    val escopo = rememberCoroutineScope()
-    val folha = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val controleDaFolha = remember { ControleDaFolha() }
     fun fechar(depois: () -> Unit) {
-        escopo.launch { folha.hide() }.invokeOnCompletion {
-            aoFechar()
-            depois()
-        }
+        controleDaFolha.depois = depois
+        controleDaFolha.fechar()
     }
-    ModalBottomSheet(onDismissRequest = aoFechar, sheetState = folha, containerColor = Paleta.corpo, dragHandle = null,
-                     shape = RoundedCornerShape(topStart = Raio.folha, topEnd = Raio.folha)) {
-        Column(Modifier.navigationBarsPadding()) {
-            Box(Modifier.fillMaxWidth().height(Altura.barra + Espaco.xs)) {
-                Text(titulo, style = estilo(Tipo.acao), color = Paleta.tinta, modifier = Modifier.align(Alignment.Center))
-                Box(Modifier.align(Alignment.CenterEnd).padding(end = Espaco.xs).size(Altura.toque).clickable { fechar {} }, contentAlignment = Alignment.Center) {
-                    Icone(Icones.fechar, Paleta.tintaSuave, tamanho = 18.dp, descricao = t("Fechar"))
-                }
-            }
-            conteudo(::fechar)
+    FolhaDoIos(aoFechar = { aoFechar(); controleDaFolha.depois?.invoke(); controleDaFolha.depois = null }, media = true) { fecharFolha ->
+        controleDaFolha.fechar = fecharFolha
+        Column(Modifier.fillMaxSize().background(Paleta.corpo).navigationBarsPadding()) {
+            CabecalhoDaFolha(titulo, { fechar {} })
+            Box(Modifier.padding(top = Espaco.xs)) { conteudo(::fechar) }
         }
     }
 }

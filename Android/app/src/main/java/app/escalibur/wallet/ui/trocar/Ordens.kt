@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.trocar
 
+import app.escalibur.wallet.ui.comp.Interruptor
 import app.escalibur.wallet.ui.comp.Girando
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -334,9 +335,7 @@ fun PerguntaDasVencidas() {
             p.opcional("abaixoDoMercado")?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.cautela, modifier = Modifier.padding(top = Espaco.sm)) }
             Row(Modifier.padding(top = Espaco.lg).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(t("Perguntar de novo quando vencer"), style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.weight(1f))
-                Switch(continuar, { continuar = it },
-                       colors = SwitchDefaults.colors(checkedTrackColor = Paleta.acento, checkedThumbColor = Paleta.tinta,
-                                                      uncheckedTrackColor = Paleta.trilho, uncheckedThumbColor = Paleta.tintaSuave, uncheckedBorderColor = Paleta.borda))
+                Interruptor(continuar, { continuar = it }, cor = Paleta.acento)
             }
             Text(t("Refazer pede a sua biometria ou o PIN: sem você, ninguém assina uma ordem nova com a sua chave."), style = estilo(Tipo.nota),
                  color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.xs))

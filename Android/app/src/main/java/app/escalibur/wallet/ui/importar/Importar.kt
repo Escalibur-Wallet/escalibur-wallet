@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.importar
 
+import app.escalibur.wallet.ui.comp.Interruptor
 import android.content.ClipboardManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -427,10 +428,7 @@ internal fun TelaDaFrase(
             }
             if (escolhendo == null && conferindo == null) Row(Modifier.padding(top = Espaco.md), verticalAlignment = Alignment.CenterVertically) {
                 Text(t("Esta carteira usa passphrase"), style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
-                Switch(usaPassphrase, aoMudarPassphrase, colors = SwitchDefaults.colors(
-                    checkedTrackColor = Paleta.acento, checkedThumbColor = Paleta.sobreAcento,
-                    uncheckedTrackColor = Paleta.trilho, uncheckedThumbColor = Paleta.tintaSuave, uncheckedBorderColor = Paleta.borda,
-                ))
+                Interruptor(usaPassphrase, aoMudarPassphrase, cor = Paleta.acento)
             }
             AnimatedVisibility(usaPassphrase) {
                 Column(verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {

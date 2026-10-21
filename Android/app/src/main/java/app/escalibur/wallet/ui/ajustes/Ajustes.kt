@@ -92,16 +92,16 @@ fun TelaDeAjustes() {
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = Espaco.xl + LocalEspacoDaBarra.current)) {
         TituloDeAba(t("Ajustes"))
         GrupoDeAjustes(Modifier.padding(top = Espaco.lg)) {
-            LinhaDeAjuste(Icones.carteira, t("Carteiras"), "${estado.carteiras.size}") { Navegacao.abrir { TelaDeCarteiras() } }
+            LinhaDeAjuste(Icones.carteiraContorno, t("Carteiras"), "${estado.carteiras.size}") { Navegacao.abrir { TelaDeCarteiras() } }
             LinhaDeAjuste(Icones.cadeado, t("Segurança")) { Navegacao.abrir { TelaDeSeguranca() } }
-            LinhaDeAjuste(Icones.pessoas, t("Endereços salvos"), estado.contatos.takeIf { it > 0 }?.toString()) { Navegacao.abrir { TelaDeContatos() } }
+            LinhaDeAjuste(Icones.livro, t("Endereços salvos"), estado.contatos.takeIf { it > 0 }?.toString()) { Navegacao.abrir { TelaDeContatos() } }
             LinhaDeAjuste(Icones.envelopeAberto, t("Abrir um envelope")) { Navegacao.cobrir { FluxoDeAbrirEnvelope() } }
         }
         SecaoDeAjustes(t("Preferências")) {
             val ligadas = (Redes.todas.size - estado.redesDesligadas.size).coerceAtLeast(0)
-            LinhaDeAjuste(Icones.globo, t("Redes"), t("%lld ligadas", ligadas)) { Navegacao.abrir { TelaDeRedes() } }
+            LinhaDeAjuste(Icones.rede, t("Redes"), t("%lld ligadas", ligadas)) { Navegacao.abrir { TelaDeRedes() } }
             LinhaDeAjuste(Icones.sino, t("Alertas de preço"), alertas) { Navegacao.abrir { TelaDosAlertas() } }
-            LinhaDeAjuste(Icones.receber, t("Aviso de recebimento"), recebimento) { Navegacao.abrir { TelaDoRecebimento() } }
+            LinhaDeAjuste(Icones.receberCirculo, t("Aviso de recebimento"), recebimento) { Navegacao.abrir { TelaDoRecebimento() } }
         }
         SecaoDeAjustes(t("Sobre")) {
             LinhaDeAjuste(Icones.pergunta, t("Suporte")) { Navegacao.abrir { TelaDeSuporte() } }

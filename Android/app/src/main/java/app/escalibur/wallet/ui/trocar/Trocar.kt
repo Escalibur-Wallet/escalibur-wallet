@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.trocar
 
+import app.escalibur.wallet.ui.comp.Interruptor
 import app.escalibur.wallet.ui.comp.Girando
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -459,14 +460,10 @@ private fun ColumnScope.FormularioLimite(r: RetratoDaTroca, mudar: (JSONObject) 
         Column(Modifier.padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(t("Refazer quando vencer"), style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.weight(1f))
-                Switch(
-                    limite.refazer, { novo ->
-                        mudar(JSONObject().put("refazer", novo))
-                        if (novo) escopo.launch { pedir() }
-                    },
-                    colors = SwitchDefaults.colors(checkedTrackColor = Paleta.acento, checkedThumbColor = Paleta.tinta,
-                                                   uncheckedTrackColor = Paleta.trilho, uncheckedThumbColor = Paleta.tintaSuave, uncheckedBorderColor = Paleta.borda),
-                )
+                Interruptor(limite.refazer, { novo ->
+                    mudar(JSONObject().put("refazer", novo))
+                    if (novo) escopo.launch { pedir() }
+                }, cor = Paleta.acento)
             }
             Text(t("Quando o prazo acabar, o celular avisa e o app pergunta se refaz com o mesmo preço. Refazer pede a sua biometria ou o PIN: sem você, ninguém assina uma ordem nova com a sua chave."),
                  style = estilo(Tipo.nota), color = Paleta.tintaApagada)

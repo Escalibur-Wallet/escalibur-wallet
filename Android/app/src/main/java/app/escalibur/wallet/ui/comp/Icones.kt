@@ -55,6 +55,16 @@ object Icones {
     val coracaoCheio = cheio("coracaoCheio", "M12 20.2 C11.2 19.6 3 14.3 3 8.9 C3 6.1 5.1 4 7.8 4 C9.6 4 11.1 5 12 6.4 C12.9 5 14.4 4 16.2 4 C18.9 4 21 6.1 21 8.9 C21 14.3 12.8 19.6 12 20.2 Z")
     val trianguloAcima = cheioRedondo("trianguloAcima", "M12 5.5 L19.5 18 H4.5 Z", raio = 1.4f)
     val trianguloAbaixo = cheioRedondo("trianguloAbaixo", "M12 18.5 L19.5 6 H4.5 Z", raio = 1.4f)
+    // Os dos Ajustes, finos como os simbolos de peso regular do iOS.
+    val carteiraContorno = traco("carteiraContorno",
+        "M5.2 7.2 H18.4 A2.6 2.6 0 0 1 21 9.8 V18.4 A2.6 2.6 0 0 1 18.4 21 H5.6 A2.6 2.6 0 0 1 3 18.4 V7.6",
+        "M3 7.6 L15.6 3.3 A1.6 1.6 0 0 1 17.7 4.8 V7.2",
+        "M16.4 11.6 H21 V16.6 H16.4 A2.5 2.5 0 0 1 16.4 11.6 Z", "M16.6 14.1 H16.7", espessura = 1.55f)
+    val livro = traco("livro", "M6.8 3 H18.5 A1 1 0 0 1 19.5 4 V19 A1 1 0 0 1 18.5 20 H6.8 A2.3 2.3 0 0 1 4.5 17.7 V5.3 A2.3 2.3 0 0 1 6.8 3 Z",
+                      "M8.5 3 V20", "M4.5 17.7 A2.3 2.3 0 0 1 6.8 15.4 H19.5", espessura = 1.55f)
+    val rede = traco("rede", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M12 3 C9.3 5.5 8.2 8.7 8.2 12 C8.2 15.3 9.3 18.5 12 21 C14.7 18.5 15.8 15.3 15.8 12 C15.8 8.7 14.7 5.5 12 3 Z",
+                     "M3 12 H21", "M4.4 7.2 H19.6", "M4.4 16.8 H19.6", "M12 3 V21", espessura = 1.4f)
+    val receberCirculo = traco("receberCirculo", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M12 7.5 V16", "M8.3 12.5 L12 16.2 L15.7 12.5", espessura = 1.55f)
     val chevronsDireita = traco("chevronsDireita", "M5.5 6 L11.5 12 L5.5 18 M12.5 6 L18.5 12 L12.5 18", espessura = 2.6f)
     val voltar = traco("voltar", "M15 4.5 L7.5 12 L15 19.5", espessura = 2.2f)
     val avancar = traco("avancar", "M9 4.5 L16.5 12 L9 19.5", espessura = 2.2f)

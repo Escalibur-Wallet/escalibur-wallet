@@ -1,9 +1,11 @@
 package app.escalibur.wallet.ui.ajustes
 
+import app.escalibur.wallet.ui.comp.Interruptor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -67,7 +69,7 @@ fun LinhaDeAjuste(
             .padding(horizontal = Espaco.md),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
     ) {
-        if (icone != null) Icone(icone, Paleta.tintaSuave, tamanho = 18.dp, modifier = Modifier.width(28.dp))
+        if (icone != null) Box(Modifier.width(28.dp), contentAlignment = Alignment.Center) { Icone(icone, Paleta.tintaSuave, tamanho = 21.dp) }
         Text(titulo, style = estilo(Tipo.corpo), color = corDoTitulo, modifier = Modifier.weight(1f))
         if (valor != null) Text(valor, style = estilo(Tipo.nota), color = corDoValor)
         if (seta) Icone(Icones.avancar, Paleta.tintaApagada, tamanho = 13.dp)
@@ -78,7 +80,7 @@ fun LinhaDeAjuste(
 @Composable
 fun LinhaComInterruptor(
     icone: ImageVector?, titulo: String, ligado: Boolean, detalhe: String? = null, habilitado: Boolean = true,
-    inicio: (@Composable RowScope.() -> Unit)? = null, aoMudar: (Boolean) -> Unit,
+    inicio: (@Composable RowScope.() -> Unit)? = null, cor: Color = Paleta.sucesso, aoMudar: (Boolean) -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = Altura.linhaCompacta).padding(horizontal = Espaco.md, vertical = Espaco.xs),
@@ -89,11 +91,7 @@ fun LinhaComInterruptor(
             Text(titulo, style = estilo(Tipo.corpo), color = if (habilitado) Paleta.tinta else Paleta.tintaApagada)
             if (detalhe != null) Text(detalhe, style = estilo(Tipo.nota), color = Paleta.tintaSuave)
         }
-        Switch(
-            ligado, aoMudar, enabled = habilitado,
-            colors = SwitchDefaults.colors(checkedTrackColor = Paleta.sucesso, checkedThumbColor = Paleta.tinta,
-                                           uncheckedTrackColor = Paleta.trilho, uncheckedThumbColor = Paleta.tintaSuave, uncheckedBorderColor = Paleta.borda),
-        )
+        Interruptor(ligado, aoMudar, cor = cor, habilitado = habilitado)
     }
 }
 

@@ -251,3 +251,38 @@ fun toqueDeSelecao(): () -> Unit {
     val haptico = LocalHapticFeedback.current
     return { haptico.performHapticFeedback(HapticFeedbackType.SegmentTick) }
 }
+
+/**
+ * O interruptor do iOS 26: a trilha larga (63 por 28) e o botao em capsula branca (37 por 24) que
+ * desliza com mola. Apertado, o botao cresce, como o vidro do iOS. Desligado, a trilha e o cinza dos
+ * controles; ligado, a cor dada (o verde do sistema, por padrao).
+ */
+@Composable
+fun Interruptor(ligado: Boolean, aoMudar: (Boolean) -> Unit, modifier: Modifier = Modifier, cor: Color = Paleta.sucesso, habilitado: Boolean = true) {
+    val haptico = LocalHapticFeedback.current
+    val toque = remember { MutableInteractionSource() }
+    val apertado by toque.collectIsPressedAsState()
+    val posicao by animateFloatAsState(if (ligado) 1f else 0f, spring(dampingRatio = 0.78f, stiffness = 520f), label = "interruptor")
+    val crescido by animateFloatAsState(if (apertado && habilitado) 1f else 0f, spring(dampingRatio = 0.7f, stiffness = 600f), label = "aperto")
+    val trilha by androidx.compose.animation.animateColorAsState(
+        when { !habilitado -> Paleta.controle; ligado -> cor; else -> Paleta.controle }, tween(180), label = "trilha")
+    Box(
+        modifier.size(width = 63.dp, height = 28.dp).clip(CircleShape).background(trilha)
+            .clickable(toque, indication = null, enabled = habilitado, role = Role.Switch) {
+                haptico.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                aoMudar(!ligado)
+            },
+    ) {
+        Box(
+            Modifier.padding(2.dp)
+                .graphicsLayer {
+                    translationX = (63.dp - 37.dp - 4.dp).toPx() * posicao
+                    val e = 1f + 0.18f * crescido
+                    scaleX = e
+                    scaleY = e
+                }
+                .size(width = 37.dp, height = 24.dp).clip(CircleShape)
+                .background(if (habilitado) Color.White.copy(alpha = 1f - 0.12f * crescido) else Paleta.tintaApagada),
+        )
+    }
+}

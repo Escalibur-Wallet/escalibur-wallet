@@ -1,5 +1,9 @@
 package app.escalibur.wallet.ui.comp
 
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.shadow
+import kotlinx.coroutines.launch
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -254,6 +258,32 @@ fun Esqueleto(largura: Dp, altura: Dp = 14.dp, modifier: Modifier = Modifier) {
     )
 }
 
+/**
+ * O cabecalho de uma folha do iOS (o `SheetHeader`): o titulo grande a esquerda e o fechar num circulo
+ * pequeno a direita, com um botao a mais antes dele quando preciso (o "+" do Receber).
+ */
+@Composable
+fun CabecalhoDaFolha(titulo: String, aoFechar: (() -> Unit)?, modifier: Modifier = Modifier,
+                     extra: Triple<androidx.compose.ui.graphics.vector.ImageVector, String, () -> Unit>? = null) {
+    Row(modifier.fillMaxWidth().padding(horizontal = Espaco.margem).padding(top = Espaco.lg), verticalAlignment = Alignment.CenterVertically) {
+        Text(titulo, style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.weight(1f))
+        if (extra != null) {
+            Box(Modifier.size(Altura.toque).clip(CircleShape).clickable(onClickLabel = extra.second, onClick = extra.third), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(30.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
+                    Icone(extra.first, Paleta.tinta, tamanho = 15.dp, descricao = extra.second)
+                }
+            }
+        }
+        if (aoFechar != null) {
+            Box(Modifier.size(Altura.toque).clip(CircleShape).clickable(onClickLabel = t("Fechar"), onClick = aoFechar), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(30.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
+                    Icone(Icones.fechar, Paleta.tintaSuave, tamanho = 13.dp, descricao = t("Fechar"))
+                }
+            }
+        }
+    }
+}
+
 /** O cabecalho de uma folha: titulo no centro e o fechar no canto. */
 @Composable
 fun CabecalhoDeFolha(titulo: String, aoFechar: (() -> Unit)?, modifier: Modifier = Modifier, aoVoltar: (() -> Unit)? = null) {
@@ -265,41 +295,69 @@ fun CabecalhoDeFolha(titulo: String, aoFechar: (() -> Unit)?, modifier: Modifier
     }
 }
 
-/** O aviso curto que aparece e some sozinho (copiado, salvo). */
+/**
+ * O aviso curto que aparece e some sozinho (copiado, salvo), como o do iOS: um cartao na largura da
+ * tela, no alto, por cima de tudo, com o icone do tipo. Some em 2,5 s; arrastado para cima, sai na hora.
+ */
 object Avisos {
-    var atual by mutableStateOf<String?>(null)
-        private set
-    private var contador by mutableStateOf(0)
+    enum class Tipo { sucesso, falha, informacao }
 
-    fun mostrar(texto: String) {
-        atual = texto
+    data class Aviso(val texto: String, val tipo: Tipo, val numero: Int)
+
+    var atual by mutableStateOf<Aviso?>(null)
+        private set
+    private var contador = 0
+
+    fun mostrar(texto: String, tipo: Tipo = Tipo.sucesso) {
         contador++
+        atual = Aviso(texto, tipo, contador)
     }
 
     @Composable
     fun Camada(modifier: Modifier = Modifier) {
-        val texto = atual
-        LaunchedEffect(contador) {
-            if (texto != null) {
-                delay(1800)
-                atual = null
+        val aviso = atual
+        val escopo = rememberCoroutineScope()
+        val arraste = remember { Animatable(0f) }
+        LaunchedEffect(aviso?.numero) {
+            arraste.snapTo(0f)
+            if (aviso != null) {
+                delay(2500)
+                if (atual?.numero == aviso.numero) atual = null
             }
         }
+        var ultimo by remember { mutableStateOf<Aviso?>(null) }
+        if (aviso != null) ultimo = aviso
         AnimatedVisibility(
-            visible = texto != null, modifier = modifier.statusBarsPadding().padding(top = Espaco.xs),
-            enter = slideInVertically { -it } + fadeIn(), exit = slideOutVertically { -it } + fadeOut(),
+            visible = aviso != null, modifier = modifier.statusBarsPadding().padding(top = Espaco.xs),
+            enter = slideInVertically(spring(dampingRatio = 0.86f, stiffness = 440f)) { -it * 2 } + fadeIn(),
+            exit = slideOutVertically(tween(200)) { -it * 2 } + fadeOut(tween(200)),
         ) {
+            val mostrado = ultimo ?: return@AnimatedVisibility
+            val (icone, cor) = when (mostrado.tipo) {
+                Tipo.sucesso -> Icones.vistoCheio to Paleta.alta
+                Tipo.falha -> Icones.fecharCheio to Paleta.baixa
+                Tipo.informacao -> Icones.info to Paleta.tintaSuave
+            }
             Row(
-                Modifier
-                    .clip(CircleShape)
-                    .background(Paleta.controle)
-                    .border(BorderStroke(1.dp, Paleta.bordaForte), CircleShape)
-                    .padding(horizontal = Espaco.md, vertical = Espaco.sm),
+                Modifier.padding(horizontal = Espaco.margem).fillMaxWidth()
+                    .graphicsLayer { translationY = arraste.value }
+                    .shadow(24.dp, RoundedCornerShape(Raio.cartao), ambientColor = Color.Black.copy(alpha = 0.5f), spotColor = Color.Black.copy(alpha = 0.5f))
+                    .clip(RoundedCornerShape(Raio.cartao)).background(Paleta.trilho).border(1.dp, Paleta.borda, RoundedCornerShape(Raio.cartao))
+                    .pointerInput(mostrado.numero) {
+                        // Segue o dedo para cima; para baixo, so cede um pouco. Solto alto o bastante, sai.
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                if (arraste.value < -24.dp.toPx()) atual = null
+                                else escopo.launch { arraste.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 500f)) }
+                            },
+                        ) { _, dy: Float -> escopo.launch { arraste.snapTo(arraste.value + if (arraste.value + dy < 0) dy else dy / 5) } }
+                    }
+                    .heightIn(min = 48.dp).padding(horizontal = Espaco.md, vertical = Espaco.sm),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Espaco.xs),
+                horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
             ) {
-                Icone(Icones.visto, Paleta.tinta, tamanho = 16.dp)
-                Text(texto ?: "", style = estilo(Tipo.nota), color = Paleta.tinta)
+                Icone(icone, cor, tamanho = 19.dp)
+                Text(mostrado.texto, style = estilo(app.escalibur.wallet.ui.tema.Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
             }
         }
     }
@@ -386,4 +444,10 @@ fun Modifier.moedaGirando(atraso: Long = 0): Modifier = composed {
         scaleX = if (frente) 1f else -1f
         cameraDistance = 6f * density
     }
+}
+
+/** O fechar de uma folha do iOS e o que fazer depois que ela saiu. */
+class ControleDaFolha {
+    var fechar: () -> Unit = {}
+    var depois: (() -> Unit)? = null
 }

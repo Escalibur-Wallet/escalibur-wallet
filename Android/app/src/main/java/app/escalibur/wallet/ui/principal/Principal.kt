@@ -6,6 +6,7 @@ import app.escalibur.wallet.ui.comp.seguraToques
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.key
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -117,21 +118,25 @@ object Navegacao {
      * Uma tela aberta. `posicao` vai de 1 (fora: a direita, se empurrada; embaixo, se coberta ou
      * folha) a 0 (no lugar).
      */
-    class Entrada(val modo: Modo, val tela: @Composable () -> Unit) {
+    class Entrada(val modo: Modo, val media: Boolean = false, val tela: @Composable () -> Unit) {
         val posicao = Animatable(1f)
         var saindo by mutableStateOf(false)
+        /** A folha na altura media (metade da tela) ou ja puxada para cima. */
+        var alta by mutableStateOf(!media)
+        /** Quem abriu fica sabendo quando ela termina de sair (a folha aberta de dentro de uma tela). */
+        var aoSair: (() -> Unit)? = null
     }
 
     /** Empurra na aba aberta; dentro de um fluxo de tela cheia ou de uma folha, empurra nele. */
     fun abrir(tela: @Composable () -> Unit) {
-        (if (sobre.isNotEmpty()) sobre else pilha).add(Entrada(Modo.empurrada, tela))
+        (if (sobre.isNotEmpty()) sobre else pilha).add(Entrada(Modo.empurrada, tela = tela))
     }
 
     /** O fluxo de tela cheia: sobe de baixo e cobre a barra de abas. */
-    fun cobrir(tela: @Composable () -> Unit) { sobre.add(Entrada(Modo.coberta, tela)) }
+    fun cobrir(tela: @Composable () -> Unit) { sobre.add(Entrada(Modo.coberta, tela = tela)) }
 
     /** A folha: sobe de baixo, e o que fica atras recua. */
-    fun folha(tela: @Composable () -> Unit) { sobre.add(Entrada(Modo.folha, tela)) }
+    fun folha(media: Boolean = false, tela: @Composable () -> Unit) { sobre.add(Entrada(Modo.folha, media, tela)) }
 
     /** A de cima, entre todas: a que o voltar fecha. */
     val doTopo: Entrada? get() = sobre.lastOrNull { !it.saindo } ?: pilha.lastOrNull { !it.saindo }
@@ -250,6 +255,7 @@ private fun Camadas(entradas: SnapshotStateList<Navegacao.Entrada>, largura: Flo
                 if (entrada.saindo) {
                     entrada.posicao.animateTo(1f, tween(if (entrada.modo == Navegacao.Modo.empurrada) 320 else 340, easing = CurvaDoIos))
                     Navegacao.remover(entrada)
+                    entrada.aoSair?.invoke()
                 } else if (entrada.posicao.value > 0f) {
                     entrada.posicao.animateTo(0f, tween(if (entrada.modo == Navegacao.Modo.empurrada) 420 else 460, easing = CurvaDoIos))
                 }
@@ -280,8 +286,13 @@ private fun Camadas(entradas: SnapshotStateList<Navegacao.Entrada>, largura: Flo
 @Composable
 private fun Folha(entrada: Navegacao.Entrada, deCima: Navegacao.Entrada?, largura: Float, altura: Float) {
     val escopo = rememberCoroutineScope()
-    val topo = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 10.dp
-    val alturaDaFolha = altura - with(androidx.compose.ui.platform.LocalDensity.current) { topo.toPx() }
+    val densidade = androidx.compose.ui.platform.LocalDensity.current
+    val topoAlto = with(densidade) { (WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 10.dp).toPx() }
+    // Na altura media, a folha comeca na metade da tela; puxada para cima, vai ate o alto.
+    val topoAnimado by androidx.compose.animation.core.animateFloatAsState(if (entrada.alta) topoAlto else altura * 0.5f,
+        spring(dampingRatio = 0.86f, stiffness = 420f), label = "detent")
+    val topo = with(densidade) { topoAnimado.toDp() }
+    val alturaDaFolha = altura - topoAnimado
     fun soltar(velocidade: Float) {
         escopo.launch {
             if (entrada.posicao.value > 0.25f || velocidade > 1800f) entrada.saindo = true
@@ -291,6 +302,11 @@ private fun Folha(entrada: Navegacao.Entrada, deCima: Navegacao.Entrada?, largur
     val arraste = remember(entrada) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // Na altura media, o dedo subindo leva a folha para o alto primeiro.
+                if (available.y < -2f && !entrada.alta && entrada.posicao.value <= 0f) {
+                    entrada.alta = true
+                    return Offset(0f, available.y)
+                }
                 // Folha ja descida e o dedo subindo: primeiro a folha volta para o lugar.
                 if (available.y < 0 && entrada.posicao.value > 0f && !entrada.saindo) {
                     val antes = entrada.posicao.value
@@ -329,13 +345,35 @@ private fun Folha(entrada: Navegacao.Entrada, deCima: Navegacao.Entrada?, largur
             .nestedScroll(arraste)
             .draggable(
                 rememberDraggableState { delta ->
-                    if (!entrada.saindo) escopo.launch { entrada.posicao.snapTo((entrada.posicao.value + delta / alturaDaFolha).coerceIn(0f, 1f)) }
+                    if (delta < -2f && !entrada.alta && entrada.posicao.value <= 0f) entrada.alta = true
+                    else if (!entrada.saindo) escopo.launch { entrada.posicao.snapTo((entrada.posicao.value + delta / alturaDaFolha).coerceIn(0f, 1f)) }
                 },
                 Orientation.Vertical,
                 onDragStopped = { soltar(it) },
             )
             .seguraToques(),
     ) { entrada.tela() }
+}
+
+/**
+ * Uma folha aberta de dentro de uma tela (o `.sheet` do iOS), mostrada por cima de tudo com o subir e
+ * o recuo do iOS. Ela fica enquanto esta composta; arrastada para baixo ou no voltar, sai deslizando
+ * e chama `aoFechar`. `conteudo` recebe o `fechar`, que tambem sai deslizando.
+ */
+@Composable
+fun FolhaDoIos(aoFechar: () -> Unit, media: Boolean = false, conteudo: @Composable (fechar: () -> Unit) -> Unit) {
+    val atual = rememberUpdatedState(conteudo)
+    val aoFecharAtual = rememberUpdatedState(aoFechar)
+    val entrada = remember {
+        lateinit var esta: Navegacao.Entrada
+        esta = Navegacao.Entrada(Navegacao.Modo.folha, media) { atual.value { esta.saindo = true } }
+        esta.aoSair = { aoFecharAtual.value() }
+        esta
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        Navegacao.sobre.add(entrada)
+        onDispose { Navegacao.remover(entrada) }
+    }
 }
 
 /**

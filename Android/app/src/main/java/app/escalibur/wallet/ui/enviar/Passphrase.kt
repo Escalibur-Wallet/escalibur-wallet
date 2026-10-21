@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.enviar
 
+import app.escalibur.wallet.ui.comp.Interruptor
 import app.escalibur.wallet.ui.comp.seguraToques
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -148,11 +149,7 @@ fun FolhaDaPassphrase(pedido: PedidoDePassphrase.Pedido) {
                 Column(Modifier.padding(top = Espaco.lg), verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text(t("Não pedir de novo por um tempo"), style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
-                        Switch(
-                            folgaLigada, { folgaLigada = it },
-                            colors = SwitchDefaults.colors(checkedTrackColor = Paleta.sucesso, checkedThumbColor = Paleta.tinta,
-                                                           uncheckedTrackColor = Paleta.trilho, uncheckedThumbColor = Paleta.tintaSuave, uncheckedBorderColor = Paleta.borda),
-                        )
+                        Interruptor(folgaLigada, { folgaLigada = it })
                     }
                     Text(
                         if (folgaLigada) t("Nos próximos %lld minutos, %@ não pede a passphrase para mover saldo. A biometria ou o PIN continuam. Travar o app encerra.", minutos, pedido.nomeDaCarteira)

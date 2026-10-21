@@ -1,5 +1,9 @@
 package app.escalibur.wallet.ui.carteira
 
+import androidx.compose.foundation.layout.fillMaxSize
+import app.escalibur.wallet.ui.principal.FolhaDoIos
+import app.escalibur.wallet.ui.comp.ControleDaFolha
+import app.escalibur.wallet.ui.comp.CabecalhoDaFolha
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -107,7 +111,7 @@ fun subtituloDaCarteira(carteira: Carteira): String = when {
 @Composable
 fun SeletorDeCarteiras(aoFechar: () -> Unit) {
     val escopo = rememberCoroutineScope()
-    val folha = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val controleDaFolha = remember { ControleDaFolha() }
     val haptico = LocalHapticFeedback.current
     val estado = App.estado
     var renomeando by remember { mutableStateOf<Carteira?>(null) }
@@ -118,21 +122,14 @@ fun SeletorDeCarteiras(aoFechar: () -> Unit) {
     val alturaDaLinha = with(LocalDensity.current) { Altura.linha.toPx() }
 
     fun fechar(depois: () -> Unit = {}) {
-        escopo.launch { folha.hide() }.invokeOnCompletion {
-            aoFechar()
-            depois()
-        }
+        controleDaFolha.depois = depois
+        controleDaFolha.fechar()
     }
 
-    ModalBottomSheet(onDismissRequest = aoFechar, sheetState = folha, containerColor = Paleta.corpo, dragHandle = null,
-                     shape = RoundedCornerShape(topStart = Raio.folha, topEnd = Raio.folha)) {
-        Column(Modifier.navigationBarsPadding()) {
-            Box(Modifier.fillMaxWidth().height(Altura.barra + Espaco.xs)) {
-                Text(t("Carteiras"), style = estilo(Tipo.acao), color = Paleta.tinta, modifier = Modifier.align(Alignment.Center))
-                Box(Modifier.align(Alignment.CenterEnd).padding(end = Espaco.xs).size(Altura.toque).clickable { fechar() }, contentAlignment = Alignment.Center) {
-                    Icone(Icones.fechar, Paleta.tintaSuave, tamanho = 18.dp, descricao = t("Fechar"))
-                }
-            }
+    FolhaDoIos(aoFechar = { aoFechar(); controleDaFolha.depois?.invoke(); controleDaFolha.depois = null }, media = true) { fecharFolha ->
+        controleDaFolha.fechar = fecharFolha
+        Column(Modifier.fillMaxSize().background(Paleta.corpo).navigationBarsPadding()) {
+            CabecalhoDaFolha(t("Carteiras"), { fechar() })
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState(), enabled = arrastando == null).padding(top = Espaco.xs)) {
                 ordem.forEachIndexed { indice, carteira ->
                     val selecionada = carteira.id == estado.selecionada || (estado.selecionada == null && indice == 0)
@@ -268,7 +265,7 @@ private fun Renomear(carteira: Carteira, aoFechar: () -> Unit) {
 fun CopiarEndereco(carteira: Carteira, aoFechar: () -> Unit) {
     val contexto = LocalContext.current
     val escopo = rememberCoroutineScope()
-    val folha = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val controleDaFolha = remember { ControleDaFolha() }
     var abertas by remember { mutableStateOf(false) }
     val redes = Redes.todas
     val evm = redes.filter { it.familia == "evm" && carteira.endereco(it.id) != null }
@@ -283,21 +280,14 @@ fun CopiarEndereco(carteira: Carteira, aoFechar: () -> Unit) {
 
     fun copiar(titulo: String, endereco: String) {
         Transferencia.copiar(contexto, endereco)
-        escopo.launch { folha.hide() }.invokeOnCompletion {
-            aoFechar()
-            Avisos.mostrar(t("Endereço %@ copiado. Depois de colar, confira o endereço inteiro, inclusive o meio.", titulo))
-        }
+        controleDaFolha.depois = { Avisos.mostrar(t("Endereço %@ copiado. Depois de colar, confira o endereço inteiro, inclusive o meio.", titulo)) }
+        controleDaFolha.fechar()
     }
 
-    ModalBottomSheet(onDismissRequest = aoFechar, sheetState = folha, containerColor = Paleta.vazio, dragHandle = null,
-                     shape = RoundedCornerShape(topStart = Raio.folha, topEnd = Raio.folha)) {
-        Column(Modifier.navigationBarsPadding().padding(bottom = Espaco.md)) {
-            Box(Modifier.fillMaxWidth().height(Altura.barra + Espaco.xs)) {
-                Text(t("Copiar endereço"), style = estilo(Tipo.acao), color = Paleta.tinta, modifier = Modifier.align(Alignment.Center))
-                Box(Modifier.align(Alignment.CenterEnd).padding(end = Espaco.xs).size(Altura.toque).clickable { aoFechar() }, contentAlignment = Alignment.Center) {
-                    Icone(Icones.fechar, Paleta.tintaSuave, tamanho = 18.dp, descricao = t("Fechar"))
-                }
-            }
+    FolhaDoIos(aoFechar = { aoFechar(); controleDaFolha.depois?.invoke(); controleDaFolha.depois = null }, media = true) { fecharFolha ->
+        controleDaFolha.fechar = fecharFolha
+        Column(Modifier.fillMaxSize().background(Paleta.vazio).navigationBarsPadding().padding(bottom = Espaco.md)) {
+            CabecalhoDaFolha(t("Copiar endereço"), { controleDaFolha.fechar() })
             Text(t("Escolha a rede. Depois de colar, confira o endereço inteiro, inclusive o meio."), style = estilo(Tipo.nota), color = Paleta.tintaSuave,
                  modifier = Modifier.padding(horizontal = Espaco.margem))
             Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(top = Espaco.md),
