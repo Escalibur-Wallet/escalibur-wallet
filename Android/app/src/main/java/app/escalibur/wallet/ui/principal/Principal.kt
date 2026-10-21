@@ -58,6 +58,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.CompositionLocalProvider
@@ -162,8 +163,8 @@ object Navegacao {
         pilhas.values.forEach { it.remove(entrada) }
     }
 
-    /** So no build de depuracao: a tela pedida pelo adb, aberta uma vez depois de destrancar. */
-    var telaDeDepuracao: String? = null
+    /** So no build de depuracao: a tela pedida pelo adb, aberta depois de destrancar (e de novo a cada pedido). */
+    var telaDeDepuracao by mutableStateOf<String?>(null)
 }
 
 /** O app destrancado. Sem carteira: a oferta da biometria (uma vez) e a primeira carteira. */
@@ -181,9 +182,10 @@ fun Principal() {
         return
     }
     if (app.escalibur.wallet.BuildConfig.DEBUG) {
-        androidx.compose.runtime.LaunchedEffect(Unit) {
+        androidx.compose.runtime.LaunchedEffect(Navegacao.telaDeDepuracao) {
             val tela = Navegacao.telaDeDepuracao ?: return@LaunchedEffect
             Navegacao.telaDeDepuracao = null
+            Navegacao.fecharTudo()
             if (tela.startsWith("enviar-")) Navegacao.cobrir { app.escalibur.wallet.ui.enviar.FluxoDeEnviar("demo:" + tela.removePrefix("enviar-")) }
             when (tela) {
                 // Como no importar: o fechar no alto, abaixo da barra de status.
@@ -194,6 +196,19 @@ fun Principal() {
                     }
                 }
                 "receber" -> Navegacao.folha { app.escalibur.wallet.ui.receber.FluxoDeReceber() }
+                "receber-btc" -> Navegacao.folha { app.escalibur.wallet.ui.receber.FluxoDeReceber("bitcoin:native") }
+                "lacrar" -> App.estado.carteira?.let { c -> Navegacao.cobrir { app.escalibur.wallet.ui.envelope.FluxoDeLacrar(c) } }
+                "abrir" -> Navegacao.cobrir { app.escalibur.wallet.ui.envelope.FluxoDeAbrirEnvelope() }
+                "adicionar" -> Navegacao.cobrir { AdicionarCarteira(primeira = false) { Navegacao.fechar() } }
+                "seguranca" -> { Navegacao.aba = Aba.ajustes; Navegacao.abrir { app.escalibur.wallet.ui.ajustes.TelaDeSeguranca() } }
+                "redes" -> { Navegacao.aba = Aba.ajustes; Navegacao.abrir { app.escalibur.wallet.ui.ajustes.TelaDeRedes() } }
+                "alertas" -> { Navegacao.aba = Aba.ajustes; Navegacao.abrir { app.escalibur.wallet.ui.avisos.TelaDosAlertas() } }
+                "recebimento" -> { Navegacao.aba = Aba.ajustes; Navegacao.abrir { app.escalibur.wallet.ui.avisos.TelaDoRecebimento() } }
+                "suporte" -> { Navegacao.aba = Aba.ajustes; Navegacao.abrir { app.escalibur.wallet.ui.ajustes.TelaDeSuporte() } }
+                "sobre" -> { Navegacao.aba = Aba.ajustes; Navegacao.abrir { app.escalibur.wallet.ui.ajustes.TelaSobre() } }
+                "contatos" -> { Navegacao.aba = Aba.ajustes; Navegacao.abrir { app.escalibur.wallet.ui.ajustes.TelaDeContatos() } }
+                "carteiras" -> { Navegacao.aba = Aba.ajustes; Navegacao.abrir { app.escalibur.wallet.ui.ajustes.TelaDeCarteiras() } }
+                "superseguranca" -> { Navegacao.aba = Aba.ajustes; Navegacao.abrir { app.escalibur.wallet.ui.ajustes.TelaDoSuperSecurity() } }
                 "mercado" -> Navegacao.aba = Aba.mercado
                 "trocar" -> Navegacao.aba = Aba.trocar
                 "atividade" -> Navegacao.aba = Aba.atividade
@@ -352,7 +367,14 @@ private fun Folha(entrada: Navegacao.Entrada, deCima: Navegacao.Entrada?, largur
                 onDragStopped = { soltar(it) },
             )
             .seguraToques(),
-    ) { entrada.tela() }
+    ) {
+        CompositionLocalProvider(app.escalibur.wallet.ui.comp.LocalDentroDaFolha provides true) { entrada.tela() }
+        // A alca, na folha que tem altura media (a que se puxa para cima).
+        if (entrada.media) {
+            Box(Modifier.align(Alignment.TopCenter).padding(top = 5.dp).size(width = 36.dp, height = 5.dp).clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.3f)))
+        }
+    }
 }
 
 /**

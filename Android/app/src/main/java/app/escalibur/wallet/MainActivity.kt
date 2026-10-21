@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity() {
     /** O toque numa notificacao com o app ja aberto. */
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        if (BuildConfig.DEBUG) intent.getStringExtra("tela")?.let { Navegacao.telaDeDepuracao = it }
         Vigia.receber(intent)
     }
 

@@ -183,19 +183,6 @@ private fun PilulaDoToken(ativo: AtivoDaTroca?, acao: () -> Unit) {
     }
 }
 
-@Composable
-internal fun PilulaDaRede(rede: RetratoDaTroca.Rede, acao: () -> Unit) {
-    Row(
-        Modifier.height(34.dp).clip(CircleShape).background(Paleta.corpo).border(1.dp, Paleta.borda, CircleShape).clickable(onClick = acao)
-            .padding(start = 6.dp, end = Espaco.sm),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        SeloDaRede(rede.id, rede.coingecko, 22.dp, Paleta.corpo)
-        Text(rede.nome, style = estilo(Tipo.rotulo), color = Paleta.tinta, maxLines = 1)
-        Icone(Icones.abaixo, Paleta.tintaSuave, tamanho = 11.dp)
-    }
-}
-
 /** Ordem grande: de uma vez, pelo preco da ordem inteira, ou em partes, por um preco melhor. */
 @Composable
 internal fun EscolhaDeExecucao(partes: RetratoDaTroca.Partes, emPartes: Boolean, aoEscolher: (Boolean) -> Unit) {
@@ -452,26 +439,6 @@ internal fun Folha(titulo: String, aoFechar: () -> Unit, conteudo: @Composable (
         Column(Modifier.fillMaxSize().background(Paleta.corpo).navigationBarsPadding()) {
             CabecalhoDaFolha(titulo, { fechar {} })
             Box(Modifier.padding(top = Espaco.xs)) { conteudo(::fechar) }
-        }
-    }
-}
-
-@Composable
-internal fun FolhaDeRedes(r: RetratoDaTroca, aoFechar: () -> Unit, aoEscolher: (String) -> Unit) {
-    Folha(t("Rede"), aoFechar) { fechar ->
-        LazyColumn(Modifier.fillMaxWidth().padding(bottom = Espaco.md)) {
-            items(r.redes, key = { it.id }) { rede ->
-                val escolhida = rede.id == r.rede?.id
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = Altura.linhaCompacta).background(if (escolhida) Paleta.trilho else Paleta.corpo)
-                        .clickable { fechar { aoEscolher(rede.id) } }.padding(horizontal = Espaco.margem),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
-                ) {
-                    SeloDaRede(rede.id, rede.coingecko, 28.dp, Paleta.corpo)
-                    Text(rede.nome, style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.weight(1f))
-                    if (escolhida) Icone(Icones.visto, Paleta.tinta, tamanho = 16.dp)
-                }
-            }
         }
     }
 }

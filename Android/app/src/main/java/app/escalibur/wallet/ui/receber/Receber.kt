@@ -1,5 +1,20 @@
 package app.escalibur.wallet.ui.receber
 
+import app.escalibur.wallet.ui.comp.OpcaoDoMenu
+import app.escalibur.wallet.ui.comp.PilulaComMenu
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.unit.IntOffset
+import app.escalibur.wallet.ui.comp.BotaoDeCopiar
+import app.escalibur.wallet.ui.comp.BotaoDoGrupo
+import app.escalibur.wallet.ui.comp.CabecalhoDaFolha
+import app.escalibur.wallet.ui.comp.PlacaLaqueada
+import app.escalibur.wallet.ui.comp.TelaComBarra
 import app.escalibur.wallet.ui.carteira.TipoDeSelo
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -123,21 +138,40 @@ fun FluxoDeReceber(preescolhido: String? = null) {
         }.getOrDefault(emptyList())
         if (preescolhido != null) ativo = moedas.flatMap { it.todas }.firstOrNull { it.id == preescolhido }
     }
-    Column(Modifier.fillMaxSize().background(Paleta.corpo).statusBarsPadding().navigationBarsPadding()) {
-        val atual = ativo
-        val escolhida = moeda
-        when {
-            !carteira.temCopia && !carteira.observacao -> AntesDaCopia(carteira)
-            atual != null -> {
-                BackHandler { if (preescolhido != null) Navegacao.fechar() else ativo = null }
-                val formas = moedas.firstOrNull { m -> m.todas.any { it.id == atual.id } }?.todas ?: listOf(atual)
-                TelaDoEndereco(atual, formas, aoTrocar = { ativo = it }) { if (preescolhido != null) Navegacao.fechar() else ativo = null }
+    // As etapas empurram dentro da folha, como a pilha do iOS: a seguinte entra da direita.
+    val etapa = when {
+        !carteira.temCopia && !carteira.observacao -> 0
+        ativo != null -> 3
+        moeda != null -> 2
+        else -> 1
+    }
+    AnimatedContent(
+        etapa,
+        transitionSpec = {
+            val frente = targetState > initialState
+            val curva = tween<IntOffset>(380, easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0.9f, 0.25f, 1f))
+            (slideInHorizontally(curva) { if (frente) it else -it / 3 } togetherWith slideOutHorizontally(curva) { if (frente) -it / 3 else it })
+                .using(SizeTransform(clip = false))
+        },
+        modifier = Modifier.fillMaxSize().background(Paleta.corpo).navigationBarsPadding(),
+        label = "receber",
+    ) { qual ->
+        Box(Modifier.fillMaxSize().background(Paleta.corpo)) {
+            val atual = ativo
+            val escolhida = moeda
+            when {
+                qual == 0 -> AntesDaCopia(carteira)
+                qual == 3 && atual != null -> {
+                    BackHandler { if (preescolhido != null) Navegacao.fechar() else ativo = null }
+                    val formas = moedas.firstOrNull { m -> m.todas.any { it.id == atual.id } }?.todas ?: listOf(atual)
+                    TelaDoEndereco(atual, formas, direto = preescolhido != null, aoTrocar = { ativo = it }) { if (preescolhido != null) Navegacao.fechar() else ativo = null }
+                }
+                qual == 2 && escolhida != null -> {
+                    BackHandler { moeda = null }
+                    EscolhaDaRede(escolhida, aoVoltar = { moeda = null }) { ativo = it }
+                }
+                else -> Escolha(moedas) { if (it.redes == 1) ativo = it.ativos.first() else moeda = it }
             }
-            escolhida != null -> {
-                BackHandler { moeda = null }
-                EscolhaDaRede(escolhida, aoVoltar = { moeda = null }) { ativo = it }
-            }
-            else -> Escolha(moedas) { if (it.redes == 1) ativo = it.ativos.first() else moeda = it }
         }
     }
 }
@@ -179,8 +213,8 @@ private fun Escolha(moedas: List<MoedaRecebivel>, aoEscolher: (MoedaRecebivel) -
     val naCarteira = filtradas.filter { it.naCarteira }
     val outras = filtradas.filter { !it.naCarteira }
     Column(Modifier.fillMaxSize()) {
-        CabecalhoDeFolha(t("Receber"), { Navegacao.fechar() })
-        CampoDeBusca(busca, t("Buscar qualquer moeda"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md)) { busca = it }
+        CabecalhoDaFolha(t("Receber"), { Navegacao.fechar() })
+        CampoDeBusca(busca, t("Buscar qualquer moeda"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md), superficie = Paleta.trilho) { busca = it }
         LazyColumn(Modifier.fillMaxSize().padding(top = Espaco.xs)) {
             if (naCarteira.isNotEmpty()) {
                 item { TituloDeSecao(t("Na carteira")) }
@@ -248,9 +282,8 @@ private fun LinhaDeMoeda(moeda: MoedaRecebivel, aoTocar: () -> Unit) {
 /** A rede. Quem envia escolhe a rede do lado de la; as duas tem de ser a mesma. */
 @Composable
 private fun EscolhaDaRede(moeda: MoedaRecebivel, aoVoltar: () -> Unit, aoEscolher: (AtivoRecebivel) -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        CabecalhoDeFolha("", null, aoVoltar = aoVoltar)
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(top = Espaco.xs, bottom = Espaco.lg)) {
+    TelaComBarra(aoVoltar = aoVoltar, fundo = Paleta.corpo) { espaco ->
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(espaco).padding(horizontal = Espaco.margem).padding(top = Espaco.xs, bottom = Espaco.lg)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
                 LogoDaMoeda(moeda.coingecko, moeda.simbolo, 32.dp, anel = Paleta.corpo)
                 Text(t("Receber %@", moeda.simbolo), style = estilo(Tipo.titulo), color = Paleta.tinta)
@@ -288,15 +321,17 @@ private fun LinhaDeRede(ativo: AtivoRecebivel, titulo: String, detalhe: String?,
 
 /** O endereco: o QR com o logo da moeda, a rede, o endereco em blocos, o aviso da rede, copiar e compartilhar. */
 @Composable
-private fun TelaDoEndereco(ativo: AtivoRecebivel, formas: List<AtivoRecebivel>, aoTrocar: (AtivoRecebivel) -> Unit, aoVoltar: () -> Unit) {
+private fun TelaDoEndereco(ativo: AtivoRecebivel, formas: List<AtivoRecebivel>, direto: Boolean, aoTrocar: (AtivoRecebivel) -> Unit, aoVoltar: () -> Unit) {
     val contexto = LocalContext.current
     var dados by remember(ativo.id) { mutableStateOf<JSONObject?>(null) }
     LaunchedEffect(ativo.id) { dados = runCatching { Api.objeto("receber.endereco", JSONObject().put("ativo", ativo.id)) }.getOrNull() }
     val info = dados ?: return
     val endereco = info.getString("endereco")
     val existe = info.getBoolean("existe")
-    Column(Modifier.fillMaxSize()) {
-        CabecalhoDeFolha("", null, aoVoltar = aoVoltar)
+    // Aberta direto (sem a lista antes): so o fechar no alto, como no iOS; senao, o voltar de vidro.
+    TelaComBarra(aoVoltar = if (direto) null else aoVoltar, fundo = Paleta.corpo,
+                 acoes = if (direto) ({ BotaoDoGrupo(Icones.fechar, t("Fechar"), Paleta.tintaSuave) { Navegacao.fechar() } }) else null) { espaco ->
+    Column(Modifier.fillMaxSize().padding(espaco)) {
         if (info.getBoolean("tronOutraChave")) {
             Column(Modifier.padding(horizontal = Espaco.margem), verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
                 Text(t("Esta conta na Tron é controlada por outra chave"), style = estilo(Tipo.titulo), color = Paleta.tinta)
@@ -306,16 +341,15 @@ private fun TelaDoEndereco(ativo: AtivoRecebivel, formas: List<AtivoRecebivel>, 
             return@Column
         }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(top = Espaco.xs, bottom = Espaco.lg)) {
-            Text(t("Receber %@", ativo.simbolo), style = estilo(Tipo.titulo), color = Paleta.tinta)
-            Text(t("pela rede %@", ativo.redeNome), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = 2.dp))
-            if (!ativo.nativo) Text(listOf(ativo.nome, ativo.padrao).filter { it.isNotEmpty() }.joinToString(" · "), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+            // A rede e o token ao lado do titulo; sem espaco (nome longo, texto grande), embaixo.
+            TituloDoEndereco(ativo)
             if (info.getBoolean("observacao")) {
                 Faixa(TipoDeFaixa.cautela, t("Carteira só de observação"), Modifier.padding(top = Espaco.md),
                       mensagem = t("Este app não tem a chave deste endereço: o que chegar aqui não sai por este app. Se alguém pediu para você observar um endereço e depositar nele, é golpe."))
             }
             // O QR numa placa clara, com o logo da moeda no meio e a rede no selo.
             Box(Modifier.fillMaxWidth().padding(top = Espaco.lg), contentAlignment = Alignment.Center) {
-                Box(Modifier.size(280.dp).clip(RoundedCornerShape(Raio.botao)).background(Paleta.viva), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(280.dp).background(Paleta.viva, PlacaLaqueada(corte = 24.dp)), contentAlignment = Alignment.Center) {
                     ImagemDoQR(endereco, 232.dp)
                     Box(Modifier.clip(CircleShape).background(Paleta.viva).padding(5.dp)) {
                         LogoDaMoeda(ativo.formaDe ?: ativo.coingecko, ativo.formaDeSimbolo ?: ativo.simbolo, 48.dp, anel = Paleta.viva,
@@ -336,7 +370,7 @@ private fun TelaDoEndereco(ativo: AtivoRecebivel, formas: List<AtivoRecebivel>, 
                     style = estilo(Tipo.nota), color = Paleta.cautela, modifier = Modifier.padding(top = Espaco.sm),
                 )
             }
-            BotaoPrimario(t("Copiar"), Modifier.padding(top = Espaco.lg)) {
+            BotaoDeCopiar(t("Copiar endereço"), t("Endereço copiado"), Modifier.padding(top = Espaco.lg)) {
                 Transferencia.copiar(contexto, endereco)
                 Avisos.mostrar(t("Endereço copiado. Depois de colar, confira o endereço inteiro, inclusive o meio."))
             }
@@ -347,32 +381,47 @@ private fun TelaDoEndereco(ativo: AtivoRecebivel, formas: List<AtivoRecebivel>, 
         }
     }
 }
+}
 
+/** "Receber USDT", e ao lado "pela rede Tron" e "Tether · TRC-20"; sem espaco, um embaixo do outro. */
 @Composable
-private fun SeletorDeForma(formas: List<AtivoRecebivel>, escolhida: AtivoRecebivel, aoEscolher: (AtivoRecebivel) -> Unit) {
-    var aberto by remember { mutableStateOf(false) }
-    fun titulo(a: AtivoRecebivel) = if (a.nativo) a.redeNome else "${a.redeNome} · ${a.simbolo}"
-    Box {
-        Row(
-            Modifier.heightIn(min = 36.dp).clip(CircleShape).background(Paleta.corpo).border(1.dp, Paleta.borda, CircleShape)
-                .clickable { aberto = true }.padding(start = 6.dp, end = 12.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            SeloDaRede(escolhida.rede, escolhida.redeCoingecko, 20.dp, Paleta.corpo)
-            Text(titulo(escolhida), style = estilo(Tipo.rotulo), color = Paleta.tinta, maxLines = 1)
-            Icone(Icones.abaixo, Paleta.tintaSuave, tamanho = 12.dp)
-        }
-        DropdownMenu(aberto, { aberto = false }, containerColor = Paleta.corpo) {
-            for (forma in formas) {
-                DropdownMenuItem(
-                    text = { Text(titulo(forma), style = estilo(Tipo.linha), color = Paleta.tinta) },
-                    leadingIcon = { SeloDaRede(forma.rede, forma.redeCoingecko, 28.dp, Paleta.corpo) },
-                    trailingIcon = { if (forma.id == escolhida.id) Icone(Icones.visto, Paleta.tinta, tamanho = 16.dp) },
-                    onClick = { aberto = false; aoEscolher(forma) },
-                )
+private fun TituloDoEndereco(ativo: AtivoRecebivel) {
+    val titulo = t("Receber %@", ativo.simbolo)
+    val rede = t("pela rede %@", ativo.redeNome)
+    val token = if (ativo.nativo) null else listOf(ativo.nome, ativo.padrao).filter { it.isNotEmpty() }.joinToString(" · ")
+    val medidor = androidx.compose.ui.text.rememberTextMeasurer()
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val larguraDoTitulo = medidor.measure(titulo, estilo(Tipo.titulo)).size.width
+        val larguraDaRede = maxOf(medidor.measure(rede, estilo(Tipo.corpo)).size.width, token?.let { medidor.measure(it, estilo(Tipo.nota)).size.width } ?: 0)
+        val cabe = larguraDoTitulo + larguraDaRede + with(androidx.compose.ui.platform.LocalDensity.current) { Espaco.md.roundToPx() } <= constraints.maxWidth
+        if (cabe) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(titulo, style = estilo(Tipo.titulo), color = Paleta.tinta, maxLines = 1)
+                Spacer(Modifier.weight(1f))
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(rede, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, maxLines = 1)
+                    token?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1) }
+                }
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                Text(titulo, style = estilo(Tipo.titulo), color = Paleta.tinta)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(rede, style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
+                    token?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaSuave) }
+                }
             }
         }
     }
+}
+
+/** O seletor de rede embaixo do QR, por forma da moeda: a rede, e o token quando nao e a moeda nativa da rede. */
+@Composable
+private fun SeletorDeForma(formas: List<AtivoRecebivel>, escolhida: AtivoRecebivel, aoEscolher: (AtivoRecebivel) -> Unit) {
+    fun titulo(a: AtivoRecebivel) = if (a.nativo) a.redeNome else "${a.redeNome} · ${a.simbolo}"
+    PilulaComMenu(titulo(escolhida), { SeloDaRede(escolhida.rede, escolhida.redeCoingecko, 20.dp, androidx.compose.ui.graphics.Color.Transparent) },
+                  formas.map { f -> OpcaoDoMenu(f.id, titulo(f)) { SeloDaRede(f.rede, f.redeCoingecko, 28.dp, androidx.compose.ui.graphics.Color.Transparent) } },
+                  escolhida.id, descricao = t("Rede: %@", titulo(escolhida))) { id -> formas.firstOrNull { it.id == id }?.let(aoEscolher) }
 }
 
 /** O contrato do token, num desenho que nao se confunde com o endereco de deposito. */

@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.trocar
 
+import app.escalibur.wallet.ui.comp.OpcaoDoMenu
+import app.escalibur.wallet.ui.comp.PilulaComMenu
 import app.escalibur.wallet.ui.comp.Interruptor
 import app.escalibur.wallet.ui.comp.Girando
 import androidx.compose.material3.Switch
@@ -135,7 +137,6 @@ fun TelaDeTrocar() {
     val controle = ControleDaTroca.aba
     val dono = LocalLifecycleOwner.current
     val carteira = App.estado.carteira?.id
-    var escolhendoRede by remember { mutableStateOf(false) }
     var escolhendoToken by remember { mutableStateOf<Boolean?>(null) }
     var vendoRota by remember { mutableStateOf(false) }
     LaunchedEffect(carteira) { controle.chamar("troca.estado") }
@@ -169,7 +170,12 @@ fun TelaDeTrocar() {
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding()) {
         TituloDeAba(t("Trocar")) {
             val rede = r?.rede
-            if (rede != null && r.redes.isNotEmpty() && !controle.naPonte) PilulaDaRede(rede) { escolhendoRede = true }
+            // A rede num menu preso a capsula, como o NetworkMenu do iOS.
+            if (rede != null && r.redes.isNotEmpty() && !controle.naPonte) {
+                PilulaComMenu(rede.nome, { SeloDaRede(rede.id, rede.coingecko, 20.dp, Color.Transparent) },
+                              r.redes.map { x -> OpcaoDoMenu(x.id, x.nome) { SeloDaRede(x.id, x.coingecko, 28.dp, Color.Transparent) } },
+                              rede.id, descricao = t("Rede: %@", rede.nome)) { mudar(JSONObject().put("rede", it)) }
+            }
         }
         if (r == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Girando(Paleta.tintaSuave, 20.dp) }
@@ -203,7 +209,6 @@ fun TelaDeTrocar() {
         if (controle.naPonte) RodapeDaPonte() else RodapeDaTroca(controle, r)
     }
     if (r == null) return
-    if (escolhendoRede) FolhaDeRedes(r, aoFechar = { escolhendoRede = false }) { mudar(JSONObject().put("rede", it)) }
     escolhendoToken?.let { vende ->
         FolhaDeTokens(controle, vende, r, aoFechar = { escolhendoToken = null }) { mudar(JSONObject().put(if (vende) "vende" else "compra", it)) }
     }

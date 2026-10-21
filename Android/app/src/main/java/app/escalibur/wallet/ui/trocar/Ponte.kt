@@ -1,5 +1,8 @@
 package app.escalibur.wallet.ui.trocar
 
+import androidx.compose.ui.graphics.Color
+import app.escalibur.wallet.ui.comp.OpcaoDoMenu
+import app.escalibur.wallet.ui.comp.PilulaComMenu
 import app.escalibur.wallet.ui.comp.Girando
 import android.content.Intent
 import android.net.Uri
@@ -229,7 +232,9 @@ fun ColumnScope.FormularioDaPonte() {
     Row(Modifier.fillMaxWidth().padding(top = Espaco.md), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(t("De"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
-            PilulaDaRede(r.de) { escolhendo = "de" }
+            PilulaComMenu(r.de.nome, { SeloDaRede(r.de.id, r.de.coingecko, 20.dp, Color.Transparent) },
+                          r.redesDe.map { x -> OpcaoDoMenu(x.id, x.nome) { SeloDaRede(x.id, x.coingecko, 28.dp, Color.Transparent) } },
+                          r.de.id, descricao = t("Rede: %@", r.de.nome)) { mudar(JSONObject().put("de", it)) }
         }
         Box(Modifier.size(36.dp).clip(CircleShape).background(Paleta.trilho).clickable(enabled = r.podeInverter) { mudar(JSONObject().put("inverter", true)) },
             contentAlignment = Alignment.Center) {
@@ -237,7 +242,9 @@ fun ColumnScope.FormularioDaPonte() {
         }
         Column(Modifier.weight(1f), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(t("Para"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
-            PilulaDaRede(r.para) { escolhendo = "para" }
+            PilulaComMenu(r.para.nome, { SeloDaRede(r.para.id, r.para.coingecko, 20.dp, Color.Transparent) },
+                          r.redesPara.map { x -> OpcaoDoMenu(x.id, x.nome) { SeloDaRede(x.id, x.coingecko, 28.dp, Color.Transparent) } },
+                          r.para.id, descricao = t("Rede: %@", r.para.nome)) { mudar(JSONObject().put("para", it)) }
         }
     }
     Column(Modifier.padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -277,8 +284,6 @@ fun ColumnScope.FormularioDaPonte() {
     }
 
     when (escolhendo) {
-        "de" -> FolhaDeRedesDaPonte(r.redesDe, r.de.id, aoFechar = { escolhendo = null }) { mudar(JSONObject().put("de", it)) }
-        "para" -> FolhaDeRedesDaPonte(r.redesPara, r.para.id, aoFechar = { escolhendo = null }) { mudar(JSONObject().put("para", it)) }
         "moeda" -> FolhaDeMoedas(r, aoFechar = { escolhendo = null }) { mudar(JSONObject().put("moeda", it)) }
     }
     aberta?.let { linha ->
@@ -338,26 +343,6 @@ private fun PainelDaPonte(ponte: RetratoDaPonte.LinhaDaPonte) {
     }
 }
 
-@Composable
-private fun FolhaDeRedesDaPonte(redes: List<RetratoDaTroca.Rede>, escolhida: String, aoFechar: () -> Unit, aoEscolher: (String) -> Unit) {
-    Folha(t("Rede"), aoFechar) { fechar ->
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = Espaco.md)) {
-            for (rede in redes) {
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = Altura.linhaCompacta).background(if (rede.id == escolhida) Paleta.trilho else Paleta.corpo)
-                        .clickable { fechar { aoEscolher(rede.id) } }.padding(horizontal = Espaco.margem),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
-                ) {
-                    SeloDaRede(rede.id, rede.coingecko, 28.dp, Paleta.corpo)
-                    Text(rede.nome, style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.weight(1f))
-                    if (rede.id == escolhida) Icone(Icones.visto, Paleta.tinta, tamanho = 16.dp)
-                }
-            }
-        }
-    }
-}
-
-/** Escolher a moeda da ponte: a que nao faz esta rota aparece apagada, com o motivo. */
 @Composable
 private fun FolhaDeMoedas(r: RetratoDaPonte, aoFechar: () -> Unit, aoEscolher: (String) -> Unit) {
     Folha(t("Moeda"), aoFechar) { fechar ->

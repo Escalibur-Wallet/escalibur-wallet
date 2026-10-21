@@ -31,6 +31,9 @@ import app.escalibur.wallet.ui.tema.estilo
 /** A altura da barra de navegacao do iOS, abaixo da barra de status. */
 val AlturaDaBarraDeNavegacao = 52.dp
 
+/** Dentro de uma folha: a folha ja comeca abaixo da barra de status. */
+val LocalDentroDaFolha = androidx.compose.runtime.staticCompositionLocalOf { false }
+
 /**
  * Uma tela empurrada com a barra do iOS 26: o voltar num circulo de vidro a esquerda, o titulo no
  * centro e as acoes num vidro so a direita. O conteudo rola por baixo da barra, desfocado pelos
@@ -48,16 +51,17 @@ fun TelaComBarra(
     centro: (@Composable () -> Unit)? = null,
     acoes: (@Composable RowScope.() -> Unit)? = null,
     rodape: (@Composable ColumnScope.() -> Unit)? = null,
+    fundo: androidx.compose.ui.graphics.Color = Paleta.vazio,
     conteudo: @Composable (PaddingValues) -> Unit,
 ) {
-    val topo = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val topo = if (LocalDentroDaFolha.current) 0.dp else WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val barraDeAbas = LocalEspacoDaBarra.current
     val baixo = when {
         rodape != null -> 0.dp
         barraDeAbas > 0.dp -> barraDeAbas
         else -> WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     }
-    Column(modifier.fillMaxSize().background(Paleta.vazio)) {
+    Column(modifier.fillMaxSize().background(fundo)) {
         ComVidro(
             Modifier.weight(1f).fillMaxWidth(),
             frente = {
@@ -65,7 +69,7 @@ fun TelaComBarra(
                 Box(
                     Modifier.fillMaxWidth().height(topo + AlturaDaBarraDeNavegacao + Espaco.md).background(
                         Brush.verticalGradient(
-                            0f to Paleta.vazio, 0.55f to Paleta.vazio.copy(alpha = 0.92f), 1f to Paleta.vazio.copy(alpha = 0f),
+                            0f to fundo, 0.55f to fundo.copy(alpha = 0.92f), 1f to fundo.copy(alpha = 0f),
                         ),
                     ),
                 )

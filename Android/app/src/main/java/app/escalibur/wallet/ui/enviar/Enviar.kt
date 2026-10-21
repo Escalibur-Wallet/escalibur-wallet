@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.enviar
 
+import app.escalibur.wallet.ui.comp.PlacaLaqueada
 import app.escalibur.wallet.ui.carteira.TipoDeSelo
 import app.escalibur.wallet.ui.comp.Girando
 import android.content.ClipboardManager
@@ -777,27 +778,6 @@ private fun paraBaixo(valor: BigInteger, significativos: Int = 6): BigInteger {
 
 // MARK: E6 Revisao
 
-/** A placa clara de metal do destino, com o canto de cima cortado (o LacquerPlate do iOS). */
-private class PlacaLaqueada(private val corte: Dp = 20.dp, private val raio: Dp = Raio.botao) : Shape {
-    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
-        val c = with(density) { corte.toPx() }
-        val r = with(density) { raio.toPx() }
-        val w = size.width
-        val h = size.height
-        return Outline.Generic(Path().apply {
-            moveTo(r, 0f)
-            lineTo(w - c, 0f)
-            lineTo(w, c)
-            lineTo(w, h - r)
-            arcTo(Rect(w - 2 * r, h - 2 * r, w, h), 0f, 90f, false)
-            lineTo(r, h)
-            arcTo(Rect(0f, h - 2 * r, 2 * r, h), 90f, 90f, false)
-            lineTo(0f, r)
-            arcTo(Rect(0f, 0f, 2 * r, 2 * r), 180f, 90f, false)
-            close()
-        })
-    }
-}
 
 @Composable
 private fun ColumnScope.EtapaDaRevisao(controle: ControleDoEnvio, r: RetratoDoEnvio) {

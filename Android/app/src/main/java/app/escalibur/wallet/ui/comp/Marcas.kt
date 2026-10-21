@@ -1,5 +1,12 @@
 package app.escalibur.wallet.ui.comp
 
+import app.escalibur.wallet.ui.tema.Raio
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.geometry.Rect
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.LruCache
@@ -169,5 +176,27 @@ object CorDoLogo {
         // Preto some no fundo escuro; branco puro brilha demais. Cinza visivel.
         val nivel = ((cinza[1] + cinza[2] + cinza[3]).toFloat() / (cinza[0] * 3) / 255f).coerceIn(0.55f, 0.85f)
         return Color(nivel, nivel, nivel)
+    }
+}
+
+/** A placa clara de metal (o destino do envio, o QR do Receber), com o canto de cima cortado (o LacquerPlate do iOS). */
+class PlacaLaqueada(private val corte: Dp = 20.dp, private val raio: Dp = Raio.botao) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val c = with(density) { corte.toPx() }
+        val r = with(density) { raio.toPx() }
+        val w = size.width
+        val h = size.height
+        return Outline.Generic(Path().apply {
+            moveTo(r, 0f)
+            lineTo(w - c, 0f)
+            lineTo(w, c)
+            lineTo(w, h - r)
+            arcTo(Rect(w - 2 * r, h - 2 * r, w, h), 0f, 90f, false)
+            lineTo(r, h)
+            arcTo(Rect(0f, h - 2 * r, 2 * r, h), 90f, 90f, false)
+            lineTo(0f, r)
+            arcTo(Rect(0f, 0f, 2 * r, 2 * r), 180f, 90f, false)
+            close()
+        })
     }
 }
