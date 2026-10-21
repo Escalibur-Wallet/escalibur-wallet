@@ -78,6 +78,9 @@ final class Saldos: @unchecked Sendable {
     private var cotacoes: [String: Quote] = [:]
     private var cotacoesPorContrato: [String: Quote] = [:]
     private var precosDoBitcoin: [String: Double] = [:]
+    /// A moeda em que as cotacoes guardadas estao: logo depois de trocar a moeda do app, os valores
+    /// ainda sao da anterior ate a leitura nova chegar, e o retrato diz isso para a tela converter.
+    private var moedaDasCotacoes: String?
     private var carregando = false
     private var pendente = false
     private var falhas: [Chain] = []
@@ -97,6 +100,7 @@ final class Saldos: @unchecked Sendable {
             carteiraID = nil
             saldos = [:]
             cotacoes = [:]
+            moedaDasCotacoes = nil
             cotacoesPorContrato = [:]
             falhas = []
             atualizado = nil
@@ -114,6 +118,7 @@ final class Saldos: @unchecked Sendable {
                 carteiraID = wallet.id
                 saldos = metadata.balanceCache[wallet.id] ?? [:]
                 cotacoes = metadata.quoteCache.filter { !$0.key.hasPrefix(Self.prefixoDeContrato) }
+                moedaDasCotacoes = cotacoes.isEmpty ? nil : metadata.settings.currency
                 cotacoesPorContrato = Dictionary(uniqueKeysWithValues: metadata.quoteCache.compactMap { chave, cotacao in
                     chave.hasPrefix(Self.prefixoDeContrato) ? (String(chave.dropFirst(Self.prefixoDeContrato.count)), cotacao) : nil
                 })
@@ -224,7 +229,10 @@ final class Saldos: @unchecked Sendable {
             if !novos.isEmpty { lidas.insert(wallet.id) }
             guard carteiraID == wallet.id else { return false }
             for (id, saldo) in novos { saldos[id] = saldo }
-            if let novasCotacoes, !novasCotacoes.isEmpty, mesmaMoeda { cotacoes = novasCotacoes }
+            if let novasCotacoes, !novasCotacoes.isEmpty, mesmaMoeda {
+                cotacoes = novasCotacoes
+                moedaDasCotacoes = moeda
+            }
             falhas = falharam.filter { !Self.redeVaziaConhecida(saldos[$0.id]) }.sorted { $0.name < $1.name }
             if !novos.isEmpty { atualizado = .now }
             return true
@@ -456,7 +464,7 @@ final class Saldos: @unchecked Sendable {
             carteira: wallet.id.uuidString, linhas: linhas, todasAsLinhas: todas, outros: outros, suspeitos: suspeitos, total: total,
             variacao24h: variacao, variacao24hPct: antes > 0 ? variacao / antes * 100 : 0, carregando: carregando,
             falhas: falhas.map(\.name), atualizado: atualizado, semRede: semRede, tokensDesconhecidos: desconhecidos,
-            moeda: metadata.settings.currency, bitcoin: precosDoBitcoin
+            moeda: moedaDasCotacoes ?? metadata.settings.currency, bitcoin: precosDoBitcoin
         )
     }
 

@@ -1,5 +1,14 @@
 package app.escalibur.wallet.ui.comp
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -133,10 +142,10 @@ fun SecaoDoGrafico(coingecko: String, precoAoVivo: Double?, variacaoAoVivo: Doub
         when {
             falhou && pontos.isEmpty() -> Text(t("Não foi possível carregar o gráfico agora."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
                                                modifier = Modifier.padding(horizontal = Espaco.margem))
-            velhoDesde != null -> Text(t("Gráfico de %@. As fontes de preço não responderam agora; o app tenta de novo sozinho.", Formato.relogio(velhoDesde!!)),
+            velhoDesde != null -> Text(t("Gráfico de %@. As fontes de preço não responderam agora; o app tenta de novo sozinho.", Formato.carimbo(velhoDesde!!)),
                                        style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(horizontal = Espaco.margem))
         }
-        Segmentado(Periodo.entries.map { it to it.rotulo }, periodo, Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm)) {
+        SeletorDePeriodo(periodo, Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm)) {
             escolhido = null
             periodo = it
         }
@@ -233,15 +242,46 @@ fun GraficoDePreco(
                         val alvo = if (topo) precos.max() else precos.min()
                         val i = precos.indexOf(alvo).coerceAtLeast(0)
                         val p = lugar(i)
-                        val densidade = LocalDensity.current
                         Text(
-                            Formato.preco(alvo, moeda), style = estilo(Tipo.eixo), color = Paleta.tintaSuave,
-                            modifier = Modifier.offset {
-                                IntOffset((p.x - with(densidade) { 40.dp.toPx() }).coerceIn(0f, largura - with(densidade) { 90.dp.toPx() }).roundToInt(),
-                                          (if (topo) p.y - with(densidade) { 22.dp.toPx() } else p.y + with(densidade) { 6.dp.toPx() }).roundToInt())
+                            Formato.preco(alvo, moeda), style = estilo(Tipo.eixo), color = Paleta.tintaSuave, maxLines = 1, softWrap = false,
+                            modifier = Modifier.layout { medida, limites ->
+                                val peca = medida.measure(limites.copy(minWidth = 0, maxWidth = Int.MAX_VALUE))
+                                layout(peca.width, peca.height) {
+                                    val borda = 48.dp.toPx()
+                                    val cx = p.x.coerceIn(borda, largura - borda)
+                                    val cy = if (topo) p.y - 16.dp.toPx() else p.y + 16.dp.toPx()
+                                    peca.place((cx - peca.width / 2).roundToInt(), (cy - peca.height / 2).roundToInt())
+                                }
                             },
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/** Os periodos, por extenso ("1M" e ambiguo entre minuto e mes), sem trilho: so a escolha em vidro, que desliza. */
+@Composable
+private fun SeletorDePeriodo(periodo: Periodo, modifier: Modifier = Modifier, aoEscolher: (Periodo) -> Unit) {
+    val toque = toqueDeSelecao()
+    val indice = Periodo.entries.indexOf(periodo)
+    BoxWithConstraints(modifier.fillMaxWidth().height(38.dp)) {
+        val largura = (maxWidth - 2.dp * (Periodo.entries.size - 1)) / Periodo.entries.size
+        val x by animateDpAsState((largura + 2.dp) * indice, spring(dampingRatio = 0.82f, stiffness = 380f), label = "periodo")
+        Box(Modifier.offset(x = x).width(largura).fillMaxHeight().vidro(CircleShape, Vidros.selecao))
+        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            for (opcao in Periodo.entries) {
+                val escolhida = opcao == periodo
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().clip(CircleShape).clickable {
+                        if (!escolhida) toque()
+                        aoEscolher(opcao)
+                    },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(opcao.rotulo, style = estilo(Tipo.rotulo).copy(fontWeight = if (escolhida) FontWeight.SemiBold else FontWeight.Normal),
+                         color = if (escolhida) Paleta.tinta else Paleta.tintaApagada, maxLines = 1)
                 }
             }
         }

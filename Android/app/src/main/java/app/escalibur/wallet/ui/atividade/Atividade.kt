@@ -1,5 +1,10 @@
 package app.escalibur.wallet.ui.atividade
 
+import androidx.compose.ui.graphics.Color
+import app.escalibur.wallet.ui.comp.SeloDeSituacao
+import app.escalibur.wallet.ui.comp.TelaComBarra
+import app.escalibur.wallet.ui.comp.TipoDeSituacao
+import app.escalibur.wallet.ui.comp.moedaGirando
 import app.escalibur.wallet.ui.carteira.TipoDeSelo
 import app.escalibur.wallet.ui.comp.PuxarParaAtualizar
 import app.escalibur.wallet.ui.comp.LocalEspacoDaBarra
@@ -195,12 +200,14 @@ fun TelaDeAtividade() {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(bottom = Espaco.xl + LocalEspacoDaBarra.current)) {
             TituloDeAba(t("Atividade"))
             if (r != null && r.falhas.isNotEmpty()) {
-                Faixa(TipoDeFaixa.neutra, t("%@ não atualizou agora. Mostrando o que já estava salvo.", nomes(r.falhas)),
-                      Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm), tituloDaAcao = t("Tentar de novo")) { atualizar(true) }
+                AvisoDeAtualizacao(nomes(r.falhas), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm)) { atualizar(true) }
             }
             when {
-                // O carregando fica por cima da lista, no meio da tela (abaixo).
-                carregandoPrimeiraVez -> Unit
+                // Lendo pela primeira vez: o carregando no espaco livre, abaixo do que ja aparece.
+                carregandoPrimeiraVez -> Box(Modifier.fillMaxWidth().heightIn(min = alturaDaTela * 0.55f), contentAlignment = Alignment.Center) {
+                    val ligadas = Redes.todas.filter { it.id !in App.estado.redesDesligadas }
+                    CarregandoAtividade(ligadas.take(7).map { it.id to it.coingecko }, r?.redes ?: ligadas.size)
+                }
                 r != null && r.itens.isEmpty() -> Column(Modifier.fillMaxWidth().heightIn(min = alturaDaTela * 0.8f).padding(horizontal = Espaco.margem),
                                                          horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     ArteDaAtividadeVazia(230.dp)
@@ -226,7 +233,7 @@ fun TelaDeAtividade() {
                     }
                 }
             }
-            if (r != null && r.semHistorico.isNotEmpty()) {
+            if (r != null && r.semHistorico.isNotEmpty() && !carregandoPrimeiraVez) {
                 Column(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg), verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
                     Text(t("O histórico de %@ não aparece aqui: nenhum serviço gratuito publica o histórico dessas redes sem cadastro. O saldo aparece na Carteira, e o histórico completo, no explorador da rede.",
                            nomes(r.semHistorico.map { it.getString("nome") })), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
@@ -252,10 +259,21 @@ fun TelaDeAtividade() {
                 )
             }
         }
-        if (carregandoPrimeiraVez) {
-            val ligadas = Redes.todas.filter { it.id !in App.estado.redesDesligadas }
-            CarregandoAtividade(ligadas.take(7).map { it.id to it.coingecko }, r?.redes ?: ligadas.size, Modifier.align(Alignment.Center))
-        }
+    }
+}
+
+/**
+ * Rede que nao respondeu agora: uma linha, sem cartao (o `RefreshNotice` do iOS). O que estava
+ * guardado dela continua na lista.
+ */
+@Composable
+private fun AvisoDeAtualizacao(redes: String, modifier: Modifier = Modifier, tentar: () -> Unit) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+        Icone(Icones.atualizar, Paleta.tintaApagada, tamanho = 13.dp, modifier = Modifier.padding(top = 2.dp))
+        Text(t("%@ não atualizou agora. Mostrando o que já estava salvo.", redes), style = estilo(Tipo.nota), color = Paleta.tintaSuave,
+             modifier = Modifier.weight(1f))
+        Text(t("Tentar de novo"), style = estilo(Tipo.nota).copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = Paleta.tinta,
+             modifier = Modifier.padding(start = Espaco.xs).clickable(onClick = tentar))
     }
 }
 
@@ -424,39 +442,42 @@ fun DetalheDaAtividade(m: Movimento) {
         "order" -> t("Ordem")
         else -> t("Transação")
     }
-    val preco = if (m.custom || m.zero || m.falhou) null else Saldos.retrato.todasAsLinhas.firstOrNull { it.coingecko != null && it.coingecko == m.coingecko }?.preco
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding()) {
-        CabecalhoDeFolha("", null, aoVoltar = { Navegacao.fechar() })
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.xl),
+    val suspeito = m.custom && m.direcao == "received"
+    val linha = Saldos.retrato.todasAsLinhas.firstOrNull { it.coingecko != null && it.coingecko == m.coingecko }
+    val preco = if (m.custom || m.zero || m.falhou) null else linha?.preco
+    TelaComBarra(aoVoltar = { Navegacao.fechar() }) { espaco ->
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(espaco).padding(horizontal = Espaco.margem).padding(top = Espaco.sm, bottom = Espaco.xl),
                verticalArrangement = Arrangement.spacedBy(Espaco.lg)) {
-            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+            // O que se moveu: o logo grande (na troca, o que saiu e o que entrou), o tipo, o valor e a situacao.
+            Column(Modifier.fillMaxWidth().padding(top = Espaco.sm), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                 if (m.direcao == "swap" && m.recebidoSimbolo != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                        LogoDaMoeda(m.coingecko, m.simbolo, 56.dp, rede = m.rede, redeCoingecko = m.redeCoingecko, naoConferido = m.custom)
+                    Row(Modifier.padding(bottom = Espaco.xs), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                        LogoDaMoeda(m.coingecko, m.simbolo, 56.dp, Modifier.moedaGirando(), rede = m.rede, redeCoingecko = m.redeCoingecko, anel = Paleta.corpo, naoConferido = m.custom)
                         Icone(Icones.avancar, Paleta.tintaApagada, tamanho = 15.dp)
-                        LogoDaMoeda(m.recebidoCoingecko, m.recebidoSimbolo, 56.dp, rede = m.rede, redeCoingecko = m.redeCoingecko)
+                        LogoDaMoeda(m.recebidoCoingecko, m.recebidoSimbolo, 56.dp, Modifier.moedaGirando(250), rede = m.rede, redeCoingecko = m.redeCoingecko, anel = Paleta.corpo)
                     }
                 } else {
-                    Box(Modifier.size(96.dp).clip(CircleShape).background(Paleta.corpo), contentAlignment = Alignment.Center) {
-                        LogoDaMoeda(m.coingecko, m.simbolo, 72.dp, rede = m.rede, redeCoingecko = m.redeCoingecko, anel = Paleta.corpo, naoConferido = m.custom)
+                    Box(Modifier.padding(bottom = Espaco.xxs).size(96.dp).clip(CircleShape).background(Paleta.corpo), contentAlignment = Alignment.Center) {
+                        LogoDaMoeda(m.coingecko, m.simbolo, 72.dp, Modifier.moedaGirando(), rede = m.rede, redeCoingecko = m.redeCoingecko, anel = Paleta.corpo, naoConferido = m.custom)
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                     Text(tipo, style = estilo(Tipo.linha), color = Paleta.tintaSuave)
-                    if (m.custom && m.direcao == "received") SeloDeToken(TipoDeSelo.suspeito)
+                    if (suspeito) SeloDeToken(TipoDeSelo.suspeito)
                 }
                 when {
                     m.direcao == "swap" && m.recebidoQuantidade != null && m.recebidoSimbolo != null -> {
                         Text("+" + Formato.cripto(m.recebidoQuantidade, m.recebidoCasas ?: 0, m.recebidoSimbolo, Formato.EstiloCripto.cheio),
-                             style = estilo(Tipo.numero), color = if (m.falhou) Paleta.tintaApagada else Paleta.alta)
+                             style = estilo(Tipo.numero), color = if (m.falhou) Paleta.tintaApagada else Paleta.alta, maxLines = 1,
+                             textDecoration = if (m.falhou) TextDecoration.LineThrough else null)
                         Text(t("por %@", Formato.cripto(m.quantidade, m.casas, m.simbolo, Formato.EstiloCripto.cheio)), style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
                     }
                     m.soTaxa != null -> {
-                        Text(Formato.menos + Formato.cripto(m.soTaxa!!, m.casasNativas, m.simboloNativo, Formato.EstiloCripto.cheio), style = estilo(Tipo.numero), color = Paleta.tinta)
+                        Text(Formato.menos + Formato.cripto(m.soTaxa!!, m.casasNativas, m.simboloNativo, Formato.EstiloCripto.cheio), style = estilo(Tipo.numero), color = Paleta.tinta, maxLines = 1)
                         Text(t("Só a taxa da rede: nenhum valor saiu da conta"), style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
                     }
                     else -> {
-                        Text(m.sinal + Formato.cripto(m.quantidade, m.casas, m.simbolo, Formato.EstiloCripto.cheio), style = estilo(Tipo.numero),
+                        Text(m.sinal + Formato.cripto(m.quantidade, m.casas, m.simbolo, Formato.EstiloCripto.cheio), style = estilo(Tipo.numero), maxLines = 1,
                              color = if (m.falhou) Paleta.tintaApagada else if (m.direcao == "received") Paleta.alta else Paleta.tinta,
                              textDecoration = if (m.falhou) TextDecoration.LineThrough else null)
                         preco?.let {
@@ -464,23 +485,23 @@ fun DetalheDaAtividade(m: Movimento) {
                         }
                     }
                 }
-                Situacao(m, conferencia)
+                Situacao(m, conferencia, Modifier.padding(top = Espaco.xs))
             }
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(horizontal = Espaco.base, vertical = Espaco.xs)) {
                 if (m.direcao != "swap") Fato(t("Moeda")) {
-                    LogoDaMoeda(m.coingecko, m.simbolo, 22.dp, naoConferido = m.custom)
-                    Text(m.simbolo, style = estilo(Tipo.linha), color = Paleta.tinta)
+                    LogoDaMoeda(m.coingecko, m.simbolo, 22.dp, anel = Paleta.corpo, naoConferido = m.custom)
+                    Text(linha?.nome ?: m.simbolo, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
                 }
                 Fato(t("Rede")) {
-                    SeloDaRede(m.rede, m.redeCoingecko, 22.dp, Paleta.corpo)
-                    Text(m.redeNome, style = estilo(Tipo.linha), color = Paleta.tinta)
+                    SeloDaRede(m.rede, m.redeCoingecko, 22.dp, Color.Transparent)
+                    Text(m.redeNome, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
                 }
                 Fato(t("Data")) {
-                    val formato = java.text.SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(Formato.locale, "dMMMyyyyHHmm"), Formato.locale)
-                    Text(formato.format(m.data), style = estilo(Tipo.linha), color = Paleta.tinta)
+                    val formato = java.text.SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(Formato.locale, "dMMMyyyyjjmm"), Formato.locale)
+                    Text(formato.format(m.data), style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
                 }
                 m.taxa?.let { taxa ->
-                    Fato(t("Taxa da rede")) { Text(Formato.cripto(taxa, m.casasNativas, m.simboloNativo, Formato.EstiloCripto.cheio), style = estilo(Tipo.linha), color = Paleta.tinta) }
+                    Fato(t("Taxa da rede")) { Text(Formato.cripto(taxa, m.casasNativas, m.simboloNativo, Formato.EstiloCripto.cheio), style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1) }
                 }
             }
             // Sem copiar: o endereco de quem mandou pode ser isca.
@@ -491,7 +512,8 @@ fun DetalheDaAtividade(m: Movimento) {
                     EnderecoEmBlocos(contraparte)
                 }
             }
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(horizontal = Espaco.base)) {
+            // O identificador da transacao, para copiar ou abrir no explorador da rede.
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(horizontal = Espaco.base).padding(bottom = Espaco.xxs)) {
                 Text(t("Identificador"), style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.base))
                 Text(m.hash, style = estilo(Tipo.monoPequeno), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.xxs, bottom = Espaco.xs))
                 Acao(t("Copiar"), Icones.copiar) {
@@ -507,28 +529,28 @@ fun DetalheDaAtividade(m: Movimento) {
 }
 
 @Composable
-private fun Situacao(m: Movimento, conferencia: JSONObject?) {
-    val (texto, cor) = if (m.conferivel) {
+private fun Situacao(m: Movimento, conferencia: JSONObject?, modifier: Modifier = Modifier) {
+    if (m.conferivel) {
+        // O indexador e um so: "Conferida" so depois de dois nos da rede mostrarem o valor chegando.
         when (conferencia?.optString("resultado")) {
             "conferida" -> {
                 val confirmacoes = conferencia.optLong("confirmacoes", 0)
-                (if (confirmacoes > 1) t("Conferida na rede, %@ confirmações", Formato.agrupado(confirmacoes.toDouble(), 0)) else t("Conferida na rede")) to Paleta.tintaSuave
+                Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icone(Icones.visto, Paleta.tintaSuave, tamanho = 12.dp)
+                    Text(if (confirmacoes > 1) t("Conferida na rede, %@ confirmações", Formato.agrupado(confirmacoes.toDouble(), 0)) else t("Conferida na rede"),
+                         style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+                }
             }
-            "naoEncontrada" -> t("Segundo o indexador. A rede ainda não mostra esta transação") to Paleta.cautela
-            "naoConfere" -> t("A rede não confirma este recebimento") to Paleta.baixa
-            "interna" -> t("Segundo o indexador. Chegou por transação interna, que o recibo não mostra") to Paleta.cautela
-            "falhou" -> t("Segundo o indexador. Não deu para conferir na rede agora") to Paleta.cautela
-            else -> t("Segundo o indexador. Conferindo na rede") to Paleta.cautela
+            "naoEncontrada" -> SeloDeSituacao(TipoDeSituacao.pendente, t("Segundo o indexador. A rede ainda não mostra esta transação"), modifier)
+            "naoConfere" -> SeloDeSituacao(TipoDeSituacao.falhou, t("A rede não confirma este recebimento"), modifier)
+            "interna" -> SeloDeSituacao(TipoDeSituacao.pendente, t("Segundo o indexador. Chegou por transação interna, que o recibo não mostra"), modifier)
+            "falhou" -> SeloDeSituacao(TipoDeSituacao.pendente, t("Segundo o indexador. Não deu para conferir na rede agora"), modifier)
+            else -> SeloDeSituacao(TipoDeSituacao.pendente, t("Segundo o indexador. Conferindo na rede"), modifier)
         }
     } else when (m.situacao) {
-        "pendente" -> (m.nota ?: t("Pendente")) to Paleta.cautela
-        "falhou" -> (m.nota ?: t("Falhou")) to Paleta.baixa
-        else -> t("Confirmada") to Paleta.alta
-    }
-    Row(Modifier.padding(top = Espaco.xs).clip(CircleShape).background(Paleta.corpo).padding(horizontal = Espaco.sm, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(cor))
-        Text(texto, style = estilo(Tipo.nota), color = Paleta.tinta, textAlign = TextAlign.Center)
+        "pendente" -> SeloDeSituacao(TipoDeSituacao.pendente, m.nota ?: t("Pendente"), modifier)
+        "falhou" -> SeloDeSituacao(TipoDeSituacao.falhou, m.nota ?: t("Falhou"), modifier)
+        else -> SeloDeSituacao(TipoDeSituacao.feita, t("Confirmada"), modifier)
     }
 }
 

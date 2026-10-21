@@ -1,5 +1,14 @@
 package app.escalibur.wallet.ui.carteira
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
+import app.escalibur.wallet.ui.comp.BotaoTerciario
+import app.escalibur.wallet.ui.comp.Esqueleto
+import app.escalibur.wallet.ui.comp.TelaComBarra
+import app.escalibur.wallet.ui.comp.TextoNumerico
+import app.escalibur.wallet.ui.mercado.BotaoFavorito
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -62,38 +71,68 @@ import app.escalibur.wallet.ui.tema.estilo
 @Composable
 fun CopiaAgora(carteira: Carteira) = FluxoDeRevelar(carteira, copia = true) { Navegacao.fechar() }
 
-/** Um ativo da carteira: a posicao, o grafico, cada rede, o contrato e o historico dele. */
+/** Um ativo da carteira, numa rolagem so: a posicao e o numero grande; o preco, com o grafico, vem logo abaixo. */
 @Composable
 fun DetalheDoAtivo(id: String) {
     val contexto = LocalContext.current
+    val escopo = rememberCoroutineScope()
     val retrato = Saldos.retrato
     val linha = retrato.todasAsLinhas.firstOrNull { it.id == id }
     val oculto = App.estado.ocultarSaldos
     val moeda = App.estado.moeda
-    var historico by remember { mutableStateOf<List<Movimento>>(emptyList()) }
+    var historico by remember { mutableStateOf<List<Movimento>?>(null) }
     LaunchedEffect(id) {
         val ids = linha?.posicoes?.map { it.ativo }.orEmpty()
         historico = runCatching {
             Api.objeto("atividade.mostrar").optJSONArray("itens").objetos().map(::Movimento)
                 .filter { m -> linha != null && (m.coingecko == linha.coingecko && linha.coingecko != null || ids.any { it.startsWith(m.rede) && m.simbolo == linha.simbolo }) }
-                .take(10)
         }.getOrDefault(emptyList())
     }
     if (linha == null) {
-        Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding()) { CabecalhoDeFolha("", null, aoVoltar = { Navegacao.fechar() }) }
+        TelaComBarra(aoVoltar = { Navegacao.fechar() }) {}
         return
     }
     val observacao = App.estado.carteira?.observacao == true
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
-        CabecalhoDeFolha(linha.nome, null, aoVoltar = { Navegacao.fechar() })
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = Espaco.xl)) {
-            Row(Modifier.padding(horizontal = Espaco.margem), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                LogoDaMoeda(linha.coingecko, linha.simbolo, 44.dp, naoConferido = !linha.conferido, quantasRedes = linha.posicoes.size)
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(t("Sua posição"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
-                    Text(if (oculto) "•••••" else linha.valor?.let { Formato.valor(it, moeda) } ?: t("sem preço"), style = estilo(Tipo.numero), color = Paleta.tinta)
-                    Text(if (oculto) "•••" else Formato.cripto(linha.total, linha.casas, linha.simbolo, Formato.EstiloCripto.cheio), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+    var podeTrocar by remember(id) { mutableStateOf(false) }
+    LaunchedEffect(id) { podeTrocar = ControleDaTroca.permite(linha.posicoes.map { it.ativo }) }
+    val ativo = linha.posicoes.firstOrNull()?.ativo
+    TelaComBarra(
+        aoVoltar = { Navegacao.fechar() },
+        centro = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                LogoDaMoeda(linha.coingecko, linha.simbolo, 20.dp, naoConferido = !linha.conferido && !linha.reconhecido)
+                Text(linha.nome, style = estilo(Tipo.acao), color = Paleta.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (linha.custom) SeloDeToken(TipoDeSelo.custom)
+            }
+        },
+        acoes = if (linha.coingecko != null) ({ BotaoFavorito(linha.coingecko) }) else null,
+        rodape = if (observacao) null else ({
+            Row(horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                BotaoSecundario(t("Enviar"), Modifier.weight(1f), altura = Altura.primaria) { Navegacao.cobrir { FluxoDeEnviar(ativo) } }
+                BotaoSecundario(t("Receber"), Modifier.weight(1f), altura = Altura.primaria) { Navegacao.folha { FluxoDeReceber(ativo) } }
+                if (podeTrocar && ativo != null) {
+                    BotaoPrimario(t("Trocar"), Modifier.weight(1f)) {
+                        escopo.launch {
+                            if (!ControleDaTroca.preparar(ativo, vende = true)) return@launch
+                            Navegacao.fecharTudo()
+                            Navegacao.aba = Aba.trocar
+                        }
+                    }
                 }
+            }
+        }),
+    ) { espaco ->
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(espaco).padding(top = Espaco.sm, bottom = Espaco.xl)) {
+            // A posicao: o valor vem da carteira de agora, para a cotacao que chega depois aparecer aqui tambem.
+            Column(Modifier.padding(horizontal = Espaco.margem), verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
+                Text(t("Sua posição"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+                val valor = linha.valor
+                if (!oculto && valor == null && Saldos.esperandoPreco(linha)) {
+                    Esqueleto(150.dp, 26.dp, Modifier.padding(vertical = 4.dp))
+                } else {
+                    TextoNumerico(if (oculto) "R$ ••••••" else valor?.let { Formato.valor(it, moeda) } ?: t("sem preço"), estilo(Tipo.numero), Paleta.tinta, valor = valor)
+                }
+                Text(if (oculto) "••••" else Formato.cripto(linha.total, linha.casas, linha.simbolo, Formato.EstiloCripto.cheio), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
             }
             linha.coingecko?.let { coingecko ->
                 Box(Modifier.padding(top = Espaco.lg)) {
@@ -128,30 +167,36 @@ fun DetalheDoAtivo(id: String) {
                     }, contentAlignment = Alignment.Center) { Icone(Icones.copiar, Paleta.tintaSuave, tamanho = 15.dp, descricao = t("Copiar contrato")) }
                 }
             }
-            if (historico.isNotEmpty()) {
-                Text(t("Atividade"), style = estilo(Tipo.cabecalho), color = Paleta.tinta, modifier = Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.xl, bottom = Espaco.xs))
-                for (m in historico) LinhaDaAtividade(m, oculto) { Navegacao.abrir { DetalheDaAtividade(m) } }
-            }
+            AtividadeDoAtivo(historico, linha.simbolo, oculto, Modifier.padding(top = Espaco.xl))
         }
-        if (!observacao) {
-            val escopo = rememberCoroutineScope()
-            var podeTrocar by remember(id) { mutableStateOf(false) }
-            LaunchedEffect(id) { podeTrocar = ControleDaTroca.permite(linha.posicoes.map { it.ativo }) }
-            Row(Modifier.padding(horizontal = Espaco.margem).padding(vertical = Espaco.xs), horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                BotaoSecundario(t("Enviar"), Modifier.weight(1f), altura = Altura.primaria) { Navegacao.cobrir { FluxoDeEnviar(linha.posicoes.firstOrNull()?.ativo) } }
-                BotaoSecundario(t("Receber"), Modifier.weight(1f), altura = Altura.primaria) { Navegacao.folha { FluxoDeReceber(linha.posicoes.firstOrNull()?.ativo) } }
-                val ativo = linha.posicoes.firstOrNull()?.ativo
-                if (podeTrocar && ativo != null) {
-                    BotaoPrimario(t("Trocar"), Modifier.weight(1f)) {
-                        escopo.launch {
-                            if (!ControleDaTroca.preparar(ativo, vende = true)) return@launch
-                            Navegacao.fecharTudo()
-                            Navegacao.aba = Aba.trocar
-                        }
+    }
+}
+
+/** A secao "Atividade" da pagina do ativo: as ultimas oito, e o caminho para a lista inteira na aba Atividade. */
+@Composable
+private fun AtividadeDoAtivo(historico: List<Movimento>?, simbolo: String, oculto: Boolean, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(t("Atividade"), style = estilo(Tipo.cabecalho), color = Paleta.tinta, modifier = Modifier.padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs))
+        when {
+            historico == null -> repeat(3) {
+                Row(Modifier.fillMaxWidth().heightIn(min = Altura.linha).padding(horizontal = Espaco.margem), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                    Box(Modifier.size(40.dp).clip(CircleShape).background(Paleta.corpo))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { Esqueleto(120.dp); Esqueleto(80.dp) }
+                    Esqueleto(72.dp, 16.dp)
+                }
+            }
+            historico.isEmpty() -> Text(t("Nenhum movimento de %@ ainda. Envios, recebimentos e trocas aparecem aqui.", simbolo), style = estilo(Tipo.nota),
+                                        color = Paleta.tintaSuave, modifier = Modifier.padding(horizontal = Espaco.margem))
+            else -> {
+                for (m in historico.take(8)) LinhaDaAtividade(m, oculto) { Navegacao.abrir { DetalheDaAtividade(m) } }
+                if (historico.size > 8) {
+                    BotaoTerciario(t("Ver tudo na Atividade"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.xs)) {
+                        Navegacao.fecharTudo()
+                        Navegacao.aba = Aba.atividade
                     }
                 }
             }
         }
     }
 }
-

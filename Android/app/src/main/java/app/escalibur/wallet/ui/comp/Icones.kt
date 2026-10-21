@@ -29,12 +29,30 @@ object Icones {
             }
         }.build()
 
+    /** Cheio com os cantos arredondados: o mesmo caminho, preenchido e contornado na mesma cor. */
+    private fun cheioRedondo(nome: String, caminho: String, raio: Float): ImageVector =
+        ImageVector.Builder(nome, 24.dp, 24.dp, 24f, 24f).apply {
+            addPath(PathParser().parsePathString(caminho).toNodes(), fill = SolidColor(Color.Black), stroke = SolidColor(Color.Black),
+                    strokeLineWidth = raio * 2, strokeLineJoin = StrokeJoin.Round, pathFillType = androidx.compose.ui.graphics.PathFillType.EvenOdd)
+        }.build()
+
+    /** Traco com uma parte cheia (a ponta de seta do grafico, a do relogio). */
+    private fun tracoComPonta(nome: String, traco: String, ponta: String, espessura: Float): ImageVector =
+        ImageVector.Builder(nome, 24.dp, 24.dp, 24f, 24f).apply {
+            addPath(PathParser().parsePathString(traco).toNodes(), stroke = SolidColor(Color.Black), strokeLineWidth = espessura,
+                    strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round)
+            addPath(PathParser().parsePathString(ponta).toNodes(), fill = SolidColor(Color.Black), stroke = SolidColor(Color.Black),
+                    strokeLineWidth = espessura * 0.5f, strokeLineJoin = StrokeJoin.Round)
+        }.build()
+
     private fun cheio(nome: String, vararg caminhos: String): ImageVector =
         ImageVector.Builder(nome, 24.dp, 24.dp, 24f, 24f).apply {
             for (caminho in caminhos) addPath(PathParser().parsePathString(caminho).toNodes(), fill = SolidColor(Color.Black), pathFillType = androidx.compose.ui.graphics.PathFillType.EvenOdd)
         }.build()
 
     val alertaContorno = traco("alertaContorno", "M12 3.8 L21.2 19.6 H2.8 Z", "M12 9.8 V14", "M12 16.9 V17", espessura = 2f)
+    val coracao = traco("coracao", "M12 20.2 C11.2 19.6 3 14.3 3 8.9 C3 6.1 5.1 4 7.8 4 C9.6 4 11.1 5 12 6.4 C12.9 5 14.4 4 16.2 4 C18.9 4 21 6.1 21 8.9 C21 14.3 12.8 19.6 12 20.2 Z", espessura = 2f)
+    val coracaoCheio = cheio("coracaoCheio", "M12 20.2 C11.2 19.6 3 14.3 3 8.9 C3 6.1 5.1 4 7.8 4 C9.6 4 11.1 5 12 6.4 C12.9 5 14.4 4 16.2 4 C18.9 4 21 6.1 21 8.9 C21 14.3 12.8 19.6 12 20.2 Z")
     val chevronsDireita = traco("chevronsDireita", "M5.5 6 L11.5 12 L5.5 18 M12.5 6 L18.5 12 L12.5 18", espessura = 2.6f)
     val voltar = traco("voltar", "M15 4.5 L7.5 12 L15 19.5", espessura = 2.2f)
     val avancar = traco("avancar", "M9 4.5 L16.5 12 L9 19.5", espessura = 2.2f)
@@ -47,8 +65,8 @@ object Icones {
 
     val enviar = traco("enviar", "M12 20 V4.5 M5.5 11 L12 4.5 L18.5 11", espessura = 2.1f)
     val receber = traco("receber", "M12 4 V19.5 M5.5 13 L12 19.5 L18.5 13", espessura = 2.1f)
-    // A seta da esquerda em cima e a da direita embaixo, como o arrow.left.arrow.right do iOS.
-    val trocar = traco("trocar", "M20 8 H5 M9 4 L5 8 L9 12 M4 16 H19 M15 12 L19 16 L15 20")
+    // A seta da esquerda em cima e a da direita embaixo, longas e finas, como o arrow.left.arrow.right do iOS.
+    val trocar = traco("trocar", "M2.53 5.78 H21.53 M8.61 0.9 L2.53 5.78 L8.61 10.66 M2.53 18.1 H21.53 M15.83 13.04 L21.53 18.1 L15.83 23.16", espessura = 1.55f)
     val trocarVertical = traco("trocarVertical", "M8 20 V5 M4 9 L8 5 L12 9 M16 4 V19 M12 15 L16 19 L20 15")
     val setaDiagonal = traco("setaDiagonal", "M7 17 L17 7 M9 7 H17 V15")
     val atualizar = traco("atualizar", "M19.5 12 A7.5 7.5 0 1 1 17.3 6.7 M19.5 4 V8.5 H15")
@@ -104,8 +122,12 @@ object Icones {
         "M10.3 3.5 H13.7 L14.2 5.9 L15.8 6.8 L18.1 6 L19.8 8.9 L18 10.6 V12.4 V13.4 L19.8 15.1 L18.1 18 L15.8 17.2 L14.2 18.1 L13.7 20.5 H10.3 L9.8 18.1 L8.2 17.2 L5.9 18 L4.2 15.1 L6 13.4 V10.6 L4.2 8.9 L5.9 6 L8.2 6.8 L9.8 5.9 Z",
     )
     val carteira = traco("carteira", "M4.5 7 H18 A1.5 1.5 0 0 1 19.5 8.5 V18 A1.5 1.5 0 0 1 18 19.5 H6 A1.5 1.5 0 0 1 4.5 18 V7 Z M4.5 7 V6 A1.5 1.5 0 0 1 6 4.5 H16", "M15 12 H19.5 V15 H15 A1.5 1.5 0 0 1 15 12 Z")
-    val mercado = traco("mercado", "M3.5 3.5 V20.5 H20.5", "M7 16 L11 11.5 L14 14.5 L20 8", "M16 8 H20 V12")
-    val atividade = traco("atividade", "M4 12 A8 8 0 1 0 6.3 6.3", "M3.5 4 V7.5 H7", "M12 8 V12 L14.5 14.5")
+    // Os eixos e a linha que sobe, com a ponta cheia (o chart.line.uptrend.xyaxis do iOS).
+    val mercado = tracoComPonta("mercado", "M1.81 2.88 V21.12 H23.09 M2.57 14.66 L7.13 9.34 L12.83 14.28 L18.6 8.3",
+                                "M16.1 6.3 L22.49 4.93 L20.97 11.24 Z", espessura = 1.55f)
+    // O relogio com a seta girando para tras, aberta a esquerda (o clock.arrow.circlepath do iOS).
+    val atividade = tracoComPonta("atividade", "M3.2 10.6 A10.26 10.26 0 1 1 4.99 18.33 M12.91 6.68 V14.28 L15.57 16.18",
+                                  "M0.75 10.48 H6.45 L3.49 14.43 Z", espessura = 1.55f)
     val envelope = traco("envelope", "M4.5 6 H19.5 A1.5 1.5 0 0 1 21 7.5 V16.5 A1.5 1.5 0 0 1 19.5 18 H4.5 A1.5 1.5 0 0 1 3 16.5 V7.5 A1.5 1.5 0 0 1 4.5 6 Z", "M3.5 7 L12 13 L20.5 7")
     val envelopeAberto = traco("envelopeAberto", "M3 10 L12 4 L21 10 V19 A1.5 1.5 0 0 1 19.5 20.5 H4.5 A1.5 1.5 0 0 1 3 19 Z", "M3.5 10.5 L12 15.5 L20.5 10.5")
     val chave = traco("chave", "M8 16 A4 4 0 1 0 8 8 A4 4 0 1 0 8 16 Z", "M12 12 H20.5 M17.5 12 V15 M20.5 12 V14")
@@ -121,20 +143,22 @@ object Icones {
     /** As da barra de abas, cheias como as do iOS 26. */
     val carteiraCheia = cheio(
         "carteiraCheia",
-        "M5.2 6.5 H17.3 A3.2 3.2 0 0 1 20.5 9.7 V17.3 A3.2 3.2 0 0 1 17.3 20.5 H5.2 A3.2 3.2 0 0 1 2 17.3 V9.7 A3.2 3.2 0 0 1 5.2 6.5 Z " +
-            "M6.05 2.9 H16.45 A1.45 1.45 0 0 1 17.9 4.35 A1.45 1.45 0 0 1 16.45 5.8 H6.05 A1.45 1.45 0 0 1 4.6 4.35 A1.45 1.45 0 0 1 6.05 2.9 Z " +
-            "M15.8 10.1 H16.8 A3.7 3.7 0 0 1 16.8 17.5 H15.8 A3.7 3.7 0 0 1 15.8 10.1 Z " +
-            "M15.8 11.3 H18 A2.5 2.5 0 0 1 18 16.3 H15.8 A2.5 2.5 0 0 1 15.8 11.3 Z " +
-            "M17.5 13.8 A1.2 1.2 0 1 0 15.1 13.8 A1.2 1.2 0 1 0 17.5 13.8 Z",
+        "M3.49 6.06 H19.3 A3.04 3.04 0 0 1 22.34 9.1 V19.28 A3.04 3.04 0 0 1 19.3 22.32 H3.49 A3.04 3.04 0 0 1 0.45 19.28 V9.1 A3.04 3.04 0 0 1 3.49 6.06 Z " +
+            "M6.23 4.16 L16.6 1.42 C17.7 1.13 18.69 1.9 18.69 3.04 V4.16 Z " +
+            "M17.44 8.96 H20.11 A3.6 3.6 0 0 1 23.71 12.56 V15.98 A3.6 3.6 0 0 1 20.11 19.58 H17.44 A3.6 3.6 0 0 1 13.84 15.98 V12.56 A3.6 3.6 0 0 1 17.44 8.96 Z " +
+            "M17.59 9.71 H20.71 A3 3 0 0 1 23.71 12.71 V15.83 A3 3 0 0 1 20.71 18.83 H17.59 A3 3 0 0 1 14.59 15.83 V12.71 A3 3 0 0 1 17.59 9.71 Z " +
+            "M19.6 14.27 A1.37 1.37 0 1 0 16.86 14.27 A1.37 1.37 0 1 0 19.6 14.27 Z",
     )
-    val engrenagemCheia = cheio(
+    // Oito dentes de pontas redondas, um apontando para cima, e o furo no meio (o gearshape.fill).
+    val engrenagemCheia = cheioRedondo(
         "engrenagemCheia",
-        "M20.17 10.04 L22.48 10.42 L22.48 13.58 L20.17 13.96 L19.99 14.6 L19.76 15.21 L19.48 15.81 L19.16 16.39 L20.53 18.3 L18.3 20.53 " +
-            "L16.39 19.16 L15.81 19.48 L15.21 19.76 L14.6 19.99 L13.96 20.17 L13.58 22.48 L10.42 22.48 L10.04 20.17 L9.4 19.99 L8.79 19.76 " +
-            "L8.19 19.48 L7.61 19.16 L5.7 20.53 L3.47 18.3 L4.84 16.39 L4.52 15.81 L4.24 15.21 L4.01 14.6 L3.83 13.96 L1.52 13.58 L1.52 10.42 " +
-            "L3.83 10.04 L4.01 9.4 L4.24 8.79 L4.52 8.19 L4.84 7.61 L3.47 5.7 L5.7 3.47 L7.61 4.84 L8.19 4.52 L8.79 4.24 L9.4 4.01 L10.04 3.83 " +
-            "L10.42 1.52 L13.58 1.52 L13.96 3.83 L14.6 4.01 L15.21 4.24 L15.81 4.52 L16.39 4.84 L18.3 3.47 L20.53 5.7 L19.16 7.61 L19.48 8.19 " +
-            "L19.76 8.79 L19.99 9.4 Z M15.5 12 A3.5 3.5 0 1 0 8.5 12 A3.5 3.5 0 1 0 15.5 12 Z",
+        "M9.3 4.36 L9.97 2 L14.03 2 L14.7 4.36 L14.9 4.44 L15.1 4.52 L15.29 4.6 L15.49 4.69 L17.63 3.49 L20.51 6.37 L19.31 8.51 L19.4 8.71 " +
+            "L19.48 8.9 L19.56 9.1 L19.64 9.3 L22 9.97 L22 14.03 L19.64 14.7 L19.56 14.9 L19.48 15.1 L19.4 15.29 L19.31 15.49 L20.51 17.63 " +
+            "L17.63 20.51 L15.49 19.31 L15.29 19.4 L15.1 19.48 L14.9 19.56 L14.7 19.64 L14.03 22 L9.97 22 L9.3 19.64 L9.1 19.56 L8.9 19.48 " +
+            "L8.71 19.4 L8.51 19.31 L6.37 20.51 L3.49 17.63 L4.69 15.49 L4.6 15.29 L4.52 15.1 L4.44 14.9 L4.36 14.7 L2 14.03 L2 9.97 L4.36 9.3 " +
+            "L4.44 9.1 L4.52 8.9 L4.6 8.71 L4.69 8.51 L3.49 6.37 L6.37 3.49 L8.51 4.69 L8.71 4.6 L8.9 4.52 L9.1 4.44 Z " +
+            "M16.25 12 A4.25 4.25 0 1 0 7.75 12 A4.25 4.25 0 1 0 16.25 12 Z",
+        raio = 0.6f,
     )
     /** O escudo da checagem do aparelho: a metade esquerda cheia enquanto confere. */
     val escudoMetade = ImageVector.Builder("escudoMetade", 24.dp, 24.dp, 24f, 24f).apply {

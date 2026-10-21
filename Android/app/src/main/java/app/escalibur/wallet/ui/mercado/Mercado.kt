@@ -1,5 +1,27 @@
 package app.escalibur.wallet.ui.mercado
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import app.escalibur.wallet.ui.comp.TelaComBarra
+import kotlin.math.abs
 import app.escalibur.wallet.ui.comp.LocalEspacoDaBarra
 import app.escalibur.wallet.ui.avisos.SinoDoAlerta
 import androidx.compose.foundation.background
@@ -122,6 +144,7 @@ fun TelaDoMercado() {
         falhou = false
         moedas = resposta.optJSONArray("moedas").objetos().map(::MoedaDeMercado)
         favoritas = resposta.optJSONArray("favoritas").textos()
+        Favoritas.ids = favoritas.toSet()
         val quando = resposta.data("atualizado")
         velho = if (resposta.optBoolean("velho")) quando else null
         rodape = quando?.let { t("Dados de mercado: %@, às %@", resposta.optString("fonte"), Formato.relogio(it)) }
@@ -138,8 +161,8 @@ fun TelaDoMercado() {
 
     val termo = busca.trim()
     val filtradas = if (termo.isEmpty()) moedas else moedas.filter { it.simbolo.contains(termo, true) || it.nome.contains(termo, true) }
-    val marcadas = favoritas.mapNotNull { id -> filtradas.firstOrNull { it.id == id } }.let { if (ordem == Ordem.relevancia) it else ordem.ordenar(it) }
-    val outras = ordem.ordenar(filtradas.filter { it.id !in favoritas })
+    val marcadas = (favoritas.filter { it in Favoritas.ids } + (Favoritas.ids - favoritas.toSet())).mapNotNull { id -> filtradas.firstOrNull { it.id == id } }.let { if (ordem == Ordem.relevancia) it else ordem.ordenar(it) }
+    val outras = ordem.ordenar(filtradas.filter { it.id !in Favoritas.ids })
 
     LazyColumn(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = LocalEspacoDaBarra.current)) {
         item { TituloDeAba(t("Mercado")) }
@@ -209,18 +232,56 @@ private fun LinhaDoMercado(m: MoedaDeMercado, moeda: String, aoTocar: () -> Unit
     }
 }
 
-/** A pagina de uma moeda: o grafico, o mercado e, se a carteira tem, enviar e receber. */
+/** As moedas fixadas no topo do Mercado, as mesmas em toda tela. */
+object Favoritas {
+    var ids by mutableStateOf<Set<String>>(emptySet())
+
+    fun alternar(escopo: kotlinx.coroutines.CoroutineScope, id: String) {
+        val nova = id !in ids
+        ids = if (nova) ids + id else ids - id
+        escopo.launch { runCatching { Api.objeto("mercado.favorita", JSONObject().put("id", id).put("favorita", nova)) } }
+    }
+}
+
+/** O coracao da barra: fixa a moeda no topo do Mercado (o `FavoriteButton` do iOS). */
+@Composable
+fun BotaoFavorito(id: String?) {
+    id ?: return
+    val escopo = rememberCoroutineScope()
+    val haptico = LocalHapticFeedback.current
+    val favorita = id in Favoritas.ids
+    LaunchedEffect(Unit) {
+        if (Favoritas.ids.isEmpty()) {
+            runCatching { Api.objeto("mercado.lista", JSONObject().put("moeda", App.estado.moeda)).optJSONArray("favoritas").textos().toSet() }
+                .getOrNull()?.let { Favoritas.ids = it }
+        }
+    }
+    val escala by animateFloatAsState(if (favorita) 1.08f else 1f, spring(dampingRatio = 0.5f, stiffness = 440f), label = "coracao")
+    Box(
+        Modifier.size(width = 42.dp, height = Altura.toque).clip(CircleShape).clickable {
+            haptico.performHapticFeedback(HapticFeedbackType.ContextClick)
+            Favoritas.alternar(escopo, id)
+        }.semantics { contentDescription = if (favorita) t("Tirar dos favoritos") else t("Fixar no topo do Mercado") },
+        contentAlignment = Alignment.Center,
+    ) {
+        AnimatedContent(favorita, transitionSpec = { (scaleIn(initialScale = 0.6f) + fadeIn()) togetherWith (scaleOut(targetScale = 0.6f) + fadeOut()) }, label = "favorita") { f ->
+            Icone(if (f) Icones.coracaoCheio else Icones.coracao, if (f) Paleta.baixa else Paleta.tintaSuave, tamanho = 21.dp,
+                  modifier = Modifier.graphicsLayer { scaleX = escala; scaleY = escala })
+        }
+    }
+}
+
+/** A pagina de uma moeda: o grafico, o mercado e, se a carteira tem, vender e comprar. */
 @Composable
 fun DetalheDaMoeda(m: MoedaDeMercado) {
     val escopo = rememberCoroutineScope()
     val moeda = App.estado.moeda
-    var favorita by remember { mutableStateOf(false) }
     var detalhes by remember { mutableStateOf<JSONObject?>(null) }
-    var semDetalhes by remember { mutableStateOf(false) }
-    LaunchedEffect(m.id) {
-        favorita = runCatching { Api.objeto("mercado.lista", JSONObject().put("moeda", moeda)).optJSONArray("favoritas").textos().contains(m.id) }.getOrDefault(false)
+    var carregando by remember { mutableStateOf(true) }
+    LaunchedEffect(m.id, moeda) {
+        carregando = true
         detalhes = runCatching { Api.objeto("mercado.detalhes", JSONObject().put("id", m.id).put("moeda", moeda)) }.getOrNull()
-        semDetalhes = detalhes == null
+        carregando = false
     }
     // O que comprar e o que vender desta moeda, pelo nucleo: (comprar, vender).
     var troca by remember { mutableStateOf<Pair<String?, String?>>(null to null) }
@@ -230,104 +291,162 @@ fun DetalheDaMoeda(m: MoedaDeMercado) {
         }.getOrDefault(null to null)
     }
     val observacao = App.estado.carteira?.observacao == true
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding()) {
-        Box(Modifier.fillMaxWidth()) {
-            CabecalhoDeFolha(m.nome, null, aoVoltar = { Navegacao.fechar() })
-            SinoDoAlerta(m.id, m.simbolo, m.nome, Modifier.align(Alignment.CenterEnd).padding(end = Espaco.xs + Altura.toque))
-            Box(Modifier.align(Alignment.CenterEnd).padding(end = Espaco.xs).size(Altura.toque).clickable {
-                val nova = !favorita
-                favorita = nova
-                escopo.launch { runCatching { Api.objeto("mercado.favorita", JSONObject().put("id", m.id).put("favorita", nova)) } }
-            }, contentAlignment = Alignment.Center) {
-                Icone(Icones.estrela, if (favorita) Paleta.realce else Paleta.tintaSuave, tamanho = 20.dp,
-                      descricao = if (favorita) t("Tirar das favoritas") else t("Marcar como favorita"))
-            }
+    fun abrirTroca(ativo: String, vende: Boolean) {
+        escopo.launch {
+            if (!ControleDaTroca.preparar(ativo, vende)) return@launch
+            Navegacao.fecharTudo()
+            Navegacao.aba = Aba.trocar
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = Espaco.xl)) {
-            Row(Modifier.padding(horizontal = Espaco.margem).padding(bottom = Espaco.sm), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                LogoDaMoeda(m.id, m.simbolo, 24.dp)
-                Text(m.simbolo, style = estilo(Tipo.linha), color = Paleta.tintaSuave)
+    }
+    TelaComBarra(
+        aoVoltar = { Navegacao.fechar() },
+        centro = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                LogoDaMoeda(m.id, m.simbolo, 20.dp)
+                Text(m.nome, style = estilo(Tipo.acao), color = Paleta.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            SecaoDoGrafico(m.id, m.preco, m.variacao, moeda, estavel = m.id in listOf("tether", "usd-coin", "dai"))
-            FatosDoMercado(m, detalhes, semDetalhes, moeda)
-        }
+        },
+        acoes = {
+            SinoDoAlerta(m.id, m.simbolo, m.nome)
+            BotaoFavorito(m.id)
+        },
         // Vender o que a carteira tem da moeda, na rede onde ha mais; comprar pela primeira rede com
-        // troca que tem a moeda (o MarketCoinDetail do iOS).
-        if (!observacao && (troca.first != null || troca.second != null)) {
-            fun abrir(ativo: String, vende: Boolean) {
-                escopo.launch {
-                    if (!ControleDaTroca.preparar(ativo, vende)) return@launch
-                    Navegacao.fecharTudo()
-                    Navegacao.aba = Aba.trocar
-                }
+        // troca que tem a moeda.
+        rodape = if (!observacao && (troca.first != null || troca.second != null)) ({
+            Row(horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                troca.second?.let { vender -> BotaoSecundario(t("Vender"), Modifier.weight(1f), altura = Altura.primaria) { abrirTroca(vender, true) } }
+                troca.first?.let { comprar -> BotaoPrimario(t("Comprar %@", m.simbolo.uppercase()), Modifier.weight(1f)) { abrirTroca(comprar, false) } }
             }
-            Row(Modifier.padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs), horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                troca.second?.let { vender -> BotaoSecundario(t("Vender"), Modifier.weight(1f), altura = Altura.primaria) { abrir(vender, true) } }
-                troca.first?.let { comprar -> BotaoPrimario(t("Comprar %@", m.simbolo.uppercase()), Modifier.weight(1f)) { abrir(comprar, false) } }
-            }
+        }) else null,
+    ) { espaco ->
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(espaco).padding(bottom = Espaco.xl)) {
+            SecaoDoGrafico(m.id, m.preco, m.variacao, moeda, estavel = m.id in listOf("tether", "usd-coin", "dai"))
+            FatosDoMercado(m, detalhes, carregando, moeda, Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.xl))
         }
     }
 }
 
+/**
+ * O que a pagina da moeda mostra abaixo do grafico, como as boas corretoras: mercado, faixa de 24
+ * horas, maxima historica, oferta e um "Sobre" curto. Os tres numeros da lista aparecem na hora; o
+ * resto chega quando a pagina abre, e so o que a fonte entregou aparece.
+ */
 @Composable
-private fun FatosDoMercado(m: MoedaDeMercado, d: JSONObject?, semDetalhes: Boolean, moeda: String) {
+private fun FatosDoMercado(m: MoedaDeMercado, d: JSONObject?, carregando: Boolean, moeda: String, modifier: Modifier = Modifier) {
     fun numero(chave: String): Double? = d?.takeIf { it.has(chave) && !it.isNull(chave) }?.getDouble(chave)
-    Column(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.xl), verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
-        Text(t("Sobre o mercado"), style = estilo(Tipo.cabecalho), color = Paleta.tinta)
-        Cartao {
-            Fato(t("Capitalização"), (numero("marketCap") ?: m.capitalizacao)?.let { Formato.compacto(it, moeda) })
-            Fato(t("Volume em 24h"), (numero("volume24h") ?: m.volume)?.let { Formato.compacto(it, moeda) })
-            Fato(t("Posição no mercado"), (d?.optInt("rank")?.takeIf { it > 0 } ?: m.posicao)?.let { "${it}º" })
-            numero("fullyDilutedValuation")?.let { Fato(t("Valor totalmente diluído"), Formato.compacto(it, moeda)) }
+    val preco = numero("price") ?: m.preco
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(Espaco.lg)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
+            Text(t("Sobre o mercado"), style = estilo(Tipo.cabecalho), color = Paleta.tinta)
+            GradeDeFatos(buildList {
+                add(t("Capitalização") to (numero("marketCap") ?: m.capitalizacao)?.let { Formato.compacto(it, moeda) })
+                add(t("Volume em 24h") to (numero("volume24h") ?: m.volume)?.let { Formato.compacto(it, moeda) })
+                add(t("Posição no mercado") to (d?.optInt("rank")?.takeIf { it > 0 } ?: m.posicao)?.let { "${it}º" })
+                numero("fullyDilutedValuation")?.let { add(t("Valor totalmente diluído") to Formato.compacto(it, moeda)) }
+            })
         }
-        val baixa = numero("low24h")
-        val alta = numero("high24h")
-        if (baixa != null && alta != null) {
-            Text(t("Faixa de 24 horas"), style = estilo(Tipo.acao), color = Paleta.tinta)
-            Cartao {
-                Fato(t("Mínima"), Formato.preco(baixa, moeda))
-                Fato(t("Máxima"), Formato.preco(alta, moeda))
-            }
-        }
-        numero("allTimeHigh")?.let { maxima ->
-            Text(t("Máxima histórica"), style = estilo(Tipo.acao), color = Paleta.tinta)
-            Cartao {
-                Fato(t("Preço"), Formato.preco(maxima, moeda))
-                numero("fromAllTimeHigh")?.let { distancia ->
-                    Fato(t("Distância"), if (distancia >= -0.5) t("Na máxima") else t("%@%% abaixo da máxima", Formato.agrupado(kotlin.math.abs(distancia), if (kotlin.math.abs(distancia) < 10) 1 else 0, aparar = true)))
+        if (d != null) {
+            val baixa = numero("low24h")
+            val alta = numero("high24h")
+            if (baixa != null && alta != null && alta > baixa) FaixaDoDia(baixa, alta, preco, moeda)
+            numero("allTimeHigh")?.let { maxima ->
+                Column(verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                    Text(t("Máxima histórica"), style = estilo(Tipo.acao), color = Paleta.tinta)
+                    Row(verticalAlignment = Alignment.Top) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(Formato.preco(maxima, moeda), style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
+                            d.data("allTimeHighDate")?.let { Text(t("Em %@", Formato.diaLongo(it)), style = estilo(Tipo.nota), color = Paleta.tintaApagada) }
+                        }
+                        numero("fromAllTimeHigh")?.let { distancia ->
+                            Text(if (distancia >= -0.5) t("Na máxima") else t("%@% abaixo da máxima", Formato.agrupado(abs(distancia), if (abs(distancia) < 10) 1 else 0, aparar = true)),
+                                 style = estilo(Tipo.nota), color = Paleta.tintaSuave, textAlign = TextAlign.End, modifier = Modifier.padding(start = Espaco.sm))
+                        }
+                    }
                 }
             }
-        }
-        val circulando = numero("circulatingSupply")
-        val total = numero("totalSupply")
-        val maximo = numero("maxSupply")
-        if (circulando != null || total != null || maximo != null || d?.optBoolean("unlimitedSupply") == true) {
-            Text(t("Oferta de moedas"), style = estilo(Tipo.acao), color = Paleta.tinta)
-            Cartao {
-                circulando?.let { Fato(t("Em circulação"), Formato.compacto(it)) }
-                total?.let { Fato(t("Oferta total"), Formato.compacto(it)) }
-                if (maximo != null) Fato(t("Oferta máxima"), Formato.compacto(maximo)) else if (d?.optBoolean("unlimitedSupply") == true) Fato(t("Oferta máxima"), t("Sem teto"))
+            val simbolo = m.simbolo.uppercase()
+            val oferta = buildList {
+                numero("circulatingSupply")?.let { add(t("Em circulação") to "${Formato.compacto(it)} $simbolo") }
+                numero("totalSupply")?.let { add(t("Oferta total") to "${Formato.compacto(it)} $simbolo") }
+                val maximo = numero("maxSupply")
+                if (maximo != null) add(t("Oferta máxima") to "${Formato.compacto(maximo)} $simbolo")
+                else if (d.optBoolean("unlimitedSupply")) add(t("Oferta máxima") to t("Sem teto"))
+            }
+            if (oferta.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
+                    Text(t("Oferta de moedas"), style = estilo(Tipo.acao), color = Paleta.tinta)
+                    GradeDeFatos(oferta)
+                }
+            }
+            d.optString("about").takeIf { it.isNotBlank() && it != "null" }?.let { sobre ->
+                Column(verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                    Text(t("Sobre o projeto"), style = estilo(Tipo.acao), color = Paleta.tinta)
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Text(sobre, style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
+                    }
+                    if (!d.optBoolean("aboutInPortuguese")) Text(t("Texto em inglês, como a fonte publica."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+                }
+            }
+        } else if (carregando) {
+            Column(verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                Esqueleto(140.dp, 16.dp)
+                Esqueleto(220.dp)
+                Esqueleto(180.dp)
             }
         }
-        d?.optString("about")?.takeIf { it.isNotBlank() && it != "null" }?.let { sobre ->
-            Text(t("Sobre o projeto"), style = estilo(Tipo.acao), color = Paleta.tinta)
-            Text(sobre, style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
-            if (d.optBoolean("aboutInPortuguese") == false) Text(t("Texto em inglês, como a fonte publica."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+        if (d != null) {
+            val fonte = d.optString("source")
+            val quando = d.data("fetchedAt")?.let { Formato.carimbo(it) } ?: ""
+            Text(if (d.optBoolean("isStale")) t("Sem conexão com as fontes agora. Dados de %@, do %@.", quando, fonte) else t("Dados do %@, às %@.", fonte, quando),
+                 style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+        } else if (!carregando) {
+            Text(t("Não foi possível carregar mais dados desta moeda agora."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
         }
-        if (semDetalhes) Text(t("Não foi possível carregar mais dados desta moeda agora."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
     }
 }
 
+/** Numeros em duas colunas: valor em cima, rotulo embaixo. Sem valor, "sem dado". */
 @Composable
-private fun Cartao(conteudo: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(horizontal = Espaco.md, vertical = Espaco.xs)) { conteudo() }
+private fun GradeDeFatos(itens: List<Pair<String, String?>>) {
+    Column(verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
+        for (par in itens.chunked(2)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Espaco.md)) {
+                for ((rotulo, valor) in par) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(valor ?: t("sem dado"), style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
+                        Text(rotulo, style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+                    }
+                }
+                if (par.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
 }
 
+/** Faixa de 24 horas: minima e maxima, com o preco de agora marcado entre elas. */
 @Composable
-private fun Fato(rotulo: String, valor: String?) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(rotulo, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.weight(1f))
-        Text(valor ?: t("sem dado"), style = estilo(Tipo.linha), color = Paleta.tinta)
+private fun FaixaDoDia(baixa: Double, alta: Double, preco: Double, moeda: String) {
+    // A maxima e a minima da fonte podem estar um pouco atras do preco vivo: o marcador fica na ponta.
+    val posicao = ((preco - baixa) / (alta - baixa)).coerceIn(0.0, 1.0).toFloat()
+    Column(verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+        Text(t("Faixa de 24 horas"), style = estilo(Tipo.acao), color = Paleta.tinta)
+        Canvas(Modifier.fillMaxWidth().height(12.dp)) {
+            val meio = size.height / 2
+            val traco = 4.dp.toPx()
+            drawLine(Paleta.trilho, Offset(traco / 2, meio), Offset(size.width - traco / 2, meio), traco, StrokeCap.Round)
+            drawLine(Paleta.bordaForte, Offset(traco / 2, meio), Offset(maxOf(traco, size.width * posicao) - traco / 2, meio), traco, StrokeCap.Round)
+            val x = (size.width * posicao).coerceIn(6.dp.toPx(), size.width - 6.dp.toPx())
+            drawCircle(Paleta.tinta, 6.dp.toPx(), Offset(x, meio))
+        }
+        Row {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(Formato.preco(baixa, moeda), style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
+                Text(t("Mínima"), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(Formato.preco(alta, moeda), style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
+                Text(t("Máxima"), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+            }
+        }
     }
 }

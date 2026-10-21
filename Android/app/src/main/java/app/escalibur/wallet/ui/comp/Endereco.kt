@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.comp
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
@@ -103,8 +105,11 @@ fun EnderecoEmBlocos(endereco: String, modifier: Modifier = Modifier, naPlaca: B
             } else {
                 withStyle(SpanStyle(color = if (naPlaca) Paleta.placaApagada else Paleta.tintaSuave)) { append(bloco) }
             }
-            if (indice < blocos.lastIndex) append("  ")
+            // O espaco entre os blocos e pequeno (dois espacos numa letra de 8), como no iOS: so separa o
+            // olho, e a copia continua sem espacos.
+            if (indice < blocos.lastIndex) withStyle(SpanStyle(fontSize = 8.sp)) { append("  ") }
         }
     }
-    Text(texto, fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.Medium, lineHeight = 26.sp, modifier = modifier)
+    Text(texto, fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.Medium, lineHeight = 25.sp,
+         modifier = modifier.semantics { contentDescription = endereco })
 }

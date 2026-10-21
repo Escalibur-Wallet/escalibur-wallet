@@ -178,6 +178,20 @@ object Formato {
         return t("%@, %@", diaCurto(data), hora)
     }
 
+    /** "14:32", "ontem, 14:32" ou "3 out, 14:32": quando um dado foi lido (o `stamp` do iOS). */
+    fun carimbo(data: Date, agora: Date = Date()): String {
+        val hora = relogio(data)
+        if (mesmoDia(data, agora)) return hora
+        if (mesmoDia(data, Date(agora.time - 86_400_000))) return t("ontem, %@", hora)
+        return t("%@, %@", diaCurto(data), hora)
+    }
+
+    /** "7 de mai de 2021". */
+    fun diaLongo(data: Date): String {
+        val texto = SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(locale, "dMMMyyyy"), locale).format(data)
+        return if (locale.language == "pt") texto.replace(".", "") else texto
+    }
+
     private fun mesmoDia(a: Date, b: Date): Boolean {
         val x = Calendar.getInstance().apply { time = a }
         val y = Calendar.getInstance().apply { time = b }

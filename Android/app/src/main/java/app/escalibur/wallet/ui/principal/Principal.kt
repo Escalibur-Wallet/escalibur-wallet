@@ -476,7 +476,7 @@ private fun BarraDeAbas(folga: Dp, modifier: Modifier = Modifier) {
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Icone(icone, cor, tamanho = 26.dp)
-                    Text(titulo, style = TextStyle(fontFamily = Letra.familia(FontWeight.Medium, 10f), fontWeight = FontWeight.Medium, fontSize = 10.sp,
+                    Text(titulo, style = TextStyle(fontFamily = Letra.familia(FontWeight.SemiBold, 10f), fontWeight = FontWeight.SemiBold, fontSize = 10.sp,
                                                    letterSpacing = Letra.espacoNatural(10f).em),
                          color = cor, maxLines = 1, modifier = Modifier.padding(top = 3.dp))
                 }

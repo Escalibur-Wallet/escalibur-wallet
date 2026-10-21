@@ -1,5 +1,11 @@
 package app.escalibur.wallet.ui.comp
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.ui.composed
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlin.math.cos
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -134,9 +140,7 @@ fun <T> Segmentado(opcoes: List<Pair<T, String>>, selecao: T, modifier: Modifier
                 .offset(x = deslocamento)
                 .width(largura)
                 .fillMaxHeight()
-                .clip(CircleShape)
-                .background(Paleta.controle)
-                .border(1.dp, Color(0x2EFFFFFF), CircleShape)
+                .vidro(CircleShape, Vidros.selecao)
         )
         Row(Modifier.fillMaxWidth().fillMaxHeight()) {
             opcoes.forEachIndexed { posicao, (valor, titulo) ->
@@ -338,3 +342,51 @@ fun Modifier.seguraToques(): Modifier = pointerInput(Unit) {
  * conteudo, e o ultimo item nao pode ficar atras dela. Zero fora das abas.
  */
 val LocalEspacoDaBarra = androidx.compose.runtime.staticCompositionLocalOf { 0.dp }
+
+/** A situacao de uma movimentacao ou ordem (o `StatusBadge` do iOS): pendente com o ponto pulsando. */
+enum class TipoDeSituacao { pendente, aberta, parcial, feita, encerrada, falhou }
+
+@Composable
+fun SeloDeSituacao(tipo: TipoDeSituacao, texto: String, modifier: Modifier = Modifier) {
+    val (cor, fundo) = when (tipo) {
+        TipoDeSituacao.pendente -> Paleta.tintaSuave to Paleta.trilho
+        TipoDeSituacao.aberta, TipoDeSituacao.parcial -> Paleta.tinta to Paleta.controle
+        TipoDeSituacao.feita -> Paleta.alta to Paleta.altaFundo
+        TipoDeSituacao.encerrada -> Paleta.tintaApagada to Paleta.trilho
+        TipoDeSituacao.falhou -> Paleta.baixa to Paleta.baixaFundo
+    }
+    Row(
+        modifier.height(Altura.selo).clip(RoundedCornerShape(Raio.selo)).background(fundo).padding(horizontal = Espaco.xs),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (tipo == TipoDeSituacao.pendente) {
+            val pulso by rememberInfiniteTransition(label = "pulso").animateFloat(0.45f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "alfa")
+            Box(Modifier.size(6.dp).graphicsLayer { alpha = pulso }.clip(CircleShape).background(Paleta.tintaSuave))
+        }
+        Text(texto, style = estilo(Tipo.rotulo), color = cor, maxLines = 1)
+    }
+}
+
+/**
+ * O giro da moeda no detalhe (o `CoinSpin` do iOS): duas voltas em 3D ao abrir, assentando devagar,
+ * e uma volta a cada 4,5 segundos. O verso desfaz o espelho, para o logo nunca aparecer invertido.
+ */
+fun Modifier.moedaGirando(atraso: Long = 0): Modifier = composed {
+    val parado = movimentoReduzido()
+    val angulo = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        if (parado) return@LaunchedEffect
+        delay(150 + atraso)
+        angulo.animateTo(angulo.value + 720f, tween(1500, easing = CubicBezierEasing(0.2f, 0.8f, 0.25f, 1f)))
+        while (true) {
+            delay(4500)
+            angulo.animateTo(angulo.value + 360f, tween(1100, easing = FastOutSlowInEasing))
+        }
+    }
+    graphicsLayer {
+        val frente = cos(Math.toRadians(angulo.value.toDouble())) >= 0
+        rotationY = angulo.value
+        scaleX = if (frente) 1f else -1f
+        cameraDistance = 6f * density
+    }
+}

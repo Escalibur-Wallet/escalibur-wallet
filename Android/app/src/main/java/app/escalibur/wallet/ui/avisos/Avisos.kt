@@ -431,7 +431,7 @@ fun SinoDoAlerta(id: String, simbolo: String, nome: String, modifier: Modifier =
     LaunchedEffect(id) {
         vigiando = runCatching { EstadoDosAlertas(Api.objeto("alertas.estado")) }.getOrNull()?.let { e -> e.ligado && e.moedas.any { it.optString("id") == id } } ?: false
     }
-    Box(modifier.size(Altura.toque).clickable {
+    Box(modifier.size(width = 42.dp, height = Altura.toque).clip(CircleShape).clickable {
         escopo.launch {
             if (vigiando) {
                 runCatching { Api.objeto("alertas.mudar", JSONObject().put("tirar", id)) }
@@ -456,7 +456,7 @@ fun SinoDoAlerta(id: String, simbolo: String, nome: String, modifier: Modifier =
             Vigia.conferir(contexto, forcar = true)
         }
     }, contentAlignment = Alignment.Center) {
-        Icone(if (vigiando) Icones.sinoCheio else Icones.sino, if (vigiando) Paleta.tinta else Paleta.tintaSuave, tamanho = 20.dp,
+        Icone(if (vigiando) Icones.sinoCheio else Icones.sino, if (vigiando) Paleta.tinta else Paleta.tintaSuave, tamanho = 21.dp,
               descricao = if (vigiando) t("Desligar alertas desta moeda") else t("Avisar sobre o preço desta moeda"))
     }
 }
