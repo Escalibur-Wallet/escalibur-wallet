@@ -203,10 +203,7 @@ fun Chip(titulo: String, selecionado: Boolean, modifier: Modifier = Modifier, ac
         modifier
             .height(Altura.chip)
             .clip(CircleShape)
-            .then(
-                if (selecionado) Modifier.background(Paleta.controle).border(1.dp, Color(0x2EFFFFFF), CircleShape)
-                else Modifier.border(1.dp, Paleta.borda, CircleShape)
-            )
+            .then(if (selecionado) Modifier.vidro(CircleShape, Vidros.selecao) else Modifier.border(1.dp, Paleta.borda, CircleShape))
             .clickable(role = Role.Button) {
                 if (!selecionado) toque()
                 acao()

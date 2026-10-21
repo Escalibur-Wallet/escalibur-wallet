@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.comp
 
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
@@ -294,7 +295,7 @@ private fun SeletorDePeriodo(periodo: Periodo, modifier: Modifier = Modifier, ao
  * do sistema desligadas, fica parada. O Mercado sem fonte usa a mesma linha.
  */
 @Composable
-fun GraficoCarregando(modifier: Modifier = Modifier) {
+fun GraficoCarregando(modifier: Modifier = Modifier, folga: androidx.compose.ui.unit.Dp = 26.dp) {
     val parado = LocalContext.current.let { android.provider.Settings.Global.getFloat(it.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }
     var tempo by remember { mutableFloatStateOf(0f) }
     if (!parado) LaunchedEffect(Unit) {
@@ -303,16 +304,16 @@ fun GraficoCarregando(modifier: Modifier = Modifier) {
     }
     Canvas(modifier.fillMaxSize()) {
         val margem = Espaco.margem.toPx()
-        val folga = 26.dp.toPx()
+        val espacoDoRotulo = folga.toPx()
         val largura = size.width - margem * 2
-        val altura = size.height - folga * 2
+        val altura = size.height - espacoDoRotulo * 2
         val linha = Path()
         val passos = 90
         for (passo in 0..passos) {
             val x = passo / passos.toFloat()
             val onda = 0.5f + 0.16f * sin(x * 2 * PI.toFloat() * 1.2f + tempo * 0.9f) + 0.08f * sin(x * 2 * PI.toFloat() * 2.9f - tempo * 1.3f)
             val px = margem + largura * x
-            val py = folga + altura - altura * onda
+            val py = espacoDoRotulo + altura - altura * onda
             if (passo == 0) linha.moveTo(px, py) else linha.lineTo(px, py)
         }
         val traco = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
@@ -331,18 +332,22 @@ fun GraficoCarregando(modifier: Modifier = Modifier) {
     }
 }
 
-/** A pilula da variacao do dia: so a seta tem cor, lima na alta e vermelho na queda. */
+/**
+ * A pilula da variacao do dia, em vidro (o `ChangePill` do iOS): so o triangulo tem cor, lima na alta
+ * e vermelho na queda; o numero, sem sinal (o triangulo ja diz a direcao), fica na tinta do app.
+ * Abaixo de 0,01% e neutra, sem triangulo.
+ */
 @Composable
 fun PilulaDeVariacao(variacao: Double?, modifier: Modifier = Modifier) {
     val valor = variacao ?: 0.0
     val sobe = valor > 0.004
     val desce = valor < -0.004
     Row(
-        modifier.height(28.dp).background(Paleta.corpo, androidx.compose.foundation.shape.CircleShape)
-            .padding(horizontal = Espaco.sm),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
+        modifier.defaultMinSize(minWidth = 80.dp, minHeight = 28.dp).vidro(CircleShape, Vidros.pilula).padding(horizontal = Espaco.sm),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
     ) {
-        if (sobe || desce) Icone(if (sobe) Icones.acima else Icones.abaixo, if (sobe) Paleta.alta else Paleta.baixa, tamanho = 9.dp)
-        Text(Formato.percentual(kotlin.math.abs(valor)).removePrefix("+"), style = estilo(Tipo.rotulo), color = if (sobe || desce) Paleta.tinta else Paleta.tintaSuave)
+        if (sobe || desce) Icone(if (sobe) Icones.trianguloAcima else Icones.trianguloAbaixo, if (sobe) Paleta.alta else Paleta.baixa, tamanho = 9.dp)
+        Text(Formato.percentual(kotlin.math.abs(valor)).removePrefix("+"), style = estilo(Tipo.rotulo).copy(fontFeatureSettings = "tnum"),
+             color = if (sobe || desce) Paleta.tinta else Paleta.tintaSuave, maxLines = 1)
     }
 }

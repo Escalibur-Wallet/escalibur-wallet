@@ -114,6 +114,9 @@ object Vidros {
     /** A escolha dentro do vidro (a aba escolhida, o segmento escolhido): um vidro mais claro. */
     val selecao = EstiloDoVidro(tom = Color.White.copy(alpha = 0.15f), semFundo = Color.White.copy(alpha = 0.15f), brilho = 0.75f)
 
+    /** A pilula de variacao: vidro sem cor e sem toque (ela nao e botao). */
+    val pilula = EstiloDoVidro(tom = Color.White.copy(alpha = 0.06f), semFundo = Color.White.copy(alpha = 0.06f), brilho = 0.7f)
+
     /** A gota que o dedo arrasta na barra de abas: quase transparente, so a lente. */
     val gota = EstiloDoVidro(
         tom = Color.White.copy(alpha = 0.06f), semFundo = Color.White.copy(alpha = 0.16f),

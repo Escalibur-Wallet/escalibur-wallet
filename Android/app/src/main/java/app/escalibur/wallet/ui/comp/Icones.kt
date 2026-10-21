@@ -53,6 +53,8 @@ object Icones {
     val alertaContorno = traco("alertaContorno", "M12 3.8 L21.2 19.6 H2.8 Z", "M12 9.8 V14", "M12 16.9 V17", espessura = 2f)
     val coracao = traco("coracao", "M12 20.2 C11.2 19.6 3 14.3 3 8.9 C3 6.1 5.1 4 7.8 4 C9.6 4 11.1 5 12 6.4 C12.9 5 14.4 4 16.2 4 C18.9 4 21 6.1 21 8.9 C21 14.3 12.8 19.6 12 20.2 Z", espessura = 2f)
     val coracaoCheio = cheio("coracaoCheio", "M12 20.2 C11.2 19.6 3 14.3 3 8.9 C3 6.1 5.1 4 7.8 4 C9.6 4 11.1 5 12 6.4 C12.9 5 14.4 4 16.2 4 C18.9 4 21 6.1 21 8.9 C21 14.3 12.8 19.6 12 20.2 Z")
+    val trianguloAcima = cheioRedondo("trianguloAcima", "M12 5.5 L19.5 18 H4.5 Z", raio = 1.4f)
+    val trianguloAbaixo = cheioRedondo("trianguloAbaixo", "M12 18.5 L19.5 6 H4.5 Z", raio = 1.4f)
     val chevronsDireita = traco("chevronsDireita", "M5.5 6 L11.5 12 L5.5 18 M12.5 6 L18.5 12 L12.5 18", espessura = 2.6f)
     val voltar = traco("voltar", "M15 4.5 L7.5 12 L15 19.5", espessura = 2.2f)
     val avancar = traco("avancar", "M9 4.5 L16.5 12 L9 19.5", espessura = 2.2f)

@@ -1,5 +1,10 @@
 package app.escalibur.wallet.ui.mercado
 
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.draw.alpha
+import app.escalibur.wallet.ui.comp.GraficoCarregando
+import app.escalibur.wallet.ui.comp.PuxarParaAtualizar
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -147,7 +152,7 @@ fun TelaDoMercado() {
         Favoritas.ids = favoritas.toSet()
         val quando = resposta.data("atualizado")
         velho = if (resposta.optBoolean("velho")) quando else null
-        rodape = quando?.let { t("Dados de mercado: %@, às %@", resposta.optString("fonte"), Formato.relogio(it)) }
+        rodape = quando?.let { t("Dados de mercado: %@, às %@", resposta.optString("fonte"), Formato.carimbo(it)) }
     }
     // Lista viva: atualiza a cada 30 s so enquanto a aba esta na tela e o app na frente.
     LaunchedEffect(moeda) {
@@ -164,48 +169,60 @@ fun TelaDoMercado() {
     val marcadas = (favoritas.filter { it in Favoritas.ids } + (Favoritas.ids - favoritas.toSet())).mapNotNull { id -> filtradas.firstOrNull { it.id == id } }.let { if (ordem == Ordem.relevancia) it else ordem.ordenar(it) }
     val outras = ordem.ordenar(filtradas.filter { it.id !in Favoritas.ids })
 
-    LazyColumn(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = LocalEspacoDaBarra.current)) {
+    var puxando by remember { mutableStateOf(false) }
+    PuxarParaAtualizar(puxando, { puxando = true; escopo.launch { try { carregar() } finally { puxando = false } } }, Modifier.fillMaxSize().background(Paleta.vazio)) {
+    LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = LocalEspacoDaBarra.current + Espaco.xl)) {
         item { TituloDeAba(t("Mercado")) }
         item { CampoDeBusca(busca, t("Buscar moeda"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm)) { busca = it } }
         item {
-            Row(Modifier.padding(top = Espaco.sm).horizontalScroll(rememberScrollState()).padding(horizontal = Espaco.margem), horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+            // Sem lista, nao ha o que ordenar: os filtros apagam e nao respondem.
+            val apagado by animateFloatAsState(if (moedas.isEmpty()) 0.35f else 1f, tween(150), label = "filtros")
+            Row(Modifier.padding(top = Espaco.sm).alpha(apagado).horizontalScroll(rememberScrollState()).padding(horizontal = Espaco.margem),
+                horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                 for (opcao in Ordem.entries) Chip(opcao.titulo, ordem == opcao) { if (moedas.isNotEmpty()) ordem = opcao }
             }
         }
         when {
             moedas.isEmpty() && (carregando || !falhou) -> items(8) {
-                Row(Modifier.fillMaxWidth().heightIn(min = Altura.linha).padding(horizontal = Espaco.margem), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                    Box(Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(Paleta.corpo))
+                Row(Modifier.fillMaxWidth().heightIn(min = Altura.linha).padding(horizontal = Espaco.margem).padding(top = if (it == 0) Espaco.sm else 0.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                    Box(Modifier.size(40.dp).clip(CircleShape).background(Paleta.corpo))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { Esqueleto(48.dp); Esqueleto(88.dp) }
                     Esqueleto(72.dp, 16.dp)
+                    Esqueleto(72.dp, 28.dp)
                 }
             }
             moedas.isEmpty() && falhou -> item {
+                // O Mercado sem nenhuma fonte de preco: a linha do grafico carregando, o que aconteceu,
+                // de onde os precos vem e o tentar de novo. Centrado e sem cartao: e a tela inteira.
                 Column(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem).padding(top = 72.dp), horizontalAlignment = Alignment.CenterHorizontally,
                        verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                    Icone(Icones.mercado, Paleta.tintaApagada, tamanho = 36.dp)
-                    Text(t("Não foi possível carregar o mercado agora."), style = estilo(Tipo.linha), color = Paleta.tinta, textAlign = TextAlign.Center)
-                    BotaoSecundario(t("Tentar de novo")) { escopo.launch { carregar() } }
+                    Box(Modifier.widthIn(max = 280.dp).fillMaxWidth().height(104.dp).padding(bottom = Espaco.sm)) { GraficoCarregando(folga = 10.dp) }
+                    Text(t("Não foi possível carregar o mercado agora"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
+                    Text(t("Os preços vêm do CoinGecko e, quando ele não responde, do CoinPaprika. Nenhum dos dois respondeu. Confira a internet e tente de novo."),
+                         style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
+                    BotaoSecundario(t("Tentar de novo"), Modifier.widthIn(max = 220.dp).padding(top = Espaco.md)) { escopo.launch { carregar() } }
                 }
             }
             else -> {
                 velho?.let { quando ->
                     item {
                         Faixa(TipoDeFaixa.neutra, t("Sem conexão com os dados de mercado agora."), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md),
-                              mensagem = t("Mostrando os preços de %@.", Formato.relogio(quando)), tituloDaAcao = t("Tentar de novo")) { escopo.launch { carregar() } }
+                              mensagem = t("Mostrando os preços de %@.", Formato.carimbo(quando)), tituloDaAcao = t("Tentar de novo")) { escopo.launch { carregar() } }
                     }
                 }
+                item { Spacer(Modifier.height(Espaco.sm)) }
                 if (marcadas.isNotEmpty()) {
                     item { TituloDeSecao(t("Favoritas")) }
-                    items(marcadas, key = { "f" + it.id }) { LinhaDoMercado(it, moeda) { abrir(it) } }
+                    items(marcadas, key = { "f" + it.id }) { LinhaDoMercado(it, moeda, Modifier.animateItem()) { abrir(it) } }
                     item { TituloDeSecao(t("Todas")) }
                 }
-                items(outras, key = { it.id }) { LinhaDoMercado(it, moeda) { abrir(it) } }
+                items(outras, key = { it.id }) { LinhaDoMercado(it, moeda, Modifier.animateItem()) { abrir(it) } }
                 rodape?.let { item { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaApagada, textAlign = TextAlign.Center,
-                                          modifier = Modifier.fillMaxWidth().padding(top = Espaco.lg, bottom = Espaco.xl)) } }
+                                          modifier = Modifier.fillMaxWidth().padding(top = Espaco.lg)) } }
             }
         }
+    }
     }
 }
 
@@ -217,9 +234,9 @@ private fun TituloDeSecao(texto: String) {
 }
 
 @Composable
-private fun LinhaDoMercado(m: MoedaDeMercado, moeda: String, aoTocar: () -> Unit) {
+private fun LinhaDoMercado(m: MoedaDeMercado, moeda: String, modifier: Modifier = Modifier, aoTocar: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = Altura.linha).clickable(onClick = aoTocar).padding(horizontal = Espaco.margem),
+        modifier.fillMaxWidth().heightIn(min = Altura.linha).clickable(onClick = aoTocar).padding(horizontal = Espaco.margem),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
     ) {
         LogoDaMoeda(m.id, m.simbolo, 40.dp)
@@ -228,7 +245,7 @@ private fun LinhaDoMercado(m: MoedaDeMercado, moeda: String, aoTocar: () -> Unit
             Text(m.nome, style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
         }
         Text(Formato.preco(m.preco, moeda), style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1, textAlign = TextAlign.End, modifier = Modifier.width(120.dp))
-        PilulaDeVariacao(m.variacao, Modifier.width(84.dp))
+        PilulaDeVariacao(m.variacao)
     }
 }
 

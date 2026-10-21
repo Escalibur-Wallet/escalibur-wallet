@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.carteira
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
@@ -302,7 +303,8 @@ private fun SeletorDeUnidade(escolhida: String, unidades: List<String>, aoEscolh
     var primeira by remember { mutableStateOf(true) }
     LaunchedEffect(escolhida, lugares[escolhida]) {
         val (alvoX, alvoL) = lugares[escolhida] ?: return@LaunchedEffect
-        val mola = spring<Float>(dampingRatio = 1f, stiffness = 800f)
+        // O snappy do iOS: rapido, com um balanco pequeno.
+        val mola = spring<Float>(dampingRatio = 0.85f, stiffness = 815f)
         if (primeira) { x.snapTo(alvoX); largura.snapTo(alvoL); primeira = false }
         else { launch { x.animateTo(alvoX, mola) }; largura.animateTo(alvoL, mola) }
     }
@@ -321,7 +323,8 @@ private fun SeletorDeUnidade(escolhida: String, unidades: List<String>, aoEscolh
                         .padding(horizontal = 10.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(Formato.simboloDaMoeda(unidade), style = estilo(Tipo.rotulo), color = if (selecionada) Paleta.tinta else Paleta.tintaApagada)
+                    val cor by animateColorAsState(if (selecionada) Paleta.tinta else Paleta.tintaApagada, tween(220), label = "unidade")
+                    Text(Formato.simboloDaMoeda(unidade), style = estilo(Tipo.rotulo), color = cor)
                 }
             }
         }

@@ -196,12 +196,13 @@ private fun Escolha(moedas: List<MoedaRecebivel>, aoEscolher: (MoedaRecebivel) -
 }
 
 @Composable
-fun CampoDeBusca(texto: String, dica: String, modifier: Modifier = Modifier, aoMudar: (String) -> Unit) {
+fun CampoDeBusca(texto: String, dica: String, modifier: Modifier = Modifier, superficie: androidx.compose.ui.graphics.Color = Paleta.corpo, aoMudar: (String) -> Unit) {
     Row(
-        modifier.fillMaxWidth().height(Altura.campo).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.trilho).padding(horizontal = Espaco.sm),
+        modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(Raio.cartao)).background(superficie)
+            .padding(start = Espaco.md, end = if (texto.isEmpty()) Espaco.md else Espaco.xxs),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs),
     ) {
-        Icone(Icones.busca, Paleta.tintaApagada, tamanho = 18.dp)
+        Icone(Icones.busca, Paleta.tintaApagada, tamanho = 17.dp)
         Box(Modifier.weight(1f)) {
             if (texto.isEmpty()) Text(dica, style = estilo(Tipo.corpo), color = Paleta.tintaApagada)
             BasicTextField(
@@ -211,8 +212,8 @@ fun CampoDeBusca(texto: String, dica: String, modifier: Modifier = Modifier, aoM
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        if (texto.isNotEmpty()) Box(Modifier.size(28.dp).clickable { aoMudar("") }, contentAlignment = Alignment.Center) {
-            Icone(Icones.fecharCheio, Paleta.tintaApagada, tamanho = 16.dp)
+        if (texto.isNotEmpty()) Box(Modifier.size(width = 32.dp, height = 44.dp).clickable { aoMudar("") }, contentAlignment = Alignment.Center) {
+            Icone(Icones.fecharCheio, Paleta.tintaApagada, tamanho = 17.dp, descricao = t("Limpar busca"))
         }
     }
 }

@@ -1,9 +1,7 @@
 package app.escalibur.wallet.ui.atividade
 
 import androidx.compose.ui.graphics.Color
-import app.escalibur.wallet.ui.comp.SeloDeSituacao
 import app.escalibur.wallet.ui.comp.TelaComBarra
-import app.escalibur.wallet.ui.comp.TipoDeSituacao
 import app.escalibur.wallet.ui.comp.moedaGirando
 import app.escalibur.wallet.ui.carteira.TipoDeSelo
 import app.escalibur.wallet.ui.comp.PuxarParaAtualizar
@@ -528,29 +526,34 @@ fun DetalheDaAtividade(m: Movimento) {
     }
 }
 
+/**
+ * A situacao no detalhe: a capsula com o ponto da cor do estado e o texto claro (a do Android, que o
+ * dono preferiu a do iOS, 21/10/2026).
+ */
 @Composable
 private fun Situacao(m: Movimento, conferencia: JSONObject?, modifier: Modifier = Modifier) {
-    if (m.conferivel) {
+    val (texto, cor) = if (m.conferivel) {
         // O indexador e um so: "Conferida" so depois de dois nos da rede mostrarem o valor chegando.
         when (conferencia?.optString("resultado")) {
             "conferida" -> {
                 val confirmacoes = conferencia.optLong("confirmacoes", 0)
-                Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icone(Icones.visto, Paleta.tintaSuave, tamanho = 12.dp)
-                    Text(if (confirmacoes > 1) t("Conferida na rede, %@ confirmações", Formato.agrupado(confirmacoes.toDouble(), 0)) else t("Conferida na rede"),
-                         style = estilo(Tipo.nota), color = Paleta.tintaSuave)
-                }
+                (if (confirmacoes > 1) t("Conferida na rede, %@ confirmações", Formato.agrupado(confirmacoes.toDouble(), 0)) else t("Conferida na rede")) to Paleta.tintaSuave
             }
-            "naoEncontrada" -> SeloDeSituacao(TipoDeSituacao.pendente, t("Segundo o indexador. A rede ainda não mostra esta transação"), modifier)
-            "naoConfere" -> SeloDeSituacao(TipoDeSituacao.falhou, t("A rede não confirma este recebimento"), modifier)
-            "interna" -> SeloDeSituacao(TipoDeSituacao.pendente, t("Segundo o indexador. Chegou por transação interna, que o recibo não mostra"), modifier)
-            "falhou" -> SeloDeSituacao(TipoDeSituacao.pendente, t("Segundo o indexador. Não deu para conferir na rede agora"), modifier)
-            else -> SeloDeSituacao(TipoDeSituacao.pendente, t("Segundo o indexador. Conferindo na rede"), modifier)
+            "naoEncontrada" -> t("Segundo o indexador. A rede ainda não mostra esta transação") to Paleta.cautela
+            "naoConfere" -> t("A rede não confirma este recebimento") to Paleta.baixa
+            "interna" -> t("Segundo o indexador. Chegou por transação interna, que o recibo não mostra") to Paleta.cautela
+            "falhou" -> t("Segundo o indexador. Não deu para conferir na rede agora") to Paleta.cautela
+            else -> t("Segundo o indexador. Conferindo na rede") to Paleta.cautela
         }
     } else when (m.situacao) {
-        "pendente" -> SeloDeSituacao(TipoDeSituacao.pendente, m.nota ?: t("Pendente"), modifier)
-        "falhou" -> SeloDeSituacao(TipoDeSituacao.falhou, m.nota ?: t("Falhou"), modifier)
-        else -> SeloDeSituacao(TipoDeSituacao.feita, t("Confirmada"), modifier)
+        "pendente" -> (m.nota ?: t("Pendente")) to Paleta.cautela
+        "falhou" -> (m.nota ?: t("Falhou")) to Paleta.baixa
+        else -> t("Confirmada") to Paleta.alta
+    }
+    Row(modifier.clip(CircleShape).background(Paleta.corpo).padding(horizontal = Espaco.sm, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(cor))
+        Text(texto, style = estilo(Tipo.nota), color = Paleta.tinta, textAlign = TextAlign.Center)
     }
 }
 

@@ -34,6 +34,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -74,21 +76,7 @@ fun TextoNumerico(texto: String, estilo: TextStyle, cor: Color, modifier: Modifi
     Layout(
         content = {
             texto.forEachIndexed { indice, caractere ->
-                key(texto.length - indice) {
-                    AnimatedContent(
-                        caractere,
-                        transitionSpec = {
-                            if (parado || !caractere.isDigit()) {
-                                fadeIn(tween(150)) togetherWith fadeOut(tween(150))
-                            } else {
-                                val mola = spring<IntOffset>(dampingRatio = 0.86f, stiffness = 520f)
-                                (slideInVertically(mola) { if (sobe) it else -it } + fadeIn(tween(220))) togetherWith
-                                    (slideOutVertically(mola) { if (sobe) -it else it } + fadeOut(tween(160)))
-                            }.using(SizeTransform(clip = false))
-                        },
-                        label = "digito",
-                    ) { c -> Text(c.toString(), style = estilo, color = cor, maxLines = 1, softWrap = false) }
-                }
+                key(texto.length - indice) { Caractere(caractere, estilo, cor, sobe, parado) }
             }
         },
         modifier = modifier.clearAndSetSemantics { contentDescription = texto },
@@ -102,6 +90,46 @@ fun TextoNumerico(texto: String, estilo: TextStyle, cor: Color, modifier: Modifi
         }
     }
 }
+
+/**
+ * Um caractere do numero. Mudou: o antigo sai para cima (ou para baixo, se o valor caiu) desfocando e
+ * apagando, e o novo chega do outro lado desfocado e assenta nitido, como o rolar dos digitos do
+ * iOS. Separadores e simbolos so cruzam.
+ */
+@Composable
+private fun Caractere(caractere: Char, estilo: TextStyle, cor: Color, sobe: Boolean, parado: Boolean) {
+    var atual by remember { mutableStateOf(caractere) }
+    var antigo by remember { mutableStateOf<Char?>(null) }
+    var subindo by remember { mutableStateOf(sobe) }
+    val progresso = remember { Animatable(1f) }
+    LaunchedEffect(caractere) {
+        if (caractere == atual) return@LaunchedEffect
+        antigo = atual
+        atual = caractere
+        subindo = sobe
+        progresso.snapTo(0f)
+        progresso.animateTo(1f, if (parado) tween(150) else spring(dampingRatio = 0.85f, stiffness = 420f))
+        antigo = null
+    }
+    val rola = !parado && (atual.isDigit() || antigo?.isDigit() == true)
+    val p = progresso.value.coerceIn(0f, 1f)
+    Box(contentAlignment = Alignment.Center) {
+        antigo?.let { velho ->
+            Text(velho.toString(), style = estilo, color = cor, maxLines = 1, softWrap = false, modifier = Modifier.graphicsLayer {
+                alpha = 1f - p
+                if (rola) translationY = (if (subindo) -1f else 1f) * size.height * 0.6f * p
+            }.desfocado(if (rola) 6f * p else 0f))
+        }
+        Text(atual.toString(), style = estilo, color = cor, maxLines = 1, softWrap = false, modifier = Modifier.graphicsLayer {
+            alpha = if (antigo == null) 1f else p
+            if (rola && antigo != null) translationY = (if (subindo) 1f else -1f) * size.height * 0.6f * (1f - progresso.value)
+        }.desfocado(if (rola && antigo != null) 6f * (1f - p) else 0f))
+    }
+}
+
+/** Desfoque em dp, so no Android 12 em diante (antes, nada). */
+private fun Modifier.desfocado(raio: Float): Modifier =
+    if (raio <= 0.05f || android.os.Build.VERSION.SDK_INT < 31) this else this.blur(raio.dp, BlurredEdgeTreatment.Unbounded)
 
 /**
  * O puxar para atualizar do iOS: o conteudo desce junto com o dedo, e no espaco que abre os raios
