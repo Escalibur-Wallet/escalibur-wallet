@@ -10,7 +10,7 @@ Cada mudanca na Play passa por uma "edicao": abrir, mudar, e so o commit publica
 nada muda na loja. Enquanto o app nunca foi publicado, a Play so aceita versao em rascunho: quem
 lanca e o dono, na Play Console.
 """
-import glob, io, json, os, sys, time, urllib.error, urllib.parse, urllib.request
+import io, json, os, sys, time, urllib.error, urllib.parse, urllib.request
 
 import jwt
 from PIL import Image
@@ -20,7 +20,6 @@ CHAVE = os.path.expanduser("~/.escalibur/android/play-api.json")
 API = f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/{PACOTE}"
 ENVIO = f"https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/{PACOTE}"
 RAIZ = os.path.normpath(os.path.join(os.path.dirname(__file__), "../.."))
-IMAGENS = os.path.join(RAIZ, "build/loja-android")
 
 
 def token():
@@ -58,8 +57,13 @@ def conferir():
 
 
 def png(caminho, alfa=False):
-    """A Play pede o icone em PNG de 32 bits (com alfa) e o destaque sem alfa."""
-    imagem = Image.open(caminho).convert("RGBA" if alfa else "RGB")
+    """A Play pede o icone em PNG de 32 bits (com alfa), o destaque sem alfa e nenhuma tela mais
+    comprida que o dobro da largura: a mais alta (as da App Store) perde o excesso em cima e embaixo."""
+    imagem = Image.open(os.path.join(RAIZ, caminho)).convert("RGBA" if alfa else "RGB")
+    largura, altura = imagem.size
+    if altura > 2 * largura:
+        topo = (altura - 2 * largura) // 2
+        imagem = imagem.crop((0, topo, largura, topo + 2 * largura))
     saida = io.BytesIO()
     imagem.save(saida, "PNG")
     return saida.getvalue()
@@ -72,15 +76,15 @@ def ficha():
     for idioma, f in dados["fichas"].items():
         pedir("PUT", f"/edits/{edicao}/listings/{idioma}",
               {"language": idioma, "title": f["titulo"], "shortDescription": f["curta"], "fullDescription": f["completa"]}, t)
-        pasta = f["imagens"]
-        envios = [("icon", [os.path.join(IMAGENS, "grafico/icone-512.png")], True),
-                  ("featureGraphic", [os.path.join(IMAGENS, f"grafico/destaque-{pasta}.png")], False),
-                  ("phoneScreenshots", sorted(glob.glob(os.path.join(IMAGENS, pasta, "*.png"))), False)]
+        # Sem destaque nem telas, o idioma mostra os do idioma padrao.
+        envios = [("icon", ["build/loja-android/grafico/icone-512.png"], True),
+                  ("featureGraphic", [f["destaque"]] if f["destaque"] else [], False),
+                  ("phoneScreenshots", f["telas"], False)]
         for tipo, arquivos, alfa in envios:
             pedir("DELETE", f"/edits/{edicao}/listings/{idioma}/{tipo}", t=t)
             for a in arquivos:
                 pedir("POST", f"/edits/{edicao}/listings/{idioma}/{tipo}?uploadType=media", png(a, alfa), t, base=ENVIO, tipo="image/png")
-        print(f"{idioma}: textos, icone, destaque e {len(envios[2][1])} telas")
+        print(f"{idioma}: textos, icone, {'destaque' if f['destaque'] else 'sem destaque'} e {len(f['telas'])} telas")
     pedir("PATCH", f"/edits/{edicao}/details",
           {"defaultLanguage": dados["idiomaPadrao"], "contactEmail": dados["contato"]["email"], "contactWebsite": dados["contato"]["site"]}, t)
     for l in pedir("GET", f"/edits/{edicao}/listings", t=t).get("listings", []):
