@@ -47,6 +47,8 @@ data class Retrato(
     val carteira: String?, val linhas: List<Linha>, val todasAsLinhas: List<Linha>, val outros: List<Outro>, val suspeitos: List<Outro>,
     val total: Double, val variacao24h: Double, val variacao24hPct: Double, val carregando: Boolean, val falhas: List<String>,
     val atualizado: Date?, val semRede: Boolean, val tokensDesconhecidos: Int, val moeda: String, val bitcoin: Map<String, Double>,
+    /** Os outros sem suspeita, escondidos ou nao: o Gerenciar ativos lista todos. */
+    val todosOsOutros: List<Outro> = emptyList(),
 ) {
     /** Um valor na moeda do app levado para outra unidade, pela cotacao do bitcoin. */
     fun converter(valor: Double, unidade: String): Double? {
@@ -97,6 +99,7 @@ data class Retrato(
                 semRede = json.optBoolean("semRede"), tokensDesconhecidos = json.optInt("tokensDesconhecidos"),
                 moeda = json.optString("moeda", "usd"),
                 bitcoin = bitcoin?.keys()?.asSequence()?.associateWith { bitcoin.getDouble(it) } ?: emptyMap(),
+                todosOsOutros = json.optJSONArray("todosOsOutros")?.objetos()?.map(::outro).orEmpty(),
             )
         }
     }

@@ -207,6 +207,8 @@ enum Nucleo {
 
         case "saldos.mostrar":
             return try json(Saldos.shared.mostrar())
+        case let ativos where ativos.hasPrefix("ativos.") || ativos.hasPrefix("tokens."):
+            return try Ativos.chamar(ativos, pedido)
         case "saldos.atualizar":
             let forcar = pedido["forcar"]?.boolValue ?? false
             esperarSemErro { await Saldos.shared.atualizar(forcar: forcar) }

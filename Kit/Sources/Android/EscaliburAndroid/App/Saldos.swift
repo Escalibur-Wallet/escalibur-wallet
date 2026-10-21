@@ -58,6 +58,8 @@ final class Saldos: @unchecked Sendable {
         let linhas: [Linha]
         let todasAsLinhas: [Linha]
         let outros: [Outro]
+        /// Os outros sem suspeita, escondidos ou nao: o Gerenciar ativos lista todos.
+        let todosOsOutros: [Outro]
         let suspeitos: [Outro]
         let total: Double
         let variacao24h: Double
@@ -391,7 +393,7 @@ final class Saldos: @unchecked Sendable {
     private func retrato(_ wallet: WalletMeta?, _ metadata: Metadata) -> Retrato {
         trava.withLock {
             guard let wallet, carteiraID == wallet.id else {
-                return Retrato(carteira: nil, linhas: [], todasAsLinhas: [], outros: [], suspeitos: [], total: 0, variacao24h: 0, variacao24hPct: 0,
+                return Retrato(carteira: nil, linhas: [], todasAsLinhas: [], outros: [], todosOsOutros: [], suspeitos: [], total: 0, variacao24h: 0, variacao24hPct: 0,
                                carregando: carregando, falhas: [], atualizado: nil, semRede: semRede, tokensDesconhecidos: 0,
                                moeda: metadata.settings.currency, bitcoin: precosDoBitcoin)
             }
@@ -461,7 +463,7 @@ final class Saldos: @unchecked Sendable {
         }
         let antes = total - variacao
         return Retrato(
-            carteira: wallet.id.uuidString, linhas: linhas, todasAsLinhas: todas, outros: outros, suspeitos: suspeitos, total: total,
+            carteira: wallet.id.uuidString, linhas: linhas, todasAsLinhas: todas, outros: outros, todosOsOutros: todosOsOutros, suspeitos: suspeitos, total: total,
             variacao24h: variacao, variacao24hPct: antes > 0 ? variacao / antes * 100 : 0, carregando: carregando,
             falhas: falhas.map(\.name), atualizado: atualizado, semRede: semRede, tokensDesconhecidos: desconhecidos,
             moeda: moedaDasCotacoes ?? metadata.settings.currency, bitcoin: precosDoBitcoin
@@ -507,6 +509,9 @@ final class Saldos: @unchecked Sendable {
     static func decimal(_ quantidade: BigUInt, casas: Int) -> Double {
         Double(quantidade.decimalString).map { $0 / pow(10, Double(casas)) } ?? 0
     }
+
+    /// O retrato de novo, sem ler a rede: depois de esconder um ativo ou mudar as moedas custom.
+    func reemitir() { emitir() }
 
     private func emitir() {
         guard let json = try? Nucleo.json(retratoAtual()) else { return }

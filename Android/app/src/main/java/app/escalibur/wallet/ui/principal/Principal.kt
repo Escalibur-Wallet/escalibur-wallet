@@ -213,6 +213,8 @@ fun Principal() {
                 "contatos" -> { Navegacao.aba = Aba.ajustes; Navegacao.abrir { app.escalibur.wallet.ui.ajustes.TelaDeContatos() } }
                 "carteiras" -> { Navegacao.aba = Aba.ajustes; Navegacao.abrir { app.escalibur.wallet.ui.ajustes.TelaDeCarteiras() } }
                 "superseguranca" -> { Navegacao.aba = Aba.ajustes; Navegacao.abrir { app.escalibur.wallet.ui.ajustes.TelaDoSuperSecurity() } }
+                "gerenciar" -> Navegacao.abrir { app.escalibur.wallet.ui.carteira.TelaDeGerenciarAtivos() }
+                "moeda-custom" -> Navegacao.folha { app.escalibur.wallet.ui.carteira.AdicionarMoedaCustom { Navegacao.fechar() } }
                 "mercado" -> Navegacao.aba = Aba.mercado
                 "trocar" -> Navegacao.aba = Aba.trocar
                 "atividade" -> Navegacao.aba = Aba.atividade

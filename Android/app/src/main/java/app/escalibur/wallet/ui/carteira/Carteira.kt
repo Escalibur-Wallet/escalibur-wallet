@@ -339,6 +339,10 @@ private fun Ativos(retrato: Retrato, oculto: Boolean, unidade: String, taxa: Dou
             if (retrato.carregando) {
                 Girando(Paleta.tintaApagada, 16.dp, Modifier.padding(start = Espaco.xs))
             }
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.heightIn(min = Altura.toque).clickable { Navegacao.abrir { TelaDeGerenciarAtivos() } }, contentAlignment = Alignment.Center) {
+                Text(t("Gerenciar"), style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
+            }
         }
         when {
             retrato.linhas.isEmpty() && retrato.carregando && retrato.atualizado == null -> EsqueletoDosAtivos()
