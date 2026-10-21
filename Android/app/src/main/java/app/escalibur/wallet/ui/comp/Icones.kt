@@ -65,6 +65,8 @@ object Icones {
     val rede = traco("rede", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M12 3 C9.3 5.5 8.2 8.7 8.2 12 C8.2 15.3 9.3 18.5 12 21 C14.7 18.5 15.8 15.3 15.8 12 C15.8 8.7 14.7 5.5 12 3 Z",
                      "M3 12 H21", "M4.4 7.2 H19.6", "M4.4 16.8 H19.6", "M12 3 V21", espessura = 1.4f)
     val receberCirculo = traco("receberCirculo", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M12 7.5 V16", "M8.3 12.5 L12 16.2 L15.7 12.5", espessura = 1.55f)
+    val celularComCadeado = traco("celularComCadeado", "M8 2.5 H16 A2 2 0 0 1 18 4.5 V19.5 A2 2 0 0 1 16 21.5 H8 A2 2 0 0 1 6 19.5 V4.5 A2 2 0 0 1 8 2.5 Z",
+        "M10.2 11 V9.8 A1.8 1.8 0 0 1 13.8 9.8 V11", "M9.6 11 H14.4 V15 H9.6 Z", espessura = 1.7f)
     val chevronsDireita = traco("chevronsDireita", "M5.5 6 L11.5 12 L5.5 18 M12.5 6 L18.5 12 L12.5 18", espessura = 2.6f)
     val voltar = traco("voltar", "M15 4.5 L7.5 12 L15 19.5", espessura = 2.2f)
     val avancar = traco("avancar", "M9 4.5 L16.5 12 L9 19.5", espessura = 2.2f)

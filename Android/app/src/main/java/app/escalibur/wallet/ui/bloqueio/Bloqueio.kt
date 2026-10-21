@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.bloqueio
 
+import app.escalibur.wallet.ui.comp.CabecalhoDaFolha
+import app.escalibur.wallet.ui.comp.FolhaSolta
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -148,15 +150,15 @@ fun TelaDeBloqueio(vinda: Int) {
 private fun FolhaEsqueciOPin(aoFechar: () -> Unit) {
     var confirmar by remember { mutableStateOf(false) }
     val escopo = rememberCoroutineScope()
-    BackHandler(onBack = aoFechar)
-    Column(Modifier.fillMaxSize().background(Paleta.corpo).statusBarsPadding().navigationBarsPadding()) {
-        CabecalhoDeFolha("", aoFechar)
+    FolhaSolta(aoFechar) {
+    Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+        CabecalhoDaFolha("", aoFechar)
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(Modifier.size(72.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
-                Icone(Icones.cadeado, Paleta.tinta, tamanho = 32.dp)
+                Icone(Icones.celularComCadeado, Paleta.tinta, tamanho = 34.dp)
             }
             Text(t("Não existe redefinir o PIN"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.md))
             Text(
@@ -176,6 +178,7 @@ private fun FolhaEsqueciOPin(aoFechar: () -> Unit) {
             BotaoDestrutivo(t("Apagar as carteiras deste celular")) { confirmar = true }
             BotaoSecundario(t("Voltar e tentar o PIN"), acao = aoFechar)
         }
+    }
     }
     if (confirmar) {
         Confirmacao(
