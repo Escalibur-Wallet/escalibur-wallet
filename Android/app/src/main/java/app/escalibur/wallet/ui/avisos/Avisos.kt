@@ -45,6 +45,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.escalibur.wallet.ui.comp.BotaoDeTextoDoGrupo
+import app.escalibur.wallet.ui.comp.TelaComBarra
 import app.escalibur.wallet.nucleo.Api
 import app.escalibur.wallet.ui.App
 import app.escalibur.wallet.ui.Ciclo
@@ -253,9 +255,9 @@ fun TelaDosAlertas() {
     }
 
     Subtela("") {
-        Column(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem).padding(top = Espaco.sm), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem).padding(top = Espaco.md), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(64.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
-                Icone(Icones.sino, Paleta.tinta, tamanho = 26.dp)
+                Icone(Icones.sinoComPonto, Paleta.tinta, tamanho = 32.dp)
             }
             Text(t("Alertas de preço"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.sm))
             Text(t("O próprio celular confere os preços e avisa quando uma moeda passa de um número redondo ou se mexe forte em 24 h. Sem servidor da Escalibur no caminho."),
@@ -272,7 +274,7 @@ fun TelaDosAlertas() {
         }
         if (e.ligado) {
             SecaoDeAjustes(t("Quando avisar")) {
-                LinhaComInterruptor(Icones.alvo, t("Números redondos"), e.redondos, detalhe = t("Ex.: Bitcoin passou de %@", exemplo(mercado, App.estado.moeda))) {
+                LinhaComInterruptor(Icones.bitcoin, t("Números redondos"), e.redondos, detalhe = t("Ex.: Bitcoin passou de %@", exemplo(mercado, App.estado.moeda))) {
                     mudar(JSONObject().put("redondos", it))
                 }
                 LinhaComInterruptor(Icones.altaEQueda, t("Alta ou queda forte"), e.variacao != null, detalhe = t("Variação em 24 h acima do limite")) {
@@ -301,7 +303,7 @@ fun TelaDosAlertas() {
                             Text(moeda.optString("symbol").uppercase(), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
                         }
                         Box(Modifier.size(Altura.toque).clickable { alternar(moeda) }, contentAlignment = Alignment.Center) {
-                            Icone(Icones.menos, Paleta.tintaApagada, tamanho = 18.dp, descricao = t("Tirar %@ dos alertas", moeda.optString("name")))
+                            Icone(Icones.menosCirculoCheio, Paleta.tintaApagada, tamanho = 23.dp, descricao = t("Tirar %@ dos alertas", moeda.optString("name")))
                         }
                     }
                 }
@@ -379,8 +381,10 @@ private fun EscolherMoedas(mercado: List<JSONObject>, aoMudar: () -> Unit) {
         it.optString("simbolo").contains(busca, ignoreCase = true) || it.optString("nome").contains(busca, ignoreCase = true)
     }
     val cheia = vigiadas.size >= maximo
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().imePadding()) {
-        CabecalhoDeFolha(t("Adicionar moeda"), { Navegacao.fechar() })
+    // A barra das folhas do iOS: o titulo no meio e o "OK" de vidro a direita.
+    TelaComBarra(null, titulo = t("Adicionar moeda"), fundo = Paleta.vazio,
+                 acoes = { BotaoDeTextoDoGrupo(t("OK")) { Navegacao.fechar() } }) { espaco ->
+    Column(Modifier.fillMaxSize().padding(top = espaco.calculateTopPadding()).imePadding()) {
         CampoDeBusca(busca, t("Buscar moeda"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm)) { busca = it }
         Text(if (cheia) t("Você escolheu %lld moedas, o máximo. Tire uma para escolher outra.", maximo)
              else t("Escolha até %lld moedas: %lld de %lld.", maximo, vigiadas.size, maximo),
@@ -389,7 +393,7 @@ private fun EscolherMoedas(mercado: List<JSONObject>, aoMudar: () -> Unit) {
         if (mercado.isEmpty()) {
             Faixa(TipoDeFaixa.neutra, t("Não foi possível carregar a lista de moedas agora."), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md))
         }
-        LazyColumn(Modifier.weight(1f).padding(top = Espaco.sm), contentPadding = PaddingValues(bottom = Espaco.xl)) {
+        LazyColumn(Modifier.weight(1f).padding(top = Espaco.sm), contentPadding = PaddingValues(bottom = Espaco.xl + espaco.calculateBottomPadding())) {
             items(filtradas, key = { it.optString("id") }) { moeda ->
                 val id = moeda.optString("id")
                 val marcada = id in vigiadas
@@ -413,11 +417,12 @@ private fun EscolherMoedas(mercado: List<JSONObject>, aoMudar: () -> Unit) {
                         Text(moeda.optString("nome"), style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(moeda.optString("simbolo").uppercase(), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
                     }
-                    if (marcada) Icone(Icones.vistoCheio, Paleta.sucesso, tamanho = 22.dp)
-                    else Box(Modifier.size(22.dp).border(1.5.dp, Paleta.bordaForte, CircleShape))
+                    if (marcada) Icone(Icones.vistoCheio, Paleta.sucesso, tamanho = 26.dp)
+                    else Box(Modifier.size(26.dp).padding(2.dp).border(1.5.dp, Paleta.bordaForte, CircleShape))
                 }
             }
         }
+    }
     }
 }
 

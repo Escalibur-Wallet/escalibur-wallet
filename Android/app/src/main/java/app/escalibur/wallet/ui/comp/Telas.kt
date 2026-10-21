@@ -73,7 +73,8 @@ fun TelaComBarra(
     fundo: Color = Paleta.vazio,
     conteudo: @Composable (PaddingValues) -> Unit,
 ) {
-    val topo = if (LocalDentroDaFolha.current) 0.dp else WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    // Na folha, a barra desce um pouco do alto dela, como a barra de navegacao das folhas do iOS.
+    val topo = if (LocalDentroDaFolha.current) 12.dp else WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val barraDeAbas = LocalEspacoDaBarra.current
     val baixo = when {
         rodape != null -> 0.dp

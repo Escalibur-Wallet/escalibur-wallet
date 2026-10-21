@@ -95,6 +95,9 @@ import app.escalibur.wallet.ui.tema.Raio
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.Calendar
@@ -168,15 +171,20 @@ fun TelaDeAtividade() {
 
     fun atualizar(forcar: Boolean) {
         escopo.launch {
-            runCatching { retrato = RetratoDaAtividade(Api.objeto("atividade.atualizar", JSONObject().put("forcar", forcar))) }
+            runCatching { retrato = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { RetratoDaAtividade(Api.objeto("atividade.atualizar", JSONObject().put("forcar", forcar))) } }
         }
     }
     LaunchedEffect(estado.selecionada) {
-        runCatching { retrato = RetratoDaAtividade(Api.objeto("atividade.mostrar")) }
+        runCatching { retrato = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { RetratoDaAtividade(Api.objeto("atividade.mostrar")) } }
         atualizar(false)
     }
     LaunchedEffect(Unit) {
-        Eventos.eventos.filter { it.nome == "atividade" }.collect { evento -> runCatching { retrato = RetratoDaAtividade(JSONObject(evento.json)) } }
+        // Lido fora da linha principal, e so o mais novo (como o retrato dos saldos).
+        Eventos.eventos.filter { it.nome == "atividade" }
+            .map { evento -> runCatching { RetratoDaAtividade(JSONObject(evento.json)) }.getOrNull() }
+            .flowOn(kotlinx.coroutines.Dispatchers.Default)
+            .conflate()
+            .collect { novo -> if (novo != null) retrato = novo }
     }
 
     val r = retrato

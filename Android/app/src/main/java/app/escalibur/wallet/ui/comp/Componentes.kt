@@ -288,6 +288,14 @@ fun CabecalhoDaFolha(titulo: String, aoFechar: (() -> Unit)?, modifier: Modifier
 @Composable
 fun CabecalhoDeFolha(titulo: String, aoFechar: (() -> Unit)?, modifier: Modifier = Modifier, aoVoltar: (() -> Unit)? = null) {
     Box(modifier.fillMaxWidth().height(Altura.barra + Espaco.xs).padding(horizontal = Espaco.xs)) {
+        if (titulo.isEmpty()) {
+            // A tela cheia do iOS, sem titulo: o botao fica a esquerda. Com voltar e fechar juntos, o
+            // voltar a esquerda e o fechar vai para a direita.
+            if (aoVoltar != null) BotaoDeCanto(Icones.voltar, t("Voltar"), Modifier.align(Alignment.CenterStart), acao = aoVoltar)
+            if (aoFechar != null) BotaoDeCanto(Icones.fechar, t("Fechar"), Modifier.align(if (aoVoltar != null) Alignment.CenterEnd else Alignment.CenterStart),
+                                               acao = aoFechar)
+            return@Box
+        }
         if (aoVoltar != null) BotaoDeCanto(Icones.voltar, t("Voltar"), Modifier.align(Alignment.CenterStart), acao = aoVoltar)
         Text(titulo, style = estilo(Tipo.acao), color = Paleta.tinta, textAlign = TextAlign.Center,
              modifier = Modifier.align(Alignment.Center).padding(horizontal = Altura.toque), maxLines = 1)

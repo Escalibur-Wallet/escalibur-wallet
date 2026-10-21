@@ -274,13 +274,7 @@ fun FluxoDeNovaCarteira(primeira: Boolean, aoTerminar: () -> Unit) {
 /** O cofre guardando a carteira: os segundos do Argon2 do PIN e do Keystore. */
 @Composable
 fun Trabalhando(titulo: String) {
-    Box(Modifier.fillMaxSize().background(Paleta.vazio.copy(alpha = 0.92f)).clickable(enabled = true, onClick = {}), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
-            SeloDaCarteira(64.dp)
-            Text(titulo, style = estilo(Tipo.cabecalho), color = Paleta.tinta)
-            androidx.compose.material3.LinearProgressIndicator(color = Paleta.acento, trackColor = Paleta.trilho, modifier = Modifier.width(140.dp))
-        }
-    }
+    Box(Modifier.fillMaxSize().clickable(enabled = true, onClick = {})) { app.escalibur.wallet.ui.comp.TrabalhandoCifrado(titulo) }
 }
 
 /** As palavras escolhidas pelo dono: a tela de digitar, com a ultima reservada para o sorteio. */

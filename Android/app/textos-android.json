@@ -2695,5 +2695,47 @@
   "zh-Hans": "确认生物识别以重新开启",
   "vi": "Xác nhận sinh trắc học để bật lại",
   "ar": "أكّد المصادقة الحيوية لإعادة التشغيل"
+ },
+ "O app cifra uma cópia da senha da sua carteira com outra senha, que só você escolhe. Tudo acontece aqui no celular, e o envelope fica salvo só aqui, até você decidir onde guardar uma cópia.": {
+  "en": "The app encrypts a copy of your recovery phrase with another password that only you choose. Everything happens here on the phone, and the envelope is saved only here, until you decide where to keep a copy.",
+  "es": "La app cifra una copia de la frase de recuperación con otra contraseña que solo tú eliges. Todo ocurre aquí en el teléfono, y el sobre se guarda solo aquí, hasta que decidas dónde guardar una copia.",
+  "fr": "L’app chiffre une copie de la phrase de récupération avec un autre mot de passe que vous seul choisissez. Tout se passe ici sur le téléphone, et l’enveloppe reste enregistrée ici seulement, jusqu’à ce que vous décidiez où en garder une copie.",
+  "de": "Die App verschlüsselt eine Kopie der Wiederherstellungsphrase mit einem anderen Passwort, das nur du wählst. Alles passiert hier auf dem Smartphone, und der Umschlag wird nur hier gespeichert, bis du entscheidest, wo du eine Kopie aufbewahrst.",
+  "hi": "ऐप रिकवरी फ़्रेज़ की एक कॉपी को दूसरे पासवर्ड से एन्क्रिप्ट करता है, जिसे सिर्फ़ आप चुनते हैं। सब कुछ यहीं फ़ोन पर होता है, और लिफ़ाफ़ा सिर्फ़ यहीं सेव रहता है, जब तक आप तय न करें कि उसकी कॉपी कहाँ रखनी है।",
+  "id": "Aplikasi mengenkripsi salinan frasa pemulihan dengan kata sandi lain yang hanya Anda pilih. Semuanya terjadi di sini, di ponsel, dan amplop hanya tersimpan di sini, sampai Anda memutuskan di mana menyimpan salinannya.",
+  "ja": "アプリはリカバリーフレーズのコピーを、あなただけが決める別のパスワードで暗号化します。すべてこのスマートフォンの中で行われ、エンベロープはコピーの保管場所を決めるまで、ここにだけ保存されます。",
+  "ko": "앱은 복구 구문의 사본을 오직 당신이 정하는 다른 비밀번호로 암호화합니다. 모든 과정은 이 휴대폰 안에서 이루어지며, 사본을 어디에 둘지 정할 때까지 봉투는 여기에만 저장됩니다.",
+  "tr": "Uygulama, kurtarma ifadesinin bir kopyasını yalnızca sizin seçtiğiniz başka bir parolayla şifreler. Her şey burada, telefonda olur ve zarf, bir kopyasını nerede saklayacağınıza karar verene kadar yalnızca burada kayıtlı kalır.",
+  "zh-Hans": "应用会用另一个只有你选择的密码加密助记词的副本。一切都在这台手机上完成，在你决定把副本存放在哪里之前，信封只保存在这里。",
+  "vi": "Ứng dụng mã hóa một bản sao cụm từ khôi phục bằng một mật khẩu khác do chính bạn chọn. Mọi thứ diễn ra ngay trên điện thoại này, và phong bì chỉ được lưu ở đây cho đến khi bạn quyết định giữ bản sao ở đâu.",
+  "ar": "يشفّر التطبيق نسخة من عبارة الاسترداد بكلمة مرور أخرى تختارها أنت وحدك. يحدث كل شيء هنا على الهاتف، ويبقى المغلف محفوظًا هنا فقط، حتى تقرر أين تحتفظ بنسخة منه."
+ },
+ "Tudo dentro dele é criptografado aqui no celular. Sem a senha, ele não mostra quantas palavras guarda nem o que tem dentro, e uma senha errada só devolve ruído.": {
+  "en": "Everything inside it is encrypted here on the phone. Without the password, it doesn’t show how many words it holds or what’s inside, and a wrong password only returns noise.",
+  "es": "Todo lo que contiene se cifra aquí en el teléfono. Sin la contraseña, no muestra cuántas palabras guarda ni qué hay dentro, y una contraseña incorrecta solo devuelve ruido.",
+  "fr": "Tout ce qu’elle contient est chiffré ici sur le téléphone. Sans le mot de passe, elle ne montre ni combien de mots elle garde ni ce qu’il y a dedans, et un mauvais mot de passe ne renvoie que du bruit.",
+  "de": "Alles darin wird hier auf dem Smartphone verschlüsselt. Ohne das Passwort zeigt er weder, wie viele Wörter er enthält, noch was darin ist, und ein falsches Passwort liefert nur Rauschen.",
+  "hi": "इसके अंदर की हर चीज़ यहीं फ़ोन पर एन्क्रिप्ट होती है। पासवर्ड के बिना यह न दिखाता है कि इसमें कितने शब्द हैं, न यह कि अंदर क्या है, और गलत पासवर्ड से सिर्फ़ शोर मिलता है।",
+  "id": "Semua isinya dienkripsi di sini, di ponsel. Tanpa kata sandi, amplop tidak menunjukkan berapa kata yang disimpan atau apa isinya, dan kata sandi yang salah hanya menghasilkan derau.",
+  "ja": "中身はすべてこのスマートフォンで暗号化されます。パスワードがなければ、何語入っているかも中身も分からず、間違ったパスワードではノイズしか返りません。",
+  "ko": "안의 모든 것은 이 휴대폰에서 암호화됩니다. 비밀번호가 없으면 몇 개의 단어가 들어 있는지도, 무엇이 들어 있는지도 보이지 않으며, 틀린 비밀번호로는 잡음만 나옵니다.",
+  "tr": "İçindeki her şey burada, telefonda şifrelenir. Parola olmadan kaç kelime sakladığını ya da içinde ne olduğunu göstermez; yanlış bir parola yalnızca gürültü döndürür.",
+  "zh-Hans": "里面的一切都在这台手机上加密。没有密码，它既不显示存了多少个词，也不显示里面有什么，错误的密码只会得到杂讯。",
+  "vi": "Mọi thứ bên trong đều được mã hóa ngay trên điện thoại này. Không có mật khẩu, nó không cho thấy chứa bao nhiêu từ hay bên trong có gì, và mật khẩu sai chỉ trả về nhiễu.",
+  "ar": "كل ما بداخله مشفّر هنا على الهاتف. من دون كلمة المرور، لا يُظهر عدد الكلمات التي يحفظها ولا ما بداخله، وكلمة المرور الخاطئة لا تعيد إلا ضجيجًا."
+ },
+ "Em %@": {
+  "en": "On %@",
+  "es": "El %@",
+  "fr": "Le %@",
+  "de": "Am %@",
+  "hi": "%@ को",
+  "id": "Pada %@",
+  "ja": "%@",
+  "ko": "%@",
+  "tr": "%@",
+  "zh-Hans": "%@",
+  "vi": "Ngày %@",
+  "ar": "في %@"
  }
 }

@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.envelope
 
+import app.escalibur.wallet.ui.comp.EmblemaCifrado
 import app.escalibur.wallet.ui.comp.Girando
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -11,6 +12,12 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -38,7 +45,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -52,6 +58,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -63,6 +70,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.escalibur.wallet.BuildConfig
 import app.escalibur.wallet.nucleo.Api
 import app.escalibur.wallet.nucleo.FalhaDoNucleo
 import app.escalibur.wallet.ui.App
@@ -116,16 +124,36 @@ private fun cercaDe(segundos: Double): String {
 private fun PontoDoEnvelope(icone: ImageVector, texto: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
         Box(Modifier.size(32.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
-            Icone(icone, Paleta.tinta, tamanho = 15.dp)
+            Icone(icone, Paleta.tinta, tamanho = 18.dp)
         }
         Text(texto, style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f).padding(top = 5.dp))
     }
 }
 
+/** O "Como funciona" do envelope, o mesmo em lacrar e em abrir: uma capsula com o play. */
 @Composable
-private fun SeloDoEnvelope(icone: ImageVector = Icones.envelope) {
-    Box(Modifier.size(96.dp).clip(CircleShape).background(Paleta.corpo), contentAlignment = Alignment.Center) {
-        Icone(icone, Paleta.tinta, tamanho = 40.dp)
+private fun BotaoComoFunciona(modifier: Modifier = Modifier) {
+    Row(
+        modifier.height(34.dp).clip(CircleShape).background(Paleta.trilho)
+            .clickable(role = Role.Button) { Navegacao.folha { ComoFuncionaOEnvelope { Navegacao.fechar() } } }
+            .padding(horizontal = Espaco.sm),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icone(Icones.reproduzirCirculo, Paleta.tinta, tamanho = 15.dp)
+        Text(t("Como funciona"), style = estilo(Tipo.rotulo), color = Paleta.tinta)
+    }
+}
+
+/** As escolhas da senha do envelope: capsulas da mesma largura, com o icone do que fazem (o sorteio em pixels). */
+@Composable
+private fun BotaoDeOpcao(titulo: String, icone: ImageVector?, modifier: Modifier = Modifier, acao: () -> Unit) {
+    Row(
+        modifier.fillMaxWidth().height(48.dp).clip(CircleShape).background(Paleta.trilho).border(1.dp, Paleta.borda, CircleShape)
+            .clickable(role = Role.Button, onClick = acao),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs, Alignment.CenterHorizontally),
+    ) {
+        if (icone == null) app.escalibur.wallet.ui.comp.PixelsDoSorteio(Modifier.size(16.dp)) else Icone(icone, Paleta.tinta, tamanho = 15.dp)
+        Text(titulo, style = estilo(Tipo.acao), color = Paleta.tinta, maxLines = 1)
     }
 }
 
@@ -138,7 +166,7 @@ private fun SeloDoEnvelope(icone: ImageVector = Icones.envelope) {
  * dono escolher.
  */
 @Composable
-fun FluxoDeLacrar(carteira: Carteira) {
+fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
     val escopo = rememberCoroutineScope()
     val contexto = LocalContext.current
     var passo by remember { mutableStateOf("explicacao") }
@@ -155,10 +183,33 @@ fun FluxoDeLacrar(carteira: Carteira) {
     var arquivo by remember { mutableStateOf<ByteArray?>(null) }
     var nomeDoArquivo by remember { mutableStateOf("") }
     var fraca by remember { mutableStateOf(false) }
+    /** A parte do lacre na tela: 0 a conta da senha, 1 a cifra, 2 a gravacao. */
+    var parte by remember { mutableStateOf(0) }
+    var inicioDoLacre by remember { mutableStateOf(0L) }
+    val vista = androidx.compose.ui.platform.LocalView.current
 
     // O custo do Argon2 deste celular, medido fora da tela.
     LaunchedEffect(Unit) {
         runCatching { segundos = Api.objeto("envelope.calibrar").optDouble("segundos", 3.0) }
+    }
+    // So na depuracao: uma etapa do lacre sem a carteira aberta, para ver a tela. Nada e cifrado.
+    if (BuildConfig.DEBUG && demo != null) LaunchedEffect(Unit) {
+        when (demo) {
+            "lacrar-criar" -> { sugestao = CifraDoEnvelope.exemplo.take(6); passo = "criar" }
+            "lacrar-propria" -> { propria = true; passo = "criar" }
+            "lacrar-repetir" -> passo = "repetir"
+            "lacrando" -> {
+                inicioDoLacre = System.currentTimeMillis()
+                passo = "lacrando"
+                delay((segundos * 1000).toLong())
+                parte = 1
+                delay(450)
+                parte = 2
+                nomeDoArquivo = "envelope-7F3A.esclbr"
+                delay(450)
+                passo = "feito"
+            }
+        }
     }
     DisposableEffect(Unit) {
         onDispose {
@@ -256,9 +307,10 @@ fun FluxoDeLacrar(carteira: Carteira) {
 
     fun lacrar() {
         erro = null
+        parte = 0
+        inicioDoLacre = System.currentTimeMillis()
         passo = "lacrando"
         escopo.launch {
-            val inicio = System.currentTimeMillis()
             try {
                 val lacrado = Api.comSegredo("envelope.lacrar", JSONObject().put("nome", nome.trim().take(64)), repeticao.bytes())
                 arquivo = Base64.decode(lacrado.getString("arquivo"), Base64.NO_WRAP)
@@ -267,9 +319,14 @@ fun FluxoDeLacrar(carteira: Carteira) {
                 App.recarregar()
                 senha.clearText()
                 repeticao.clearText()
-                // A cifra e a gravacao levam milissegundos: a tela mostra o fim por um instante.
-                delay(maxOf(0L, 600L - (System.currentTimeMillis() - inicio)))
+                // A cifra e a gravacao levam milissegundos: a tela mostra cada uma por um instante,
+                // para o dono ver o que aconteceu, e so entao o envelope fecha.
+                parte = 1
+                delay(450)
+                parte = 2
+                delay(450)
                 passo = "feito"
+                vista.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
             } catch (falha: FalhaDoNucleo) {
                 repeticao.clearText()
                 erro = when (falha.codigo) {
@@ -291,29 +348,35 @@ fun FluxoDeLacrar(carteira: Carteira) {
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().imePadding()) {
         when (passo) {
             "explicacao" -> {
-                CabecalhoDeFolha("", { fechar() })
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md),
-                       horizontalAlignment = Alignment.CenterHorizontally) {
-                    SeloDoEnvelope()
-                    Text(t("Criptografar a senha da carteira"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
-                         modifier = Modifier.padding(top = Espaco.lg))
-                    Text(t("Uma cópia de segurança da senha da carteira, trancada com outra senha que só você conhece."), style = estilo(Tipo.corpo),
-                         color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
-                    Column(
-                        Modifier.padding(top = Espaco.lg).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.base),
-                        verticalArrangement = Arrangement.spacedBy(Espaco.md),
-                    ) {
-                        PontoDoEnvelope(Icones.documento, t("A senha da carteira vira um arquivo criptografado, aqui no celular."))
-                        PontoDoEnvelope(Icones.chave, t("Só você cria a senha do arquivo. Ela nunca sai deste celular."))
-                        PontoDoEnvelope(Icones.olhoRiscado, t("O arquivo não passa por nós. Sem a sua senha, ninguém abre. Só você."))
-                        PontoDoEnvelope(Icones.cadeado, t("Guarde onde quiser: sem a sua senha, o arquivo criptografado não abre."))
+                // A cena comeca por baixo do fechar, sem cortar o alto dela (como no iOS).
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem)
+                               .padding(top = Altura.barra + Espaco.xs + 8.dp, bottom = Espaco.lg)) {
+                        // A mesma cena do passo 1 do "Como funciona", toda em pixels.
+                        CenaDoEnvelope(Modifier.padding(bottom = Espaco.xs))
+                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                            Text(t("Criptografar a senha da carteira"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
+                            Text(t("Uma cópia de segurança da senha da carteira, trancada com outra senha que só você conhece."), style = estilo(Tipo.corpo),
+                                 color = Paleta.tintaSuave, textAlign = TextAlign.Center)
+                            BotaoComoFunciona(Modifier.padding(top = Espaco.xxs))
+                        }
+                        Column(
+                            Modifier.padding(top = Espaco.md).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.base),
+                            verticalArrangement = Arrangement.spacedBy(Espaco.md),
+                        ) {
+                            PontoDoEnvelope(Icones.documentoCadeado, t("A senha da carteira vira um arquivo criptografado, aqui no celular."))
+                            PontoDoEnvelope(Icones.chave, t("Só você cria a senha do arquivo. Ela nunca sai deste celular."))
+                            PontoDoEnvelope(Icones.olhoRiscado, t("O arquivo não passa por nós. Sem a sua senha, ninguém abre. Só você."))
+                            PontoDoEnvelope(Icones.disco, t("Guarde onde quiser: sem a sua senha, o arquivo criptografado não abre."))
+                        }
+                        erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
                     }
-                    erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
+                    CabecalhoDeFolha("", { fechar() })
                 }
                 Rodape { BotaoPrimario(t("Continuar"), carregando = trabalhando) { erro = null; passo = "checagem" } }
             }
             "checagem" -> {
-                CabecalhoDeFolha("", { fechar() }, aoVoltar = { passo = "explicacao" })
+                CabecalhoDeFolha("", { fechar() })
                 Box(Modifier.weight(1f)) {
                     VerificacaoDoAparelho(t("Deslize para criar a senha"), criando = false) { abrirCarteira() }
                     if (trabalhando) app.escalibur.wallet.ui.novacarteira.Trabalhando(t("Abrindo as palavras"))
@@ -324,43 +387,26 @@ fun FluxoDeLacrar(carteira: Carteira) {
                                   aoSorteadas = { senha.clearText(); erro = null; propria = false; sortear() }, aoFechar = { fechar() }) { seguirDaCriacao() }
             "repetir" -> {
                 CabecalhoDeFolha("", { fechar() }, aoVoltar = { voltarParaCriar() })
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md),
-                       verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
+                    Box(Modifier.fillMaxWidth().padding(bottom = Espaco.md), contentAlignment = Alignment.Center) { EmblemaCifrado() }
                     Text(t("Repita a senha do envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
-                         modifier = Modifier.fillMaxWidth().padding(bottom = Espaco.md))
-                    CampoSecreto(repeticao, t("Senha do envelope"), revelar) { revelar = it }
-                    Text(t("Segure o dedo no campo para ver o que digitou."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
-                    erro?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.baixa) }
-                    Text(t("Nome dentro do envelope"), style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.md))
-                    CampoDeTexto(nome) { nome = it.take(64) }
-                    Text(t("O nome fica cifrado. O arquivo não diz de quem é."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+                         modifier = Modifier.fillMaxWidth())
+                    Box(Modifier.padding(top = Espaco.lg)) { CampoSecreto(repeticao, t("Senha do envelope"), revelar) { revelar = it } }
+                    Text(t("Segure o dedo no campo para ver o que digitou."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
+                         modifier = Modifier.padding(top = Espaco.xs))
+                    erro?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.baixa, modifier = Modifier.padding(top = Espaco.xs)) }
+                    Text(t("Nome dentro do envelope"), style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.lg))
+                    Box(Modifier.padding(top = Espaco.xs)) { CampoDeTexto(nome) { nome = it.take(64) } }
+                    Text(t("O nome fica cifrado. O arquivo não diz de quem é."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
+                         modifier = Modifier.padding(top = Espaco.xs))
                 }
                 Rodape { BotaoPrimario(t("Lacrar envelope"), ligado = repeticao.text.isNotEmpty()) { lacrar() } }
             }
-            "lacrando" -> Lacrando(segundos)
-            "feito" -> {
+            // Lacrando e lacrado dividem a cena: as palavras caem no envelope, a aba fecha e o cadeado
+            // se monta, sem o envelope sair do lugar.
+            "lacrando", "feito" -> {
                 CabecalhoDeFolha("", { fechar() })
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md),
-                       horizontalAlignment = Alignment.CenterHorizontally) {
-                    Spacer(Modifier.height(Espaco.xl))
-                    SeloDoEnvelope(Icones.cadeadoCheio)
-                    Text(t("Envelope lacrado"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.lg))
-                    Row(Modifier.padding(top = Espaco.sm), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                        Icone(Icones.documento, Paleta.tintaSuave, tamanho = 14.dp)
-                        Text(nomeDoArquivo, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    Text(t("O arquivo não mostra o que guarda. Guarde o arquivo e a senha em lugares diferentes: quem tiver os dois tem a carteira."),
-                         style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
-                    if (fraca) {
-                        Faixa(TipoDeFaixa.cautela, t("Senha muito fraca: guarde o arquivo num pendrive ou no seu computador, nunca na nuvem nem por e-mail."),
-                              Modifier.padding(top = Espaco.md))
-                    }
-                }
-                Rodape {
-                    BotaoPrimario(t("Salvar ou enviar o arquivo")) { salvar.launch(nomeDoArquivo) }
-                    Text(t("Para abrir: Ajustes, Abrir um envelope, neste ou em outro celular com o app."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
-                         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.sm))
-                }
+                LacreEmCena(passo == "feito", parte, inicioDoLacre, segundos, nomeDoArquivo, fraca) { salvar.launch(nomeDoArquivo) }
             }
         }
     }
@@ -388,6 +434,8 @@ private fun ColumnScope.CriarSenha(
 ) {
     CabecalhoDeFolha("", aoFechar)
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
+        // Digitando a senha propria: o selo das telas onde se digita um segredo.
+        if (propria) Box(Modifier.fillMaxWidth().padding(bottom = Espaco.md), contentAlignment = Alignment.Center) { EmblemaCifrado() }
         Text(t("Crie a senha do envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         Text(t("Só ela abre o envelope, em qualquer aparelho. Não é o PIN e não pode ser a senha da carteira. Não existe redefinir."),
              style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.sm))
@@ -395,17 +443,20 @@ private fun ColumnScope.CriarSenha(
             Box(Modifier.padding(top = Espaco.lg)) { CampoSecreto(senha, t("Senha do envelope"), revelar, aoRevelar) }
             Text(t("Segure o dedo no campo para ver o que digitou."), style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.xs))
             LinhaDaForca(senha, Modifier.padding(top = Espaco.sm))
-            BotaoSecundario(t("Usar 6 palavras sorteadas"), Modifier.padding(top = Espaco.md), acao = aoSorteadas)
+            BotaoDeOpcao(t("Usar 6 palavras sorteadas"), null, Modifier.padding(top = Espaco.md), acao = aoSorteadas)
         } else {
-            Text(
-                sugestao.joinToString(" "), fontFamily = FontFamily.Monospace, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Paleta.placaTinta,
-                modifier = Modifier.padding(top = Espaco.lg).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.viva).padding(Espaco.base),
-            )
+            // As seis palavras na placa laqueada, como a senha da carteira.
+            androidx.compose.animation.Crossfade(sugestao, label = "sorteadas") { palavras ->
+                Text(
+                    palavras.joinToString(" "), fontFamily = FontFamily.Monospace, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Paleta.placaTinta,
+                    modifier = Modifier.padding(top = Espaco.lg).fillMaxWidth().background(Paleta.viva, app.escalibur.wallet.ui.comp.PlacaLaqueada()).padding(Espaco.base),
+                )
+            }
             Text(t("Seis palavras sorteadas neste celular. Anote em outro lugar, longe do papel da senha da carteira."), style = estilo(Tipo.nota),
                  color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
             Row(Modifier.padding(top = Espaco.md), horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                BotaoSecundario(t("Sortear outras"), Modifier.weight(1f), acao = aoSortear)
-                BotaoSecundario(t("Criar a minha"), Modifier.weight(1f), acao = aoPropria)
+                BotaoDeOpcao(t("Sortear outras"), null, Modifier.weight(1f), acao = aoSortear)
+                BotaoDeOpcao(t("Criar a minha"), Icones.lapis, Modifier.weight(1f), acao = aoPropria)
             }
         }
         erro?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.baixa, modifier = Modifier.padding(top = Espaco.xs)) }
@@ -505,23 +556,93 @@ private fun BotaoDeSegurar(titulo: String, segundos: Int, modifier: Modifier = M
     }
 }
 
-/** Lacrando: a senha fica cara de adivinhar (o Argon2, quase todo o tempo) e o arquivo e gravado. */
+/**
+ * Lacrando e lacrado na mesma cena (o `sealStage` do iOS): as palavras viram pixels e caem no envelope
+ * enquanto a senha fica cara de adivinhar, a aba fecha gravando, e lacrado o cadeado se monta e o
+ * anel acende. A cena e os textos ficam no mesmo lugar nas duas etapas; o rodape troca embaixo.
+ */
 @Composable
-private fun ColumnScope.Lacrando(segundos: Double) {
-    val progresso = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { progresso.animateTo(0.92f, tween((segundos * 1000).toInt().coerceAtLeast(500), easing = LinearEasing)) }
-    Spacer(Modifier.weight(1f))
-    Column(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem), horizontalAlignment = Alignment.CenterHorizontally,
-           verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-        SeloDoEnvelope()
-        Text(t("Lacrando o envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.md))
-        Text(t("Deixando a senha difícil de adivinhar"), style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
-        LinearProgressIndicator(progress = { progresso.value }, color = Paleta.tinta, trackColor = Paleta.trilho, modifier = Modifier.width(220.dp).padding(top = Espaco.sm))
-        Text(t("Leva %@, só neste celular, sem internet.", cercaDe(segundos)), style = estilo(Tipo.nota), color = Paleta.tintaApagada, textAlign = TextAlign.Center)
+private fun ColumnScope.LacreEmCena(feito: Boolean, parte: Int, inicio: Long, segundos: Double, nomeDoArquivo: String, fraca: Boolean, aoSalvar: () -> Unit) {
+    val f by androidx.compose.animation.core.animateFloatAsState(if (feito) 1f else 0f, tween(250), label = "lacrado")
+    val etapa = when {
+        feito -> EtapaDoLacre.lacrado
+        parte >= 2 -> EtapaDoLacre.gravando
+        else -> EtapaDoLacre.trabalhando
     }
-    Spacer(Modifier.weight(1f))
-    Text(t("A senha do envelope não sai deste celular."), style = estilo(Tipo.nota), color = Paleta.tintaApagada, textAlign = TextAlign.Center,
-         modifier = Modifier.fillMaxWidth().padding(bottom = Espaco.md))
+    Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs)) {
+        // O alto da cena fica vazio depois que as palavras caem: o conjunto sobe metade disso.
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Column(Modifier.offset(y = -AltoVazioDaCena / 2), horizontalAlignment = Alignment.CenterHorizontally) {
+                CenaDoEnvelope(Modifier.padding(bottom = Espaco.xl), etapa = etapa)
+                Box(contentAlignment = Alignment.TopCenter) {
+                    Column(Modifier.fillMaxWidth().alpha(1 - f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                        Text(t("Lacrando o envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
+                        androidx.compose.animation.Crossfade(parte, label = "parte") { p ->
+                            Text(when (p) {
+                                0 -> t("Deixando a senha difícil de adivinhar")
+                                1 -> t("Cifrando a senha da carteira")
+                                else -> t("Gravando o arquivo")
+                            }, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
+                        }
+                        ProgressoDoLacre(inicio, segundos, terminado = parte > 0, Modifier.padding(top = Espaco.sm).width(220.dp))
+                        Text(t("Leva %@, só neste celular, sem internet.", cercaDe(segundos)), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
+                             textAlign = TextAlign.Center)
+                    }
+                    if (feito) Column(Modifier.fillMaxWidth().alpha(f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                        Text(t("Envelope lacrado"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                            Icone(Icones.documentoCadeado, Paleta.tintaSuave, tamanho = 15.dp)
+                            Text(nomeDoArquivo, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                        }
+                        Text(t("O arquivo não mostra o que guarda. Guarde o arquivo e a senha em lugares diferentes: quem tiver os dois tem a carteira."),
+                             style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xxs))
+                        if (fraca) {
+                            Faixa(TipoDeFaixa.cautela, t("Senha muito fraca: guarde o arquivo num pendrive ou no seu computador, nunca na nuvem nem por e-mail."),
+                                  Modifier.padding(top = Espaco.xs))
+                        }
+                    }
+                }
+            }
+        }
+        // Os dois rodapes ocupam a mesma altura: o meio de cima nao muda ao lacrar.
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
+            Column(Modifier.fillMaxWidth().alpha(f)) {
+                BotaoPrimario(t("Salvar ou enviar o arquivo"), ligado = feito, acao = aoSalvar)
+                Text(t("Para abrir: Ajustes, Abrir um envelope, neste ou em outro celular com o app."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
+                     textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.sm))
+            }
+            if (!feito) Text(t("A senha do envelope não sai deste celular."), style = estilo(Tipo.nota), color = Paleta.tintaApagada, textAlign = TextAlign.Center,
+                             modifier = Modifier.fillMaxWidth().padding(bottom = Espaco.sm).alpha(1 - f))
+        }
+    }
+}
+
+/**
+ * A barra do lacre, em pixels: anda pelo tempo que este celular costuma levar e para em 92% ate o
+ * Argon2 terminar de verdade; dai enche. Cada pixel aceso cifra de leve; os apagados ficam escuros.
+ */
+@Composable
+private fun ProgressoDoLacre(inicio: Long, estimativa: Double, terminado: Boolean, modifier: Modifier = Modifier) {
+    // O relogio so faz a barra redesenhar a cada quadro; o tempo vem do inicio do lacre.
+    val quadro = app.escalibur.wallet.ui.comp.relogio(terminado)
+    Canvas(modifier.height(6.dp)) {
+        quadro.value
+        val decorrido = (System.currentTimeMillis() - inicio) / 1000.0
+        val bruto = (decorrido / maxOf(estimativa, 0.5)).coerceIn(0.0, 1.0)
+        // Desacelera perto do fim: 1 - (1 - t)^2, ate 92%.
+        val fracao = if (terminado) 1.0 else 0.92 * (1 - (1 - bruto) * (1 - bruto))
+        val quantos = 30
+        val passo = size.width / quantos
+        val lado = minOf(passo - 1.6.dp.toPx(), size.height)
+        val acesos = (fracao * quantos).toInt()
+        val relogio = System.currentTimeMillis() / 1000.0
+        for (i in 0 until quantos) {
+            val bit = app.escalibur.wallet.ui.comp.PixelsCifrando.ruido(i, (relogio * 6).toInt() % 997, 0x4E)
+            val tom = if (i < acesos) 0.62 + 0.3 * bit else 0.16
+            drawRoundRect(app.escalibur.wallet.ui.comp.PixelsCifrando.cinza(tom), Offset(i * passo + (passo - lado) / 2, (size.height - lado) / 2),
+                          Size(lado, lado), CornerRadius(1.2.dp.toPx()))
+        }
+    }
 }
 
 @Composable
@@ -545,7 +666,8 @@ private fun nomeDoIdioma(idioma: String): String {
         "japanese" -> "ja"; "korean" -> "ko"; "chineseSimplified" -> "zh-Hans"; "chineseTraditional" -> "zh-Hant"
         else -> return idioma
     }
-    return Locale.forLanguageTag(codigo).getDisplayName(Formato.locale).replaceFirstChar { it.titlecase(Formato.locale) }
+    // O nome como o idioma escreve, igual ao iOS: "inglês" em portugues, "English" em ingles.
+    return Locale.forLanguageTag(codigo).getDisplayName(Formato.locale)
 }
 
 /**
@@ -706,11 +828,12 @@ fun FluxoDeAbrirEnvelope(aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerm
         when (passo) {
             "escolher" -> {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem), horizontalAlignment = Alignment.CenterHorizontally) {
-                    SeloDoEnvelope(Icones.envelopeAberto)
-                    Text(t("Abrir um envelope criptografado"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
-                         modifier = Modifier.padding(top = Espaco.lg))
+                    // O lacre ao contrario, em pixels: o envelope abre e as palavras sobem dele.
+                    CenaDoEnvelope(Modifier.padding(top = Espaco.sm, bottom = Espaco.lg), abrindo = true)
+                    Text(t("Abrir um envelope criptografado"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
                     Text(t("Escolha o arquivo .esclbr e digite a senha do envelope. A senha da carteira é decifrada só aqui, neste celular, sem internet, e o arquivo original continua onde está."),
                          style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
+                    BotaoComoFunciona(Modifier.padding(top = Espaco.md))
                     erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
                 }
                 Rodape { BotaoPrimario(t("Escolher arquivo")) { escolher.launch(arrayOf("*/*")) } }
@@ -718,6 +841,7 @@ fun FluxoDeAbrirEnvelope(aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerm
             "senha" -> {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md),
                        verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                    Box(Modifier.fillMaxWidth().padding(bottom = Espaco.md), contentAlignment = Alignment.Center) { EmblemaCifrado() }
                     Text(nomeDoArquivo, style = estilo(Tipo.monoPequeno), color = Paleta.tintaApagada, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(t("Senha do envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta)
                     Text(t("A senha escolhida quando o envelope foi lacrado. No app Escalibur, é a senha do cofre."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave,
@@ -728,25 +852,22 @@ fun FluxoDeAbrirEnvelope(aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerm
                 }
                 Rodape { BotaoPrimario(t("Abrir envelope"), ligado = senha.text.isNotEmpty()) { abrir() } }
             }
+            // Abrindo e aberto dividem a ilustracao: o arquivo com o cifrado trocando enquanto o app faz
+            // a conta e, aberto, um visto no lugar de cada palavra (nunca as de exemplo).
             "abrindo" -> {
-                Spacer(Modifier.weight(1f))
-                Column(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem), horizontalAlignment = Alignment.CenterHorizontally,
-                       verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                    Girando(Paleta.tinta, 48.dp)
-                    Text(t("Abrindo o envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.md))
+                Column(Modifier.weight(1f).padding(horizontal = Espaco.margem)) {
+                    CartaoCifrado(ModoDoCartao.abrindo, Modifier.padding(top = Espaco.sm, bottom = Espaco.xl), nomeDoArquivo)
+                    Text(t("Abrindo o envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta)
                     Text(t("Leva %@, e cada tentativa custa o mesmo para quem tentar adivinhar.", cercaDe(segundos)), style = estilo(Tipo.corpo),
-                         color = Paleta.tintaSuave, textAlign = TextAlign.Center)
+                         color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
                 }
-                Spacer(Modifier.weight(1f))
             }
             "aberto" -> {
                 val dados = aberto ?: return@Column
                 palavras = dados.optInt("palavras", 12)
                 Column(Modifier.weight(1f).padding(horizontal = Espaco.margem)) {
-                    Spacer(Modifier.height(Espaco.xl))
-                    SeloDoEnvelope(Icones.vistoCheio)
-                    Text(dados.optString("rotulo").ifEmpty { t("Envelope aberto") }, style = estilo(Tipo.titulo), color = Paleta.tinta,
-                         modifier = Modifier.padding(top = Espaco.lg))
+                    CartaoCifrado(ModoDoCartao.aberto, Modifier.padding(top = Espaco.sm, bottom = Espaco.xl), nomeDoArquivo, palavras)
+                    Text(dados.optString("rotulo").ifEmpty { t("Envelope aberto") }, style = estilo(Tipo.titulo), color = Paleta.tinta)
                     Text(t("%lld palavras, lista em %@", palavras, nomeDoIdioma(dados.optString("idioma"))) +
                              (if (dados.optBoolean("comPassphrase")) t(" · com passphrase") else ""),
                          style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xxs))

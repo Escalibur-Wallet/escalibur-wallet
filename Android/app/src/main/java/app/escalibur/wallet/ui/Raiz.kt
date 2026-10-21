@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import app.escalibur.wallet.BuildConfig
 import app.escalibur.wallet.nucleo.Api
 import app.escalibur.wallet.ui.abertura.FluxoDeAbertura
@@ -107,10 +108,30 @@ fun Raiz() {
                 }
             }
         }
+        CapaDaAbertura(pronto)
         app.escalibur.wallet.ui.enviar.PedidoDePassphrase.pedido?.let { app.escalibur.wallet.ui.enviar.FolhaDaPassphrase(it) }
         Autorizacao.pedido?.let { FolhaDePin(it) }
         Avisos.Camada(Modifier.align(Alignment.TopCenter))
         App.estado.aviso?.let { app.escalibur.wallet.ui.comp.AlertaDeSeguranca(it) }
+    }
+}
+
+/**
+ * A continuacao da abertura do sistema (o LaunchCover do iOS): o mesmo selo, no mesmo lugar (o centro
+ * da tela inteira), agora cifrando, e some num esmaecer quando o app ja carregou. Nao segura toques.
+ */
+@Composable
+private fun CapaDaAbertura(pronto: Boolean) {
+    val inicio = remember { System.nanoTime() }
+    var abrindo by remember { mutableStateOf(true) }
+    LaunchedEffect(pronto) {
+        if (!pronto) return@LaunchedEffect
+        kotlinx.coroutines.delay((650 - (System.nanoTime() - inicio) / 1_000_000).coerceAtLeast(0))
+        abrindo = false
+    }
+    androidx.compose.animation.AnimatedVisibility(abrindo, enter = androidx.compose.animation.EnterTransition.None,
+                                                  exit = androidx.compose.animation.fadeOut(tween(300, easing = androidx.compose.animation.core.LinearOutSlowInEasing))) {
+        Box(Modifier.fillMaxSize().background(Paleta.vazio), contentAlignment = Alignment.Center) { app.escalibur.wallet.ui.comp.EmblemaCifrado(88.dp) }
     }
 }
 

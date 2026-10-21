@@ -2,4 +2,6 @@
 <resources>
     <!-- O rosa do icone do app, o mesmo do iOS. -->
     <color name="icone_fundo">#FFFF007B</color>
+    <!-- Palette.void do iOS: o fundo do app, ja na abertura. -->
+    <color name="vazio">#FF0B0B0C</color>
 </resources>

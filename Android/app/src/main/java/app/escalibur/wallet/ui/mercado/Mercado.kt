@@ -375,7 +375,7 @@ private fun FatosDoMercado(m: MoedaDeMercado, d: JSONObject?, carregando: Boolea
                             d.data("allTimeHighDate")?.let { Text(t("Em %@", Formato.diaLongo(it)), style = estilo(Tipo.nota), color = Paleta.tintaApagada) }
                         }
                         numero("fromAllTimeHigh")?.let { distancia ->
-                            Text(if (distancia >= -0.5) t("Na máxima") else t("%@% abaixo da máxima", Formato.agrupado(abs(distancia), if (abs(distancia) < 10) 1 else 0, aparar = true)),
+                            Text(if (distancia >= -0.5) t("Na máxima") else t("%@%% abaixo da máxima", Formato.agrupado(abs(distancia), if (abs(distancia) < 10) 1 else 0, aparar = true)),
                                  style = estilo(Tipo.nota), color = Paleta.tintaSuave, textAlign = TextAlign.End, modifier = Modifier.padding(start = Espaco.sm))
                         }
                     }

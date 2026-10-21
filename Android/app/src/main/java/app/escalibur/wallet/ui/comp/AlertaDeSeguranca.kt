@@ -43,10 +43,7 @@ fun AlertaDeSeguranca(a: JSONObject) {
     BackHandler {}
     Column(Modifier.fillMaxSize().background(Paleta.vazio).seguraToques().statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.lg)) {
-            Box(Modifier.padding(top = Espaco.xl).size(96.dp).clip(CircleShape).background(Paleta.baixaFundo).align(Alignment.CenterHorizontally),
-                contentAlignment = Alignment.Center) {
-                Icone(Icones.escudoAlerta, Paleta.baixa, tamanho = 40.dp)
-            }
+            EmblemaCifrado(96.dp, Icones.escudoAlertaCheio, Paleta.baixa, Modifier.padding(top = Espaco.xl).align(Alignment.CenterHorizontally))
             Text(t("Alerta de segurança"), style = estilo(Tipo.nota), fontWeight = FontWeight.SemiBold, color = Paleta.tinta, textAlign = TextAlign.Center,
                  modifier = Modifier.fillMaxWidth().padding(top = Espaco.lg))
             Text(a.optString("titulo"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
@@ -56,9 +53,8 @@ fun AlertaDeSeguranca(a: JSONObject) {
                 Modifier.padding(top = Espaco.lg).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.md),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.md),
             ) {
-                Box(Modifier.size(64.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
-                    Icone(Icones.cadeadoCheio, Paleta.sucesso, tamanho = 28.dp)
-                }
+                // Os pixels que cifram: o que esta cifrado continua cifrado.
+                EmblemaCifrado(76.dp, Icones.cadeadoCheio, Paleta.sucesso)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
                     Text(a.optString("seguroTitulo"), style = estilo(Tipo.linha), color = Paleta.tinta)
                     Text(a.optString("seguroTexto"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)

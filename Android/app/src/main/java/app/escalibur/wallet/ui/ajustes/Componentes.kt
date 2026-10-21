@@ -87,7 +87,7 @@ fun LinhaComInterruptor(
         Modifier.fillMaxWidth().heightIn(min = Altura.linhaCompacta).padding(horizontal = Espaco.md, vertical = Espaco.xs),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
     ) {
-        if (inicio != null) inicio() else if (icone != null) Icone(icone, Paleta.tintaSuave, tamanho = 18.dp, modifier = Modifier.width(28.dp))
+        if (inicio != null) inicio() else if (icone != null) Icone(icone, Paleta.tintaSuave, tamanho = 21.dp, modifier = Modifier.width(28.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(titulo, style = estilo(Tipo.corpo), color = if (habilitado) Paleta.tinta else Paleta.tintaApagada)
             if (detalhe != null) Text(detalhe, style = estilo(Tipo.nota), color = Paleta.tintaSuave)

@@ -180,7 +180,7 @@ object CorDoLogo {
 }
 
 /** A placa clara de metal (o destino do envio, o QR do Receber), com o canto de cima cortado (o LacquerPlate do iOS). */
-class PlacaLaqueada(private val corte: Dp = 20.dp, private val raio: Dp = Raio.botao) : Shape {
+class PlacaLaqueada(private val corte: Dp = 24.dp, private val raio: Dp = Raio.botao) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
         val c = with(density) { corte.toPx() }
         val r = with(density) { raio.toPx() }

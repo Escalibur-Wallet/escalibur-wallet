@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.importar
 
+import app.escalibur.wallet.ui.comp.EmblemaCifrado
 import app.escalibur.wallet.ui.comp.Interruptor
 import android.content.ClipboardManager
 import androidx.activity.compose.BackHandler
@@ -355,6 +356,7 @@ internal fun TelaDaFrase(
         CabecalhoDeFolha("", aoCancelar)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                EmblemaCifrado(modifier = Modifier.padding(bottom = Espaco.xs))
                 Text(when {
                          escolhendo != null -> t("Escolha as suas palavras")
                          conferindo != null -> t("Confira a seed phrase de %@", conferindo)
@@ -537,7 +539,8 @@ private fun PosicaoSorteada(numero: Int, modifier: Modifier) {
         Text("%02d".format(numero), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Paleta.tintaApagada)
         Text(t("o app sorteia"), fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Paleta.tintaSuave, maxLines = 1, softWrap = false,
              overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Icone(Icones.atualizar, Paleta.tintaApagada, tamanho = 14.dp)
+        // O sorteio em pixels, como no iOS.
+        app.escalibur.wallet.ui.comp.PixelsDoSorteio(Modifier.size(16.dp))
     }
 }
 

@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.ajustes
 
+import app.escalibur.wallet.ui.comp.EmblemaCifrado
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -192,6 +193,8 @@ private fun androidx.compose.foundation.layout.ColumnScope.DigitarPassphrase(bas
     CabecalhoDeFolha("", null, aoVoltar = aoVoltar)
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md),
            verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+        // O selo das telas onde se digita um segredo.
+        Box(Modifier.fillMaxWidth().padding(bottom = Espaco.xs), contentAlignment = Alignment.Center) { EmblemaCifrado() }
         Text(t("Digite a passphrase"), style = estilo(Tipo.titulo), color = Paleta.tinta)
         Text(t("Escreva igual ao que você anotou. Diferença de maiúscula, acento ou espaço já abre outra carteira."), style = estilo(Tipo.corpo),
              color = Paleta.tintaSuave, modifier = Modifier.padding(bottom = Espaco.md))

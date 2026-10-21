@@ -245,6 +245,15 @@ fun BotaoDoGrupo(icone: ImageVector, descricao: String, cor: Color = Paleta.tint
     ) { Icone(icone, cor, tamanho = 21.dp, descricao = descricao) }
 }
 
+/** Um botao de texto do `GrupoDeVidro` (o "OK" da barra das folhas do iOS). */
+@Composable
+fun BotaoDeTextoDoGrupo(titulo: String, acao: () -> Unit) {
+    Box(
+        Modifier.height(Altura.toque).clip(CircleShape).clickable(role = Role.Button, onClick = acao).padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) { Text(titulo, style = estilo(Tipo.acao), color = Paleta.tinta, maxLines = 1) }
+}
+
 /** O toque leve de selecao, como o `sensoryFeedback(.selection)` do iOS. */
 @Composable
 fun toqueDeSelecao(): () -> Unit {

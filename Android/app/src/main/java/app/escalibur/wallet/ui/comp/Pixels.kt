@@ -403,7 +403,7 @@ fun BotaoDeCopiar(titulo: String, feito: String, modifier: Modifier = Modifier, 
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
             Box(Modifier.size(20.dp).graphicsLayer { scaleX = quique.value; scaleY = quique.value }, contentAlignment = Alignment.Center) {
-                Icone(if (copiado) Icones.visto else Icones.copiar, Paleta.sobreAcento, tamanho = 17.dp)
+                Icone(if (copiado) Icones.visto else Icones.copiar, Paleta.sobreAcento, tamanho = 19.dp)
             }
             AnimatedContent(
                 copiado,
@@ -416,6 +416,86 @@ fun BotaoDeCopiar(titulo: String, feito: String, modifier: Modifier = Modifier, 
             ) { feitoAgora ->
                 Text(if (feitoAgora) feito else titulo, style = estilo(Tipo.acao), color = Paleta.sobreAcento, maxLines = 1)
             }
+        }
+    }
+}
+
+/**
+ * O selo das telas onde se digita um segredo (o `CipherEmblem` do iOS): o cadeado no meio de dois
+ * aneis de pixels cinza que cifram, o mesmo desenho do preenchimento do deslizar. Cada pixel troca de
+ * tom no seu compasso, e uma passada mais clara gira devagar pelos aneis. Pequeno e calmo de
+ * proposito: diz "isto aqui esta cifrado" sem chamar mais atencao que o campo.
+ */
+@Composable
+fun EmblemaCifrado(tamanho: androidx.compose.ui.unit.Dp = 88.dp, icone: androidx.compose.ui.graphics.vector.ImageVector = Icones.cadeadoCheio,
+                   cor: Color = Paleta.tinta, modifier: Modifier = Modifier) {
+    val parado = movimentoReduzido()
+    val agora = relogioQueAnda(!parado)
+    Box(modifier.size(tamanho), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val centro = center
+            val passada = ((agora / 2.6) % 1.0) * 2 * Math.PI
+            val celula = 4.5.dp.toPx()
+            listOf(40 to 5.dp.toPx(), 30 to 14.dp.toPx()).forEachIndexed { anel, (quantos, recuo) ->
+                val raio = size.minDimension / 2 - recuo
+                for (i in 0 until quantos) {
+                    val angulo = i.toDouble() / quantos * 2 * Math.PI - Math.PI / 2
+                    val fase = PixelsCifrando.ruido(i, anel, 0x51ED)
+                    val batida = agora * 5 * (0.6 + 0.8 * fase) + fase * 8
+                    val degrau = floor(batida)
+                    val t = batida - degrau
+                    val mistura = t * t * (3 - 2 * t)
+                    val a = PixelsCifrando.ruido(i, anel, degrau.toLong())
+                    val b = PixelsCifrando.ruido(i, anel, degrau.toLong() + 1)
+                    val bit = a + (b - a) * mistura
+                    var distancia = kotlin.math.abs(angulo + Math.PI / 2 - passada)
+                    distancia = minOf(distancia, 2 * Math.PI - distancia)
+                    val brilho = exp(-(distancia / 0.55) * (distancia / 0.55))
+                    val tom = 0.2 + 0.28 * bit + 0.38 * brilho * (if (anel == 0) 1.0 else 0.7)
+                    val x = centro.x + (raio * kotlin.math.cos(angulo)).toFloat()
+                    val y = centro.y + (raio * kotlin.math.sin(angulo)).toFloat()
+                    drawRoundRect(PixelsCifrando.cinza(tom), Offset(x - celula / 2, y - celula / 2), Size(celula, celula), CornerRadius(1.2.dp.toPx()))
+                }
+            }
+        }
+        Box(Modifier.size(tamanho * 0.5f).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
+            Icone(icone, cor, tamanho = tamanho * 0.2f)
+        }
+    }
+}
+
+/** A tela de espera com o selo (o `CipherWorking` do iOS): o cofre abrindo depois do PIN, no meio da tela inteira. */
+@Composable
+fun TrabalhandoCifrado(titulo: String) {
+    androidx.compose.foundation.layout.Column(
+        Modifier.fillMaxSize().background(Paleta.vazio),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.md, Alignment.CenterVertically),
+    ) {
+        EmblemaCifrado()
+        Text(titulo, style = estilo(Tipo.cabecalho), color = Paleta.tinta)
+    }
+}
+
+/** O sorteio em pixels (o `DrawPixels` do iOS): quatro por quatro quadradinhos cinza trocando de tom, no lugar do dado. */
+@Composable
+fun PixelsDoSorteio(modifier: Modifier = Modifier) {
+    val parado = movimentoReduzido()
+    val agora = relogioQueAnda(!parado)
+    Canvas(modifier) {
+        val celulas = 4
+        val passo = size.width / celulas
+        val lado = passo * 0.74f
+        for (linha in 0 until celulas) for (coluna in 0 until celulas) {
+            val fase = PixelsCifrando.ruido(coluna, linha, 0x51A)
+            val batida = agora * (1.4 + 1.8 * fase) + fase * 8
+            val degrau = floor(batida)
+            val t = batida - degrau
+            val mistura = t * t * (3 - 2 * t)
+            val a = PixelsCifrando.ruido(coluna, linha, degrau.toLong())
+            val b = PixelsCifrando.ruido(coluna, linha, degrau.toLong() + 1)
+            val tom = 0.22 + 0.62 * (a + (b - a) * mistura)
+            drawRoundRect(PixelsCifrando.cinza(tom), Offset(coluna * passo + (passo - lado) / 2, linha * passo + (passo - lado) / 2), Size(lado, lado),
+                          CornerRadius(lado * 0.22f))
         }
     }
 }

@@ -87,8 +87,9 @@ object Icones {
 
     val copiar = traco(
         "copiar",
-        "M9 8.5 H18 A1.5 1.5 0 0 1 19.5 10 V19 A1.5 1.5 0 0 1 18 20.5 H9 A1.5 1.5 0 0 1 7.5 19 V10 A1.5 1.5 0 0 1 9 8.5 Z",
-        "M16.5 5.5 V5 A1.5 1.5 0 0 0 15 3.5 H6 A1.5 1.5 0 0 0 4.5 5 V14 A1.5 1.5 0 0 0 6 15.5 H7.5",
+        // Duas folhas em pe, como o doc.on.doc do iOS.
+        "M10 7 H17.5 A1.8 1.8 0 0 1 19.3 8.8 V19.2 A1.8 1.8 0 0 1 17.5 21 H10 A1.8 1.8 0 0 1 8.2 19.2 V8.8 A1.8 1.8 0 0 1 10 7 Z",
+        "M15.6 4.8 A1.8 1.8 0 0 0 13.8 3 H6.5 A1.8 1.8 0 0 0 4.7 4.8 V15.2 A1.8 1.8 0 0 0 6.5 17 H8.2",
     )
     val colar = traco(
         "colar",
@@ -120,6 +121,14 @@ object Icones {
     val globo = traco("globo", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M3 12 H21", "M12 3 C14.5 5.5 15.5 8.7 15.5 12 C15.5 15.3 14.5 18.5 12 21 C9.5 18.5 8.5 15.3 8.5 12 C8.5 8.7 9.5 5.5 12 3 Z")
     val sino = traco("sino", "M6 16.5 V11 A6 6 0 0 1 18 11 V16.5 L19.5 18 H4.5 Z", "M10 20.5 H14")
     val sinoCheio = cheio("sinoCheio", "M12 3 A6.5 6.5 0 0 0 5.5 9.5 V15.6 L3.9 17.4 C3.4 18 3.8 19 4.6 19 H19.4 C20.2 19 20.6 18 20.1 17.4 L18.5 15.6 V9.5 A6.5 6.5 0 0 0 12 3 Z", "M9.6 20.2 A2.5 2.5 0 0 0 14.4 20.2 Z")
+    /** O sino com o ponto do aviso (o bell.badge do iOS): o contorno abre onde o ponto fica. */
+    val sinoComPonto = tracoComPonta("sinoComPonto", "M6 16.5 V11 A6 6 0 0 1 13.6 5.2 M17.95 10.2 Q18 10.6 18 11 V16.5 L19.5 18 H4.5 L6 16.5 M10 20.5 H14",
+                                     "M19 3.7 A2.5 2.5 0 1 1 18.99 3.7 Z", 1.9f)
+    /** O simbolo do bitcoin (o bitcoinsign do iOS), para os numeros redondos. */
+    val bitcoin = traco("bitcoin", "M8 5 V19", "M8 5 H13 A3.25 3.25 0 0 1 13 11.5 H8", "M8 11.5 H13.8 A3.75 3.75 0 0 1 13.8 19 H8",
+                        "M10.2 3 V5 M13 3 V5 M10.2 19 V21 M13 19 V21", espessura = 1.8f)
+    /** O circulo cheio com o menos vazado (o minus.circle.fill do iOS). */
+    val menosCirculoCheio = cheio("menosCirculoCheio", "M12 2.5 A9.5 9.5 0 1 1 11.99 2.5 Z M7.6 11.05 H16.4 A0.95 0.95 0 0 1 16.4 12.95 H7.6 A0.95 0.95 0 0 1 7.6 11.05 Z")
     val alvo = traco("alvo", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M12 16 A4 4 0 1 0 12 8 A4 4 0 1 0 12 16 Z")
     val altaEQueda = traco("altaEQueda", "M8 19 V5 M4.5 8.5 L8 5 L11.5 8.5", "M16 5 V19 M12.5 15.5 L16 19 L19.5 15.5")
     val estrela = traco("estrela", "M12 3.5 L14.6 8.9 L20.5 9.6 L16.2 13.7 L17.3 19.6 L12 16.8 L6.7 19.6 L7.8 13.7 L3.5 9.6 L9.4 8.9 Z")
@@ -185,6 +194,17 @@ object Icones {
     val escudoAlertaCheio = cheio("escudoAlertaCheio",
         "M12 2.5 L20 5.6 V11.3 C20 16.3 16.6 20.1 12 21.7 C7.4 20.1 4 16.3 4 11.3 V5.6 Z M11 7.2 H13 V13.2 H11 Z M11 15.1 H13 V17.1 H11 Z")
     val exclamacaoCheia = cheio("exclamacaoCheia", "M12 2 A10 10 0 1 1 12 22 A10 10 0 1 1 12 2 Z M11 6.5 H13 V13.5 H11 Z M11 15.5 H13 V17.5 H11 Z")
+    val reproduzirCirculo = tracoComPonta("reproduzirCirculo", "M12 3 A9 9 0 1 1 11.99 3 Z", "M10.2 8.6 L15.4 12 L10.2 15.4 Z", 1.7f)
+    val documentoCadeado = traco("documentoCadeado", "M6.5 3 H14 L18.5 7.5 V19.5 A1.5 1.5 0 0 1 17 21 H6.5 A1.5 1.5 0 0 1 5 19.5 V4.5 A1.5 1.5 0 0 1 6.5 3 Z",
+                                 "M14 3 V7.5 H18.5", "M9.3 14.6 H14.2 V18 H9.3 Z", "M10.3 14.6 V13.4 A1.45 1.45 0 0 1 13.2 13.4 V14.6", espessura = 1.7f)
+    val disco = traco("disco", "M3.5 13 L6.1 6.6 A2 2 0 0 1 7.95 5.4 H16.05 A2 2 0 0 1 17.9 6.6 L20.5 13",
+                      "M5.5 13 H18.5 A2 2 0 0 1 20.5 15 V17 A2 2 0 0 1 18.5 19 H5.5 A2 2 0 0 1 3.5 17 V15 A2 2 0 0 1 5.5 13 Z", "M16.6 16 V16.05")
+    val envelopeCheio = cheio("envelopeCheio", "M4.2 5 H19.8 A2.2 2.2 0 0 1 22 7.2 V16.8 A2.2 2.2 0 0 1 19.8 19 H4.2 A2.2 2.2 0 0 1 2 16.8 V7.2 A2.2 2.2 0 0 1 4.2 5 Z " +
+        "M2.6 7.1 L12 13.9 L21.4 7.1 V5.6 L12 12.4 L2.6 5.6 Z M2.6 17.6 L7.4 12.6 L8.4 13.6 L3.6 18.6 Z M21.4 17.6 L16.6 12.6 L15.6 13.6 L20.4 18.6 Z")
+    val envelopeAbertoCheio = cheio("envelopeAbertoCheio", "M2 10 L12 3 L22 10 V18.8 A2.2 2.2 0 0 1 19.8 21 H4.2 A2.2 2.2 0 0 1 2 18.8 Z " +
+        "M3.6 10.4 L12 4.7 L20.4 10.4 L12 15.8 Z")
+    val cadeadoAbertoCheio = cheio("cadeadoAbertoCheio", "M3 12 A2 2 0 0 1 5 10 H15 A2 2 0 0 1 17 12 V19 A2 2 0 0 1 15 21 H5 A2 2 0 0 1 3 19 Z",
+                                   "M12 10 V6.8 A4.5 4.5 0 0 1 21 6.8 V9 H19 V6.8 A2.5 2.5 0 0 0 14 6.8 V10 Z")
     val cadeadoCheio = cheio("cadeadoCheio", "M7 10 V7.5 A5 5 0 0 1 17 7.5 V10 H17.5 A2 2 0 0 1 19.5 12 V19 A2 2 0 0 1 17.5 21 H6.5 A2 2 0 0 1 4.5 19 V12 A2 2 0 0 1 6.5 10 Z M9 10 H15 V7.5 A3 3 0 0 0 9 7.5 Z")
 }
 

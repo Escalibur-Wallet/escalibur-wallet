@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.carteira
 
+import app.escalibur.wallet.ui.comp.EmblemaCifrado
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -235,6 +236,7 @@ private fun ConferirPassphrase(carteira: Carteira, comRascunho: Boolean, aoTermi
     }
 
     Column(Modifier.fillMaxSize().padding(horizontal = Espaco.margem).padding(top = Espaco.md, bottom = Espaco.xs)) {
+        Box(Modifier.fillMaxWidth().padding(bottom = Espaco.md), contentAlignment = Alignment.Center) { EmblemaCifrado() }
         Text(t("Confira a passphrase"), style = estilo(Tipo.titulo), color = Paleta.tinta)
         Text(t("Digite a passphrase de %@ a partir de onde você anotou. Diferença de maiúscula, acento ou espaço já abre outra carteira, e o que chegar nesta se perde.", carteira.nome),
              style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))

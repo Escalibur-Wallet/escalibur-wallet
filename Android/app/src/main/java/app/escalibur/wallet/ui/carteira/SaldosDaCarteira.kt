@@ -10,7 +10,11 @@ import app.escalibur.wallet.ui.textos
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.Date
@@ -49,7 +53,8 @@ data class Retrato(
     }
 
     companion object {
-        val vazio = Retrato(null, emptyList(), emptyList(), emptyList(), emptyList(), 0.0, 0.0, 0.0, false, emptyList(), null, false, 0, "usd", emptyMap())
+        // Antes do primeiro retrato do nucleo: carregando, para a carteira mostrar o esqueleto e nao "vazia".
+        val vazio = Retrato(null, emptyList(), emptyList(), emptyList(), emptyList(), 0.0, 0.0, 0.0, true, emptyList(), null, false, 0, "usd", emptyMap())
 
         private fun linha(json: JSONObject) = Linha(
             id = json.getString("id"), simbolo = json.getString("simbolo"), nome = json.getString("nome"),
@@ -100,19 +105,25 @@ object Saldos {
 
     init {
         escopo.launch {
-            Eventos.eventos.filter { it.nome == "saldos" }.collect { evento ->
-                runCatching { retrato = Retrato.de(JSONObject(evento.json)) }
-            }
+            // Ler o retrato fora da linha principal, e so o mais novo: com muitas redes chegando juntas,
+            // ler cada um na linha principal travava o toque (ANR digitando o PIN).
+            Eventos.eventos.filter { it.nome == "saldos" }
+                .map { evento -> runCatching { Retrato.de(JSONObject(evento.json)) }.getOrNull() }
+                .flowOn(Dispatchers.Default)
+                .conflate()
+                .collect { novo -> if (novo != null) retrato = novo }
         }
     }
 
     suspend fun mostrar() {
-        runCatching { retrato = Retrato.de(Api.objeto("saldos.mostrar")) }
+        runCatching { retrato = lido(Api.objeto("saldos.mostrar")) }
     }
 
     suspend fun atualizar(forcar: Boolean) {
-        runCatching { retrato = Retrato.de(Api.objeto("saldos.atualizar", JSONObject().put("forcar", forcar))) }
+        runCatching { retrato = lido(Api.objeto("saldos.atualizar", JSONObject().put("forcar", forcar))) }
     }
+
+    private suspend fun lido(json: JSONObject): Retrato = withContext(Dispatchers.Default) { Retrato.de(json) }
 
     /** A linha ainda espera a cotacao: no lugar do valor, a barra que brilha. */
     fun esperandoPreco(linha: Linha): Boolean = linha.preco == null && (retrato.carregando || (linha.coingecko != null && !retrato.semRede))

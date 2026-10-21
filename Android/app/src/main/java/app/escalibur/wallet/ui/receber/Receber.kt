@@ -333,7 +333,7 @@ private fun TelaDoEndereco(ativo: AtivoRecebivel, formas: List<AtivoRecebivel>, 
                  acoes = if (direto) ({ BotaoDoGrupo(Icones.fechar, t("Fechar"), Paleta.tintaSuave) { Navegacao.fechar() } }) else null) { espaco ->
     Column(Modifier.fillMaxSize().padding(espaco)) {
         if (info.getBoolean("tronOutraChave")) {
-            Column(Modifier.padding(horizontal = Espaco.margem), verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+            Column(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
                 Text(t("Esta conta na Tron é controlada por outra chave"), style = estilo(Tipo.titulo), color = Paleta.tinta)
                 Text(t("Quando esta carteira foi importada, a rede mostrou outra chave no controle da conta na Tron. É o golpe da frase com saldo: o que entrar nela, quem controla essa chave leva. Por isso o app não mostra este endereço."),
                      style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
@@ -429,7 +429,8 @@ private fun SeletorDeForma(formas: List<AtivoRecebivel>, escolhida: AtivoRecebiv
 private fun CartaoDoContrato(contrato: String, ativo: AtivoRecebivel, modifier: Modifier) {
     val contexto = LocalContext.current
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.vazio).padding(start = Espaco.md, end = Espaco.xs, top = Espaco.sm, bottom = Espaco.sm),
+        // Um cartao liso, da cor da folha, como no iOS: o contrato nao se confunde com o endereco.
+        modifier.fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(start = Espaco.md, end = Espaco.xs, top = Espaco.sm, bottom = Espaco.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {

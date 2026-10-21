@@ -243,7 +243,8 @@ private fun ColumnScope.Etapas(controle: ControleDoEnvio, r: RetratoDoEnvio, vol
         else -> null
     }
     BackHandler(enabled = !enviando) { voltar?.invoke() ?: Navegacao.fechar() }
-    CabecalhoDeFolha("", if (enviando) null else ({ Navegacao.fechar() }), aoVoltar = voltar)
+    // Como no iOS, so o fechar no alto; o voltar do sistema volta uma etapa.
+    CabecalhoDeFolha("", if (enviando) null else ({ Navegacao.fechar() }))
     Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs)) {
         when (r.etapa) {
             "destino" -> EtapaDoDestino(controle, r)
