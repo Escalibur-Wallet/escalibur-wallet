@@ -15,6 +15,7 @@ object Textos {
     private val idiomas = listOf("en", "es", "fr", "de", "hi", "id", "ja", "ko", "tr", "zh-Hans", "vi", "ar")
 
     @Volatile private var tabela: JSONObject = JSONObject()
+    @Volatile private var reserva: JSONObject = JSONObject()
     @Volatile var locale: Locale = Locale.forLanguageTag("pt-BR")
         private set
     private var plurais: PluralRules = PluralRules.forLocale(locale)
@@ -23,20 +24,29 @@ object Textos {
     @Volatile var idioma: String = "pt-BR"
         private set
 
+    /**
+     * O primeiro idioma da lista do aparelho que o app tem (como o iOS faz). Sem nenhum, ingles: o app e
+     * universal, e um celular em italiano ou russo nao deve abrir em portugues.
+     */
     fun carregar(contexto: Context) {
-        val local = contexto.resources.configuration.locales[0]
-        val escolhido = escolher(local)
-        idioma = escolhido ?: "pt-BR"
-        locale = if (escolhido == null) Locale.forLanguageTag("pt-BR") else local
+        val locais = contexto.resources.configuration.locales
+        val (escolhido, local) = (0 until locais.size()).map { locais[it] }
+            .firstNotNullOfOrNull { l -> escolher(l)?.let { it to l } }
+            ?: ("en" to Locale.ENGLISH)
+        idioma = escolhido
+        locale = if (escolhido == "pt-BR") Locale.forLanguageTag("pt-BR") else local
         plurais = PluralRules.forLocale(locale)
-        tabela = runCatching {
-            contexto.assets.open("textos/$idioma.json").use { JSONObject(it.readBytes().decodeToString()) }
-        }.getOrElse { JSONObject() }
+        val ler = { nome: String ->
+            runCatching { contexto.assets.open("textos/$nome.json").use { JSONObject(it.readBytes().decodeToString()) } }.getOrElse { JSONObject() }
+        }
+        tabela = ler(idioma)
+        // Frase ainda sem traducao neste idioma sai em ingles, nunca em portugues no meio do resto.
+        reserva = if (idioma == "pt-BR" || idioma == "en") JSONObject() else ler("en")
     }
 
     private fun escolher(local: Locale): String? {
         val lingua = local.language
-        if (lingua == "pt") return null
+        if (lingua == "pt") return "pt-BR"
         if (lingua == "zh") return "zh-Hans"
         if (lingua == "in") return "id"
         return idiomas.firstOrNull { it == lingua }
@@ -48,17 +58,19 @@ object Textos {
      */
     fun tabelaPlana(): JSONObject {
         val plana = JSONObject()
-        for (chave in tabela.keys()) {
-            when (val valor = tabela.opt(chave)) {
-                is String -> plana.put(chave, valor)
-                is JSONObject -> valor.optString("other", null)?.let { plana.put(chave, it) }
+        for (fonte in listOf(reserva, tabela)) {
+            for (chave in fonte.keys()) {
+                when (val valor = fonte.opt(chave)) {
+                    is String -> plana.put(chave, valor)
+                    is JSONObject -> valor.optString("other", null)?.let { plana.put(chave, it) }
+                }
             }
         }
         return plana
     }
 
     fun t(chave: String, vararg argumentos: Any?): String {
-        val valor = tabela.opt(chave)
+        val valor = tabela.opt(chave) ?: reserva.opt(chave)
         val modelo = when (valor) {
             is String -> valor
             is JSONObject -> forma(valor, argumentos) ?: chave
