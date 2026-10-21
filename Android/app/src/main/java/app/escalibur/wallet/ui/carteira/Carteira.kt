@@ -1,5 +1,34 @@
 package app.escalibur.wallet.ui.carteira
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.em
+import app.escalibur.wallet.ui.comp.CorDoLogo
+import app.escalibur.wallet.ui.comp.TextoNumerico
+import app.escalibur.wallet.ui.tema.Letra
+import kotlin.math.roundToInt
+import app.escalibur.wallet.ui.comp.PuxarParaAtualizar
 import app.escalibur.wallet.ui.comp.Girando
 import app.escalibur.wallet.ui.comp.LocalEspacoDaBarra
 import androidx.compose.animation.core.animateDpAsState
@@ -26,7 +55,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -118,9 +146,9 @@ fun TelaDaCarteira() {
 
     // O indicador de cima so quando o dono puxa; a leitura automatica fica no circulo de Ativos.
     var puxando by remember { mutableStateOf(false) }
-    PullToRefreshBox(
-        isRefreshing = puxando,
-        onRefresh = {
+    PuxarParaAtualizar(
+        atualizando = puxando,
+        aoAtualizar = {
             puxando = true
             escopo.launch {
                 try { Saldos.atualizar(forcar = true) } finally { puxando = false }
@@ -212,28 +240,37 @@ private fun AvisosDeEstado(retrato: Retrato) {
     }
 }
 
-/** O saldo grande: o simbolo menor e mais claro, o inteiro em peso, as casas menores. */
+/**
+ * O saldo grande: o simbolo menor e mais claro, o inteiro em peso, as casas menores e mais claras, na
+ * mesma linha de base. Os digitos rolam quando o valor muda, como no iOS.
+ */
 @Composable
 fun NumeroDoSaldo(valor: Double, unidade: String, oculto: Boolean, modifier: Modifier = Modifier) {
     val casas = if (unidade == "btc") 8 else 2
     val simbolo = Formato.simboloDaMoeda(unidade)
-    val texto = buildAnnotatedString {
-        val estiloDoSimbolo = SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Paleta.tintaSuave)
-        val antes = Formato.dinheiro("X", simbolo).startsWith(simbolo)
-        if (antes) withStyle(estiloDoSimbolo) { append(simbolo + " ") }
+    val antes = Formato.dinheiro("X", simbolo).startsWith(simbolo)
+    val doSimbolo = TextStyle(fontFamily = Letra.familia(FontWeight.SemiBold, 24f), fontWeight = FontWeight.SemiBold, fontSize = 24.sp,
+                              letterSpacing = Letra.espacoNatural(24f).em)
+    val dasCasas = estilo(Tipo.vitrine).copy(fontSize = if (casas > 2) 22.sp else 28.sp, fontFamily = Letra.familia(FontWeight.Bold, if (casas > 2) 22f else 28f),
+                                            letterSpacing = Letra.espacoNatural(28f).em)
+    @Composable fun Simbolo(alinhado: Modifier) {
+        AnimatedContent(simbolo, transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) }, modifier = alinhado, label = "simbolo") {
+            Text(it, style = doSimbolo, color = Paleta.tintaSuave, maxLines = 1)
+        }
+    }
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (antes) Simbolo(Modifier.alignByBaseline())
         if (oculto) {
-            append("••••••")
+            Text("••••••", style = estilo(Tipo.vitrine), color = Paleta.tinta, modifier = Modifier.alignByBaseline())
         } else {
-            val numero = Formato.agrupado(valor, casas, aparar = unidade == "btc")
-            val partes = numero.split(Formato.decimal)
-            append(partes[0])
-            withStyle(SpanStyle(fontSize = if (casas > 2) 22.sp else 28.sp, color = Paleta.tintaSuave)) {
-                append(Formato.decimal + (partes.getOrNull(1) ?: "0".repeat(casas)))
+            val partes = Formato.agrupado(valor, casas, aparar = unidade == "btc").split(Formato.decimal)
+            Row(Modifier.alignByBaseline()) {
+                TextoNumerico(partes[0], estilo(Tipo.vitrine), Paleta.tinta, Modifier.alignByBaseline(), valor)
+                TextoNumerico(Formato.decimal + (partes.getOrNull(1) ?: "0".repeat(casas)), dasCasas, Paleta.tintaSuave, Modifier.alignByBaseline(), valor)
             }
         }
-        if (!antes) withStyle(estiloDoSimbolo) { append(" $simbolo") }
+        if (!antes) Simbolo(Modifier.alignByBaseline())
     }
-    Text(texto, style = estilo(Tipo.vitrine), color = Paleta.tinta, maxLines = 1, modifier = modifier)
 }
 
 @Composable
@@ -247,27 +284,45 @@ private fun LinhaDaVariacao(variacao: Double, retrato: Retrato, unidade: String,
         retrato.variacao24h < 0 -> Paleta.baixa
         else -> Paleta.tintaSuave
     }
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
-        Text("${Formato.valor(variacao, unidade, comSinal = true)} (${Formato.percentual(retrato.variacao24hPct)})", style = estilo(Tipo.linha), color = cor)
-        Text(if (retrato.falhas.isEmpty()) "24h" else t("24h, sem %@", retrato.falhas.joinToString(", ")), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        TextoNumerico("${Formato.valor(variacao, unidade, comSinal = true)} (${Formato.percentual(retrato.variacao24hPct)})", estilo(Tipo.linha), cor,
+                      Modifier.alignByBaseline(), variacao)
+        Text(if (retrato.falhas.isEmpty()) "24h" else t("24h, sem %@", retrato.falhas.joinToString(", ")), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
+             modifier = Modifier.alignByBaseline())
     }
 }
 
-/** R$, US$, €, ₿: em que unidade o total aparece. */
+/** R$, US$, €, ₿: em que unidade o total aparece. Capsulas pequenas, a escolhida preenchida, e a marca desliza ate ela. */
 @Composable
 private fun SeletorDeUnidade(escolhida: String, unidades: List<String>, aoEscolher: (String) -> Unit) {
     val toque = toqueDeSelecao()
-    Row(Modifier.clip(CircleShape).background(Paleta.corpo).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        for (unidade in unidades) {
-            val selecionada = unidade == escolhida
-            Box(
-                Modifier.heightIn(min = 28.dp).clip(CircleShape)
-                    .background(if (selecionada) Paleta.controle else Paleta.corpo)
-                    .clickable { if (!selecionada) { toque(); aoEscolher(unidade) } }
-                    .padding(horizontal = 10.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(Formato.simboloDaMoeda(unidade), style = estilo(Tipo.rotulo), color = if (selecionada) Paleta.tinta else Paleta.tintaApagada)
+    val lugares = remember { mutableStateMapOf<String, Pair<Float, Float>>() }
+    val x = remember { Animatable(0f) }
+    val largura = remember { Animatable(0f) }
+    var primeira by remember { mutableStateOf(true) }
+    LaunchedEffect(escolhida, lugares[escolhida]) {
+        val (alvoX, alvoL) = lugares[escolhida] ?: return@LaunchedEffect
+        val mola = spring<Float>(dampingRatio = 1f, stiffness = 800f)
+        if (primeira) { x.snapTo(alvoX); largura.snapTo(alvoL); primeira = false }
+        else { launch { x.animateTo(alvoX, mola) }; largura.animateTo(alvoL, mola) }
+    }
+    Box(Modifier.clip(CircleShape).background(Paleta.corpo).padding(2.dp)) {
+        if (lugares[escolhida] != null) {
+            Box(Modifier.offset { IntOffset(x.value.roundToInt(), 0) }.width(with(LocalDensity.current) { largura.value.toDp() }).height(28.dp)
+                    .clip(CircleShape).background(Paleta.controle))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            for (unidade in unidades) {
+                val selecionada = unidade == escolhida
+                Box(
+                    Modifier.heightIn(min = 28.dp).clip(CircleShape)
+                        .onGloballyPositioned { lugares[unidade] = it.positionInParent().x to it.size.width.toFloat() }
+                        .clickable { if (!selecionada) { toque(); aoEscolher(unidade) } }
+                        .padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(Formato.simboloDaMoeda(unidade), style = estilo(Tipo.rotulo), color = if (selecionada) Paleta.tinta else Paleta.tintaApagada)
+                }
             }
         }
     }
@@ -292,7 +347,16 @@ private fun Ativos(retrato: Retrato, oculto: Boolean, unidade: String, taxa: Dou
                 }
             }
         }
-        if (retrato.outros.isNotEmpty()) OutrosTokens(retrato.outros, oculto, unidade, taxa, retrato.moeda)
+        if (retrato.outros.isNotEmpty() || retrato.suspeitos.isNotEmpty()) {
+            OutrosTokens(retrato.outros, retrato.suspeitos, oculto, retrato.moeda, Modifier.padding(top = if (retrato.linhas.isEmpty()) Espaco.md else Espaco.lg))
+        }
+    }
+    // A distribuicao vem depois da lista: primeiro o que a carteira tem, depois como isso se divide.
+    if (retrato.linhas.size >= 2) {
+        Column(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.xl), verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
+            Text(t("Distribuição"), style = estilo(Tipo.cabecalho), color = Paleta.tinta)
+            Distribuicao(retrato.linhas, oculto)
+        }
     }
 }
 
@@ -363,7 +427,7 @@ fun LinhaDeAtivo(linha: Linha, oculto: Boolean, unidade: String, taxa: Double?, 
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(linha.simbolo, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (linha.custom) SeloDeToken(t("Custom"))
+                if (linha.custom) SeloDeToken(TipoDeSelo.custom)
                 val preco = linha.preco
                 if (preco != null) {
                     Text(Formato.preco(mostrado(preco), unidadeMostrada), style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
@@ -392,45 +456,169 @@ fun LinhaDeAtivo(linha: Linha, oculto: Boolean, unidade: String, taxa: Double?, 
     }
 }
 
+/** O selo de um token que nao e da lista conferida, com a cor so no suspeito (o `TokenBadge` do iOS). */
+enum class TipoDeSelo { custom, naoVerificado, suspeito }
+
 @Composable
-fun SeloDeToken(texto: String, cor: androidx.compose.ui.graphics.Color = Paleta.tintaSuave) {
-    Text(texto, style = estilo(Tipo.rotulo), color = cor,
-         modifier = Modifier.clip(RoundedCornerShape(Raio.selo)).background(Paleta.trilho).padding(horizontal = 5.dp, vertical = 1.dp))
+fun SeloDeToken(tipo: TipoDeSelo) {
+    val (titulo, cor, fundo) = when (tipo) {
+        TipoDeSelo.custom -> Triple(t("Custom"), Paleta.tinta, Paleta.controle)
+        TipoDeSelo.naoVerificado -> Triple(t("Não verificado"), Paleta.tintaSuave, Paleta.trilho)
+        TipoDeSelo.suspeito -> Triple(t("Suspeito"), Paleta.cautela, Paleta.cautelaFundo)
+    }
+    Box(Modifier.height(Altura.selo).clip(RoundedCornerShape(Raio.selo)).background(fundo).padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
+        Text(titulo, style = estilo(Tipo.rotulo), color = cor, maxLines = 1, softWrap = false)
+    }
 }
 
-/** Tokens fora da lista e das moedas custom, sem suspeita: so com o selo de nao conferido. */
+/**
+ * "Outros tokens" na Carteira: o que a conta tem e nao esta na lista conferida nem nas moedas custom.
+ * Aparece, marcado, sem preco inventado, fechado de inicio, com a contagem; os de cara de golpe ficam
+ * atras de "Mostrar suspeitos".
+ */
 @Composable
-private fun OutrosTokens(outros: List<Outro>, oculto: Boolean, unidade: String, taxa: Double?, moeda: String) {
-    var aberto by remember { mutableStateOf(false) }
-    val giro by animateDpAsState(if (aberto) 1.dp else 0.dp, label = "seta")
-    Column(Modifier.padding(top = Espaco.lg)) {
-        Row(
-            Modifier.fillMaxWidth().clickable { aberto = !aberto }.heightIn(min = Altura.toque).padding(horizontal = Espaco.margem),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(t("Outros tokens"), style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.weight(1f))
-            Text("${outros.size}", style = estilo(Tipo.nota), color = Paleta.tintaApagada)
-            Icone(if (giro > 0.dp) Icones.acima else Icones.abaixo, Paleta.tintaApagada, tamanho = 14.dp, modifier = Modifier.padding(start = Espaco.xs))
+private fun OutrosTokens(outros: List<Outro>, suspeitos: List<Outro>, oculto: Boolean, moeda: String, modifier: Modifier = Modifier) {
+    var abertos by remember { mutableStateOf(false) }
+    var mostrandoSuspeitos by remember { mutableStateOf(false) }
+    Column(modifier.animateContentSize(spring(dampingRatio = 1f, stiffness = 800f))) {
+        if (outros.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().clickable { abertos = !abertos }.heightIn(min = Altura.toque).padding(horizontal = Espaco.margem),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs),
+            ) {
+                Text(t("Outros tokens"), style = estilo(Tipo.cabecalho), color = Paleta.tinta)
+                Box(Modifier.heightIn(min = 22.dp).clip(CircleShape).background(Paleta.controle).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
+                    Text("${outros.size}", style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+                }
+                Spacer(Modifier.weight(1f))
+                Icone(if (abertos) Icones.acima else Icones.abaixo, Paleta.tintaApagada, tamanho = 13.dp)
+            }
+            if (abertos) {
+                Text(t("Fora da lista verificada. Sem preço confiável, ficam fora do saldo total."), style = estilo(Tipo.nota), color = Paleta.tintaSuave,
+                     modifier = Modifier.padding(horizontal = Espaco.margem))
+                Column(Modifier.padding(top = Espaco.xs)) { for (outro in outros) LinhaDeOutroToken(outro, oculto, moeda) }
+            }
         }
-        if (aberto) {
-            Text(t("Fora da lista conferida da Escalibur. Qualquer um cria um token com qualquer nome: confira o contrato antes de confiar."),
-                 style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs))
-            for (outro in outros) {
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = Altura.linha).padding(horizontal = Espaco.margem),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
-                ) {
-                    LogoDaMoeda(null, outro.simbolo, 40.dp, naoConferido = true, rede = outro.rede, redeCoingecko = Redes.rede(outro.rede)?.coingecko)
-                    Column(Modifier.weight(1f)) {
-                        Text(outro.simbolo, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(Redes.rede(outro.rede)?.nome ?: outro.rede, style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        val valor = outro.valor
-                        if (valor != null) Text(if (oculto) "••••" else Formato.valor(valor * (taxa ?: 1.0), if (taxa != null) unidade else moeda),
-                                                style = estilo(Tipo.linha), color = Paleta.tinta)
-                        Text(if (oculto) "••••" else Formato.cripto(outro.quantidade, outro.casas, outro.simbolo), style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
-                    }
+        if (suspeitos.isNotEmpty()) {
+            Row(
+                Modifier.padding(top = if (outros.isEmpty()) 0.dp else Espaco.sm).fillMaxWidth().clickable { mostrandoSuspeitos = !mostrandoSuspeitos }
+                    .heightIn(min = Altura.toque).padding(horizontal = Espaco.margem),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs),
+            ) {
+                Box(Modifier.size(28.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
+                    Icone(if (mostrandoSuspeitos) Icones.olhoRiscado else Icones.alertaContorno, Paleta.tinta, tamanho = 15.dp)
+                }
+                Text(if (mostrandoSuspeitos) t("Esconder suspeitos") else t("Mostrar suspeitos (%lld)", suspeitos.size), style = estilo(Tipo.corpo),
+                     color = Paleta.tintaSuave, modifier = Modifier.weight(1f))
+                Icone(if (mostrandoSuspeitos) Icones.acima else Icones.abaixo, Paleta.tintaApagada, tamanho = 13.dp)
+            }
+            if (mostrandoSuspeitos) {
+                Text(t("Chegaram sem você pedir e têm cara de golpe. Não abra os sites dos nomes."), style = estilo(Tipo.nota), color = Paleta.tintaSuave,
+                     modifier = Modifier.padding(horizontal = Espaco.margem).padding(bottom = Espaco.xxs))
+                for (outro in suspeitos) LinhaDeOutroToken(outro, oculto, moeda)
+            }
+        }
+    }
+}
+
+/** Uma linha de token fora da lista: logo neutro, simbolo limpo, selo, rede e valor so com preco por contrato. */
+@Composable
+private fun LinhaDeOutroToken(outro: Outro, oculto: Boolean, moeda: String) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = Altura.linha).padding(horizontal = Espaco.margem),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
+    ) {
+        LogoDaMoeda(null, outro.simbolo, 40.dp, naoConferido = true, rede = outro.rede, redeCoingecko = Redes.rede(outro.rede)?.coingecko)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(outro.simbolo, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                SeloDeToken(if (outro.suspeito) TipoDeSelo.suspeito else TipoDeSelo.naoVerificado)
+                Text(t("na %@", Redes.rede(outro.rede)?.nome ?: outro.rede), style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
+            }
+        }
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            val valor = outro.valor
+            when {
+                oculto -> Text("R$ ••••••", style = estilo(Tipo.linha), color = Paleta.tinta)
+                valor != null -> Text(Formato.valor(valor, moeda), style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
+                else -> Text(t("sem preço"), style = estilo(Tipo.nota), color = Paleta.tintaApagada, maxLines = 1)
+            }
+            Text(if (oculto) "••••" else Formato.cripto(outro.quantidade, outro.casas, null), style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
+        }
+    }
+}
+
+/**
+ * Onde esta o saldo: uma rosca com a fatia de cada ativo na cor do proprio logo, e a legenda ao lado
+ * com a porcentagem. Os cinco maiores aparecem por nome; o resto vira "Outros". Tocar numa fatia
+ * destaca o ativo no centro.
+ */
+@Composable
+private fun Distribuicao(linhas: List<Linha>, oculto: Boolean) {
+    val contexto = LocalContext.current
+    data class Fatia(val id: String, val simbolo: String, val valor: Double, val cor: Color)
+    val fatias = remember(linhas) {
+        val comValor = linhas.mapNotNull { l -> l.valor?.takeIf { it > 0 }?.let { Fatia(l.id, l.simbolo, it, CorDoLogo.de(contexto, l.coingecko)) } }.sortedByDescending { it.valor }
+        if (comValor.size <= 6) comValor
+        else comValor.take(5) + Fatia("outros", t("Outros"), comValor.drop(5).sumOf { it.valor }, Paleta.tintaMorta)
+    }
+    val total = fatias.sumOf { it.valor }
+    if (fatias.size < 2 || total <= 0) return
+    var escolhida by remember { mutableStateOf<String?>(null) }
+    val toque = toqueDeSelecao()
+    fun porcento(parte: Double): String {
+        val v = parte * 100
+        return if (v < 0.1) "< 0,1%" else Formato.agrupado(v, if (v < 10) 1 else 0, aparar = true) + "%"
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.lg)) {
+        Box(Modifier.size(132.dp).pointerInput(fatias) {
+            detectTapGestures { p ->
+                val c = Offset(size.width / 2f, size.height / 2f)
+                val d = (p - c).getDistance()
+                if (d < size.width / 2f * 0.6f || d > size.width / 2f) { escolhida = null; return@detectTapGestures }
+                var angulo = Math.toDegrees(kotlin.math.atan2((p.y - c.y).toDouble(), (p.x - c.x).toDouble())) + 90
+                if (angulo < 0) angulo += 360
+                var corrido = 0.0
+                val alvo = fatias.firstOrNull { corrido += it.valor / total * 360; angulo <= corrido }?.id
+                escolhida = if (escolhida == alvo) null else alvo
+                toque()
+            }
+        }, contentAlignment = Alignment.Center) {
+            Canvas(Modifier.fillMaxSize()) {
+                var inicio = -90f
+                val raio = size.minDimension / 2
+                for (f in fatias) {
+                    val varre = (f.valor / total * 360).toFloat()
+                    val fora = raio * (if (escolhida == f.id) 1f else 0.94f)
+                    val dentro = raio * 0.64f
+                    val espessura = fora - dentro
+                    val meio = dentro + espessura / 2
+                    drawArc(
+                        f.cor.copy(alpha = if (escolhida == null || escolhida == f.id) 1f else 0.35f),
+                        inicio + 0.75f, (varre - 1.5f).coerceAtLeast(0.5f), false,
+                        topLeft = Offset(center.x - meio, center.y - meio), size = Size(meio * 2, meio * 2), style = Stroke(espessura),
+                    )
+                    inicio += varre
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val f = fatias.firstOrNull { it.id == escolhida }
+                if (f != null) {
+                    Text(f.simbolo, style = estilo(Tipo.rotulo), color = Paleta.tintaSuave)
+                    Text(if (oculto) "••" else porcento(f.valor / total), style = estilo(Tipo.linha), color = Paleta.tinta)
+                } else {
+                    Text("${linhas.size}", style = estilo(Tipo.linha), color = Paleta.tinta)
+                    Text(if (linhas.size == 1) t("ativo") else t("ativos"), style = estilo(Tipo.rotulo), color = Paleta.tintaSuave)
+                }
+            }
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+            for (f in fatias) {
+                Row(Modifier.alpha(if (escolhida == null || escolhida == f.id) 1f else 0.4f), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(f.cor))
+                    Text(f.simbolo, style = estilo(Tipo.nota), color = Paleta.tinta, maxLines = 1, modifier = Modifier.weight(1f))
+                    Text(if (oculto) "••" else porcento(f.valor / total), style = estilo(Tipo.nota).copy(fontFeatureSettings = "tnum"), color = Paleta.tintaSuave)
                 }
             }
         }

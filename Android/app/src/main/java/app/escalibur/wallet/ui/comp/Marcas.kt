@@ -24,6 +24,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -130,5 +131,43 @@ fun SeloDaRede(rede: String, coingecko: String, tamanho: Dp = 16.dp, anel: Color
             )
             else -> Box(Modifier.size(tamanho).background(Paleta.controle))
         }
+    }
+}
+
+/**
+ * A cor de um logo, para a fatia dele na distribuicao (o `LogoColor` do iOS): a cor saturada que
+ * mais aparece num logo reduzido a 32 px; sem cor, um cinza visivel no fundo escuro.
+ */
+object CorDoLogo {
+    private val guardadas = HashMap<String, Color>()
+
+    fun de(contexto: Context, coingecko: String?): Color {
+        val id = coingecko ?: return Paleta.tintaApagada
+        guardadas[id]?.let { return it }
+        val cor = Logos.imagem(contexto, "logo-$id")?.let(::calcular) ?: Paleta.tintaApagada
+        guardadas[id] = cor
+        return cor
+    }
+
+    private fun calcular(imagem: ImageBitmap): Color? {
+        val lado = 32
+        val reduzida = android.graphics.Bitmap.createScaledBitmap(imagem.asAndroidBitmap(), lado, lado, true)
+        val saturadas = HashMap<Int, IntArray>()
+        val neutras = HashMap<Int, IntArray>()
+        for (y in 0 until lado) for (x in 0 until lado) {
+            val p = reduzida.getPixel(x, y)
+            if ((p ushr 24) <= 200) continue
+            val r = (p shr 16) and 0xFF; val g = (p shr 8) and 0xFF; val b = p and 0xFF
+            val alto = maxOf(r, g, b); val baixo = minOf(r, g, b)
+            val chave = (r shr 4) shl 8 or ((g shr 4) shl 4) or (b shr 4)
+            val mapa = if (alto > 40 && alto - baixo > 48) saturadas else neutras
+            val e = mapa.getOrPut(chave) { IntArray(4) }
+            e[0]++; e[1] += r; e[2] += g; e[3] += b
+        }
+        saturadas.values.maxByOrNull { it[0] }?.takeIf { it[0] >= 12 }?.let { return Color(it[1] / it[0] / 255f, it[2] / it[0] / 255f, it[3] / it[0] / 255f) }
+        val cinza = neutras.values.maxByOrNull { it[0] } ?: return null
+        // Preto some no fundo escuro; branco puro brilha demais. Cinza visivel.
+        val nivel = ((cinza[1] + cinza[2] + cinza[3]).toFloat() / (cinza[0] * 3) / 255f).coerceIn(0.55f, 0.85f)
+        return Color(nivel, nivel, nivel)
     }
 }

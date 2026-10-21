@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.atividade
 
+import app.escalibur.wallet.ui.carteira.TipoDeSelo
+import app.escalibur.wallet.ui.comp.PuxarParaAtualizar
 import app.escalibur.wallet.ui.comp.LocalEspacoDaBarra
 import android.content.Intent
 import android.net.Uri
@@ -41,7 +43,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -181,9 +182,9 @@ fun TelaDeAtividade() {
     val carregandoPrimeiraVez = r == null || (r.itens.isEmpty() && (r.carregando || !r.lidaUmaVez))
     val alturaDaTela = LocalConfiguration.current.screenHeightDp.dp
 
-    PullToRefreshBox(
-        isRefreshing = puxando,
-        onRefresh = {
+    PuxarParaAtualizar(
+        atualizando = puxando,
+        aoAtualizar = {
             puxando = true
             escopo.launch {
                 try { runCatching { retrato = RetratoDaAtividade(Api.objeto("atividade.atualizar", JSONObject().put("forcar", true))) } } finally { puxando = false }
@@ -442,7 +443,7 @@ fun DetalheDaAtividade(m: Movimento) {
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                     Text(tipo, style = estilo(Tipo.linha), color = Paleta.tintaSuave)
-                    if (m.custom && m.direcao == "received") SeloDeToken(t("Suspeito"), Paleta.cautela)
+                    if (m.custom && m.direcao == "received") SeloDeToken(TipoDeSelo.suspeito)
                 }
                 when {
                     m.direcao == "swap" && m.recebidoQuantidade != null && m.recebidoSimbolo != null -> {

@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.principal
 
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import app.escalibur.wallet.ui.comp.seguraToques
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.tween
@@ -179,7 +181,13 @@ fun Principal() {
             Navegacao.telaDeDepuracao = null
             if (tela.startsWith("enviar-")) Navegacao.cobrir { app.escalibur.wallet.ui.enviar.FluxoDeEnviar("demo:" + tela.removePrefix("enviar-")) }
             when (tela) {
-                "checagem" -> Navegacao.cobrir { app.escalibur.wallet.ui.novacarteira.VerificacaoDoAparelho(t("Deslize para digitar as palavras"), criando = false) { Navegacao.fechar() } }
+                // Como no importar: o fechar no alto, abaixo da barra de status.
+                "checagem" -> Navegacao.cobrir {
+                    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+                        app.escalibur.wallet.ui.comp.CabecalhoDeFolha("", { Navegacao.fechar() })
+                        app.escalibur.wallet.ui.novacarteira.VerificacaoDoAparelho(t("Deslize para digitar as palavras"), criando = false) { Navegacao.fechar() }
+                    }
+                }
                 "receber" -> Navegacao.folha { app.escalibur.wallet.ui.receber.FluxoDeReceber() }
                 "mercado" -> Navegacao.aba = Aba.mercado
                 "trocar" -> Navegacao.aba = Aba.trocar
@@ -467,7 +475,7 @@ private fun BarraDeAbas(folga: Dp, modifier: Modifier = Modifier) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Icone(icone, cor, tamanho = 24.dp)
+                    Icone(icone, cor, tamanho = 26.dp)
                     Text(titulo, style = TextStyle(fontFamily = Letra.familia(FontWeight.Medium, 10f), fontWeight = FontWeight.Medium, fontSize = 10.sp,
                                                    letterSpacing = Letra.espacoNatural(10f).em),
                          color = cor, maxLines = 1, modifier = Modifier.padding(top = 3.dp))

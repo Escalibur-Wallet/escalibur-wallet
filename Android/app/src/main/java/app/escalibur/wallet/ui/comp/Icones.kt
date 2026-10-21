@@ -34,6 +34,7 @@ object Icones {
             for (caminho in caminhos) addPath(PathParser().parsePathString(caminho).toNodes(), fill = SolidColor(Color.Black), pathFillType = androidx.compose.ui.graphics.PathFillType.EvenOdd)
         }.build()
 
+    val alertaContorno = traco("alertaContorno", "M12 3.8 L21.2 19.6 H2.8 Z", "M12 9.8 V14", "M12 16.9 V17", espessura = 2f)
     val chevronsDireita = traco("chevronsDireita", "M5.5 6 L11.5 12 L5.5 18 M12.5 6 L18.5 12 L12.5 18", espessura = 2.6f)
     val voltar = traco("voltar", "M15 4.5 L7.5 12 L15 19.5", espessura = 2.2f)
     val avancar = traco("avancar", "M9 4.5 L16.5 12 L9 19.5", espessura = 2.2f)

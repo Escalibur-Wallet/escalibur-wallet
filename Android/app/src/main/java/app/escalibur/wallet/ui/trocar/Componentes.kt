@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.trocar
 
+import app.escalibur.wallet.ui.carteira.TipoDeSelo
 import app.escalibur.wallet.ui.comp.Girando
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
@@ -529,7 +530,7 @@ private fun LinhaDoToken(opcao: OpcaoDeToken, acao: () -> Unit) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(ativo.simbolo, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
-                if (!ativo.conferido) SeloDeToken(if (ativo.custom) t("Custom") else t("Não verificado"))
+                if (!ativo.conferido) SeloDeToken(if (ativo.custom) TipoDeSelo.custom else TipoDeSelo.naoVerificado)
             }
             Text(ativo.nome, style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }

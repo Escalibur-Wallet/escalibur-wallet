@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.enviar
 
+import app.escalibur.wallet.ui.carteira.TipoDeSelo
 import app.escalibur.wallet.ui.comp.Girando
 import android.content.ClipboardManager
 import android.content.Intent
@@ -212,7 +213,7 @@ private fun ColumnScope.EscolhaDoAtivo(aoBloquear: (String, String) -> Unit, aoE
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(item.simbolo, style = estilo(Tipo.linha), color = Paleta.tinta)
-                        if (item.custom) SeloDeToken(t("Custom"))
+                        if (item.custom) SeloDeToken(TipoDeSelo.custom)
                     }
                     Text(
                         if (item.indisponivel == null) t("na %@ · %@", item.redeNome, Formato.cripto(item.disponivel, item.casas))
@@ -261,7 +262,7 @@ private fun Cabecalho(r: RetratoDoEnvio) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(t("Enviar %@", r.simbolo), style = estilo(Tipo.titulo), color = Paleta.tinta)
-                if (r.custom) SeloDeToken(t("Custom"))
+                if (r.custom) SeloDeToken(TipoDeSelo.custom)
             }
             Text(t("pela rede %@", r.redeNome), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
         }

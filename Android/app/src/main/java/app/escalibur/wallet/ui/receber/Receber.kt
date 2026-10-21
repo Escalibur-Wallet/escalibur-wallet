@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.receber
 
+import app.escalibur.wallet.ui.carteira.TipoDeSelo
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -233,7 +234,7 @@ private fun LinhaDeMoeda(moeda: MoedaRecebivel, aoTocar: () -> Unit) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(moeda.simbolo, style = estilo(Tipo.linha), color = Paleta.tinta)
-                if (moeda.custom) SeloDeToken(t("Custom"))
+                if (moeda.custom) SeloDeToken(TipoDeSelo.custom)
             }
             Text(if (moeda.custom) t("%@ na %@", moeda.nome, unica?.redeNome ?: "") else moeda.nome,
                  style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
@@ -383,7 +384,7 @@ private fun CartaoDoContrato(contrato: String, ativo: AtivoRecebivel, modifier: 
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (ativo.custom) SeloDeToken(t("Custom"))
+                if (ativo.custom) SeloDeToken(TipoDeSelo.custom)
                 Text(if (ativo.usaEmissor) t("Emissor da moeda %@", ativo.simbolo) else t("Contrato da moeda %@", ativo.simbolo), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
             }
             Text(contrato, fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Paleta.tintaSuave)
