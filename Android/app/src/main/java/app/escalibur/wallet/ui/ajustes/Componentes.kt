@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.ajustes
 
+import app.escalibur.wallet.ui.comp.TelaComBarra
 import app.escalibur.wallet.ui.comp.Interruptor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -113,11 +114,13 @@ fun NotaDeAjuste(texto: String, cor: Color = Paleta.tintaApagada, modifier: Modi
     Text(texto, style = estilo(Tipo.nota), color = cor, modifier = modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.xs))
 }
 
-/** Uma subtela dos Ajustes, na pilha: o titulo no centro e voltar no canto. */
+/**
+ * Uma subtela dos Ajustes, na pilha: a barra do iOS (o voltar em vidro, o titulo no centro), com o
+ * conteudo rolando por baixo dela e terminando acima da barra de abas.
+ */
 @Composable
 fun Subtela(titulo: String, conteudo: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding()) {
-        CabecalhoDeFolha(titulo, null, aoVoltar = { Navegacao.fechar() })
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = Espaco.xl), content = conteudo)
+    TelaComBarra(aoVoltar = { Navegacao.fechar() }, titulo = titulo.ifEmpty { null }) { espaco ->
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(espaco).padding(bottom = Espaco.xl), content = conteudo)
     }
 }

@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.carteira
 
+import app.escalibur.wallet.ui.comp.BotaoDeAlerta
+import app.escalibur.wallet.ui.comp.AlertaDoIos
 import androidx.compose.foundation.layout.fillMaxSize
 import app.escalibur.wallet.ui.principal.FolhaDoIos
 import app.escalibur.wallet.ui.comp.ControleDaFolha
@@ -221,39 +223,32 @@ fun SeletorDeCarteiras(aoFechar: () -> Unit) {
 private fun Renomear(carteira: Carteira, aoFechar: () -> Unit) {
     val escopo = rememberCoroutineScope()
     var nome by remember { mutableStateOf(carteira.nome) }
-    AlertDialog(
-        onDismissRequest = aoFechar, containerColor = Paleta.corpo, shape = RoundedCornerShape(Raio.folha),
-        title = { Text(t("Nome da carteira"), style = estilo(Tipo.cabecalho), color = Paleta.tinta) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                Text(t("Só aparece neste celular."), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
-                Box(
-                    Modifier.fillMaxWidth().height(Altura.campo).background(Paleta.vazio, RoundedCornerShape(Raio.cartao))
-                        .border(1.dp, Paleta.borda, RoundedCornerShape(Raio.cartao)).padding(horizontal = Espaco.md),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    BasicTextField(
-                        nome, { nome = it.take(40) }, singleLine = true, textStyle = estilo(Tipo.linha).copy(color = Paleta.tinta),
-                        cursorBrush = SolidColor(Paleta.acento), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                BotaoPrimario(t("Salvar"), ligado = nome.isNotBlank()) {
-                    // Sem controle nem caractere invisivel, ate 40: o mesmo saneamento dos nomes de envelope.
-                    val limpo = nome.filter { !it.isISOControl() && Character.getType(it) != Character.FORMAT.toInt() }.trim().take(40)
-                    escopo.launch {
-                        if (limpo.isNotEmpty()) runCatching { App.aplicar(Api.objeto("carteira.renomear", JSONObject().put("id", carteira.id).put("nome", limpo))) }
-                        aoFechar()
-                    }
-                }
-                BotaoSecundario(t("Cancelar"), acao = aoFechar)
-            }
-        },
-    )
+    fun salvar() {
+        // Sem controle nem caractere invisivel, ate 40: o mesmo saneamento dos nomes de envelope.
+        val limpo = nome.filter { !it.isISOControl() && Character.getType(it) != Character.FORMAT.toInt() }.trim().take(40)
+        escopo.launch {
+            if (limpo.isNotEmpty()) runCatching { App.aplicar(Api.objeto("carteira.renomear", JSONObject().put("id", carteira.id).put("nome", limpo))) }
+            aoFechar()
+        }
+    }
+    AlertaDoIos(
+        t("Nome da carteira"), t("Só aparece neste celular."),
+        cancelar = BotaoDeAlerta(t("Cancelar"), acao = aoFechar),
+        acoes = listOf(BotaoDeAlerta(t("Salvar"), ligado = nome.isNotBlank()) { salvar() }),
+        aoFechar = aoFechar,
+    ) {
+        Box(
+            Modifier.padding(top = Espaco.xs).fillMaxWidth().height(40.dp).background(Paleta.vazio, RoundedCornerShape(Raio.trilho))
+                .padding(horizontal = Espaco.sm),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            BasicTextField(
+                nome, { nome = it.take(40) }, singleLine = true, textStyle = estilo(Tipo.corpo).copy(color = Paleta.tinta),
+                cursorBrush = SolidColor(Paleta.acento), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
 }
 
 /**
