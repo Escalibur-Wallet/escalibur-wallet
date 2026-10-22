@@ -61,6 +61,17 @@ enum Nucleo {
         case "sessao.destrancarBiometria":
             try Sessao.shared.destrancarComBiometria()
             return try json(Estado.agora())
+        case "sessao.podeComecar":
+            // Antes do teclado do PIN, como o `retrying` do iOS: a espera depois de a biometria
+            // mudar, e a biometria perdida e nao religada, recusam aqui. Digitar o PIN para ouvir
+            // "espere" nao ajuda ninguem. No reforcado vale a espera de "Esperar 24 horas" em
+            // toda operacao. O cofre confere de novo na operacao.
+            if Chaves.root.securityMode == .hardened {
+                try Chaves.root.checkHardenedAllowed()
+            } else if pedido["ambos"]?.boolValue == true {
+                try Chaves.root.checkPINAndBiometryAllowed()
+            }
+            return try json(["ok": true])
         case "sessao.aceitarResponsabilidade":
             try Sessao.shared.aceitarResponsabilidade(versao: Int(pedido["versao"]?.doubleValue ?? 1))
             return try json(Estado.agora())

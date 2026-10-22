@@ -61,12 +61,14 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.sp
 import app.escalibur.wallet.nucleo.Api
 import app.escalibur.wallet.nucleo.FalhaDoNucleo
 import app.escalibur.wallet.ui.App
 import app.escalibur.wallet.ui.Autorizacao
 import app.escalibur.wallet.ui.Textos
+import app.escalibur.wallet.ui.carteira.OrbitaDeMoedas
 import app.escalibur.wallet.ui.carteira.Redes
 import app.escalibur.wallet.ui.comp.Aceite
 import app.escalibur.wallet.ui.comp.BotaoPrimario
@@ -86,6 +88,10 @@ import app.escalibur.wallet.ui.comp.PalavraPeloCelular
 import app.escalibur.wallet.ui.comp.TecladoDePalavras
 import app.escalibur.wallet.ui.comp.TecladoDoCelular
 import app.escalibur.wallet.ui.principal.Navegacao
+import androidx.compose.ui.semantics.Role
+import app.escalibur.wallet.ui.comp.BotaoSecundario
+import app.escalibur.wallet.ui.comp.Vidros
+import app.escalibur.wallet.ui.comp.vidro
 import app.escalibur.wallet.ui.comp.rememberPalavra
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
 import app.escalibur.wallet.ui.novacarteira.VerificacaoDoAparelho
@@ -141,6 +147,9 @@ class EntradaDaFrase(quantas: Int = 12) {
     }
 
     fun preenchida(indice: Int): Boolean = posicoes.getOrNull(indice) != null
+
+    /** As posicoes em que a palavra (em bytes, da lista) esta, sem virar a frase em texto. */
+    fun lugares(palavra: ByteArray): List<Int> = posicoes.indices.filter { posicoes[it]?.contentEquals(palavra) == true }
     val preenchidas: Int get() = posicoes.count { it != null }
 
     /** Quantas letras tem a palavra (os pontos da tela). */
@@ -250,6 +259,7 @@ internal fun TelaDaFrase(
     var confirmarLimpar by remember { mutableStateOf(false) }
     var mostrar by remember { mutableStateOf(false) }
     var maisTamanhos by remember { mutableStateOf(false) }
+    var outroTamanho by remember { mutableIntStateOf(12) }
     val revisao = entrada.revisao
     // O teclado das palavras (o ImportPhraseView do iOS): o Safe Keyboard com o ajuste ligado, na
     // primeira carteira e na conferencia da copia; o globo troca pelo do celular nesta tela, para as
@@ -308,6 +318,24 @@ internal fun TelaDaFrase(
             digitando = false
             depois()
         }
+    }
+
+    // Da lista: a palavra entra na posicao em edicao, se vazia, ou na primeira vazia, e a seguinte
+    // vazia fica ativa. Com todas preenchidas, a lista fecha.
+    fun escolherDaLista(escolhida: String) {
+        val alvo = if (entrada.preenchida(entrada.ativa)) (0 until entrada.quantidade).firstOrNull { !entrada.preenchida(it) } else entrada.ativa
+        if (alvo == null) { Navegacao.fechar(); return }
+        entrada.definir(escolhida, alvo)
+        mensagem = null
+        val proxima = (0 until entrada.quantidade).firstOrNull { !entrada.preenchida(it) }
+        if (proxima != null) entrada.ativa = proxima else Navegacao.fechar()
+    }
+
+    // Da lista: a palavra marcada sai da ultima posicao em que esta, e essa posicao fica ativa.
+    fun tirarDaLista(lugar: Int) {
+        entrada.limpar(lugar)
+        entrada.ativa = lugar
+        mensagem = null
     }
 
     fun colar() {
@@ -403,27 +431,31 @@ internal fun TelaDaFrase(
                     }
                 }
             }
-            if (escolhendo == null && conferindo == null) Row(Modifier.padding(top = Espaco.lg), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                val opcoes = if (maisTamanhos) EntradaDaFrase.TAMANHOS else if (entrada.quantidade == 24) listOf(12, 24) else listOf(entrada.quantidade, 24)
-                Segmentado(opcoes.map { it to if (maisTamanhos) "$it" else t("%lld palavras", it) }, entrada.quantidade, Modifier.weight(1f)) {
-                    entrada.mudarQuantidade(it)
-                    palavra.limpar()
-                    maisTamanhos = false
-                }
-                if (!maisTamanhos) {
-                    Box(Modifier.size(40.dp).clip(CircleShape).background(Paleta.corpo).clickable { maisTamanhos = true }, contentAlignment = Alignment.Center) {
-                        Icone(Icones.mais, Paleta.tintaSuave, tamanho = 16.dp, descricao = t("Outros tamanhos de frase"))
+            // O tamanho e o Colar na mesma linha, como no iOS. Conferindo uma copia, nada de colar: a
+            // conferencia e do papel.
+            if (escolhendo == null && conferindo == null) Row(Modifier.padding(top = Espaco.lg), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                    // A outra opcao ao lado da de 24 fica a ultima escolhida (15, 18 ou 21 continuam ali
+                    // depois de passar pela de 24), e nao volta para 12.
+                    LaunchedEffect(entrada.quantidade) { if (entrada.quantidade != 24) outroTamanho = entrada.quantidade }
+                    val opcoes = if (maisTamanhos) EntradaDaFrase.TAMANHOS else listOf(if (entrada.quantidade == 24) outroTamanho else entrada.quantidade, 24)
+                    Segmentado(opcoes.map { it to if (maisTamanhos) "$it" else t("%lld palavras", it) }, entrada.quantidade, Modifier.weight(1f)) {
+                        entrada.mudarQuantidade(it)
+                        palavra.limpar()
+                        maisTamanhos = false
+                    }
+                    if (!maisTamanhos) {
+                        Box(Modifier.size(40.dp).clip(CircleShape).background(Paleta.corpo).clickable { maisTamanhos = true }, contentAlignment = Alignment.Center) {
+                            Icone(Icones.mais, Paleta.tintaSuave, tamanho = 16.dp, descricao = t("Outros tamanhos de frase"))
+                        }
                     }
                 }
-            }
-            // Conferindo uma copia, nada de colar: a conferencia e do papel.
-            if (escolhendo == null && conferindo == null) Row(Modifier.padding(top = Espaco.sm)) {
                 Row(
-                    Modifier.height(36.dp).clip(CircleShape).background(Paleta.trilho).clickable { colar() }.padding(horizontal = Espaco.sm),
+                    Modifier.height(40.dp).vidro(CircleShape, Vidros.barra).clickable(role = Role.Button) { colar() }.padding(horizontal = Espaco.sm),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Icone(Icones.colar, Paleta.tinta, tamanho = 15.dp)
-                    Text(t("Colar"), style = estilo(Tipo.rotulo), color = Paleta.tinta)
+                    Icone(Icones.colar, Paleta.tinta, tamanho = 17.dp)
+                    Text(t("Colar"), style = estilo(Tipo.corpo), fontSize = 17.sp, color = Paleta.tinta)
                 }
             }
             if (colado) {
@@ -435,6 +467,16 @@ internal fun TelaDaFrase(
                     palavra.limpar()
                     digitando = true
                     if (!proprio) celular.mostrar()
+                }
+            }
+            if (escolhendo != null) {
+                BotaoSecundario(t("Escolher na lista de palavras"), Modifier.padding(top = Espaco.sm), icone = Icones.lista) {
+                    pronto {
+                        palavra.limpar()
+                        Navegacao.folha {
+                            ListaDePalavras(entrada, aoEscolher = { escolherDaLista(it) }, aoTirar = { tirarDaLista(it) }) { Navegacao.fechar() }
+                        }
+                    }
                 }
             }
             Row(Modifier.fillMaxWidth().padding(top = Espaco.xs), verticalAlignment = Alignment.CenterVertically) {
@@ -566,7 +608,7 @@ private fun GradeDaFrase(
 @Composable
 private fun PosicaoSorteada(numero: Int, modifier: Modifier) {
     Row(
-        modifier.height(48.dp).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.trilho).padding(horizontal = Espaco.sm),
+        modifier.height(44.dp).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.trilho).padding(start = Espaco.sm, end = 9.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs),
     ) {
         Text("%02d".format(numero), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Paleta.tintaApagada)
@@ -588,7 +630,7 @@ private fun PosicaoDaFrase(
     val forma = RoundedCornerShape(Raio.cartao)
     val preenchida = entrada.preenchida(indice)
     Row(
-        modifier.height(48.dp).clip(forma).background(Paleta.corpo).border(1.dp, if (ativa) Paleta.acento else Paleta.borda, forma)
+        modifier.height(44.dp).clip(forma).background(Paleta.corpo).border(if (ativa) 1.5.dp else 1.dp, if (ativa) Paleta.tintaSuave else Paleta.borda, forma)
             .pointerInput(indice) {
                 detectTapGestures(
                     onPress = {
@@ -602,7 +644,8 @@ private fun PosicaoDaFrase(
             .padding(horizontal = Espaco.sm),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs),
     ) {
-        Text("${indice + 1}", style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.width(20.dp))
+        Text("%02d".format(indice + 1), style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum"),
+             color = if (ativa) Paleta.tintaSuave else Paleta.tintaApagada)
         val texto = when {
             ativa && digitado.isNotEmpty() -> digitado
             ativa && !preenchida -> ""
@@ -611,9 +654,9 @@ private fun PosicaoDaFrase(
             else -> ""
         }
         if (texto.isEmpty() && !ativa) {
-            Text(t("palavra"), style = estilo(Tipo.mono), color = Paleta.tintaMorta)
+            Text(t("palavra"), fontFamily = FontFamily.Monospace, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Paleta.tintaMorta)
         } else {
-            Text(texto, fontFamily = FontFamily.Monospace, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Paleta.tinta, maxLines = 1)
+            Text(texto, fontFamily = FontFamily.Monospace, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Paleta.tinta, maxLines = 1)
         }
         if (ativa) Box(Modifier.width(2.dp).height(20.dp).background(Paleta.acento))
     }
@@ -772,7 +815,7 @@ fun ObservarEndereco(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
         CabecalhoDeFolha("", aoCancelar)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                Box(Modifier.size(60.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) { Icone(Icones.olho, Paleta.tinta, tamanho = 24.dp) }
+                OrbitaDeMoedas(icone = Icones.olho)
                 Text(t("Observar um endereço"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
                 Text(t("Acompanhe o saldo de um endereço sem guardar chave nenhuma neste celular."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
             }

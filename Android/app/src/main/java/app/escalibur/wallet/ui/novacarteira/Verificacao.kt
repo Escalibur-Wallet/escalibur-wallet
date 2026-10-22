@@ -37,7 +37,6 @@ import app.escalibur.wallet.ui.comp.DeslizeParaSeguir
 import app.escalibur.wallet.ui.comp.Girando
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.KeyguardManager
-import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.os.Debug
@@ -143,7 +142,6 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
                          else Resultado.Cautela(t("O Safe Keyboard está desligado em Segurança: as palavras passam pelo teclado do celular.")))
             }),
             Passo("sistema", "Android ${Build.VERSION.RELEASE}", ::sistema),
-            Passo("copia", t("Nada copiado na área de transferência"), ::copia),
         )
 
         fun bloqueio(contexto: Context): Checagem {
@@ -247,15 +245,8 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
                 if (antiga) Resultado.Cautela(t("A última atualização de segurança deste celular é de %@. Atualize quando puder.", Build.VERSION.SECURITY_PATCH)) else Resultado.Passou)
         }
 
-        /** So pergunta se ha algo copiado: nunca le o conteudo. */
         /** A ultima conferencia terminada nesta abertura do app. */
         var ultimaConferencia: Date? = null
-
-        fun copia(contexto: Context): Checagem {
-            val ha = runCatching { contexto.getSystemService(ClipboardManager::class.java).hasPrimaryClip() }.getOrDefault(false)
-            return if (ha) Checagem("copia", t("Há algo copiado"), Resultado.Cautela(t("Se for a senha da carteira, apague depois de colar: outros apps podem ler a área de transferência.")))
-            else Checagem("copia", t("Nada copiado na área de transferência"), Resultado.Passou)
-        }
     }
 }
 

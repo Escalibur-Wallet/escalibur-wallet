@@ -47,6 +47,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -281,14 +282,20 @@ internal fun Tolerancia(bps: Int, automatica: Boolean, auto: Int, modifier: Modi
             Text(t("Tolerância de preço"), style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.weight(1f))
             Text(texto, style = estilo(Tipo.linha), color = Paleta.tinta)
         }
+        // O gesto vive enquanto a regua existe e chama sempre a escolha de agora: com a tolerancia como
+        // chave, cada valor novo reiniciava o gesto no meio do arrasto, e a bolinha ficava presa.
+        val escolhaDeAgora by rememberUpdatedState<(Float) -> Unit> { escolher(it) }
         BoxWithConstraints(
             Modifier.fillMaxWidth().height(34.dp)
-                .pointerInput(automatica, bps) { detectTapGestures { escolher(it.x / size.width) } }
-                .pointerInput(automatica, bps) {
-                    detectHorizontalDragGestures(onDragEnd = { arrasto = null }, onDragCancel = { arrasto = null }) { mudanca, _ ->
+                .pointerInput(Unit) { detectTapGestures { escolhaDeAgora(it.x / size.width) } }
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { inicio -> arrasto = (inicio.x / size.width).coerceIn(0f, 1f) },
+                        onDragEnd = { arrasto = null }, onDragCancel = { arrasto = null },
+                    ) { mudanca, _ ->
                         val razao = (mudanca.position.x / size.width).coerceIn(0f, 1f)
                         arrasto = razao
-                        escolher(razao)
+                        escolhaDeAgora(razao)
                     }
                 },
             contentAlignment = Alignment.CenterStart,

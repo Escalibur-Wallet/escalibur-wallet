@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
+import app.escalibur.wallet.ui.tema.Letra
 import app.escalibur.wallet.ui.tema.Paleta
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -105,9 +106,9 @@ fun EnderecoEmBlocos(endereco: String, modifier: Modifier = Modifier, naPlaca: B
             } else {
                 withStyle(SpanStyle(color = if (naPlaca) Paleta.placaApagada else Paleta.tintaSuave)) { append(bloco) }
             }
-            // O espaco entre os blocos e pequeno (dois espacos numa letra de 8), como no iOS: so separa o
-            // olho, e a copia continua sem espacos.
-            if (indice < blocos.lastIndex) withStyle(SpanStyle(fontSize = 8.sp)) { append("  ") }
+            // O espaco entre os blocos e pequeno (dois espacos numa letra de 8 do texto, nao da mono), como
+            // no iOS: so separa o olho, e a copia continua sem espacos.
+            if (indice < blocos.lastIndex) withStyle(SpanStyle(fontSize = 8.sp, fontFamily = Letra.familia(FontWeight.Normal, 8f))) { append("  ") }
         }
     }
     Text(texto, fontFamily = FontFamily.Monospace, fontSize = 16.sp, fontWeight = FontWeight.Medium, lineHeight = 25.sp,

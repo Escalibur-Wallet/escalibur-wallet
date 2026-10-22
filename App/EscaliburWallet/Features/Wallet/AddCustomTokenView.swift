@@ -461,12 +461,14 @@ struct NetworkChoice: View {
 
 /// O alto de "Adicionar moeda" (pedido do dono, 18/10/2026): logos de moedas girando numa
 /// orbita em volta do "+", maiores e acesas quando passam na frente, menores e apagadas atras.
-/// Os logos sao os que vem no app (nada pela rede). Com "Reduzir movimento", parada.
-private struct CoinOrbit: View {
+/// Os logos sao os que vem no app (nada pela rede). Com "Reduzir movimento", parada. "Observar um
+/// endereco" usa a mesma, com o olho no lugar do "+" (pedido do dono, 22/10/2026).
+struct CoinOrbit: View {
     private static let coins: [(id: String, symbol: String)] = [
         ("tether", "USDT"), ("chainlink", "LINK"), ("pepe", "PEPE"), ("usd-coin", "USDC"),
         ("uniswap", "UNI"), ("shiba-inu", "SHIB"), ("aave", "AAVE"), ("bonk", "BONK"),
     ]
+    var symbol = "plus"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -486,7 +488,7 @@ private struct CoinOrbit: View {
                             .position(x: center.x + CGFloat(cos(angle)) * across, y: center.y + CGFloat(sin(angle)) * 30)
                             .zIndex(depth)
                     }
-                    Image(systemName: "plus")
+                    Image(systemName: symbol)
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(Palette.ink)
                         .frame(width: 60, height: 60)

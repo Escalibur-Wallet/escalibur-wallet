@@ -464,9 +464,10 @@ private fun AcaoDoContrato(titulo: String, icone: ImageVector, acao: () -> Unit)
 /**
  * O alto de "Adicionar moeda" (o `CoinOrbit` do iOS): logos de moedas girando numa orbita em volta do
  * "+", maiores e acesos quando passam na frente, menores e apagados atras. Com o movimento reduzido, parada.
+ * "Observar um endereço" usa a mesma, com o olho no lugar do "+".
  */
 @Composable
-private fun OrbitaDeMoedas(modifier: Modifier = Modifier) {
+fun OrbitaDeMoedas(modifier: Modifier = Modifier, icone: ImageVector = Icones.mais) {
     val moedas = listOf("tether" to "USDT", "chainlink" to "LINK", "pepe" to "PEPE", "usd-coin" to "USDC",
                         "uniswap" to "UNI", "shiba-inu" to "SHIB", "aave" to "AAVE", "bonk" to "BONK")
     val parado = movimentoReduzido()
@@ -483,7 +484,7 @@ private fun OrbitaDeMoedas(modifier: Modifier = Modifier) {
                 }) { LogoDaMoeda(id, simbolo, 40.dp) }
             }
             Box(Modifier.size(60.dp).clip(CircleShape).background(Paleta.controle).border(1.dp, Paleta.borda, CircleShape), contentAlignment = Alignment.Center) {
-                Icone(Icones.mais, Paleta.tinta, tamanho = 24.dp)
+                Icone(icone, Paleta.tinta, tamanho = 24.dp)
             }
         },
         modifier = modifier.fillMaxWidth().height(132.dp),

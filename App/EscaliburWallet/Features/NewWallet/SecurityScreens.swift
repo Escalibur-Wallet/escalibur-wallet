@@ -47,7 +47,6 @@ struct DeviceCheck: Identifiable, Equatable {
             Step(id: "tela", title: String(localized: "Tela sem gravação"), run: screen),
             Step(id: "teclado", title: String(localized: "Teclados de terceiros bloqueados"), run: keyboards),
             Step(id: "sistema", title: "iOS \(version.majorVersion).\(version.minorVersion)", run: system),
-            Step(id: "copia", title: String(localized: "Nada copiado na área de transferência"), run: clipboard),
             Step(id: "leitor", title: String(localized: "Nada lendo a tela em voz alta"), run: voiceOver),
         ]
     }
@@ -200,19 +199,6 @@ struct DeviceCheck: Identifiable, Equatable {
         let behind = (version.majorVersion, version.minorVersion) < (26, 5)
         return .init(id: "sistema", title: "iOS \(current)",
                      outcome: behind ? .caution(String(localized: "Existe iOS mais novo, com correções de segurança. Atualize quando puder.")) : .pass)
-    }
-
-    @MainActor
-    static func clipboard() -> DeviceCheck {
-        // O titulo diz o que foi achado: "nada copiado" ao lado de um aviso de texto
-        // copiado se contradizia.
-        // So pergunta se ha texto copiado, nunca le nem mexe no conteudo (o verificar.sh
-        // confere). Para as capturas da loja, a area de transferencia do simulador se limpa por
-        // fora, antes de abrir o app.
-        UIPasteboard.general.hasStrings
-            ? .init(id: "copia", title: String(localized: "Há texto copiado"),
-                    outcome: .caution(String(localized: "Se for a senha da carteira, apague depois de colar: a cópia pode ir para outros aparelhos Apple.")))
-            : .init(id: "copia", title: String(localized: "Nada copiado na área de transferência"), outcome: .pass)
     }
 
     @MainActor

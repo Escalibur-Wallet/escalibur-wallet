@@ -1127,14 +1127,16 @@ private struct ClearGlassPaste: ViewModifier {
 
 /// Quantas palavras: o mesmo seletor de antes (`Segmented`), so que mais largo, com 12 e 24,
 /// que sao quase todas as frases, e o "+" ao lado abre 15, 18 e 21. Escolhida uma das outras,
-/// voltam duas: a escolhida e a de 24 (pedido do dono, 16/10/2026).
+/// voltam duas: a escolhida e a de 24 (pedido do dono, 16/10/2026). Passar pela de 24 nao
+/// devolve o 12: a outra continua a ultima escolhida (pedido do dono, 22/10/2026).
 private struct WordCountPicker: View {
     @Binding var count: Int
     @State private var expanded = false
+    @State private var other = 12
 
     private var options: [Int] {
         if expanded { return Mnemonic.validWordCounts }
-        return count == 24 ? [12, 24] : [count, 24]
+        return [count == 24 ? other : count, 24]
     }
 
     var body: some View {
@@ -1148,6 +1150,7 @@ private struct WordCountPicker: View {
                       }))
                 .frame(maxWidth: .infinity)
                 .accessibilityIdentifier("palavras-tamanho")
+                .onChange(of: count, initial: true) { _, value in if value != 24 { other = value } }
             if !expanded {
                 Button { withAnimation(Motion.select) { expanded = true } } label: {
                     Image(systemName: "plus")

@@ -241,6 +241,17 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
         }
     }
 
+    // A espera depois de a biometria mudar recusa ja no "Continuar", antes da checagem e do PIN.
+    fun comecar() {
+        erro = null
+        escopo.launch {
+            trabalhando = true
+            val recusa = Autorizacao.recusaAntes(Autorizacao.Presenca.pinEBiometria)
+            trabalhando = false
+            if (recusa != null) erro = recusa else passo = "checagem"
+        }
+    }
+
     // Depois do deslize: o PIN e a biometria abrem as palavras. Na carteira que pede a passphrase,
     // ela vem antes e o cofre confere.
     fun abrirCarteira() {
@@ -369,11 +380,15 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
                             PontoDoEnvelope(Icones.olhoRiscado, t("O arquivo não passa por nós. Sem a sua senha, ninguém abre. Só você."))
                             PontoDoEnvelope(Icones.disco, t("Guarde onde quiser: sem a sua senha, o arquivo criptografado não abre."))
                         }
-                        erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
                     }
                     CabecalhoDeFolha("", { fechar() })
                 }
-                Rodape { BotaoPrimario(t("Continuar"), carregando = trabalhando) { erro = null; passo = "checagem" } }
+                // O aviso fica junto do botao: embaixo da lista, ele passava despercebido e o fluxo
+                // parecia voltar ao comeco sozinho (visto pelo dono, 22/10/2026).
+                Rodape {
+                    erro?.let { Faixa(TipoDeFaixa.falha, it) }
+                    BotaoPrimario(t("Continuar"), carregando = trabalhando) { comecar() }
+                }
             }
             "checagem" -> {
                 CabecalhoDeFolha("", { fechar() })

@@ -3,6 +3,7 @@ package app.escalibur.wallet.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.escalibur.wallet.nucleo.Api
 import app.escalibur.wallet.nucleo.FalhaDoNucleo
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
@@ -81,6 +82,9 @@ object Autorizacao {
      */
     suspend fun <T> tentando(motivo: String, presenca: Presenca = Presenca.qualquer, operacao: suspend (Credencial) -> T): T? {
         val ambos = presenca == Presenca.pinEBiometria
+        // A espera depois de a biometria mudar, e a biometria perdida e nao religada, recusam antes
+        // do teclado (o `retrying` do iOS): digitar o PIN para ouvir "espere" nao ajuda ninguem.
+        Api.objeto("sessao.podeComecar", JSONObject().put("ambos", ambos))
         var tentativa = credencial(motivo, forcarPin = presenca != Presenca.qualquer, aviso = if (ambos) avisoDosDois else null) ?: return null
         while (true) {
             if (ambos && tentativa is Credencial.Pin) tentativa = Credencial.PinEBiometria(tentativa.pin, motivo)
@@ -107,6 +111,17 @@ object Autorizacao {
             App.recarregar()
             tentativa = credencial(motivo, forcarPin = true, aviso = aviso ?: if (ambos) avisoDosDois else null, erro = erro) ?: return null
         }
+    }
+
+    /**
+     * O texto da recusa conhecida antes de comecar uma operacao (a espera depois de a biometria
+     * mudar), para a tela avisar antes da checagem e do PIN. Nil quando pode seguir.
+     */
+    suspend fun recusaAntes(presenca: Presenca = Presenca.qualquer): String? = try {
+        Api.objeto("sessao.podeComecar", JSONObject().put("ambos", presenca == Presenca.pinEBiometria))
+        null
+    } catch (falha: FalhaDoNucleo) {
+        mensagemDeRecusa(falha)
     }
 
     private val avisoDoReforcado get() = t("Depois do PIN, a biometria confirma que é você.")

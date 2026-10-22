@@ -400,9 +400,9 @@ achados=$(grep -oE 'NS[A-Za-z]+UsageDescription' "$APP/Resources/Info.plist" | s
 [ -n "$achados" ] && { aviso "permissao fora da lista"; echo "$achados"; } || ok "permissoes: Face ID, camera, microfone e fala, nada mais"
 achados=$(swift_em "$APP" | xargs grep -lE 'UIPasteboard' 2>/dev/null | grep -vE 'Receive/ReceiveSheet\.swift|NewWallet/ImportPhraseView\.swift|NewWallet/SecurityScreens\.swift')
 [ -n "$achados" ] && { aviso "area de transferencia fora dos pontos conhecidos"; echo "$achados"; } || ok "area de transferencia so em tres pontos"
-# A checagem do aparelho so pergunta se ha texto copiado, sem ler o conteudo.
-achados=$(grep -nE 'UIPasteboard' "$APP/Features/NewWallet/SecurityScreens.swift" | grep -v 'UIPasteboard.general.hasStrings')
-[ -n "$achados" ] && { aviso "a checagem do aparelho le a area de transferencia"; echo "$achados"; } || ok "a checagem do aparelho so pergunta se ha texto copiado"
+# A checagem do aparelho nao olha a area de transferencia (tirada a pedido do dono, 22/10/2026).
+achados=$(grep -nE 'UIPasteboard' "$APP/Features/NewWallet/SecurityScreens.swift")
+[ -n "$achados" ] && { aviso "a checagem do aparelho mexe na area de transferencia"; echo "$achados"; } || ok "a checagem do aparelho nao olha a area de transferencia"
 # Toda copia passa por setItems, local (nao vai para o Mac) e com validade. A frase vale
 # no maximo 1 minuto e so sai pela tela das palavras, depois do aviso (CopyPhraseSheet).
 f="$APP/Features/Receive/ReceiveSheet.swift"

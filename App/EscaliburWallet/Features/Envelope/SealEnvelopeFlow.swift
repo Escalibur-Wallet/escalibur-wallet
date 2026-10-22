@@ -196,7 +196,6 @@ struct SealEnvelopeFlow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.body))
             .padding(.top, Space.md)
-            if let error { Banner(kind: .failure, title: error).padding(.top, Space.md) }
             }
             .padding(.bottom, Space.lg)
         }
@@ -206,10 +205,15 @@ struct SealEnvelopeFlow: View {
         // (visto pelo dono, 18/10/2026).
         .scrollClipDisabled()
         // O botao fica preso embaixo; o texto rola por tras dele no iPhone pequeno.
+        // O aviso fica junto do botao: embaixo da lista, ele passava despercebido e o fluxo
+        // parecia voltar ao comeco sozinho (visto pelo dono no Android, 22/10/2026).
         .safeAreaInset(edge: .bottom) {
-            PrimaryButton(title: String(localized: "Continuar"), loading: working) { error = nil; step = .check }
-                .padding(.top, Space.xs)
-                .background(Palette.void)
+            VStack(spacing: Space.sm) {
+                if let error { Banner(kind: .failure, title: error) }
+                PrimaryButton(title: String(localized: "Continuar"), loading: working) { begin() }
+            }
+            .padding(.top, Space.xs)
+            .background(Palette.void)
         }
     }
 
@@ -528,6 +532,18 @@ struct SealEnvelopeFlow: View {
     }
 
     // MARK: Acoes
+
+    /// A espera depois de o Face ID mudar recusa ja no "Continuar", antes da checagem e do PIN.
+    private func begin() {
+        error = nil
+        do {
+            try AuthCoordinator.checkPINAndBiometry()
+        } catch {
+            self.error = AuthCoordinator.refusalMessage(error) ?? String(localized: "Não foi possível abrir a carteira agora.")
+            return
+        }
+        step = .check
+    }
 
     private func unlockPhrase() async {
         working = true

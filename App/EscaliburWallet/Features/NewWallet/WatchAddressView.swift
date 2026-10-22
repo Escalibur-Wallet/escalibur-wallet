@@ -63,12 +63,7 @@ struct WatchAddressView: View {
 
     private var header: some View {
         VStack(spacing: Space.xs) {
-            Image(systemName: "eye")
-                .font(.system(size: 24, weight: .medium))
-                .foregroundStyle(Palette.ink)
-                .frame(width: 60, height: 60)
-                .background(Circle().fill(Palette.control))
-                .accessibilityHidden(true)
+            CoinOrbit(symbol: "eye")
             Text("Observar um endereço")
                 .typeStyle(.title).foregroundStyle(Palette.ink)
                 .padding(.top, Space.xs)

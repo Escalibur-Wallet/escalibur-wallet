@@ -76,6 +76,18 @@ import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.style.TextOverflow
+import app.escalibur.wallet.ui.comp.TelaComBarra
+import app.escalibur.wallet.ui.comp.MenuFlutuante
+import app.escalibur.wallet.ui.comp.OpcaoDoMenu
+import app.escalibur.wallet.ui.comp.movimentoReduzido
+import app.escalibur.wallet.ui.comp.relogio
+import kotlinx.coroutines.delay
+import kotlin.math.sin
 
 private class Contato(j: JSONObject) {
     val id: String = j.getString("id")
@@ -94,57 +106,124 @@ fun TelaDeContatos() {
     val contexto = LocalContext.current
     var contatos by remember { mutableStateOf<List<Contato>?>(null) }
     var removendo by remember { mutableStateOf<Contato?>(null) }
+    var menuDe by remember { mutableStateOf<String?>(null) }
     val versao = App.estado.contatos
     LaunchedEffect(versao) { contatos = runCatching { Api.lista("contatos.lista").objetos().map(::Contato) }.getOrDefault(emptyList()) }
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
-        CabecalhoDeFolha(t("Endereços salvos"), null, aoVoltar = { Navegacao.fechar() })
-        val lista = contatos ?: return@Column
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.lg)) {
-            if (lista.isEmpty()) {
-                Column(Modifier.fillMaxWidth().padding(top = Espaco.xl), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                    Box(Modifier.size(64.dp).clip(CircleShape).background(Paleta.corpo), contentAlignment = Alignment.Center) { Icone(Icones.pessoas, Paleta.tintaSuave, tamanho = 26.dp) }
-                    Text(t("Nenhum endereço salvo"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.xs))
-                    Text(t("Salve os endereços para onde você envia sempre, com a tag de destino junto quando houver. No envio, é só escolher."),
-                         style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
-                }
-            } else {
-                Text(t("Endereço salvo vira atalho no envio e entra na conferência de endereço parecido. Salvar pede a biometria ou o PIN."),
-                     style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs))
-                Column(Modifier.padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                    for (contato in lista) {
-                        Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.sm),
-                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
-                        ) {
-                            SeloDaRede(contato.rede, contato.redeCoingecko, 32.dp, Paleta.corpo)
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(contato.nome, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
-                                Text(contato.redeNome + " · " + Formato.endereco(contato.endereco), style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
-                                contato.tag?.let { Text(t("Tag %@", it), style = estilo(Tipo.nota), color = Paleta.tintaApagada) }
-                            }
-                            Box(Modifier.size(Altura.toque).clickable {
-                                Transferencia.copiar(contexto, contato.endereco)
-                                Avisos.mostrar(t("Endereço copiado."))
-                            }, contentAlignment = Alignment.Center) { Icone(Icones.copiar, Paleta.tintaSuave, tamanho = 15.dp, descricao = t("Copiar")) }
-                            Box(Modifier.size(Altura.toque).clickable { removendo = contato }, contentAlignment = Alignment.Center) {
-                                Icone(Icones.lixeira, Paleta.tintaSuave, tamanho = 15.dp, descricao = t("Remover"))
+    // Como no iOS: a lista rola por baixo da barra, e o botao fica preso embaixo.
+    TelaComBarra({ Navegacao.fechar() }, titulo = t("Endereços salvos"),
+                 rodape = { BotaoPrimario(t("Salvar um endereço")) { Navegacao.folha { NovoContato() } } }) { espaco ->
+        val lista = contatos ?: return@TelaComBarra
+        if (lista.isEmpty()) {
+            // O vazio no meio da tela, um pouco acima do centro.
+            Column(
+                Modifier.fillMaxSize().padding(espaco).padding(horizontal = Espaco.margem).padding(bottom = Espaco.xl),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+            ) {
+                IlustracaoDeEnderecos(Modifier.padding(bottom = Espaco.md))
+                Text(t("Nenhum endereço salvo"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
+                     modifier = Modifier.padding(top = Espaco.xs))
+                Text(t("Salve os endereços para onde você envia sempre, com a tag de destino junto quando houver. No envio, é só escolher."),
+                     style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
+            }
+            return@TelaComBarra
+        }
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(espaco).padding(horizontal = Espaco.margem)
+                .padding(top = Espaco.md, bottom = Espaco.lg),
+            verticalArrangement = Arrangement.spacedBy(Espaco.xs),
+        ) {
+            for (contato in lista) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(start = Espaco.md).padding(vertical = Espaco.sm),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
+                ) {
+                    SeloDaRede(contato.rede, contato.redeCoingecko, 36.dp, Paleta.corpo)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(contato.nome, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(contato.redeNome + (contato.tag?.let { " · tag $it" } ?: ""), style = estilo(Tipo.nota), color = Paleta.tintaSuave,
+                             maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(Formato.endereco(contato.endereco, 8, 6), style = estilo(Tipo.monoPequeno), color = Paleta.tintaApagada, maxLines = 1)
+                    }
+                    Box {
+                        Box(Modifier.size(Altura.toque).clickable { menuDe = contato.id }, contentAlignment = Alignment.Center) {
+                            Icone(Icones.reticencias, Paleta.tintaSuave, tamanho = 15.dp, descricao = t("Opções de %@", contato.nome))
+                        }
+                        MenuFlutuante(
+                            menuDe == contato.id,
+                            listOf(
+                                OpcaoDoMenu("copiar", t("Copiar endereço")) { Icone(Icones.copiar, Paleta.tinta, tamanho = 17.dp) },
+                                OpcaoDoMenu("apagar", t("Apagar")) { Icone(Icones.lixeira, Paleta.baixa, tamanho = 17.dp) },
+                            ),
+                            escolhida = null, aoFechar = { menuDe = null },
+                        ) { opcao ->
+                            when (opcao) {
+                                "copiar" -> {
+                                    Transferencia.copiar(contexto, contato.endereco)
+                                    Avisos.mostrar(t("Endereço copiado."))
+                                }
+                                "apagar" -> removendo = contato
                             }
                         }
                     }
                 }
             }
+            Text(t("Endereço salvo vira atalho no envio e entra na conferência de endereço parecido. Salvar pede a biometria ou o PIN."),
+                 style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.sm))
         }
-        Rodape { BotaoPrimario(t("Salvar um endereço")) { Navegacao.folha { NovoContato() } } }
     }
     removendo?.let { contato ->
         Confirmacao(
-            t("Remover %@?", contato.nome), t("O endereço sai da lista. Nada muda na rede."), t("Remover"),
+            t("Apagar %@?", contato.nome), t("O endereço sai da lista. Nada muda na rede."), t("Apagar"),
             aoConfirmar = {
                 removendo = null
                 escopo.launch { runCatching { App.aplicar(Api.objeto("contatos.remover", JSONObject().put("id", contato.id))) } }
             },
             aoCancelar = { removendo = null },
         )
+    }
+}
+
+/**
+ * O vazio dos enderecos salvos (o SavedAddressesIllustration do iOS): tres fichas de endereco, de
+ * Bitcoin, Ethereum e XRP, empilhadas e inclinadas, que se abrem em lista ao entrar e respiram de
+ * leve. Com o movimento reduzido, ja abertas e paradas.
+ */
+@Composable
+private fun IlustracaoDeEnderecos(modifier: Modifier = Modifier) {
+    val parado = movimentoReduzido()
+    val agora = relogio(parado)
+    val abertura = remember { Animatable(if (parado) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (!parado) {
+            delay(250)
+            abertura.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = 90f))
+        }
+    }
+    val fichas = listOf(Triple("bitcoin", "bitcoin", 0), Triple("ethereum", "ethereum", 1), Triple("xrpl", "ripple", 2))
+    Box(modifier.fillMaxWidth().height(190.dp), contentAlignment = Alignment.Center) {
+        // A de cima por ultimo: a primeira fica na frente.
+        for ((rede, coingecko, indice) in fichas.reversed()) {
+            val lugar = indice - 1f
+            val a = abertura.value
+            val respiro = if (parado) 0f else sin(agora.value * 1.3 + indice * 1.1).toFloat() * 2f
+            Row(
+                Modifier.graphicsLayer {
+                    translationY = ((lugar * 6f) + (lugar * 58f - lugar * 6f) * a + respiro) * density
+                    rotationZ = lugar * -5f * (1f - a)
+                    val escala = (0.94f - 0.02f * kotlin.math.abs(lugar)) + (1f - (0.94f - 0.02f * kotlin.math.abs(lugar))) * a
+                    scaleX = escala; scaleY = escala
+                }.width(250.dp).height(52.dp).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo)
+                    .border(1.dp, Paleta.borda, RoundedCornerShape(Raio.cartao)).padding(horizontal = Espaco.md),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
+            ) {
+                SeloDaRede(rede, coingecko, 30.dp, Paleta.corpo)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.width(listOf(92, 74, 104)[indice].dp).height(7.dp).clip(CircleShape).background(Paleta.tinta.copy(alpha = 0.85f)))
+                    Box(Modifier.width(listOf(132, 150, 118)[indice].dp).height(6.dp).clip(CircleShape).background(Paleta.tintaApagada.copy(alpha = 0.6f)))
+                }
+                Icone(Icones.marcadorCheio, Paleta.tintaApagada, tamanho = 13.dp)
+            }
+        }
     }
 }
 

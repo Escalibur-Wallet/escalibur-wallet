@@ -213,7 +213,11 @@ private fun Escolha(moedas: List<MoedaRecebivel>, aoEscolher: (MoedaRecebivel) -
     val naCarteira = filtradas.filter { it.naCarteira }
     val outras = filtradas.filter { !it.naCarteira }
     Column(Modifier.fillMaxSize()) {
-        CabecalhoDaFolha(t("Receber"), { Navegacao.fechar() })
+        // A moeda que nao esta na lista, pelo contrato colado (o "+" do iOS).
+        CabecalhoDaFolha(t("Receber"), { Navegacao.fechar() },
+                         extra = Triple(Icones.mais, t("Adicionar moeda pelo contrato")) {
+                             Navegacao.folha { app.escalibur.wallet.ui.carteira.AdicionarMoedaCustom { Navegacao.fechar() } }
+                         })
         CampoDeBusca(busca, t("Buscar qualquer moeda"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md), superficie = Paleta.trilho) { busca = it }
         LazyColumn(Modifier.fillMaxSize().padding(top = Espaco.xs)) {
             if (naCarteira.isNotEmpty()) {
@@ -351,7 +355,8 @@ private fun TelaDoEndereco(ativo: AtivoRecebivel, formas: List<AtivoRecebivel>, 
             Box(Modifier.fillMaxWidth().padding(top = Espaco.lg), contentAlignment = Alignment.Center) {
                 Box(Modifier.size(280.dp).background(Paleta.viva, PlacaLaqueada(corte = 24.dp)), contentAlignment = Alignment.Center) {
                     ImagemDoQR(endereco, 232.dp)
-                    Box(Modifier.clip(CircleShape).background(Paleta.viva).padding(5.dp)) {
+                    // O fundo redondo sem recortar: o selo da rede passa da borda, como no iOS.
+                    Box(Modifier.background(Paleta.viva, CircleShape).padding(5.dp)) {
                         LogoDaMoeda(ativo.formaDe ?: ativo.coingecko, ativo.formaDeSimbolo ?: ativo.simbolo, 48.dp, anel = Paleta.viva,
                                     rede = ativo.rede, redeCoingecko = ativo.redeCoingecko, naoConferido = ativo.custom)
                     }
