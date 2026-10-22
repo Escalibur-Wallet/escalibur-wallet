@@ -614,7 +614,12 @@ struct AssetRowView: View {
 /// P2: trocar de carteira.
 struct WalletSwitcherSheet: View {
     @Environment(AppSession.self) private var session
+    @Environment(AuthCoordinator.self) private var auth
+    @Environment(ToastCenter.self) private var toasts
     @Environment(\.dismiss) private var dismiss
+    /// A linha com o apagar a mostra, e a carteira no popup de apagar.
+    @State private var swiped: UUID?
+    @State private var deleting: WalletMeta?
     let onAdd: () -> Void
     @State private var renaming: WalletMeta?
     @State private var newName = ""
@@ -683,6 +688,7 @@ struct WalletSwitcherSheet: View {
                                 .padding(.trailing, Space.gutter + Height.touch)
                             }
                         }
+                        .swipeToDelete(id: wallet.id, open: $swiped) { WalletRemoval.present { deleting = wallet } }
                         .walletReorder(reorder, id: wallet.id, index: index, count: wallets.count, rowHeight: Height.row, session: session)
                     }
                     if wallets.count > 1 {
@@ -698,6 +704,13 @@ struct WalletSwitcherSheet: View {
                 .padding(.horizontal, Space.gutter).padding(.bottom, Space.xs)
         }
         .presentationDetents([.medium, .large])
+        .fullScreenCover(item: $deleting) { wallet in
+            RemoveWalletPopup(wallet: wallet) { confirmed in
+                deleting = nil
+                guard confirmed else { return }
+                Task { _ = await WalletRemoval.remove(wallet, session: session, auth: auth, toasts: toasts) }
+            }
+        }
         .presentationBackground(Palette.body)
         .presentationCornerRadius(Radius.sheet)
         .sensoryFeedback(.selection, trigger: session.selectedWallet?.id)

@@ -4067,5 +4067,19 @@
   "zh-Hans": "把口令放在和单词不同的地方。忘记口令就会失去带口令的钱包：谁也找不回来，Escalibur 也不行。",
   "vi": "Hãy cất passphrase ở nơi khác với các từ. Quên passphrase là mất ví có passphrase: không ai khôi phục được, kể cả Escalibur.",
   "ar": "احتفظ بعبارة المرور في مكان مختلف عن الكلمات. نسيان عبارة المرور يعني فقدان المحفظة ذات عبارة المرور: لا أحد يستعيدها، ولا حتى Escalibur."
+ },
+ "Segure para remover": {
+  "en": "Hold to remove",
+  "es": "Mantén pulsado para eliminar",
+  "fr": "Maintenez pour supprimer",
+  "de": "Zum Entfernen halten",
+  "hi": "हटाने के लिए दबाकर रखें",
+  "id": "Tahan untuk menghapus",
+  "ja": "長押しで削除",
+  "ko": "길게 눌러 삭제",
+  "tr": "Kaldırmak için basılı tutun",
+  "zh-Hans": "按住以移除",
+  "vi": "Nhấn giữ để xóa",
+  "ar": "اضغط مطولًا للإزالة"
  }
 }

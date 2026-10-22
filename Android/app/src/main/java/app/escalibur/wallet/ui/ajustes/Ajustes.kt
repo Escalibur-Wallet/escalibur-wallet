@@ -76,6 +76,9 @@ import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import app.escalibur.wallet.ui.carteira.RemocaoDeCarteira
+import app.escalibur.wallet.ui.carteira.PopupDeRemover
+import app.escalibur.wallet.ui.carteira.LinhaQueApaga
 import java.util.Date
 
 /** S1: Ajustes. */
@@ -123,9 +126,14 @@ private fun origemDaCarteira(carteira: Carteira): String = when (carteira.origem
 @Composable
 fun TelaDeCarteiras() {
     val estado = App.estado
+    val escopo = rememberCoroutineScope()
+    // A linha com o apagar a mostra, e a carteira no popup de apagar.
+    var aberta by remember { mutableStateOf<String?>(null) }
+    var apagando by remember { mutableStateOf<Carteira?>(null) }
     Subtela(t("Carteiras")) {
         GrupoDeAjustes(Modifier.padding(top = Espaco.md)) {
             for (carteira in estado.carteiras) {
+                LinhaQueApaga(carteira.id, aberta, { aberta = it }, { apagando = carteira }) {
                 Row(
                     Modifier.fillMaxWidth().height(Altura.linha).clickable { Navegacao.abrir { AjustesDaCarteira(carteira.id) } }.padding(horizontal = Espaco.md),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
@@ -141,10 +149,17 @@ fun TelaDeCarteiras() {
                     }
                     Icone(Icones.avancar, Paleta.tintaApagada, tamanho = 13.dp)
                 }
+                }
             }
         }
         BotaoSecundario(t("Adicionar carteira"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg)) {
             Navegacao.cobrir { AdicionarCarteira(primeira = false) { Navegacao.fechar() } }
+        }
+    }
+    apagando?.let { carteira ->
+        PopupDeRemover(carteira) { confirmou ->
+            apagando = null
+            if (confirmou) escopo.launch { RemocaoDeCarteira.remover(carteira) }
         }
     }
 }
@@ -287,36 +302,10 @@ fun AjustesDaCarteira(id: String) {
     }
 
     if (removendo) {
-        Confirmacao(
-            t("Remover %@ deste celular?", carteira.nome),
-            when {
-                !carteira.temCopia && !carteira.observacao -> t("Esta carteira não tem cópia confirmada. Removida, o saldo fica inacessível para sempre.")
-                carteira.temPassphrase -> t("O saldo continua na blockchain. Sem a senha da carteira e a passphrase, ou um envelope, você não volta a acessá-lo.")
-                else -> t("O saldo continua na blockchain. Sem a senha da carteira ou um envelope, você não volta a acessá-lo.")
-            },
-            t("Remover permanentemente"),
-            aoConfirmar = {
-                removendo = false
-                escopo.launch {
-                    try {
-                        val removeu = if (carteira.observacao) {
-                            App.aplicar(Api.objeto("carteira.removerObservacao", JSONObject().put("id", carteira.id)))
-                        } else {
-                            Autorizacao.tentando(t("Remover %@ deste celular", carteira.nome), Autorizacao.Presenca.pinEBiometria) { credencial ->
-                                App.aplicar(Api.comSegredo("carteira.remover", JSONObject().put("id", carteira.id).put("credencial", credencial.json()), *credencial.partes()))
-                            }
-                        }
-                        if (removeu != null) {
-                            App.recarregar()
-                            Navegacao.fechar()
-                        }
-                    } catch (falha: FalhaDoNucleo) {
-                        Avisos.mostrar(Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível remover agora."))
-                    }
-                }
-            },
-            aoCancelar = { removendo = false },
-        )
+        PopupDeRemover(carteira) { confirmou ->
+            removendo = false
+            if (confirmou) escopo.launch { if (RemocaoDeCarteira.remover(carteira)) Navegacao.fechar() }
+        }
     }
 }
 

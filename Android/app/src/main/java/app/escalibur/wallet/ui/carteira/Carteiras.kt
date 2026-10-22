@@ -120,6 +120,9 @@ fun SeletorDeCarteiras(aoFechar: () -> Unit) {
     val estado = App.estado
     var renomeando by remember { mutableStateOf<Carteira?>(null) }
     var copiando by remember { mutableStateOf<Carteira?>(null) }
+    // A linha com o apagar a mostra, e a carteira no popup de apagar.
+    var aberta by remember { mutableStateOf<String?>(null) }
+    var apagando by remember { mutableStateOf<Carteira?>(null) }
     var ordem by remember(estado.carteiras) { mutableStateOf(estado.carteiras) }
     var arrastando by remember { mutableStateOf<String?>(null) }
     var deslocamento by remember { mutableFloatStateOf(0f) }
@@ -147,6 +150,7 @@ fun SeletorDeCarteiras(aoFechar: () -> Unit) {
                         else -> 0f
                     }
                     val desliza by animateFloatAsState(abre, label = "abre")
+                    LinhaQueApaga(carteira.id, aberta, { aberta = it }, { apagando = carteira }, Modifier.zIndex(if (esta) 1f else 0f)) {
                     Row(
                         Modifier.fillMaxWidth().height(Altura.linha).zIndex(if (esta) 1f else 0f)
                             .graphicsLayer { translationY = if (esta) deslocamento else desliza }
@@ -205,6 +209,7 @@ fun SeletorDeCarteiras(aoFechar: () -> Unit) {
                             Icone(Icones.lapis, Paleta.tintaSuave, tamanho = 15.dp, descricao = t("Editar o nome de %@", carteira.nome))
                         }
                     }
+                    }
                 }
                 if (ordem.size > 1) {
                     Text(t("Segure uma carteira e arraste para mudar a ordem."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
@@ -218,6 +223,12 @@ fun SeletorDeCarteiras(aoFechar: () -> Unit) {
     }
 
     renomeando?.let { carteira -> Renomear(carteira) { renomeando = null } }
+    apagando?.let { carteira ->
+        PopupDeRemover(carteira) { confirmou ->
+            apagando = null
+            if (confirmou) escopo.launch { RemocaoDeCarteira.remover(carteira) }
+        }
+    }
     copiando?.let { carteira -> CopiarEndereco(carteira) { copiando = null } }
 }
 

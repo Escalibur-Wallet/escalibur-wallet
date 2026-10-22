@@ -133,8 +133,13 @@ struct SettingsRow: View {
 
 struct WalletsListView: View {
     @Environment(AppSession.self) private var session
+    @Environment(AuthCoordinator.self) private var auth
+    @Environment(ToastCenter.self) private var toasts
     @State private var adding = false
     @State private var reorder = WalletReorder()
+    /// A linha com o apagar a mostra, e a carteira no popup de apagar.
+    @State private var swiped: UUID?
+    @State private var deleting: WalletMeta?
 
     var body: some View {
         ScrollView {
@@ -158,6 +163,7 @@ struct WalletsListView: View {
                             .background(reorder.dragging == wallet.id ? Palette.rail : Color.clear)
                         }
                         .disabled(reorder.justDropped)
+                        .swipeToDelete(id: wallet.id, open: $swiped) { WalletRemoval.present { deleting = wallet } }
                         .walletReorder(reorder, id: wallet.id, index: index, count: wallets.count, rowHeight: Height.row, session: session)
                     }
                 }
@@ -175,6 +181,13 @@ struct WalletsListView: View {
         .navigationTitle("Carteiras")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $adding) { AddWalletView(isFirst: false) { adding = false } }
+        .fullScreenCover(item: $deleting) { wallet in
+            RemoveWalletPopup(wallet: wallet) { confirmed in
+                deleting = nil
+                guard confirmed else { return }
+                Task { _ = await WalletRemoval.remove(wallet, session: session, auth: auth, toasts: toasts) }
+            }
+        }
     }
 
     private func originText(_ wallet: WalletMeta) -> String {
@@ -312,7 +325,7 @@ struct WalletSettingsView: View {
                     }
                     }
 
-                    DestructiveButton(title: String(localized: "Remover deste iPhone")) { confirmRemove = true }
+                    DestructiveButton(title: String(localized: "Remover deste iPhone")) { WalletRemoval.present { confirmRemove = true } }
                         .padding(.horizontal, Space.gutter).padding(.top, Space.xl)
                 }
                 .padding(.vertical, Space.md)
@@ -333,15 +346,13 @@ struct WalletSettingsView: View {
         .fullScreenCover(isPresented: $sealing) {
             if let wallet { SealEnvelopeFlow(wallet: wallet) { sealing = false } }
         }
-        .whiteAlert("Remover \(wallet?.name ?? "") deste iPhone?", isPresented: $confirmRemove) {
-            Button("Remover permanentemente", role: .destructive) { Task { await remove() } }
-            Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text(wallet?.hasBackup == false
-                 ? "Esta carteira não tem cópia confirmada. Removida, o saldo fica inacessível para sempre."
-                 : (wallet?.hasPassphrase == true
-                    ? "O saldo continua na blockchain. Sem a senha da carteira e a passphrase, ou um envelope, você não volta a acessá-lo."
-                    : "O saldo continua na blockchain. Sem a senha da carteira ou um envelope, você não volta a acessá-lo."))
+        .fullScreenCover(isPresented: $confirmRemove) {
+            if let wallet {
+                RemoveWalletPopup(wallet: wallet) { confirmed in
+                    confirmRemove = false
+                    if confirmed { Task { await remove() } }
+                }
+            }
         }
     }
 
@@ -395,20 +406,7 @@ struct WalletSettingsView: View {
 
     private func remove() async {
         guard let wallet else { return }
-        if !wallet.isWatchOnly {
-            do {
-                guard try await auth.perform(session, reason: String(localized: "Remover \(wallet.name) deste iPhone"), presence: .pinAndBiometry, { _ in true }) == true else { return }
-            } catch {
-                if let message = AuthCoordinator.refusalMessage(error) { toasts.show(message) }
-                return
-            }
-        }
-        do {
-            try session.remove(wallet)
-            dismiss()
-        } catch {
-            toasts.show(error.localizedDescription)
-        }
+        if await WalletRemoval.remove(wallet, session: session, auth: auth, toasts: toasts) { dismiss() }
     }
 }
 
@@ -916,5 +914,162 @@ struct AboutView: View {
         .navigationTitle("Sobre")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $legalDocument) { LegalDocumentView(document: $0) }
+    }
+}
+
+// MARK: Apagar uma carteira
+
+/// Remover uma carteira deste iPhone: o aviso do que se perde e a remocao, com PIN e Face ID
+/// (menos a de so observar, que nao guarda chave). Um caminho so para a lista, a troca de
+/// carteira e os ajustes da carteira.
+@MainActor
+enum WalletRemoval {
+    static func warning(_ wallet: WalletMeta) -> String {
+        if wallet.isWatchOnly { return String(localized: "O endereço sai da lista. Nada muda na rede.") }
+        if !wallet.hasBackup { return String(localized: "Esta carteira não tem cópia confirmada. Removida, o saldo fica inacessível para sempre.") }
+        return wallet.hasPassphrase
+            ? String(localized: "O saldo continua na blockchain. Sem a senha da carteira e a passphrase, ou um envelope, você não volta a acessá-lo.")
+            : String(localized: "O saldo continua na blockchain. Sem a senha da carteira ou um envelope, você não volta a acessá-lo.")
+    }
+
+    /// Devolve se removeu.
+    static func remove(_ wallet: WalletMeta, session: AppSession, auth: AuthCoordinator, toasts: ToastCenter) async -> Bool {
+        if !wallet.isWatchOnly {
+            do {
+                guard try await auth.perform(session, reason: String(localized: "Remover \(wallet.name) deste iPhone"), presence: .pinAndBiometry, { _ in true }) == true else { return false }
+            } catch {
+                if let message = AuthCoordinator.refusalMessage(error) { toasts.show(message) }
+                return false
+            }
+        }
+        do {
+            try session.remove(wallet)
+            return true
+        } catch {
+            toasts.show(error.localizedDescription)
+            return false
+        }
+    }
+
+    /// O popup aparece sem a subida da tela cheia: ele mesmo anima.
+    static func present(_ set: () -> Void) {
+        var quiet = Transaction()
+        quiet.disablesAnimations = true
+        withTransaction(quiet, set)
+    }
+}
+
+/// A confirmacao de apagar uma carteira (pedido do dono, 22/10/2026): um popup no meio da tela, com
+/// o aviso e um botao que so apaga segurado, enchendo de vermelho. Soltar antes cancela. Depois
+/// dele vem o PIN e o Face ID de sempre.
+struct RemoveWalletPopup: View {
+    let wallet: WalletMeta
+    let onClose: (_ confirmed: Bool) -> Void
+    @State private var shown = false
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(shown ? 0.5 : 0).ignoresSafeArea()
+                .onTapGesture { close(false) }
+            VStack(spacing: 0) {
+                WalletGlyph(id: wallet.id, size: 44, selected: true, passphrase: wallet.hasPassphrase)
+                Text("Remover \(wallet.name) deste iPhone?").typeStyle(.heading).foregroundStyle(Palette.ink)
+                    .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Space.md)
+                Text(WalletRemoval.warning(wallet)).typeStyle(.note).foregroundStyle(Palette.inkSoft)
+                    .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Space.xs)
+                HoldButton(title: String(localized: "Segure para remover"), holdSeconds: 1.6, fill: Palette.down) { close(true) }
+                    .padding(.top, Space.lg)
+                    .accessibilityIdentifier("segurar-para-remover")
+                TertiaryButton(title: String(localized: "Cancelar")) { close(false) }
+                    .padding(.top, Space.xs)
+            }
+            .padding(.horizontal, Space.lg).padding(.top, Space.lg).padding(.bottom, Space.sm)
+            .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Palette.body)
+                .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Palette.edge, lineWidth: 1)))
+            .padding(.horizontal, Space.xl)
+            .scaleEffect(shown ? 1 : 0.92)
+            .opacity(shown ? 1 : 0)
+        }
+        .presentationBackground(.clear)
+        .onAppear { withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { shown = true } }
+    }
+
+    private func close(_ confirmed: Bool) {
+        withAnimation(.easeOut(duration: 0.18)) { shown = false }
+        Task {
+            try? await Task.sleep(for: .milliseconds(180))
+            WalletRemoval.present { onClose(confirmed) }
+        }
+    }
+}
+
+/// Arrastar a linha para a esquerda mostra o apagar, como nas listas do iOS (pedido do dono,
+/// 22/10/2026). Uma linha aberta por vez; tocar nela fecha. O arrasto so conta na horizontal: a
+/// lista continua rolando e o segurar-e-arrastar da ordem continua igual.
+struct SwipeToDelete: ViewModifier {
+    let id: UUID
+    @Binding var open: UUID?
+    var surface: Color = Palette.body
+    let onDelete: () -> Void
+    @State private var drag: CGFloat = 0
+    private static let width: CGFloat = 84
+
+    func body(content: Content) -> some View {
+        let shown = open == id
+        let offset = min(0, max(-Self.width * 1.3, (shown ? -Self.width : 0) + drag))
+        ZStack(alignment: .trailing) {
+            if offset < 0 {
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { open = nil }
+                    onDelete()
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: "trash.fill").font(.system(size: 17, weight: .semibold))
+                        Text("Apagar").font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: max(Self.width, -offset)).frame(maxHeight: .infinity)
+                    .background(Palette.down)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Apagar")
+            }
+            content
+                .background(surface)
+                .offset(x: offset)
+                .overlay {
+                    if shown {
+                        Color.clear.contentShape(Rectangle())
+                            .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { open = nil } }
+                    }
+                }
+        }
+        .clipped()
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 14)
+                .onChanged { value in
+                    guard abs(value.translation.width) > abs(value.translation.height) * 1.3 else { return }
+                    if open != id, open != nil { withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { open = nil } }
+                    drag = value.translation.width
+                }
+                .onEnded { value in
+                    let final = (shown ? -Self.width : 0) + (abs(value.translation.width) > abs(value.translation.height) * 1.3 ? value.translation.width : 0)
+                    let opens = final < -Self.width / 2
+                    if opens, !shown { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) {
+                        open = opens ? id : (open == id ? nil : open)
+                        drag = 0
+                    }
+                }
+        )
+        .accessibilityAction(named: Text("Apagar")) { onDelete() }
+    }
+}
+
+extension View {
+    func swipeToDelete(id: UUID, open: Binding<UUID?>, surface: Color = Palette.body, onDelete: @escaping () -> Void) -> some View {
+        modifier(SwipeToDelete(id: id, open: open, surface: surface, onDelete: onDelete))
     }
 }

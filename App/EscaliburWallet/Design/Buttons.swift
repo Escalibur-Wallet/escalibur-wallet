@@ -307,6 +307,9 @@ struct CopyButton: View {
 struct HoldButton: View {
     let title: String
     var holdSeconds: Double = 2
+    /// Com uma cor, o botao enche com ela, da esquerda para a direita, no lugar dos pixels (o
+    /// vermelho de apagar uma carteira, pedido do dono, 22/10/2026).
+    var fill: Color? = nil
     let action: () -> Void
     /// Quando o dedo encostou; nil solto.
     @State private var pressedAt: Date?
@@ -337,9 +340,13 @@ struct HoldButton: View {
                     GeometryReader { geometry in
                         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: pressedAt == nil && released == nil && parked == nil)) { timeline in
                             let width = geometry.size.width
-                            let pixels = PixelFill(edge: fraction(timeline.date) * (width + PixelFill.frontier + 32), width: width,
-                                                   doneAt: nil, now: timeline.date, still: reduceMotion, tilt: 0)
-                            Canvas { context, size in pixels.draw(&context, size: size) }
+                            if let fill {
+                                Rectangle().fill(fill).frame(width: fraction(timeline.date) * width)
+                            } else {
+                                let pixels = PixelFill(edge: fraction(timeline.date) * (width + PixelFill.frontier + 32), width: width,
+                                                       doneAt: nil, now: timeline.date, still: reduceMotion, tilt: 0)
+                                Canvas { context, size in pixels.draw(&context, size: size) }
+                            }
                         }
                     }
                 }

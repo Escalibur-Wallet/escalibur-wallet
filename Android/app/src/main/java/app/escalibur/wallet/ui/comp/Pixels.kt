@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.comp
 
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -303,7 +304,7 @@ fun DeslizeParaSeguir(titulo: String, ligado: Boolean, aoSeguir: () -> Unit) {
  * um risco grande, que nao pode sair de um toque sem querer. Com 0 segundos, e um toque comum.
  */
 @Composable
-fun BotaoDeSegurar(titulo: String, modifier: Modifier = Modifier, segundos: Float = 2f, acao: () -> Unit) {
+fun BotaoDeSegurar(titulo: String, modifier: Modifier = Modifier, segundos: Float = 2f, cor: Color? = null, acao: () -> Unit) {
     val haptico = LocalHapticFeedback.current
     val escopo = rememberCoroutineScope()
     val parado = movimentoReduzido()
@@ -344,7 +345,10 @@ fun BotaoDeSegurar(titulo: String, modifier: Modifier = Modifier, segundos: Floa
         val largura = constraints.maxWidth.toFloat()
         val extra = with(LocalDensity.current) { (48.dp + 32.dp).toPx() }
         if (fracao.value > 0f) {
-            Canvas(Modifier.fillMaxSize()) {
+            // Com uma cor, o botao enche com ela, da esquerda para a direita (o vermelho de apagar uma
+            // carteira); sem cor, os pixels que cifram.
+            if (cor != null) Box(Modifier.align(Alignment.CenterStart).fillMaxHeight().fillMaxWidth(fracao.value).background(cor))
+            else Canvas(Modifier.fillMaxSize()) {
                 with(PixelsCifrando) { desenhar(fracao.value * (largura + extra), null, agora, parado, inclinacao = 0f) }
             }
         }
