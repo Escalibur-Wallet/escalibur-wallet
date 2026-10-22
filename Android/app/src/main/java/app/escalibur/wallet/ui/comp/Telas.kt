@@ -2,6 +2,7 @@ package app.escalibur.wallet.ui.comp
 
 import app.escalibur.wallet.ui.tema.Raio
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
@@ -71,6 +72,8 @@ fun TelaComBarra(
     acoes: (@Composable RowScope.() -> Unit)? = null,
     rodape: (@Composable ColumnScope.() -> Unit)? = null,
     fundo: Color = Paleta.vazio,
+    /** O botao do canto: o voltar, ou o fechar nas telas cheias que cobrem a navegacao. */
+    iconeDoVoltar: ImageVector = Icones.voltar,
     conteudo: @Composable (PaddingValues) -> Unit,
 ) {
     // Na folha, a barra desce um pouco do alto dela, como a barra de navegacao das folhas do iOS.
@@ -94,7 +97,8 @@ fun TelaComBarra(
                     ),
                 )
                 Box(Modifier.padding(top = topo).fillMaxWidth().height(AlturaDaBarraDeNavegacao).padding(horizontal = Espaco.md)) {
-                    if (aoVoltar != null) BotaoDeCanto(Icones.voltar, t("Voltar"), Modifier.align(Alignment.CenterStart), acao = aoVoltar)
+                    if (aoVoltar != null) BotaoDeCanto(iconeDoVoltar, if (iconeDoVoltar == Icones.voltar) t("Voltar") else t("Fechar"),
+                                                       Modifier.align(Alignment.CenterStart), acao = aoVoltar)
                     Box(Modifier.align(Alignment.Center).padding(horizontal = 96.dp)) {
                         when {
                             centro != null -> centro()

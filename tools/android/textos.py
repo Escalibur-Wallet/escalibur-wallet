@@ -44,6 +44,10 @@ incompletas = {chave: [i for i in IDIOMAS if i not in valor] for chave, valor in
 # Do catalogo do iOS, as que existem mas sem algum idioma (adiadas pelo dono): so informativo.
 sem_traducao = sorted(chave for chave in chaves if chave in catalogo
                       and any(i not in catalogo[chave].get("localizations", {}) for i in ["en"]))
+# As do catalogo do iOS sem algum dos idiomas e sem a tabela do Android cobrindo: no Android, saem em
+# ingles no meio do resto. Tambem so informativo; a tabela do Android pode cobrir antes do iOS.
+sem_idioma = sorted(chave for chave in chaves if chave in catalogo
+                    and any(i not in catalogo[chave].get("localizations", {}) and i not in tabela.get(chave, {}) for i in IDIOMAS))
 
 if "--json" in sys.argv:
     print(json.dumps({"faltando": faltando, "incompletas": incompletas}, ensure_ascii=False, indent=2))
@@ -53,5 +57,6 @@ else:
     for chave, idiomas in incompletas.items():
         print(f"sem {','.join(idiomas)}  {chave}")
     print(f"{len(chaves)} textos; {len(faltando)} sem traducao; {len(incompletas)} incompletos na tabela do Android"
-          + (f"; {len(sem_traducao)} do iOS sem ingles" if sem_traducao else ""))
+          + (f"; {len(sem_traducao)} do iOS sem ingles" if sem_traducao else "")
+          + (f"; {len(sem_idioma)} do iOS sem algum idioma (saem em ingles no Android)" if sem_idioma else ""))
 sys.exit(1 if faltando or incompletas else 0)

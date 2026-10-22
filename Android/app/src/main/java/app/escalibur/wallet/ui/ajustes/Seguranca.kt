@@ -90,7 +90,7 @@ fun TelaDeSeguranca() {
 
 /** Ligar a biometria: o PIN, e depois ela mesma, para a chave nascer presa a ela. */
 @Composable
-private fun LigarBiometria() {
+internal fun LigarBiometria() {
     val escopo = rememberCoroutineScope()
     val entrada = remember { EntradaDoPin(App.estado.pinDigitos) }
     var trabalhando by remember { mutableStateOf(false) }

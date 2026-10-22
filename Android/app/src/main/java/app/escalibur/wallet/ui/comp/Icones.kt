@@ -148,6 +148,18 @@ object Icones {
     val estrela = traco("estrela", "M12 3.5 L14.6 8.9 L20.5 9.6 L16.2 13.7 L17.3 19.6 L12 16.8 L6.7 19.6 L7.8 13.7 L3.5 9.6 L9.4 8.9 Z")
     val lixeira = traco("lixeira", "M4.5 6.5 H19.5 M9.5 6.5 V4.5 H14.5 V6.5 M6.5 6.5 L7.5 20.5 H16.5 L17.5 6.5", "M10 10.5 V16.5 M14 10.5 V16.5")
     val apagarLetra = traco("apagarLetra", "M9 5.5 H19 A1.5 1.5 0 0 1 20.5 7 V17 A1.5 1.5 0 0 1 19 18.5 H9 L3.5 12 Z", "M11.5 9.5 L16 14 M16 9.5 L11.5 14")
+    /** O Super Security: person.badge.key, hand.raised, arrow.forward.circle e o circulo vazio da escolha. */
+    /** O circle.grid.3x3.fill do iOS: os nove pontos grandes, do emblema do Super Security. */
+    val gradeCheia = cheio("gradeCheia", (0..8).joinToString(" ") { i ->
+        val x = 12f + (i % 3 - 1) * 7.3f
+        val y = 12f + (i / 3 - 1) * 7.3f
+        "M${x - 2.9f} $y A2.9 2.9 0 1 0 ${x + 2.9f} $y A2.9 2.9 0 1 0 ${x - 2.9f} $y Z"
+    })
+    val pessoaComChave = traco("pessoaComChave", "M9.5 11 A3.5 3.5 0 1 0 9.5 4 A3.5 3.5 0 1 0 9.5 11 Z", "M3.5 20 C3.5 16.7 6.2 14.5 9.5 14.5 C10.7 14.5 11.8 14.8 12.7 15.3",
+                               "M17.5 16.5 A2 2 0 1 0 17.5 12.5 A2 2 0 1 0 17.5 16.5 Z", "M17.5 16.5 V21 M17.5 19 H19.3")
+    val maoLevantada = traco("maoLevantada", "M8.5 12.5 V6 A1.25 1.25 0 0 1 11 6 V11 M11 10.5 V4.5 A1.25 1.25 0 0 1 13.5 4.5 V10.5 M13.5 10.5 V5.5 A1.25 1.25 0 0 1 16 5.5 V11 M16 11 V8 A1.25 1.25 0 0 1 18.5 8 V14 C18.5 18 16 21 12.5 21 C9.8 21 8.4 19.8 7 17.6 L4.8 14 A1.3 1.3 0 0 1 6.9 12.6 L8.5 14.5")
+    val setaCirculo = traco("setaCirculo", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M7.5 12 H16 M12.5 8.5 L16 12 L12.5 15.5")
+    val circulo = traco("circulo", "M12 21.5 A9.5 9.5 0 1 0 12 2.5 A9.5 9.5 0 1 0 12 21.5 Z", espessura = 1.5f)
     val teclado = traco("teclado", "M3.5 6.5 H20.5 V16.5 H3.5 Z", "M7 10 H7.1 M10.5 10 H10.6 M14 10 H14.1 M17.5 10 H17.6 M8 13.5 H16")
     /** As teclas do Safe Keyboard: shift, shift.fill, return e keyboard.chevron.compact.down do iOS. */
     val maiuscula = traco("maiuscula", "M12 4 L20 12.5 H15.5 V19.5 H8.5 V12.5 H4 Z", espessura = 1.7f)
