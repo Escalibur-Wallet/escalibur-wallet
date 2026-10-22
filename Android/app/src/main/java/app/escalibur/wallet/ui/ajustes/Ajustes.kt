@@ -335,7 +335,7 @@ fun TelaSobre() {
     val contexto = LocalContext.current
     var documento by remember { mutableStateOf<DocumentoLegal?>(null) }
     Subtela(t("Sobre")) {
-        Column(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.lg)) {
+        Column(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.margem), verticalArrangement = Arrangement.spacedBy(Espaco.lg)) {
             Column(verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                 Text(t("Taxas"), style = estilo(Tipo.cabecalho), color = Paleta.tinta)
                 Text(t("A Escalibur não cobra taxa sobre envios, recebimentos, trocas ou ordens. Você paga só a taxa da rede e, nas trocas, a do provedor, que já vem dentro do valor que você recebe."),
@@ -347,7 +347,7 @@ fun TelaSobre() {
                      style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
                 Text(t("Versão %@ (%@)", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toString()), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
                 // A auditoria abre no navegador do celular, em outro app: o app nao abre conexao nenhuma.
-                BotaoSecundario(t("Auditar o código"), Modifier.padding(top = Espaco.xs), icone = Icones.documento) {
+                BotaoSecundario(t("Auditar o código"), Modifier.padding(top = Espaco.xs), icone = Icones.codigo) {
                     runCatching { contexto.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://escalibur-wallet.github.io/auditoria/"))) }
                 }
             }
@@ -359,7 +359,7 @@ fun TelaSobre() {
         }
         GrupoDeAjustes(Modifier.padding(top = Espaco.lg)) {
             LinhaDeAjuste(Icones.documento, t("Termos de uso")) { documento = DocumentoLegal.termos }
-            LinhaDeAjuste(Icones.escudo, t("Política de privacidade")) { documento = DocumentoLegal.privacidade }
+            LinhaDeAjuste(Icones.maoLevantada, t("Política de privacidade")) { documento = DocumentoLegal.privacidade }
         }
     }
     documento?.let { FolhaLegal(it) { documento = null } }

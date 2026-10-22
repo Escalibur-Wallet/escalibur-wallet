@@ -165,6 +165,18 @@ object Icones {
     })
     val pessoaComChave = traco("pessoaComChave", "M9.5 11 A3.5 3.5 0 1 0 9.5 4 A3.5 3.5 0 1 0 9.5 11 Z", "M3.5 20 C3.5 16.7 6.2 14.5 9.5 14.5 C10.7 14.5 11.8 14.8 12.7 15.3",
                                "M17.5 16.5 A2 2 0 1 0 17.5 12.5 A2 2 0 1 0 17.5 16.5 Z", "M17.5 16.5 V21 M17.5 19 H19.3")
+    /** O chevron.left.forwardslash.chevron.right do iOS: o codigo, no "Auditar o codigo". */
+    val codigo = traco("codigo", "M8 7 L3 12 L8 17", "M16 7 L21 12 L16 17", "M13.8 4.5 L10.2 19.5")
+    /** Os icones dos assuntos do Suporte: arrow.up.arrow.down, lightbulb, ellipsis.bubble e doc.text.magnifyingglass do iOS. */
+    val setasCimaBaixo = traco("setasCimaBaixo", "M8 19 V5 M4.5 8.5 L8 5 L11.5 8.5", "M16 5 V19 M12.5 15.5 L16 19 L19.5 15.5")
+    val lampada = traco("lampada", "M9 17.4 V15.6 C7.2 14.4 6 12.4 6 10 A6 6 0 0 1 18 10 C18 12.4 16.8 14.4 15 15.6 V17.4 Z", "M9.8 20.6 H14.2")
+    val balaoReticencias = tracoComPonta("balaoReticencias",
+        "M5.5 4.5 H18.5 A2.5 2.5 0 0 1 21 7 V14.5 A2.5 2.5 0 0 1 18.5 17 H10.5 L6.5 20.5 V17 H5.5 A2.5 2.5 0 0 1 3 14.5 V7 A2.5 2.5 0 0 1 5.5 4.5 Z",
+        "M9.1 10.8 A1.1 1.1 0 1 0 6.9 10.8 A1.1 1.1 0 1 0 9.1 10.8 Z M13.1 10.8 A1.1 1.1 0 1 0 10.9 10.8 A1.1 1.1 0 1 0 13.1 10.8 Z " +
+            "M17.1 10.8 A1.1 1.1 0 1 0 14.9 10.8 A1.1 1.1 0 1 0 17.1 10.8 Z", 1.8f)
+    val documentoLupa = traco("documentoLupa",
+        "M12.5 21 H6.5 A1.5 1.5 0 0 1 5 19.5 V4.5 A1.5 1.5 0 0 1 6.5 3 H13.5 L19 8.5 V11.5", "M13.5 3 V8.5 H19", "M8 9.5 H11 M8 13 H12 M8 16.5 H10",
+        "M16.5 19.3 A2.6 2.6 0 1 0 16.5 14.1 A2.6 2.6 0 1 0 16.5 19.3 Z", "M18.4 19.1 L20.6 21.3")
     val maoLevantada = traco("maoLevantada", "M8.5 12.5 V6 A1.25 1.25 0 0 1 11 6 V11 M11 10.5 V4.5 A1.25 1.25 0 0 1 13.5 4.5 V10.5 M13.5 10.5 V5.5 A1.25 1.25 0 0 1 16 5.5 V11 M16 11 V8 A1.25 1.25 0 0 1 18.5 8 V14 C18.5 18 16 21 12.5 21 C9.8 21 8.4 19.8 7 17.6 L4.8 14 A1.3 1.3 0 0 1 6.9 12.6 L8.5 14.5")
     val setaCirculo = traco("setaCirculo", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M7.5 12 H16 M12.5 8.5 L16 12 L12.5 15.5")
     val circulo = traco("circulo", "M12 21.5 A9.5 9.5 0 1 0 12 2.5 A9.5 9.5 0 1 0 12 21.5 Z", espessura = 1.5f)

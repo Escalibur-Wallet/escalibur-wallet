@@ -62,12 +62,29 @@ import app.escalibur.wallet.ui.tema.Raio
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
 import org.json.JSONObject
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import app.escalibur.wallet.ui.comp.SeloDaRede
+import app.escalibur.wallet.ui.comp.OpcaoDoMenu
+import app.escalibur.wallet.ui.comp.MenuFlutuante
+import app.escalibur.wallet.ui.comp.TelaComBarra
 
 /** O endereco publico do suporte. */
 const val EMAIL_DO_SUPORTE = "support@escaliburwallet.com"
 
 private enum class Assunto(val pedeRede: Boolean, val pedeTransacao: Boolean) {
     envio(true, true), troca(true, true), saldo(true, false), acesso(false, false), recuperar(false, false), ideia(false, false), outro(false, false);
+
+    /** O icone de cada assunto, os do iOS. */
+    val icone: ImageVector get() = when (this) {
+        envio -> Icones.setasCimaBaixo
+        troca -> Icones.trocar
+        saldo -> Icones.olhoRiscado
+        acesso -> Icones.digital
+        recuperar -> Icones.setaCirculo
+        ideia -> Icones.lampada
+        outro -> Icones.balaoReticencias
+    }
 
     val titulo: String get() = when (this) {
         envio -> t("Envio ou recebimento")
@@ -130,39 +147,55 @@ fun TelaDeSuporte() {
         semAppDeEmail = runCatching { contexto.startActivity(intencao) }.isFailure
     }
 
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().acimaDoTeclado()) {
-        CabecalhoDeFolha("", null, aoVoltar = { Navegacao.fechar() })
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.lg)) {
+    var escolhendoRede by remember { mutableStateOf(false) }
+    // Como no iOS: o titulo na barra, o conteudo rolando por baixo dela e o botao preso embaixo.
+    TelaComBarra({ Navegacao.fechar() }, Modifier.acimaDoTeclado(), titulo = t("Suporte"),
+                 rodape = { BotaoPrimario(t("Enviar ao suporte"), ligado = pode) { enviar() } }) { espaco ->
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(espaco).padding(horizontal = Espaco.margem).padding(vertical = Espaco.md)) {
             Text(t("Fale com o suporte"), style = estilo(Tipo.titulo), color = Paleta.tinta)
             Text(t("Conte o que aconteceu em poucos passos. O chamado vai para o suporte da Escalibur, e a resposta chega no seu e-mail."),
                  style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs))
 
             Passo(1, t("Sobre o que é?"))
-            Column(Modifier.padding(top = Espaco.xs), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+            // Os assuntos num cartao so, com o icone de cada um e o visto verde no escolhido.
+            Column(Modifier.padding(top = Espaco.sm).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo)) {
                 for (opcao in Assunto.entries) {
                     val escolhido = assunto == opcao
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = Altura.linhaCompacta).clip(RoundedCornerShape(Raio.cartao))
-                            .background(if (escolhido) Paleta.trilho else Paleta.corpo)
-                            .border(1.dp, if (escolhido) Paleta.bordaForte else Paleta.borda, RoundedCornerShape(Raio.cartao))
-                            .clickable { assunto = opcao }.padding(horizontal = Espaco.md),
-                        verticalAlignment = Alignment.CenterVertically,
+                        Modifier.fillMaxWidth().heightIn(min = Altura.linhaCompacta).clickable { assunto = opcao }.padding(horizontal = Espaco.md),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
                     ) {
+                        Box(Modifier.width(28.dp), contentAlignment = Alignment.Center) { Icone(opcao.icone, Paleta.tintaSuave, tamanho = 18.dp) }
                         Text(opcao.titulo, style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
-                        if (escolhido) Icone(Icones.visto, Paleta.tinta, tamanho = 15.dp)
+                        if (escolhido) Icone(Icones.vistoCheio, Paleta.sucesso, tamanho = 20.dp)
                     }
                 }
             }
             var numero = 2
             if (assunto?.pedeRede == true) {
                 Passo(numero++, t("Em qual rede?"))
-                Row(Modifier.padding(top = Espaco.xs).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                    Chip(t("Não sei"), rede == null) { rede = null }
-                    for (opcao in Redes.todas) Chip(opcao.nome, rede == opcao.id) { rede = opcao.id }
+                // A rede num menu, como o do iOS: o campo mostra a escolhida e abre a lista.
+                Box(Modifier.padding(top = Espaco.sm)) {
+                    Row(
+                        Modifier.fillMaxWidth().height(Altura.campo).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo)
+                            .clickable { escolhendoRede = true }.padding(horizontal = Espaco.md),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs),
+                    ) {
+                        val escolhida = rede?.let { id -> Redes.todas.firstOrNull { it.id == id } }
+                        if (escolhida != null) SeloDaRede(escolhida.id, escolhida.coingecko, 22.dp, Paleta.corpo)
+                        Text(escolhida?.nome ?: t("Não sei"), style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
+                        Icone(Icones.abaixo, Paleta.tintaApagada, tamanho = 12.dp)
+                    }
+                    MenuFlutuante(
+                        escolhendoRede,
+                        listOf(OpcaoDoMenu("", t("Não sei")) { Box(Modifier.size(22.dp)) }) +
+                            Redes.todas.map { opcao -> OpcaoDoMenu(opcao.id, opcao.nome) { SeloDaRede(opcao.id, opcao.coingecko, 22.dp, Paleta.corpo) } },
+                        escolhida = rede ?: "", aoFechar = { escolhendoRede = false },
+                    ) { rede = it.ifEmpty { null } }
                 }
             }
             Passo(numero++, t("O que aconteceu?"))
-            CampoDeTexto(detalhes, t("O que você fez, o que esperava e o que apareceu na tela."), linhas = 5) { detalhes = it.take(2000) }
+            CampoDeTexto(detalhes, t("O que você fez, o que esperava e o que apareceu na tela."), linhas = 5, alturaMinima = 132.dp) { detalhes = it.take(2000) }
             if (pareceFrase) {
                 Faixa(TipoDeFaixa.falha, t("Isto parece a senha da carteira"), Modifier.padding(top = Espaco.sm),
                       mensagem = t("Apague as palavras antes de mandar. Ninguém da Escalibur precisa delas, nem para ajudar."))
@@ -172,8 +205,8 @@ fun TelaDeSuporte() {
                 CampoDeTexto(transacao, t("Copie na Atividade, no detalhe do envio"), mono = true) { transacao = it.take(200) }
             }
             Passo(numero, t("Seu e-mail para a resposta"))
-            CampoDeTexto(email, t("seu@email.com"), email = true) { email = it.take(120) }
-            Box(Modifier.padding(top = Espaco.xs)) { CampoDeTexto(repeticao, t("Repita o e-mail"), email = true) { repeticao = it.take(120) } }
+            Box(Modifier.padding(top = Espaco.xs)) { CampoDeTexto(email, t("seu@email.com"), email = true) { email = it.take(120) } }
+            CampoDeTexto(repeticao, t("Repita o e-mail"), email = true) { repeticao = it.take(120) }
             if (repeticao.isNotEmpty() && !iguais) Text(t("Os dois e-mails não conferem."), style = estilo(Tipo.nota), color = Paleta.baixa, modifier = Modifier.padding(top = Espaco.xs))
             else if (email.isNotEmpty() && !emailValido) Text(t("Confira o e-mail: falta o @ ou o domínio."), style = estilo(Tipo.nota), color = Paleta.baixa, modifier = Modifier.padding(top = Espaco.xs))
             if (semAppDeEmail) {
@@ -183,23 +216,26 @@ fun TelaDeSuporte() {
                     Transferencia.copiar(contexto, t("Para: %@", EMAIL_DO_SUPORTE) + "\n" + assuntoDoEmail() + "\n\n" + corpo(), rotulo = "Escalibur")
                 }
             }
-            Column(Modifier.padding(top = Espaco.lg), verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                Ponto(Icones.escudo, t("Nunca mande as palavras da carteira, o PIN ou a senha de um envelope. Ninguém da Escalibur pede, nem pelo suporte."))
+            // Os avisos num cartao, como no iOS.
+            Column(
+                Modifier.padding(top = Espaco.lg).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.base),
+                verticalArrangement = Arrangement.spacedBy(Espaco.md),
+            ) {
+                Ponto(Icones.maoLevantada, t("Nunca mande as palavras da carteira, o PIN ou a senha de um envelope. Ninguém da Escalibur pede, nem pelo suporte."))
                 Ponto(Icones.celular, t("A carteira roda só neste celular: o suporte não vê, não move nem devolve saldo, e não desfaz transação."))
-                Ponto(Icones.documento, t("Vai junto só o que você escreveu, o seu e-mail, a versão do app e a do Android. Endereço da carteira e saldo não vão, e o app não guarda nada disso."))
+                Ponto(Icones.documentoLupa, t("Vai junto só o que você escreveu, o seu e-mail, a versão do app e a do Android. Endereço da carteira e saldo não vão, e o app não guarda nada disso."))
             }
         }
-        Rodape { BotaoPrimario(t("Enviar ao suporte"), ligado = pode) { enviar() } }
     }
 }
 
 @Composable
 private fun Passo(numero: Int, titulo: String) {
     Row(Modifier.padding(top = Espaco.lg), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-        Box(Modifier.size(22.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(24.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
             Text("$numero", style = estilo(Tipo.rotulo), color = Paleta.tinta)
         }
-        Text(titulo, style = estilo(Tipo.linha), color = Paleta.tinta)
+        Text(titulo, style = estilo(Tipo.cabecalho), color = Paleta.tinta)
     }
 }
 
@@ -212,12 +248,15 @@ private fun Ponto(icone: ImageVector, texto: String) {
 }
 
 @Composable
-private fun CampoDeTexto(texto: String, dica: String, linhas: Int = 1, mono: Boolean = false, email: Boolean = false, aoMudar: (String) -> Unit) {
+private fun CampoDeTexto(texto: String, dica: String, linhas: Int = 1, mono: Boolean = false, email: Boolean = false,
+                         alturaMinima: androidx.compose.ui.unit.Dp = Altura.campo, aoMudar: (String) -> Unit) {
+    // Sem borda, so o fundo do cartao, como os campos do iOS.
     Box(
-        Modifier.padding(top = Espaco.xs).fillMaxWidth().heightIn(min = Altura.campo).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo)
-            .border(1.dp, Paleta.borda, RoundedCornerShape(Raio.cartao)).padding(horizontal = Espaco.md, vertical = Espaco.sm),
+        Modifier.padding(top = Espaco.xs).fillMaxWidth().heightIn(min = alturaMinima).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo)
+            .padding(horizontal = Espaco.md, vertical = Espaco.sm),
+        contentAlignment = if (linhas == 1) Alignment.CenterStart else Alignment.TopStart,
     ) {
-        if (texto.isEmpty()) Text(dica, style = estilo(Tipo.corpo), color = Paleta.tintaMorta)
+        if (texto.isEmpty()) Text(dica, style = estilo(Tipo.corpo), color = Paleta.tintaApagada)
         BasicTextField(
             texto, aoMudar, singleLine = linhas == 1, minLines = linhas,
             textStyle = estilo(if (mono) Tipo.monoPequeno else Tipo.corpo).copy(color = Paleta.tinta), cursorBrush = SolidColor(Paleta.acento),
