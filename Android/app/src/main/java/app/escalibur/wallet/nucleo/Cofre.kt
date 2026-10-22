@@ -10,6 +10,8 @@ import android.os.CancellationSignal
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.system.Os
+import android.system.OsConstants
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
@@ -29,6 +31,7 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
+import javax.crypto.Mac
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.OAEPParameterSpec
@@ -42,11 +45,16 @@ import javax.crypto.spec.SecretKeySpec
  * Armazenamento: cada item e um arquivo na pasta sem backup do app, cifrado em AES-GCM por uma
  * chave do Keystore que nunca sai do hardware e so funciona com o aparelho desbloqueado. O nome da
  * conta e a protecao entram no AAD (um item nao vira outro). Item com senha de aplicativo leva a
- * senha (derivada do PIN) no AAD: quem confere e o hardware, e sem ela o item nao abre.
+ * senha no AAD tambem, mas isso nao protege nada: o KeyMint entrega o claro antes de conferir a tag.
+ * Quem segura o PIN e a camada de baixo, a chave do slot.
  *
  * Chaves de cada slot:
- * - aparelho e PIN: AES-GCM no Keystore (StrongBox quando o aparelho tem). Nos slots do PIN a senha
- *   derivada do PIN entra no AAD: cada chute de PIN passa por este hardware, um de cada vez.
+ * - aparelho: AES-GCM no Keystore.
+ * - PIN (formato 2): uma chave HMAC no Keystore (StrongBox quando o aparelho tem). A senha derivada
+ *   do PIN passa por ela, e o resultado vira a chave AES do embrulho: sem o hardware deste aparelho
+ *   e a senha certa, nada abre, e cada chute passa por este hardware, um de cada vez. O formato 1
+ *   (a senha so no AAD) so existe em cofres de teste do emulador, criados antes de 22/10/2026; abre
+ *   e nunca mais e gravado.
  * - biometria: RSA-2048 no Keystore, que so decifra depois de uma biometria forte (classe 3) para
  *   aquela operacao. Embrulhar usa a chave publica e nao pede nada. As que seguem o cadastro
  *   morrem quando uma digital ou rosto e cadastrado ou tirado.
@@ -70,6 +78,8 @@ object Cofre {
     private const val CHAVE_DO_ARMAZENAMENTO = PREFIXO + "cofre"
     private const val CHAVE_DA_VIGIA = PREFIXO + "vigia"
     private const val VERSAO: Byte = 1
+    /** O embrulho dos slots do PIN com a senha na chave (HMAC no Keystore). */
+    private const val VERSAO_DO_PIN: Byte = 2
 
     private lateinit var app: Context
     private lateinit var pasta: File
@@ -106,7 +116,7 @@ object Cofre {
                 else {
                     val cifra = Cipher.getInstance("AES/GCM/NoPadding")
                     cifra.init(Cipher.DECRYPT_MODE, chaveDoArmazenamento(), GCMParameterSpec(128, bruto, 2, 12))
-                    cifra.updateAAD(aadDoItem(conta, protecao, senha))
+                    aadDoItem(conta, protecao, senha).let { aad -> try { cifra.updateAAD(aad) } finally { aad.fill(0) } }
                     val claro = cifra.doFinal(bruto, 14, bruto.size - 14)
                     try { byteArrayOf(OK.toByte()) + claro } finally { claro.fill(0) }
                 }
@@ -136,7 +146,7 @@ object Cofre {
                     if (protecaoFinal == 1 && senha == null) return SENHA
                     val cifra = Cipher.getInstance("AES/GCM/NoPadding")
                     cifra.init(Cipher.ENCRYPT_MODE, chaveDoArmazenamento())
-                    cifra.updateAAD(aadDoItem(conta, protecaoFinal, senha))
+                    aadDoItem(conta, protecaoFinal, senha).let { aad -> try { cifra.updateAAD(aad) } finally { aad.fill(0) } }
                     val cifrado = cifra.doFinal(dados)
                     val corpo = byteArrayOf(VERSAO, protecaoFinal.toByte()) + cifra.iv + cifrado
                     gravarAtomico(arquivo, corpo)
@@ -187,6 +197,11 @@ object Cofre {
         return if (protecao == 1 && senha != null) base + senha else base
     }
 
+    /**
+     * Grava e troca de uma vez, e so volta depois de a troca estar no disco: o fsync da pasta leva o
+     * rename junto. Sem ele, no f2fs, um reinicio forcado logo depois de um PIN errado devolvia o
+     * contador de tentativas antigo.
+     */
     private fun gravarAtomico(arquivo: File, corpo: ByteArray) {
         val temporario = File(pasta, arquivo.name + ".novo")
         temporario.outputStream().use { saida ->
@@ -197,6 +212,8 @@ object Cofre {
             temporario.delete()
             throw java.io.IOException("troca do arquivo")
         }
+        val descritor = Os.open(pasta.absolutePath, OsConstants.O_RDONLY, 0)
+        try { Os.fsync(descritor) } finally { Os.close(descritor) }
     }
 
     private fun chaveDoArmazenamento(): SecretKey {
@@ -205,7 +222,9 @@ object Cofre {
         return gerarAes(CHAVE_DO_ARMAZENAMENTO, strongBox = false)
     }
 
-    private fun aparelhoComBloqueio(): Boolean = app.getSystemService(KeyguardManager::class.java).isDeviceSecure
+    /** Sem bloqueio de tela, o Keystore fica destravado para sempre: nenhuma chave abre (no iOS,
+     * tirar o codigo apaga as carteiras). O caminho volta quando o bloqueio volta. */
+    fun aparelhoComBloqueio(): Boolean = app.getSystemService(KeyguardManager::class.java).isDeviceSecure
 
     // ---- Chaves de cada slot (KeyWrapper) ----
 
@@ -219,7 +238,11 @@ object Cofre {
         if (!aparelhoComBloqueio()) SEM_BLOQUEIO
         else {
             keyStore.deleteEntry(alias(slot))
-            if (usaBiometria(slot)) gerarRsa(alias(slot), segueCadastro(slot)) else gerarAes(alias(slot), strongBox = true)
+            when {
+                usaBiometria(slot) -> gerarRsa(alias(slot), segueCadastro(slot))
+                usaSenha(slot) -> gerarHmac(alias(slot))
+                else -> gerarAes(alias(slot), strongBox = true)
+            }
             OK
         }
     } catch (e: Exception) {
@@ -266,11 +289,24 @@ object Cofre {
                     chave.fill(0)
                 }
             }
+            usaSenha(slot) -> {
+                val sal = ByteArray(16).also { aleatorio.nextBytes(it) }
+                val chave = chaveDoPin(slot, senha!!, sal)
+                try {
+                    val aes = Cipher.getInstance("AES/GCM/NoPadding")
+                    val iv = ByteArray(12).also { aleatorio.nextBytes(it) }
+                    aes.init(Cipher.ENCRYPT_MODE, SecretKeySpec(chave, "AES"), GCMParameterSpec(128, iv))
+                    aes.updateAAD(aadDoEmbrulho(slot, null) + VERSAO_DO_PIN)
+                    byteArrayOf(OK.toByte(), VERSAO_DO_PIN) + sal + iv + aes.doFinal(segredo)
+                } finally {
+                    chave.fill(0)
+                }
+            }
             else -> {
                 val chave = keyStore.getKey(alias(slot), null) as? SecretKey ?: throw SemChave()
                 val aes = Cipher.getInstance("AES/GCM/NoPadding")
                 aes.init(Cipher.ENCRYPT_MODE, chave)
-                aes.updateAAD(aadDoEmbrulho(slot, senha))
+                aes.updateAAD(aadDoEmbrulho(slot, null))
                 val cifrado = aes.doFinal(segredo)
                 byteArrayOf(OK.toByte(), VERSAO) + aes.iv + cifrado
             }
@@ -292,6 +328,8 @@ object Cofre {
         try { byteArrayOf(OK.toByte()) + claro } finally { claro.fill(0) }
     } catch (e: Recusa) {
         byteArrayOf(e.codigo.toByte())
+    } catch (e: SemChave) {
+        byteArrayOf(SEM_CHAVE.toByte())
     } catch (e: Exception) {
         byteArrayOf(FALHA.toByte())
     } finally {
@@ -324,13 +362,15 @@ object Cofre {
 
     private fun abrir(slot: String, blob: ByteArray, senha: ByteArray?, motivo: String?): ByteArray {
         if (usaSenha(slot) != (senha != null)) throw Recusa(FALHA)
+        if (!aparelhoComBloqueio()) throw Recusa(INDISPONIVEL)
+        if (usaSenha(slot) && blob.firstOrNull() == VERSAO_DO_PIN) return abrirPeloPin(slot, blob, senha!!)
         if (blob.isEmpty() || blob[0] != VERSAO) throw Recusa(FALHA)
         if (!usaBiometria(slot)) {
             val chave = keyStore.getKey(alias(slot), null) as? SecretKey ?: throw Recusa(SEM_CHAVE)
             if (blob.size < 1 + 12 + 16) throw Recusa(FALHA)
             val aes = Cipher.getInstance("AES/GCM/NoPadding")
             aes.init(Cipher.DECRYPT_MODE, chave, GCMParameterSpec(128, blob, 1, 12))
-            aes.updateAAD(aadDoEmbrulho(slot, senha))
+            aadDoEmbrulho(slot, senha).let { aad -> try { aes.updateAAD(aad) } finally { aad.fill(0) } }
             return try {
                 aes.doFinal(blob, 13, blob.size - 13)
             } catch (e: AEADBadTagException) {
@@ -408,6 +448,66 @@ object Cofre {
         aes.init(Cipher.DECRYPT_MODE, SecretKeySpec(chave, "AES"), GCMParameterSpec(128, resto, 0, 12))
         aes.updateAAD(aadDoEmbrulho(slot, null))
         return try { aes.doFinal(resto, 12, resto.size - 12) } catch (e: AEADBadTagException) { throw Recusa(FALHA) }
+    }
+
+    /** Formato 2: [2][sal 16][iv 12][cifrado + tag]. Senha errada da outra chave AES, e a tag recusa. */
+    private fun abrirPeloPin(slot: String, blob: ByteArray, senha: ByteArray): ByteArray {
+        if (blob.size < 1 + 16 + 12 + 16) throw Recusa(FALHA)
+        val chave = chaveDoPin(slot, senha, blob.copyOfRange(1, 17))
+        try {
+            val aes = Cipher.getInstance("AES/GCM/NoPadding")
+            aes.init(Cipher.DECRYPT_MODE, SecretKeySpec(chave, "AES"), GCMParameterSpec(128, blob, 17, 12))
+            aes.updateAAD(aadDoEmbrulho(slot, null) + VERSAO_DO_PIN)
+            return try { aes.doFinal(blob, 29, blob.size - 29) } catch (e: AEADBadTagException) { throw Recusa(SENHA) }
+        } finally {
+            chave.fill(0)
+        }
+    }
+
+    /**
+     * A chave AES de um embrulho do PIN: a senha passa pela chave HMAC do slot, que nunca sai do
+     * hardware, e o resultado e estendido com o sal deste embrulho (HKDF-SHA256). Quem copia o
+     * arquivo, ou le a memoria do Keystore, so testa PINs neste aparelho, um de cada vez.
+     */
+    private fun chaveDoPin(slot: String, senha: ByteArray, sal: ByteArray): ByteArray {
+        val hmac = keyStore.getKey(alias(slot), null) as? SecretKey ?: throw SemChave()
+        val entrada = "escalibur-wallet/android/v2/pin\u0000$slot\u0000".toByteArray() + senha
+        val semente = try {
+            Mac.getInstance("HmacSHA256").run { init(hmac); doFinal(entrada) }
+        } catch (e: java.security.InvalidKeyException) {
+            // A chave do slot ainda e a AES do formato 1: este embrulho nao e dela.
+            throw SemChave()
+        } finally {
+            entrada.fill(0)
+        }
+        try {
+            val extraida = Mac.getInstance("HmacSHA256").run { init(SecretKeySpec(sal, "HmacSHA256")); doFinal(semente) }
+            try {
+                val info = "escalibur-wallet/android/v2/embrulho\u0000$slot".toByteArray() + 1
+                return Mac.getInstance("HmacSHA256").run { init(SecretKeySpec(extraida, "HmacSHA256")); doFinal(info) }
+            } finally {
+                extraida.fill(0)
+            }
+        } finally {
+            semente.fill(0)
+        }
+    }
+
+    private fun gerarHmac(alias: String) {
+        fun spec(comStrongBox: Boolean) = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
+            .setKeySize(256)
+            .setDigests(KeyProperties.DIGEST_SHA256)
+            .setUnlockedDeviceRequired(true)
+            .setIsStrongBoxBacked(comStrongBox)
+            .build()
+        val gerador = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_HMAC_SHA256, "AndroidKeyStore")
+        try {
+            gerador.init(spec(true))
+            gerador.generateKey()
+        } catch (e: StrongBoxUnavailableException) {
+            gerador.init(spec(false))
+            gerador.generateKey()
+        }
     }
 
     private fun aadDoEmbrulho(slot: String, senha: ByteArray?): ByteArray {

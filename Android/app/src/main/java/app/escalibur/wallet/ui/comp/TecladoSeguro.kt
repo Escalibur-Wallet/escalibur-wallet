@@ -1,5 +1,9 @@
 package app.escalibur.wallet.ui.comp
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.provider.Settings
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
@@ -85,7 +89,25 @@ object TecladoSeguro {
     class Sessao(val layout: Layout, val conexao: InputConnection, val info: EditorInfo, val janela: Any?) {
         /** O globo: o teclado do celular neste campo. */
         val pediuOSistema = CompletableDeferred<Unit>()
+        /** Campo de senha (passphrase, senha do envelope, palavras): o globo nao aparece nele. */
+        val secreto = campoSecreto(info)
     }
+
+    private fun campoSecreto(info: EditorInfo): Boolean =
+        info.inputType and InputType.TYPE_MASK_CLASS == InputType.TYPE_CLASS_TEXT && info.inputType and InputType.TYPE_MASK_VARIATION in setOf(
+            InputType.TYPE_TEXT_VARIATION_PASSWORD, InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD, InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
+        )
+
+    /**
+     * O teclado do celular nao veio com o aparelho (SwiftKey baixado, teclado com nuvem, um malicioso):
+     * as flags de "sem aprendizado" sao so um pedido, e ele le o campo inteiro. Na duvida, conta como
+     * de terceiros.
+     */
+    private fun tecladoDeTerceiros(contexto: Context): Boolean = runCatching {
+        val atual = Settings.Secure.getString(contexto.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD) ?: return true
+        val pacote = ComponentName.unflattenFromString(atual)?.packageName ?: return true
+        contexto.packageManager.getApplicationInfo(pacote, 0).flags and ApplicationInfo.FLAG_SYSTEM == 0
+    }.getOrDefault(true)
 
     var sessao by mutableStateOf<Sessao?>(null)
         private set
@@ -171,9 +193,12 @@ object TecladoSeguro {
                         if (sistema?.palavras == true) atributos.inputType = atributos.inputType or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
                         conexao
                     }
-                    if (sistema != null || !App.estado.tecladoProprio) proximo.startInputMethod(semAprendizado)
                     val info = EditorInfo()
                     val conexao = original.createInputConnection(info)
+                    // Desligado, o campo vai para o teclado do celular; campo de senha com um teclado
+                    // de terceiros, nunca.
+                    val peloCelular = !App.estado.tecladoProprio && !(campoSecreto(info) && tecladoDeTerceiros(vista.context))
+                    if (sistema != null || peloCelular) proximo.startInputMethod(semAprendizado)
                     val nova = Sessao(layout(info), conexao, info, janela)
                     sessao = nova
                     try {
@@ -217,8 +242,8 @@ object TecladoSeguro {
 
         var pagina by mutableStateOf(Pagina.letras)
         var maiuscula by mutableStateOf(false)
-        /** O globo; fora no Super Security. */
-        val ofereceOSistema get() = !App.estado.reforcado
+        /** O globo; fora no Super Security e nos campos de senha. */
+        val ofereceOSistema get() = !App.estado.reforcado && !sessao.secreto
 
         fun digitar(texto: String) {
             sessao.conexao.commitText(texto, 1)

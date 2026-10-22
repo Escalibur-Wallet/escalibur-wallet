@@ -77,6 +77,15 @@ struct EVMCoWSwapTests {
         #expect(!quote.alternatives.contains { $0.provider == "CoW" })
     }
 
+    @Test("Sem referencia, cotacao da CoW mais de 5% abaixo dos agregadores tambem fica de fora: o piso")
+    func deflatedWithoutReference() async throws {
+        let (maxExpected, best) = try Self.aggregators()
+        let quote = try await engine(cow: FakeCoW(quotes: [F.amount: Self.scaled(maxExpected, 940, 1_000)])).quote(F.request())
+        #expect(quote.execution == .transactions)
+        #expect(quote.legs[0].provider == best.quote.provider.displayName)
+        #expect(!quote.alternatives.contains { $0.provider == "CoW" })
+    }
+
     @Test("Com referencia: CoW mais de 5% pior, ou mais de 5% melhor, fica de fora")
     func anchoredToReference() async throws {
         let (maxExpected, _) = try Self.aggregators()

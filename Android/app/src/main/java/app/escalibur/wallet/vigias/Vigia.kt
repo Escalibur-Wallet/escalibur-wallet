@@ -164,11 +164,22 @@ object Vigia {
         }
     }
 
+    /** Um segredo so do app, na pasta sem backup, que vai em cada notificacao. */
+    @Synchronized
+    private fun ficha(contexto: Context): String {
+        val arquivo = File(contexto.noBackupFilesDir, "aviso.ficha")
+        runCatching { arquivo.readText() }.getOrNull()?.takeIf { it.length == 64 }?.let { return it }
+        val nova = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
+        arquivo.writeText(nova)
+        return nova
+    }
+
     /** O toque so abre o app: nenhuma acao na notificacao. Depois do PIN, o app leva ao lugar. */
     private fun abrir(contexto: Context, id: String, aviso: JSONObject): PendingIntent {
         val intencao = Intent(contexto, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra("aviso", true)
+            .putExtra("aviso.ficha", ficha(contexto))
         if (aviso.optString("canal") == "precos") aviso.optString("moeda").takeIf { it.isNotEmpty() }?.let { intencao.putExtra("aviso.moeda", it) }
         if (aviso.optString("canal") == "ordens") intencao.putExtra("aviso.ordem", aviso.optString("ordem"))
         if (aviso.optString("canal") == "recebimentos") intencao.putExtra("aviso.recebimento", true)
@@ -176,8 +187,12 @@ object Vigia {
     }
 
     /** O toque que abriu (ou trouxe) o app. */
-    fun receber(intencao: Intent?) {
+    fun receber(contexto: Context, intencao: Intent?) {
         if (intencao?.getBooleanExtra("aviso", false) != true) return
+        // A MainActivity e exportada: um intent de outro app com "aviso" fechava o fluxo aberto e
+        // navegava. So a notificacao daqui leva a ficha.
+        val recebida = intencao.getStringExtra("aviso.ficha")?.toByteArray() ?: return
+        if (!java.security.MessageDigest.isEqual(recebida, ficha(contexto).toByteArray())) return
         pedido = Pedido(intencao.getStringExtra("aviso.moeda"), intencao.getStringExtra("aviso.ordem"), intencao.getBooleanExtra("aviso.recebimento", false))
         intencao.removeExtra("aviso")
     }

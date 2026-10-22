@@ -128,13 +128,15 @@ extension EVMTradeEngine {
                                 validFor: CoWProtocol.partsValidity)
     }
 
-    /// Sem referencia, a CoW so vale junto de outra cotacao, e no maximo 5% acima da
-    /// melhor estimativa dos agregadores.
+    /// Sem referencia, a CoW so vale junto de outra cotacao, a ate 5% da melhor estimativa
+    /// dos agregadores, para cima ou para baixo (como a referencia faz). Sem o piso, com
+    /// nenhum agregador ancorado a CoW levava sozinha e assinava um minimo pior do que o
+    /// que a outra fonte garantia.
     static func cowAnchored(_ candidate: EVMCoWCandidate, aggregatorExpected: [BigUInt]) -> Bool {
         if candidate.deviationBps != nil { return true }
         guard let best = aggregatorExpected.max() else { return false }
-        let ceiling = best + best * BigUInt(cowAnchorBps) / EVMTradeEngine.basisPoints
-        return candidate.quote.buyAmount <= ceiling
+        let band = best * BigUInt(cowAnchorBps) / EVMTradeEngine.basisPoints
+        return candidate.quote.buyAmount <= best + band && candidate.quote.buyAmount + band >= best
     }
 
     /// O `TradeQuote` da troca pela CoW. As alternativas sao os agregadores, cada um com o

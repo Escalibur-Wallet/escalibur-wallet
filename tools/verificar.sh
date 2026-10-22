@@ -24,6 +24,8 @@ KEYS=Kit/Sources/EscaliburKeys
 NET=Kit/Sources/EscaliburNetwork
 ENG=Kit/Sources/EscaliburEngines
 APP=App/EscaliburWallet
+# O app Android em Swift (a ponte e as telas do nucleo): vale para ele o que vale para o app do iOS.
+APPA=Kit/Sources/Android/EscaliburAndroid
 
 swift_em() { find "$@" -name "*.swift" 2>/dev/null; }
 # As regras de codigo leem so .swift. Estas sao as outras extensoes que o Xcode ou o
@@ -56,10 +58,10 @@ achados=$(procurar 'import (Network|WebKit|SafariServices|CFNetwork)\b|URLSessio
 achados=$(procurar 'NSClassFromString|NSSelectorFromString|objc_getClass|objc_lookUpClass|class_getInstanceMethod|method_exchange|dlopen|dlsym|objc_msgSend|\.perform\(|value\(forKey' "$CORE" "$CHAINS" "$KEYS")
 [ -n "$achados" ] && { aviso "reflexao que contornaria a fronteira"; echo "$achados"; } || ok "sem reflexao no nucleo, nas redes e nas chaves"
 
-achados=$(swift_em "$APP" "$CORE" "$CHAINS" "$KEYS" "$ENG" | xargs grep -lE 'URLSession' 2>/dev/null)
+achados=$(swift_em "$APP" "$APPA" "$CORE" "$CHAINS" "$KEYS" "$ENG" | xargs grep -lE 'URLSession' 2>/dev/null)
 [ -n "$achados" ] && { aviso "URLSession fora do modulo de rede"; echo "$achados"; } || ok "URLSession so no modulo de rede"
 
-achados=$(procurar 'URLSession\.shared|AsyncImage' "$APP" "$NET" "$CORE" "$CHAINS" "$KEYS" "$ENG")
+achados=$(procurar 'URLSession\.shared|AsyncImage' "$APP" "$APPA" "$NET" "$CORE" "$CHAINS" "$KEYS" "$ENG")
 [ -n "$achados" ] && { aviso "URLSession.shared ou AsyncImage (gravam cache em disco)"; echo "$achados"; } || ok "sem URLSession.shared e sem AsyncImage"
 
 achados=$(procurar 'import EscaliburKeys|SecureBytes|WalletSecret|RootKeyVault|WalletVault|Mnemonic|HDKey' "$NET")
@@ -110,7 +112,8 @@ elif ! diff -q <(echo "$hosts_atuais") hosts.lock >/dev/null; then
 else
     ok "$(wc -l < hosts.lock | tr -d ' ') hosts conferem com hosts.lock"
 fi
-achados=$(swift_em "$APP" "$NET" "$CORE" "$CHAINS" "$KEYS" | xargs grep -nE '"http://' 2>/dev/null)
+# O TesteTLS do Android (inteiro em DEBUG) confere justamente que o http e recusado.
+achados=$(swift_em "$APP" "$APPA" "$NET" "$CORE" "$CHAINS" "$KEYS" | grep -v "$APPA/TesteTLS.swift" | xargs grep -nE '"http://' 2>/dev/null)
 [ -n "$achados" ] && { aviso "http sem TLS"; echo "$achados"; } || ok "nenhum http sem TLS"
 
 if /usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity:NSAllowsArbitraryLoads" "$APP/Resources/Info.plist" 2>/dev/null | grep -q true; then
@@ -260,7 +263,7 @@ achados=$(procurar '(^|[^A-Za-z0-9_.])(print|debugPrint|dump|NSLog)\(' "$APP" "$
 [ -n "$achados" ] && { aviso "print/NSLog fora dos testes"; echo "$achados"; } || ok "nenhum print fora dos testes"
 achados=$(procurar 'Logger\(|os_log' "$KEYS" "$CHAINS")
 [ -n "$achados" ] && { aviso "logger no modulo de chaves ou de redes"; echo "$achados"; } || ok "chaves e redes nao registram nada"
-achados=$(procurar '\.random\(|randomElement|shuffled\(\)|arc4random|drand48|\brand\(|SystemRandomNumberGenerator|GKRandom' "$CORE" "$CHAINS" "$KEYS" "$APP" | grep -v 'SecureBytes\.random(')
+achados=$(procurar '\.random\(|randomElement|shuffled\(\)|arc4random|drand48|\brand\(|SystemRandomNumberGenerator|GKRandom' "$CORE" "$CHAINS" "$KEYS" "$APP" "$APPA" | grep -v 'SecureBytes\.random(')
 [ -n "$achados" ] && { aviso "aleatoriedade fora do SecRandomCopyBytes"; echo "$achados"; } || ok "a unica fonte de aleatoriedade e o SecRandomCopyBytes"
 
 # 6. Chaveiro e biometria.
@@ -415,7 +418,7 @@ chamadas=$(procurar 'Pasteboard\.copyPhrase' "$APP" | grep -v 'Receive/ReceiveSh
 [ -n "$prazo" ] && [ "$prazo" -le 60 ] && [ "$(echo "$chamadas" | grep -c .)" = "1" ] && echo "$chamadas" | grep -q 'NewWallet/RecordWordsView\.swift:' \
     && grep -q 'CopyPhraseSheet {' "$APP/Features/NewWallet/RecordWordsView.swift" \
     && ok "a frase so e copiada depois do aviso e some em ate 1 minuto" || { aviso "copia da frase fora do aviso ou com validade longa"; echo "$chamadas"; }
-achados=$(procurar '^[[:space:]]*import +(Firebase[A-Za-z]*|Crashlytics|Sentry|Bugsnag|Amplitude|Mixpanel|Segment|AppsFlyer[A-Za-z]*|Adjust[A-Za-z]*|Branch|OneSignal|Datadog[A-Za-z]*|NewRelic|Instabug|FBSDK[A-Za-z]*|GoogleMobileAds|PostHog)\b' "$APP" "$NET" "$CORE" "$CHAINS" "$KEYS")
+achados=$(procurar '^[[:space:]]*import +(Firebase[A-Za-z]*|Crashlytics|Sentry|Bugsnag|Amplitude|Mixpanel|Segment|AppsFlyer[A-Za-z]*|Adjust[A-Za-z]*|Branch|OneSignal|Datadog[A-Za-z]*|NewRelic|Instabug|FBSDK[A-Za-z]*|GoogleMobileAds|PostHog)\b' "$APP" "$APPA" "$NET" "$CORE" "$CHAINS" "$KEYS")
 [ -n "$achados" ] && { aviso "SDK de terceiro"; echo "$achados"; } || ok "nenhum SDK de analise, falha ou anuncio"
 achados=$(procurar 'WKWebView|UIWebView|ASWebAuthenticationSession|SFSafariViewController' "$APP" | grep -v "^$APP/Design/SiteBrowser.swift:")
 # A unica excecao (pedido do dono, 18/10/2026): o navegador da Apple, em outro processo, so

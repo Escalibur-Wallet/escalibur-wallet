@@ -13,14 +13,19 @@ struct JavaEnv {
 
     var table: JNINativeInterface { env.pointee!.pointee }
 
+    /// Em UTF-16, nunca no "UTF-8 modificado" do JNI: um emoji no nome de uma carteira (fora do
+    /// plano basico) chegava quebrado de um lado e podia derrubar o app do outro.
     func string(_ value: jstring?) -> String? {
-        guard let value, let chars = table.GetStringUTFChars(env, value, nil) else { return nil }
-        defer { table.ReleaseStringUTFChars(env, value, chars) }
-        return String(cString: chars)
+        guard let value else { return nil }
+        let length = Int(table.GetStringLength(env, value))
+        guard let chars = table.GetStringChars(env, value, nil) else { return nil }
+        defer { table.ReleaseStringChars(env, value, chars) }
+        return String(decoding: UnsafeBufferPointer(start: chars, count: length), as: UTF16.self)
     }
 
     func string(_ text: String) -> jstring? {
-        text.withCString { table.NewStringUTF(env, $0) }
+        let units = Array(text.utf16)
+        return units.withUnsafeBufferPointer { table.NewString(env, $0.baseAddress, jsize($0.count)) }
     }
 
     /// O conteudo de um ByteBuffer direto (o segredo fica onde o Kotlin pos, fora do heap do

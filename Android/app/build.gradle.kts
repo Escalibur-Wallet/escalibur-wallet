@@ -18,7 +18,7 @@ android {
         minSdk = 30
         targetSdk = 36
         // De 1001 em diante: os builds do Android nunca usam um numero de build do iOS.
-        versionCode = 1001
+        versionCode = 1002
         versionName = "1.0.0"
         // O nucleo so existe para arm64 (todos os aparelhos Android atuais e o emulador do Mac
         // com chip da Apple).
@@ -148,6 +148,25 @@ abstract class GerarTextos : DefaultTask() {
         return plural.mapValues { (_, forma) -> (forma["stringUnit"] as? Map<String, Any?>)?.get("value") ?: "" }
     }
 }
+
+/**
+ * O pacote da loja nunca leva o nucleo de depuracao (cofre.teste, o saldo de teste, o detalhe nos
+ * erros): o Gradle empacota o .so que estiver na pasta, de qualquer compilacao.
+ */
+abstract class ConferirNucleoDeRelease : DefaultTask() {
+    @get:InputFile abstract val nucleo: RegularFileProperty
+
+    @TaskAction
+    fun conferir() {
+        val texto = String(nucleo.get().asFile.readBytes(), Charsets.ISO_8859_1)
+        check("cofre.teste" !in texto) { "o nucleo em jniLibs e o de depuracao: rode tools/android/compilar-nucleo.sh release" }
+    }
+}
+
+val conferirNucleo = tasks.register<ConferirNucleoDeRelease>("conferirNucleoDeRelease") {
+    nucleo.set(layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libEscaliburAndroid.so"))
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(conferirNucleo) }
 
 val gerarTextos = tasks.register<GerarTextos>("gerarTextos") {
     catalogo.set(raiz.resolve("App/EscaliburWallet/Resources/Localizable.xcstrings"))

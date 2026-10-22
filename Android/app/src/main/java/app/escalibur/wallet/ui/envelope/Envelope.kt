@@ -226,7 +226,13 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
         if (uri == null) return@rememberLauncherForActivityResult
         escopo.launch {
             val ok = withContext(Dispatchers.IO) {
-                runCatching { contexto.contentResolver.openOutputStream(uri, "w")?.use { it.write(dados) } != null }.getOrDefault(false)
+                // "wt" trunca o que havia no arquivo; e so diz "salvo" depois de ler de volta o mesmo
+                // conteudo (um provedor de nuvem que gravou pela metade nao passa).
+                runCatching {
+                    contexto.contentResolver.openOutputStream(uri, "wt")?.use { it.write(dados) } ?: return@runCatching false
+                    val lido = contexto.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching false
+                    java.security.MessageDigest.isEqual(lido, dados)
+                }.getOrDefault(false)
             }
             Avisos.mostrar(if (ok) t("Arquivo salvo.") else t("Não foi possível salvar o arquivo. Tente de novo."))
         }

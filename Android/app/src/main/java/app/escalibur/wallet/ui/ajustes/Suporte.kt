@@ -114,8 +114,8 @@ fun TelaDeSuporte() {
     var repeticao by remember { mutableStateOf("") }
     var pareceFrase by remember { mutableStateOf(false) }
     var semAppDeEmail by remember { mutableStateOf(false) }
-    LaunchedEffect(detalhes) {
-        pareceFrase = runCatching { Api.objeto("carteira.reconhecer", JSONObject().put("endereco", detalhes)).optBoolean("frase") }.getOrDefault(false)
+    LaunchedEffect(detalhes, transacao) {
+        pareceFrase = runCatching { Api.objeto("suporte.pareceFrase", JSONObject().put("detalhes", detalhes).put("transacao", transacao)).optBoolean("frase") }.getOrDefault(false)
     }
     val emailValido = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$").matches(email.trim())
     val iguais = email.trim().equals(repeticao.trim(), ignoreCase = true)

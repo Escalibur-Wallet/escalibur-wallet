@@ -454,6 +454,22 @@ final class Envio: @unchecked Sendable {
     }
 
     /// Texto que parece a senha de uma carteira: nunca vai para o campo do endereco.
+    private static let palavrasBIP39: Set<String> = Set(WordLexicon.entries.compactMap(\.folded))
+
+    /// A maior sequencia de palavras seguidas do texto que estao em alguma lista BIP-39.
+    static func maiorSequenciaDePalavras(_ texto: String) -> Int {
+        var maior = 0, seguidas = 0
+        for pedaco in texto.split(whereSeparator: { !$0.isLetter }) {
+            if palavrasBIP39.contains(WordLexicon.fold(String(pedaco))) {
+                seguidas += 1
+                maior = max(maior, seguidas)
+            } else {
+                seguidas = 0
+            }
+        }
+        return maior
+    }
+
     static func pareceFrase(_ texto: String) -> Bool {
         let espacado = texto.replacingOccurrences(of: "[,;\\-]", with: " ", options: .regularExpression)
         return Mnemonic.words(in: espacado).count >= 12
@@ -913,12 +929,14 @@ enum Fmt {
     /// `aparar`: sem os zeros do fim ("1,5" em vez de "1,500000").
     static func agrupado(_ valor: Double, casas: Int, aparar: Bool = false) -> String {
         let estilo = NumberStyle.current
-        let fator = pow(10, Double(casas))
-        let arredondado = (abs(valor) * fator).rounded() / fator
-        let inteiro = Int(arredondado)
-        var fracao = casas > 0 ? String(format: "%0\(casas)d", Int(((arredondado - Double(inteiro)) * fator).rounded())) : ""
+        // Pelo texto, nunca por Int: um token com quatrilhoes de unidades (o BNB Frog Inu) passava
+        // do Int e fechava o app na cotacao.
+        guard valor.isFinite else { return "0" }
+        let texto = String(format: "%.\(max(casas, 0))f", abs(valor))
+        let partes = texto.split(separator: ".", omittingEmptySubsequences: false)
+        var fracao = partes.count > 1 ? String(partes[1]) : ""
         if aparar { while fracao.hasSuffix("0") { fracao.removeLast() } }
-        return estilo.decimal(estilo.group(String(inteiro)), fracao)
+        return estilo.decimal(estilo.group(String(partes[0])), fracao)
     }
 
     /// O inteiro da rede como o dono digitaria: sem separador de milhar, com todas as casas que

@@ -27,6 +27,7 @@ export JAVA_HOME="${JAVA_HOME:-$HOME/Library/Java/JavaVirtualMachines/jdk-21.0.1
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 ESCALIBUR_UPLOAD_SENHA="$(security find-generic-password -a escalibur-android -s escalibur-android-upload -w)"
 export ESCALIBUR_UPLOAD_SENHA
-(cd Android && ./gradlew -q bundleRelease assembleRelease)
+# Sem o cache de configuracao: ele guardaria a senha da chave em disco, dentro de Android/.gradle.
+(cd Android && ./gradlew -q --no-configuration-cache bundleRelease assembleRelease)
 unset ESCALIBUR_UPLOAD_SENHA
 ls -la Android/app/build/outputs/bundle/release/ Android/app/build/outputs/apk/release/

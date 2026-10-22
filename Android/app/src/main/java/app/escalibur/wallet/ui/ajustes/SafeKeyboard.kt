@@ -63,6 +63,7 @@ import app.escalibur.wallet.ui.comp.PixelsCifrando
 import app.escalibur.wallet.ui.comp.Sugestoes
 import app.escalibur.wallet.ui.comp.TecladoDePalavras
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
+import app.escalibur.wallet.ui.Autorizacao
 import app.escalibur.wallet.ui.t
 import app.escalibur.wallet.ui.tema.Altura
 import app.escalibur.wallet.ui.tema.Espaco
@@ -75,10 +76,16 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-/** Liga ou desliga o Safe Keyboard; no Super Security ele nao desliga. Devolve o erro para mostrar. */
+/**
+ * Liga ou desliga o Safe Keyboard; no Super Security ele nao desliga. Desligar entrega o que se
+ * digita ao teclado do celular, que pode ser de terceiros: pede o PIN. Devolve o erro para mostrar.
+ */
 private suspend fun gravarSafeKeyboard(ligado: Boolean): String? = runCatching {
-    App.aplicar(Api.objeto("ajustes.tecladoProprio", JSONObject().put("ligado", ligado)))
-}.exceptionOrNull()?.let { t("Não foi possível salvar. Tente de novo.") }
+    if (ligado) App.aplicar(Api.objeto("ajustes.tecladoProprio", JSONObject().put("ligado", true)))
+    else Autorizacao.tentando(t("Desativar o Safe Keyboard"), Autorizacao.Presenca.pin) { credencial ->
+        App.aplicar(Api.comSegredo("ajustes.tecladoProprio", JSONObject().put("ligado", false).put("credencial", credencial.json()), *credencial.partes()))
+    }
+}.exceptionOrNull()?.let { Autorizacao.mensagemDeRecusa(it) ?: t("Não foi possível salvar. Tente de novo.") }
 
 /**
  * Seguranca, Safe Keyboard (o OwnKeyboardView do iOS): o titulo e o interruptor em cima, o teclado

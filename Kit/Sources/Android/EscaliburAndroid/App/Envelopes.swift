@@ -267,8 +267,7 @@ enum Envelopes {
         )
         encerrar()
         try? Sessao.shared.atualizar(id) { $0.envelopeSealedAt = .now }
-        var sorteio = [UInt8](repeating: 0, count: 2)
-        for indice in sorteio.indices { sorteio[indice] = UInt8.random(in: 0...255) }
+        let sorteio = try SecureBytes.random(count: 2).withUnsafeBytes { Array($0) }
         return Lacrado(arquivo: arquivo.base64EncodedString(), nome: "envelope-\(Hex.encode(sorteio).uppercased()).esclbr", fraca: fraca)
     }
 

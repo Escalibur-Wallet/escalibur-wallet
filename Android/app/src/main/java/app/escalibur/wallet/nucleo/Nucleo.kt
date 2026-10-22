@@ -49,11 +49,12 @@ object Api {
      * pede, cada um zerado aqui depois do envio. Nada disto vira String.
      */
     suspend fun comSegredo(metodo: String, corpo: JSONObject, vararg partes: ByteArray): JSONObject = withContext(Dispatchers.IO) {
-        val tamanho = partes.sumOf { it.size } + maxOf(0, partes.size - 1)
-        val junto = ByteArray(maxOf(tamanho, 0))
+        // Cada parte com o tamanho na frente (4 bytes): uma passphrase colada com quebra de linha
+        // chega inteira, em vez de virar duas partes.
+        val junto = ByteArray(partes.sumOf { 4 + it.size })
         var posicao = 0
-        partes.forEachIndexed { indice, parte ->
-            if (indice > 0) junto[posicao++] = '\n'.code.toByte()
+        for (parte in partes) {
+            for (deslocamento in 0 until 4) junto[posicao++] = (parte.size ushr (24 - 8 * deslocamento)).toByte()
             parte.copyInto(junto, posicao)
             posicao += parte.size
         }

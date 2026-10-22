@@ -1,6 +1,8 @@
 package app.escalibur.wallet
 
+import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,7 +23,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
-    private var primeiraVinda = true
+    private companion object {
+        /** A primeira vinda do processo, nao da Activity: uma Activity recriada (tema, fonte ou
+         * idioma do sistema) passa pelo bloqueio automatico como qualquer volta. */
+        var primeiraVindaDoProcesso = true
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,10 +36,20 @@ class MainActivity : ComponentActivity() {
         // telas no emulador.
         val capturas = BuildConfig.DEBUG && intent.getBooleanExtra("capturas", false)
         if (!capturas) window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
-        // Nenhuma janela de outro app por cima desta (o golpe da sobreposicao).
-        window.setHideOverlayWindows(true)
+        // Nenhuma janela de outro app por cima desta (o golpe da sobreposicao). No Android 11 a
+        // janela nao some: o toque que chega com outra janela por cima e recusado.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) window.setHideOverlayWindows(true)
+        window.decorView.filterTouchesWhenObscured = true
+        // Servico de acessibilidade que nao e ferramenta de acessibilidade (o TalkBack e) nao le
+        // nada do app: nem as palavras, nem as teclas do PIN e do Safe Keyboard. E o golpe mais
+        // comum no Android. Antes do Android 14, a checagem do aparelho avisa.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            window.decorView.setAccessibilityDataSensitive(View.ACCESSIBILITY_DATA_SENSITIVE_YES)
+        }
+        // Nenhum gerenciador de senhas oferece guardar a passphrase ou a senha do envelope.
+        window.decorView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
         Textos.carregar(this)
-        Vigia.receber(intent)
+        Vigia.receber(this, intent)
         // O app e escuro sempre: a barra de status e a de navegacao com icones claros, mesmo com o
         // aparelho no tema claro (o padrao seguia o tema do sistema e os icones sumiam no fundo).
         enableEdgeToEdge(
@@ -53,13 +69,13 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         if (BuildConfig.DEBUG) intent.getStringExtra("tela")?.let { Navegacao.telaDeDepuracao = it }
-        Vigia.receber(intent)
+        Vigia.receber(this, intent)
     }
 
     override fun onStart() {
         super.onStart()
-        if (primeiraVinda) {
-            primeiraVinda = false
+        if (primeiraVindaDoProcesso) {
+            primeiraVindaDoProcesso = false
         } else {
             lifecycleScope.launch { Ciclo.voltou() }
         }

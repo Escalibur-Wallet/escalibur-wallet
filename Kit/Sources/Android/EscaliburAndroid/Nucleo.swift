@@ -124,6 +124,12 @@ enum Nucleo {
             let endereco = pedido["endereco"]?.stringValue ?? ""
             let outra = try esperar { await Importacao.tronComOutraChave(endereco) }
             return try json(["outraChave": outra])
+        case "suporte.pareceFrase":
+            // Seis palavras seguidas da lista BIP-39, em qualquer idioma, como no SupportView do
+            // iOS: o chamado com um pedaco da frase nao sai. Contar palavras soltas recusava qualquer
+            // texto de 12 palavras e deixava passar 11 da frase.
+            let textos = ["detalhes", "transacao"].map { String((pedido[$0]?.stringValue ?? "").prefix(4096)) }
+            return try json(["frase": textos.contains { Envio.maiorSequenciaDePalavras($0) >= 6 }])
         case "carteira.reconhecer":
             // A rede de um endereco colado para so observar: nada e guardado.
             let texto = String((pedido["endereco"]?.stringValue ?? "").prefix(512))
@@ -252,10 +258,13 @@ enum Nucleo {
             }
             return try json(Estado.agora())
         case "ajustes.tecladoProprio":
-            // O Safe Keyboard: no Super Security ele fica sempre ligado (como no iOS).
+            // O Safe Keyboard: no Super Security ele fica sempre ligado (como no iOS). Desligar
+            // entrega o que se digita ao teclado do celular, que pode ser de terceiros: pede o PIN
+            // ("ajustes.tecladoProprio" com segredo).
             let ligado = pedido["ligado"]?.boolValue ?? true
             guard ligado || Chaves.root.securityMode != .hardened else { throw Falha(erro: "ajustes.tecladoNoReforco") }
-            try Sessao.shared.alterar { $0.settings.ownKeyboard = ligado }
+            guard ligado else { throw Falha(erro: "ajustes.pedePIN") }
+            try Sessao.shared.alterar { $0.settings.ownKeyboard = true }
             return try json(Estado.agora())
         case "carteira.pedirPassphraseParaEnviar":
             // Ligar e na hora; desligar pede a passphrase e o PIN ("carteira.naoPedirPassphrase").
@@ -364,6 +373,11 @@ enum Nucleo {
                 tronComOutraChave: pedido["tronOutraChave"]?.boolValue ?? false, credencial: cred
             )
             return try json(CarteiraResumo(wallet, selecionada: true))
+        case "ajustes.tecladoProprio":
+            guard Chaves.root.securityMode != .hardened else { throw Falha(erro: "ajustes.tecladoNoReforco") }
+            try Sessao.shared.comChaveRaiz(try credencial()) { _ in }
+            try Sessao.shared.alterar { $0.settings.ownKeyboard = false }
+            return try json(Estado.agora())
         case "ajustes.autoTravar":
             let segundos = Estado.Ajustes.prazo(Int(pedido["segundos"]?.doubleValue ?? 60))
             try Sessao.shared.comChaveRaiz(try credencial()) { _ in }
@@ -453,18 +467,22 @@ enum Nucleo {
         let jaAberta: Bool
     }
 
-    /// O segredo em partes, separadas por quebra de linha. PIN, palavras e passphrase nunca tem
-    /// quebra de linha (a interface nao deixa digitar).
+    /// O segredo em partes, cada uma com o tamanho na frente (4 bytes, big-endian). Por tamanho e
+    /// nao por separador: uma passphrase com quebra de linha chegava cortada, sem aviso. Parte que
+    /// passa do fim encerra a leitura (o que falta vira "segredo incompleto").
     static func dividir(_ segredo: SecureBytes) -> [SecureBytes] {
         segredo.withUnsafeBytes { raw in
             let bytes = raw.bindMemory(to: UInt8.self)
             var partes: [SecureBytes] = []
             var inicio = 0
-            for indice in 0...bytes.count where indice == bytes.count || bytes[indice] == 0x0A {
-                let parte = SecureBytes(capacity: max(indice - inicio, 1))
-                if indice > inicio { parte.append(contentsOf: UnsafeBufferPointer(rebasing: bytes[inicio..<indice])) }
+            while inicio + 4 <= bytes.count {
+                let tamanho = Int(bytes[inicio]) << 24 | Int(bytes[inicio + 1]) << 16 | Int(bytes[inicio + 2]) << 8 | Int(bytes[inicio + 3])
+                let fim = inicio + 4 + tamanho
+                guard tamanho >= 0, fim <= bytes.count else { break }
+                let parte = SecureBytes(capacity: max(tamanho, 1))
+                if tamanho > 0 { parte.append(contentsOf: UnsafeBufferPointer(rebasing: bytes[(inicio + 4)..<fim])) }
                 partes.append(parte)
-                inicio = indice + 1
+                inicio = fim
             }
             return partes
         }

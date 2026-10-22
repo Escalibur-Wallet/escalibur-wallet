@@ -150,20 +150,27 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
                 if (seguro) Resultado.Passou else Resultado.Falhou(t("Sem bloqueio de tela, o Android não protege as chaves da carteira. Configure um PIN, padrão ou senha nas configurações do celular.")))
         }
 
-        /** O nivel da chave que cifra o cofre: StrongBox, TEE ou (no pior caso) software. */
+        /**
+         * O nivel das chaves que guardam o cofre, a do armazenamento e a do PIN: StrongBox, TEE ou (no
+         * pior caso) software. Vale a pior. Antes de o cofre nascer nao ha chave, e passa; uma chave
+         * que existe e nao diz o nivel nao passa.
+         */
         fun hardware(contexto: Context): Checagem {
-            val nivel = runCatching {
-                val armazem = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-                val chave = armazem.getKey("app.escalibur.wallet.cofre", null) as? SecretKey ?: return@runCatching null
-                val info = SecretKeyFactory.getInstance(chave.algorithm, "AndroidKeyStore").getKeySpec(chave, KeyInfo::class.java) as KeyInfo
-                info.securityLevel
-            }.getOrNull()
-            return when (nivel) {
-                KeyProperties.SECURITY_LEVEL_STRONGBOX, KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT, null ->
-                    Checagem("hardware", t("Chave guardada no hardware"), Resultado.Passou)
-                else -> Checagem("hardware", t("Chave guardada no hardware"),
-                    Resultado.Cautela(t("Este celular guarda a chave do cofre em software, sem o chip de segurança.")))
+            val armazem = runCatching { KeyStore.getInstance("AndroidKeyStore").apply { load(null) } }.getOrNull()
+            val seguras = listOf("app.escalibur.wallet.cofre", "app.escalibur.wallet.kpin").all { alias ->
+                runCatching {
+                    val chave = armazem!!.getKey(alias, null) as? SecretKey ?: return@runCatching true
+                    val info = SecretKeyFactory.getInstance(chave.algorithm, "AndroidKeyStore").getKeySpec(chave, KeyInfo::class.java) as KeyInfo
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        info.securityLevel == KeyProperties.SECURITY_LEVEL_STRONGBOX || info.securityLevel == KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT
+                    } else {
+                        @Suppress("DEPRECATION") info.isInsideSecureHardware
+                    }
+                }.getOrDefault(false)
             }
+            return if (seguras) Checagem("hardware", t("Chave guardada no hardware"), Resultado.Passou)
+            else Checagem("hardware", t("Chave guardada no hardware"),
+                Resultado.Cautela(t("Este celular guarda a chave do cofre em software, sem o chip de segurança.")))
         }
 
         fun root(contexto: Context): Checagem {
