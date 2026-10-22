@@ -2,8 +2,8 @@
   "assinaturas" : [
     {
       "chave" : "escalibur-mac-1",
-      "p256" : "2vYDZfKM9MtyqhCK13rtVmJfOw+iZq2v9JNwcCrfOLs51WPDJ7EFO8/2eYClKbLfe1WTq4z1d9iQje7J+GQ/EQ=="
+      "p256" : "2WAwPF/e5V2rSICrO/zZK36vrrTKEjbg7qjl0nyBuqihYrPHpvNDirqpapibwE6bQxHczPDgHaJl2gN/03uzeA=="
     }
   ],
-  "manifesto" : "{\"app\":\"app.escalibur.wallet\",\"emitido\":\"2026-10-21T02:32:30Z\",\"formato\":1,\"versoes\":[{\"builds\":[\"7\",\"8\",\"9\",\"10\",\"11\",\"1001\"],\"publicada\":\"2026-10-18\",\"versao\":\"1.0.0\"}]}"
+  "manifesto" : "{\"app\":\"app.escalibur.wallet\",\"emitido\":\"2026-10-22T23:12:37Z\",\"formato\":1,\"versoes\":[{\"builds\":[\"7\",\"8\",\"9\",\"10\",\"11\",\"1001\",\"1002\"],\"publicada\":\"2026-10-18\",\"versao\":\"1.0.0\"}]}"
 }
