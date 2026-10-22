@@ -123,10 +123,14 @@ struct PassphraseEntryView: View {
                 // O selo das telas onde se digita um segredo, como na senha da carteira (pedido
                 // do dono, 18/10/2026).
                 CipherEmblem().frame(maxWidth: .infinity).padding(.bottom, Space.xs)
+                // O titulo e o texto no centro (pedido do dono, 22/10/2026).
                 Text("Digite a passphrase").typeStyle(.title).foregroundStyle(Palette.ink)
+                    .frame(maxWidth: .infinity)
                 Text("Escreva igual ao que você anotou. Diferença de maiúscula, acento ou espaço já abre outra carteira.")
                     .typeStyle(.body).foregroundStyle(Palette.inkSoft)
+                    .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
                     .padding(.bottom, Space.md)
                 Text("Passphrase").typeStyle(.note).foregroundStyle(Palette.inkSoft)
                 PasswordBox(buffer: passphrase, length: $passphraseLength, placeholder: String(localized: "Passphrase"), reveal: $revealPassphrase,

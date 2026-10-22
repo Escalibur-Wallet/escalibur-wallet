@@ -144,7 +144,7 @@ struct WalletsListView: View {
                     ForEach(Array(wallets.enumerated()), id: \.element.id) { index, wallet in
                         NavigationLink { WalletSettingsView(walletID: wallet.id) } label: {
                             HStack(spacing: Space.sm) {
-                                WalletGlyph(id: wallet.id, size: 32, selected: true, watchOnly: wallet.isWatchOnly, plain: true, passphrase: wallet.hasPassphrase)
+                                WalletGlyph(id: wallet.id, size: 32, selected: true, plain: true, passphrase: wallet.hasPassphrase)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(verbatim: wallet.name).typeStyle(.row).foregroundStyle(Palette.ink)
                                     Text(wallet.hasBackup || wallet.isWatchOnly ? originText(wallet)

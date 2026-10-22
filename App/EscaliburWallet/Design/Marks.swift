@@ -56,7 +56,6 @@ struct WalletGlyph: View {
     let id: UUID
     var size: CGFloat = 36
     var selected: Bool = false
-    var watchOnly: Bool = false
     /// So o icone, sem o fundo, um pouco maior e um pouco acima do centro (a lista de
     /// Carteiras nos Ajustes, pedido do dono, 16/10/2026).
     var plain: Bool = false
@@ -69,7 +68,8 @@ struct WalletGlyph: View {
             .fill(plain ? Color.clear : Palette.rail)
             .frame(width: size, height: size)
             .overlay {
-                Image(systemName: watchOnly ? "eye" : "wallet.bifold.fill")
+                // A de so observar tambem e uma carteira: o mesmo icone (pedido do dono, 22/10/2026).
+                Image(systemName: "wallet.bifold.fill")
                     .font(.system(size: size * (plain ? 0.52 : 0.42), weight: .semibold))
                     .foregroundStyle(selected ? Palette.ink : Palette.inkMuted)
                     .offset(y: plain ? -1 : 0)

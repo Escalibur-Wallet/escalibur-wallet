@@ -399,7 +399,9 @@ struct ActivityView: View {
             }
             .multilineTextAlignment(.center)
             .padding(.top, Space.md)
-            PrimaryButton(title: String(localized: "Receber")) { receiving = true }.padding(.top, Space.lg)
+            if session.selectedWallet?.isWatchOnly != true {
+                PrimaryButton(title: String(localized: "Receber")) { receiving = true }.padding(.top, Space.lg)
+            }
         }
         .padding(.horizontal, Space.gutter)
     }

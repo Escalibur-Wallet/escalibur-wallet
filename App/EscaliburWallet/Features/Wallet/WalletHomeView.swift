@@ -211,7 +211,8 @@ struct WalletHomeView: View {
                 .accessibilityIdentifier("carteira-nome")
                 Spacer()
                 Button {
-                    session.metadata.settings.hideBalances.toggle()
+                    // Ocultar anima (pedido do dono, 22/10/2026), nunca corte seco.
+                    withAnimation(.easeInOut(duration: 0.4)) { session.metadata.settings.hideBalances.toggle() }
                     try? session.persist()
                 } label: {
                     Image(systemName: hide ? "eye.slash" : "eye")
@@ -259,8 +260,12 @@ struct WalletHomeView: View {
             if wallet?.isWatchOnly != true {
                 QuickAction(title: String(localized: "Enviar"), systemImage: "arrow.up") { router.present(.send(nil)) }
             }
-            QuickAction(title: String(localized: "Receber"), systemImage: "arrow.down") { receiving = true }
-                .accessibilityIdentifier("acao-receber")
+            // A de so observar nao recebe por aqui (pedido do dono, 22/10/2026): sem a chave, o
+            // que chega nao sai pelo app.
+            if wallet?.isWatchOnly != true {
+                QuickAction(title: String(localized: "Receber"), systemImage: "arrow.down") { receiving = true }
+                    .accessibilityIdentifier("acao-receber")
+            }
             if wallet?.isWatchOnly != true, !TradeEngines.chains.isEmpty {
                 QuickAction(title: String(localized: "Trocar"), systemImage: "arrow.left.arrow.right") { router.tab = .trade }
             }
@@ -392,7 +397,9 @@ struct WalletHomeView: View {
             Text("No XRP Ledger e na Stellar, a conta passa a existir no primeiro recebimento de 1 XRP ou 1 XLM, que ficam reservados pela rede.")
                 .typeStyle(.note).foregroundStyle(Palette.inkMuted).padding(.top, Space.md)
                 .fixedSize(horizontal: false, vertical: true)
-            SecondaryButton(title: String(localized: "Receber")) { receiving = true }.padding(.top, Space.md)
+            if wallet?.isWatchOnly != true {
+                SecondaryButton(title: String(localized: "Receber")) { receiving = true }.padding(.top, Space.md)
+            }
         }
         .padding(Space.md)
         .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.body)
@@ -407,6 +414,8 @@ struct BalanceFigure: View {
     let symbol: String
     var fractionDigits: Int = 2
     var hidden: Bool = false
+    /// Quantos pontos ja entraram, ao ocultar.
+    @State private var dots = 0
 
     private var symbolText: some View {
         Text(symbol)
@@ -420,7 +429,16 @@ struct BalanceFigure: View {
             // O simbolo do lado em que a regiao escreve dinheiro: "R$ 10" e "10 €".
             if Fmt.symbolFirst { symbolText }
             if hidden {
-                Text("••••••").typeStyle(.display).foregroundStyle(Palette.ink)
+                // Os pontos entram um a um, da esquerda para a direita, depois de o numero se desfazer.
+                HStack(spacing: 0) {
+                    ForEach(0..<6, id: \.self) { index in
+                        Text(verbatim: "•").typeStyle(.display).foregroundStyle(Palette.ink)
+                            .scaleEffect(index < dots ? 1 : 0.3)
+                            .opacity(index < dots ? 1 : 0)
+                            .animation(.spring(response: 0.32, dampingFraction: 0.62), value: dots)
+                    }
+                }
+                .transition(.opacity.animation(.easeOut(duration: 0.15)))
             } else {
                 // O inteiro sozinho no tamanho grande; as casas menores e mais claras,
                 // como o simbolo, na mesma linha de base.
@@ -433,10 +451,24 @@ struct BalanceFigure: View {
                     .minimumScaleFactor(0.5)
                     .contentTransition(.numericText(value: value))
                     .animation(Motion.number, value: value)
+                    // Ao ocultar, o numero sobe e se desfaz em desfoque; ao mostrar, volta do mesmo jeito.
+                    .transition(.blurReplace(.upUp))
             }
             if !Fmt.symbolFirst { symbolText }
         }
         .accessibilityElement(children: .combine)
+        .onAppear { dots = hidden ? 6 : 0 }
+        .onChange(of: hidden) { _, now in
+            dots = 0
+            guard now else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(140))
+                for step in 1...6 where hidden {
+                    dots = step
+                    try? await Task.sleep(for: .milliseconds(45))
+                }
+            }
+        }
     }
 }
 
@@ -605,7 +637,7 @@ struct WalletSwitcherSheet: View {
                             dismiss()
                         } label: {
                             HStack(spacing: Space.sm) {
-                                WalletGlyph(id: wallet.id, size: 36, selected: wallet.id == session.selectedWallet?.id, watchOnly: wallet.isWatchOnly, passphrase: wallet.hasPassphrase)
+                                WalletGlyph(id: wallet.id, size: 36, selected: wallet.id == session.selectedWallet?.id, passphrase: wallet.hasPassphrase)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(verbatim: wallet.name).typeStyle(.row).foregroundStyle(Palette.ink)
                                     Text(subtitle(wallet)).typeStyle(.note)

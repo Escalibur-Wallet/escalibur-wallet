@@ -204,9 +204,10 @@ private fun androidx.compose.foundation.layout.ColumnScope.DigitarPassphrase(bas
            verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
         // O selo das telas onde se digita um segredo.
         Box(Modifier.fillMaxWidth().padding(bottom = Espaco.xs), contentAlignment = Alignment.Center) { EmblemaCifrado() }
-        Text(t("Digite a passphrase"), style = estilo(Tipo.titulo), color = Paleta.tinta)
+        // O titulo e o texto no centro.
+        Text(t("Digite a passphrase"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         Text(t("Escreva igual ao que você anotou. Diferença de maiúscula, acento ou espaço já abre outra carteira."), style = estilo(Tipo.corpo),
-             color = Paleta.tintaSuave, modifier = Modifier.padding(bottom = Espaco.md))
+             color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = Espaco.md))
         Text(t("Passphrase"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
         CampoSecreto(passphrase, t("Passphrase"), revelar) { revelar = it }
         // A repeticao so aparece quando a primeira comeca a ser digitada.

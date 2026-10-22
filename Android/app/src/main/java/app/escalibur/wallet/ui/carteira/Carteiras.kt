@@ -79,12 +79,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.roundToInt
 
-/** O desenho de uma carteira nas listas: a carteira ou o olho, e o cadeado da passphrase. */
+/** O desenho de uma carteira nas listas: a carteira (a de so observar tambem) e o cadeado da passphrase. */
 @Composable
 fun GlifoDaCarteira(carteira: Carteira, tamanho: androidx.compose.ui.unit.Dp = 36.dp, selecionada: Boolean = false) {
     Box(Modifier.size(tamanho)) {
         Box(Modifier.size(tamanho).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.trilho), contentAlignment = Alignment.Center) {
-            Icone(if (carteira.observacao) Icones.olho else Icones.carteira, if (selecionada) Paleta.tinta else Paleta.tintaApagada, tamanho = tamanho * 0.46f)
+            Icone(Icones.carteira, if (selecionada) Paleta.tinta else Paleta.tintaApagada, tamanho = tamanho * 0.46f)
         }
         if (carteira.temPassphrase) {
             Box(

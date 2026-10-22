@@ -6,6 +6,10 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.blur
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -200,8 +204,9 @@ fun TelaDaCarteira() {
                 if (!carteira.observacao) {
                     AcaoRapida(t("Enviar"), Icones.enviar, Modifier.weight(1f)) { Navegacao.cobrir { app.escalibur.wallet.ui.enviar.FluxoDeEnviar(null) } }
                 }
-                AcaoRapida(t("Receber"), Icones.receber, Modifier.weight(1f)) { Navegacao.folha { FluxoDeReceber() } }
+                // A de so observar nao recebe por aqui: sem a chave, o que chega nao sai pelo app.
                 if (!carteira.observacao) {
+                    AcaoRapida(t("Receber"), Icones.receber, Modifier.weight(1f)) { Navegacao.folha { FluxoDeReceber() } }
                     AcaoRapida(t("Trocar"), Icones.trocar, Modifier.weight(1f)) { Navegacao.aba = Aba.trocar }
                 }
             }
@@ -261,13 +266,30 @@ fun NumeroDoSaldo(valor: Double, unidade: String, oculto: Boolean, modifier: Mod
     }
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         if (antes) Simbolo(Modifier.alignByBaseline())
-        if (oculto) {
-            Text("••••••", style = estilo(Tipo.vitrine), color = Paleta.tinta, modifier = Modifier.alignByBaseline())
-        } else {
-            val partes = Formato.agrupado(valor, casas, aparar = unidade == "btc").split(Formato.decimal)
-            Row(Modifier.alignByBaseline()) {
-                TextoNumerico(partes[0], estilo(Tipo.vitrine), Paleta.tinta, Modifier.alignByBaseline(), valor)
-                TextoNumerico(Formato.decimal + (partes.getOrNull(1) ?: "0".repeat(casas)), dasCasas, Paleta.tintaSuave, Modifier.alignByBaseline(), valor)
+        // Ocultar anima: o numero sobe e se desfaz em desfoque, e os pontos entram um a um, da esquerda
+        // para a direita. Escondido de vez, o numero sai da tela (nada fica so transparente).
+        val progresso by animateFloatAsState(if (oculto) 1f else 0f, tween(520, easing = FastOutSlowInEasing), label = "ocultar")
+        Box(Modifier.alignByBaseline()) {
+            if (progresso < 1f) {
+                val partes = Formato.agrupado(valor, casas, aparar = unidade == "btc").split(Formato.decimal)
+                val sumindo = (progresso / 0.6f).coerceIn(0f, 1f)
+                Row(Modifier.graphicsLayer {
+                    alpha = 1f - sumindo
+                    translationY = -8.dp.toPx() * sumindo
+                    scaleX = 1f - 0.04f * sumindo; scaleY = scaleX
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f)
+                }.blur(12.dp * sumindo, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded)) {
+                    TextoNumerico(partes[0], estilo(Tipo.vitrine), Paleta.tinta, Modifier.alignByBaseline(), valor)
+                    TextoNumerico(Formato.decimal + (partes.getOrNull(1) ?: "0".repeat(casas)), dasCasas, Paleta.tintaSuave, Modifier.alignByBaseline(), valor)
+                }
+            }
+            if (progresso > 0f) Row {
+                repeat(6) { i ->
+                    val ponto = ((progresso - 0.25f - i * 0.07f) / 0.35f).coerceIn(0f, 1f)
+                    val salto = app.escalibur.wallet.ui.comp.saltoDeSaida(ponto)
+                    Text("•", style = estilo(Tipo.vitrine), color = Paleta.tinta,
+                         modifier = Modifier.graphicsLayer { alpha = ponto; scaleX = 0.3f + 0.7f * salto; scaleY = scaleX })
+                }
             }
         }
         if (!antes) Simbolo(Modifier.alignByBaseline())
@@ -276,6 +298,11 @@ fun NumeroDoSaldo(valor: Double, unidade: String, oculto: Boolean, modifier: Mod
 
 @Composable
 private fun LinhaDaVariacao(variacao: Double, retrato: Retrato, unidade: String, oculto: Boolean, modifier: Modifier) {
+    AoOcultar(oculto, modifier, alinhamento = Alignment.TopStart) { LinhaDaVariacaoAgora(variacao, retrato, unidade, it, Modifier) }
+}
+
+@Composable
+private fun LinhaDaVariacaoAgora(variacao: Double, retrato: Retrato, unidade: String, oculto: Boolean, modifier: Modifier) {
     if (oculto || retrato.total == 0.0) {
         Text(" ", style = estilo(Tipo.linha), modifier = modifier)
         return
@@ -413,7 +440,9 @@ private fun CarteiraVazia() {
         }
         Text(t("No XRP Ledger e na Stellar, a conta passa a existir no primeiro recebimento de 1 XRP ou 1 XLM, que ficam reservados pela rede."),
              style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.md))
-        BotaoSecundario(t("Receber"), Modifier.padding(top = Espaco.md)) { Navegacao.folha { FluxoDeReceber() } }
+        if (App.estado.carteira?.observacao != true) {
+            BotaoSecundario(t("Receber"), Modifier.padding(top = Espaco.md)) { Navegacao.folha { FluxoDeReceber() } }
+        }
     }
 }
 
@@ -447,6 +476,7 @@ fun LinhaDeAtivo(linha: Linha, oculto: Boolean, unidade: String, taxa: Double?, 
                 }
             }
         }
+        AoOcultar(oculto) { oculto ->
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val valor = linha.valor
             if (!oculto && valor == null && Saldos.esperandoPreco(linha)) {
@@ -459,6 +489,7 @@ fun LinhaDeAtivo(linha: Linha, oculto: Boolean, unidade: String, taxa: Double?, 
                 if (oculto) "••••" else Formato.cripto(linha.total, linha.casas, linha.simbolo, if (linha.estavel) Formato.EstiloCripto.estavel else Formato.EstiloCripto.lista),
                 style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1,
             )
+        }
         }
     }
 }
@@ -543,6 +574,7 @@ private fun LinhaDeOutroToken(outro: Outro, oculto: Boolean, moeda: String) {
                 Text(t("na %@", Redes.rede(outro.rede)?.nome ?: outro.rede), style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
             }
         }
+        AoOcultar(oculto) { oculto ->
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             val valor = outro.valor
             when {
@@ -551,6 +583,7 @@ private fun LinhaDeOutroToken(outro: Outro, oculto: Boolean, moeda: String) {
                 else -> Text(t("sem preço"), style = estilo(Tipo.nota), color = Paleta.tintaApagada, maxLines = 1)
             }
             Text(if (oculto) "••••" else Formato.cripto(outro.quantidade, outro.casas, null), style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
+        }
         }
     }
 }
@@ -612,7 +645,7 @@ private fun Distribuicao(linhas: List<Linha>, oculto: Boolean) {
                 val f = fatias.firstOrNull { it.id == escolhida }
                 if (f != null) {
                     Text(f.simbolo, style = estilo(Tipo.rotulo), color = Paleta.tintaSuave)
-                    Text(if (oculto) "••" else porcento(f.valor / total), style = estilo(Tipo.linha), color = Paleta.tinta)
+                    AoOcultar(oculto, alinhamento = Alignment.Center) { Text(if (it) "••" else porcento(f.valor / total), style = estilo(Tipo.linha), color = Paleta.tinta) }
                 } else {
                     Text("${linhas.size}", style = estilo(Tipo.linha), color = Paleta.tinta)
                     Text(if (linhas.size == 1) t("ativo") else t("ativos"), style = estilo(Tipo.rotulo), color = Paleta.tintaSuave)
@@ -625,9 +658,22 @@ private fun Distribuicao(linhas: List<Linha>, oculto: Boolean) {
                     horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(f.cor))
                     Text(f.simbolo, style = estilo(Tipo.nota), color = Paleta.tinta, maxLines = 1, modifier = Modifier.weight(1f))
-                    Text(if (oculto) "••" else porcento(f.valor / total), style = estilo(Tipo.nota).copy(fontFeatureSettings = "tnum"), color = Paleta.tintaSuave)
+                    AoOcultar(oculto) { Text(if (it) "••" else porcento(f.valor / total), style = estilo(Tipo.nota).copy(fontFeatureSettings = "tnum"), color = Paleta.tintaSuave) }
                 }
             }
         }
     }
+}
+
+/** O valor que se esconde e volta: o texto sai e os pontos entram (e o contrario), sem corte seco. */
+@Composable
+private fun AoOcultar(oculto: Boolean, modifier: Modifier = Modifier, alinhamento: Alignment = Alignment.TopEnd, conteudo: @Composable (Boolean) -> Unit) {
+    androidx.compose.animation.AnimatedContent(
+        oculto, modifier, contentAlignment = alinhamento, label = "ocultar",
+        transitionSpec = {
+            (fadeIn(tween(260, delayMillis = 120)) + androidx.compose.animation.scaleIn(tween(260, delayMillis = 120), initialScale = 0.85f)) togetherWith
+                (fadeOut(tween(180)) + androidx.compose.animation.scaleOut(tween(180), targetScale = 1.04f)) using
+                androidx.compose.animation.SizeTransform(clip = false)
+        },
+    ) { conteudo(it) }
 }

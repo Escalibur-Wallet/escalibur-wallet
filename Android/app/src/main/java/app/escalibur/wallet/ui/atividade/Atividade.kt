@@ -223,7 +223,9 @@ fun TelaDeAtividade() {
                     Text(t("Sua atividade aparece aqui"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.md))
                     Text(t("Envios, recebimentos, trocas e ordens, cada um com o seu status."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave,
                          textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
-                    BotaoPrimario(t("Receber"), Modifier.padding(top = Espaco.lg)) { Navegacao.folha { FluxoDeReceber() } }
+                    if (App.estado.carteira?.observacao != true) {
+                        BotaoPrimario(t("Receber"), Modifier.padding(top = Espaco.lg)) { Navegacao.folha { FluxoDeReceber() } }
+                    }
                 }
                 else -> {
                     if (pendentes.isNotEmpty()) Secao(t("Pendentes"), pendentes, oculto)
