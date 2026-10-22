@@ -55,11 +55,12 @@ fun TelaDeSeguranca() {
     }
 
     Subtela(t("Segurança")) {
-        // Na ordem do iOS: o PIN, o Super Security, a biometria (escondida no Super Security, que ja a
+        // Na ordem do iOS: o PIN, o Super Security, o Safe Keyboard, a biometria (escondida no Super Security, que ja a
         // inclui) e o bloqueio; depois a carteira com passphrase e o apagar.
         GrupoDeAjustes(Modifier.padding(top = Espaco.md)) {
             LinhaDeAjuste(Icones.gradeDoPin, t("Mudar o PIN")) { Navegacao.cobrir { TrocarPin() } }
             LinhaDeAjuste(Icones.escudoCadeado, t("Super Security"), if (estado.reforcado) t("Ligado") else t("Desligado")) { Navegacao.abrir { TelaDoSuperSecurity() } }
+            LinhaDeAjuste(Icones.teclado, "Safe Keyboard", if (estado.tecladoProprio) t("Ligado") else t("Desligado")) { Navegacao.abrir { TelaDoSafeKeyboard() } }
             if (!estado.reforcado) {
                 LinhaComInterruptor(Icones.digital, t("Biometria"), estado.biometriaLigada, habilitado = disponivel) { ligar ->
                     if (ligar) Navegacao.cobrir { LigarBiometria() } else desligarBiometria()

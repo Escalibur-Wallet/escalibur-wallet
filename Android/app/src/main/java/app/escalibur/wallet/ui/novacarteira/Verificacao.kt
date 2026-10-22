@@ -136,7 +136,12 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
             Passo("origem", t("Instalado pela Google Play"), ::origem),
             Passo("acessibilidade", t("Nenhum app lendo a tela"), ::acessibilidade),
             Passo("tela", t("Tela protegida contra captura"), { Checagem("tela", t("Tela protegida contra captura"), Resultado.Passou) }),
-            Passo("teclado", t("Teclado próprio para as palavras"), { Checagem("teclado", t("Teclado próprio para as palavras"), Resultado.Passou) }),
+            // O Safe Keyboard segue o ajuste de Seguranca: desligado, as palavras passam pelo teclado do celular.
+            Passo("teclado", t("Teclado próprio para as palavras"), {
+                Checagem("teclado", t("Teclado próprio para as palavras"),
+                         if (app.escalibur.wallet.ui.App.estado.tecladoProprio) Resultado.Passou
+                         else Resultado.Cautela(t("O Safe Keyboard está desligado em Segurança: as palavras passam pelo teclado do celular.")))
+            }),
             Passo("sistema", "Android ${Build.VERSION.RELEASE}", ::sistema),
             Passo("copia", t("Nada copiado na área de transferência"), ::copia),
         )

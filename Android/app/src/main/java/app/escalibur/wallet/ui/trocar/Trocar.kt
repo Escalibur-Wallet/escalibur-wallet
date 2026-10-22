@@ -32,7 +32,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
+import app.escalibur.wallet.ui.comp.acimaDoTeclado
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -257,7 +257,7 @@ private fun TelaDaOrdemPronta(alvo: String, titulo: String, nota: String, aoDesi
     LaunchedEffect(Unit) { if (!iniciar(controle)) Navegacao.fechar() }
     OuvirEventos(controle)
     val r = controle.retrato
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().imePadding()) {
+    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().acimaDoTeclado()) {
         CabecalhoDeFolha(titulo, { Navegacao.fechar() })
         if (r == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Girando(Paleta.tintaSuave, 20.dp) }

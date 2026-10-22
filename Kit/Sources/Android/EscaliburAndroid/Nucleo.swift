@@ -240,6 +240,12 @@ enum Nucleo {
                 if ligada { metadata.settings.disabledChainIDs.remove(rede) } else { metadata.settings.disabledChainIDs.insert(rede) }
             }
             return try json(Estado.agora())
+        case "ajustes.tecladoProprio":
+            // O Safe Keyboard: no Super Security ele fica sempre ligado (como no iOS).
+            let ligado = pedido["ligado"]?.boolValue ?? true
+            guard ligado || Chaves.root.securityMode != .hardened else { throw Falha(erro: "ajustes.tecladoNoReforco") }
+            try Sessao.shared.alterar { $0.settings.ownKeyboard = ligado }
+            return try json(Estado.agora())
         case "carteira.pedirPassphraseParaEnviar":
             // Ligar e na hora; desligar pede a passphrase e o PIN ("carteira.naoPedirPassphrase").
             try Sessao.shared.atualizar(try uuid(pedido["id"])) { $0.passphraseToSend = true }
@@ -632,7 +638,7 @@ struct Estado: Encodable {
             ajustes: Ajustes(
                 moeda: metadata.settings.currency, unidade: metadata.settings.totalUnit ?? metadata.settings.currency,
                 ocultarSaldos: metadata.settings.hideBalances, autoTravar: Ajustes.prazo(metadata.settings.autoLockSeconds),
-                tecladoProprio: metadata.settings.ownKeyboard ?? true, protecaoMEV: metadata.settings.mevProtection,
+                tecladoProprio: (metadata.settings.ownKeyboard ?? true) || root.securityMode == .hardened, protecaoMEV: metadata.settings.mevProtection,
                 redesDesligadas: metadata.settings.disabledChainIDs.sorted(), apagarDepois: root.wipeThreshold, opcoesDeApagar: PINPolicy.wipeOptions
             ),
             responsabilidade: metadata.responsibilityVersion,

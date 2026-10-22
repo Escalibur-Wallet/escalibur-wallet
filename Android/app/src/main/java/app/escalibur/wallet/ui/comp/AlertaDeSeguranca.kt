@@ -65,7 +65,11 @@ fun AlertaDeSeguranca(a: JSONObject) {
             Column(Modifier.padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
                 passos.forEachIndexed { indice, passo ->
                     Row(horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                        if (passos.size > 1) Text("${indice + 1}", style = estilo(Tipo.linha), color = Paleta.tinta)
+                        if (passos.size > 1) {
+                            Box(Modifier.padding(top = 1.dp).size(24.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
+                                Text("${indice + 1}", style = estilo(Tipo.nota), fontWeight = FontWeight.SemiBold, color = Paleta.tinta)
+                            }
+                        }
                         Text(passo, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.weight(1f))
                     }
                 }

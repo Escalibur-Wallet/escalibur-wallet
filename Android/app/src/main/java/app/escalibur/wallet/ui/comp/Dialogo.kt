@@ -59,30 +59,33 @@ fun AlertaDoIos(titulo: String, mensagem: String?, cancelar: BotaoDeAlerta?, aco
         // O fundo escurece de leve, como atras do alerta do iOS.
         val janela = (LocalView.current.parent as? DialogWindowProvider)?.window
         SideEffect { janela?.setDimAmount(0.32f) }
-        AnimatedVisibility(
-            entrada,
-            enter = scaleIn(spring(dampingRatio = 0.8f, stiffness = 600f), initialScale = 1.12f) + fadeIn(tween(160)),
-            exit = scaleOut(tween(140), targetScale = 0.96f) + fadeOut(tween(140)),
-        ) {
-            val forma = RoundedCornerShape(32.dp)
-            Column(
-                Modifier.padding(horizontal = 40.dp).widthIn(max = 320.dp).fillMaxWidth()
-                    .vidro(forma, EstiloDoVidro(tom = Color(0xFF232326), semFundo = Color(0xFF232326), brilho = 0.8f))
-                    .padding(start = Espaco.base, end = Espaco.base, top = Espaco.base, bottom = Espaco.md),
-                verticalArrangement = Arrangement.spacedBy(Espaco.xs),
+        // Com o Safe Keyboard num campo do alerta (renomear), o teclado aparece nesta janela.
+        TecladoSeguro.NaJanela {
+            AnimatedVisibility(
+                entrada,
+                enter = scaleIn(spring(dampingRatio = 0.8f, stiffness = 600f), initialScale = 1.12f) + fadeIn(tween(160)),
+                exit = scaleOut(tween(140), targetScale = 0.96f) + fadeOut(tween(140)),
             ) {
-                Text(titulo, style = estilo(Tipo.acao), color = Paleta.tinta)
-                if (mensagem != null) Text(mensagem, style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
-                extra?.invoke()
-                val todos = acoes + listOfNotNull(cancelar)
-                val ladoALado = todos.size == 2 && todos.all { it.titulo.length <= 12 }
-                if (ladoALado) {
-                    Row(Modifier.padding(top = Espaco.sm), horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                        for (b in listOfNotNull(cancelar) + acoes) Box(Modifier.weight(1f)) { BotaoDoAlerta(b) }
-                    }
-                } else {
-                    Column(Modifier.padding(top = Espaco.sm), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                        for (b in todos) BotaoDoAlerta(b)
+                val forma = RoundedCornerShape(32.dp)
+                Column(
+                    Modifier.padding(horizontal = 40.dp).widthIn(max = 320.dp).fillMaxWidth()
+                        .vidro(forma, EstiloDoVidro(tom = Color(0xFF232326), semFundo = Color(0xFF232326), brilho = 0.8f))
+                        .padding(start = Espaco.base, end = Espaco.base, top = Espaco.base, bottom = Espaco.md),
+                    verticalArrangement = Arrangement.spacedBy(Espaco.xs),
+                ) {
+                    Text(titulo, style = estilo(Tipo.acao), color = Paleta.tinta)
+                    if (mensagem != null) Text(mensagem, style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
+                    extra?.invoke()
+                    val todos = acoes + listOfNotNull(cancelar)
+                    val ladoALado = todos.size == 2 && todos.all { it.titulo.length <= 12 }
+                    if (ladoALado) {
+                        Row(Modifier.padding(top = Espaco.sm), horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                            for (b in listOfNotNull(cancelar) + acoes) Box(Modifier.weight(1f)) { BotaoDoAlerta(b) }
+                        }
+                    } else {
+                        Column(Modifier.padding(top = Espaco.sm), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                            for (b in todos) BotaoDoAlerta(b)
+                        }
                     }
                 }
             }

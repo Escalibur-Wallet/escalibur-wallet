@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import app.escalibur.wallet.ui.comp.acimaDoTeclado
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -120,7 +120,7 @@ fun FolhaDaPassphrase(pedido: PedidoDePassphrase.Pedido) {
     LaunchedEffect(pedido) { runCatching { foco.requestFocus() } }
     BackHandler { fechar() }
 
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).seguraToques().statusBarsPadding().navigationBarsPadding().imePadding()) {
+    Column(Modifier.fillMaxSize().background(Paleta.vazio).seguraToques().statusBarsPadding().navigationBarsPadding().acimaDoTeclado()) {
         CabecalhoDeFolha(t("Digite a passphrase"), { fechar() })
         Column(Modifier.weight(1f).padding(horizontal = Espaco.margem)) {
             Text(pedido.motivo, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))

@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
+import app.escalibur.wallet.ui.comp.acimaDoTeclado
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -384,7 +384,7 @@ private fun EscolherMoedas(mercado: List<JSONObject>, aoMudar: () -> Unit) {
     // A barra das folhas do iOS: o titulo no meio e o "OK" de vidro a direita.
     TelaComBarra(null, titulo = t("Adicionar moeda"), fundo = Paleta.vazio,
                  acoes = { BotaoDeTextoDoGrupo(t("OK")) { Navegacao.fechar() } }) { espaco ->
-    Column(Modifier.fillMaxSize().padding(top = espaco.calculateTopPadding()).imePadding()) {
+    Column(Modifier.fillMaxSize().padding(top = espaco.calculateTopPadding()).acimaDoTeclado()) {
         CampoDeBusca(busca, t("Buscar moeda"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm)) { busca = it }
         Text(if (cheia) t("Você escolheu %lld moedas, o máximo. Tire uma para escolher outra.", maximo)
              else t("Escolha até %lld moedas: %lld de %lld.", maximo, vigiadas.size, maximo),

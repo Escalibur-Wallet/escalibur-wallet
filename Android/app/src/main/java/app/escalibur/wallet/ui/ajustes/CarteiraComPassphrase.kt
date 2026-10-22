@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import app.escalibur.wallet.ui.comp.acimaDoTeclado
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -86,7 +86,7 @@ fun FluxoDaCarteiraComPassphrase(base: Carteira) {
             else -> Navegacao.fechar()
         }
     }
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().imePadding()) {
+    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().acimaDoTeclado()) {
         when (passo) {
             "explicacao" -> {
                 CabecalhoDeFolha("", null, aoVoltar = { Navegacao.fechar() })

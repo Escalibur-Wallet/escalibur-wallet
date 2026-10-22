@@ -1,5 +1,34 @@
 package app.escalibur.wallet.ui.comp
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import android.view.View
+import android.view.inputmethod.InputMethodManager
+import androidx.compose.ui.platform.SoftwareKeyboardController
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,7 +39,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -93,83 +121,168 @@ fun SugestoesDePalavra(sugestoes: List<String>, modifier: Modifier = Modifier, a
 }
 
 /**
- * O teclado proprio das palavras: so letras minusculas de a a z, apagar e seguir. As letras que nao
- * levam a nenhuma palavra da lista ficam apagadas. Nada passa pelo teclado do sistema, que pode ser
- * de terceiros e aprender o que se digita.
+ * O teclado proprio das palavras (o WordKeyboard do iOS): so letras de a a z, apagar e seguir, sem
+ * previsao, sem aprendizado e sem balao na tecla. So acendem as letras que ainda formam uma palavra da
+ * lista, entao um erro de digitacao nem entra. Na ultima linha, o globo (onde a tela oferece o teclado
+ * do celular), o nome do teclado (que abre a explicacao, onde a tela sabe abrir) e o Seguinte.
+ * `demo`: a animacao dos Ajustes, sem toque e sem a faixa de navegacao, com `apertada` acesa.
  */
 @Composable
 fun TecladoDePalavras(
     digitado: String, modifier: Modifier = Modifier, letrasPossiveis: Set<Char>? = null,
-    aoDigitar: (Char) -> Unit, aoApagar: () -> Unit, aoSeguir: (() -> Unit)? = null, tituloDoSeguir: String = t("Próxima"),
+    aoDigitar: (Char) -> Unit, aoApagar: () -> Unit, aoSeguir: () -> Unit = {}, tituloDoSeguir: String = t("Seguinte"),
+    podeSeguir: Boolean = digitado.isNotEmpty(), aoLimpar: (() -> Unit)? = null, aoSistema: (() -> Unit)? = null, aoSobre: (() -> Unit)? = null,
+    demo: Boolean = false, apertada: Char? = null,
 ) {
     val linhas = listOf("qwertyuiop", "asdfghjkl", "zxcvbnm")
     val haptico = LocalHapticFeedback.current
-    Column(
-        modifier.fillMaxWidth().background(Paleta.corpo).navigationBarsPadding().padding(horizontal = 4.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    BoxWithConstraints(
+        modifier.fillMaxWidth().background(Paleta.corpo).then(if (demo) Modifier else Modifier.navigationBarsPadding())
+            .padding(horizontal = 3.dp).padding(top = 8.dp, bottom = 6.dp),
     ) {
-        linhas.forEachIndexed { indice, linha ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                if (indice == 1) Spacer(Modifier.weight(0.5f))
-                if (indice == 2) Spacer(Modifier.weight(0.6f))
-                for (letra in linha) {
-                    val possivel = letrasPossiveis?.contains(letra) ?: true
-                    Tecla(letra.toString(), Modifier.weight(1f), ligada = possivel) {
-                        haptico.performHapticFeedback(HapticFeedbackType.KeyboardTap)
-                        aoDigitar(letra)
-                    }
-                }
-                if (indice == 1) Spacer(Modifier.weight(0.5f))
-                if (indice == 2) {
-                    TeclaDeIcone(Icones.apagarLetra, t("Apagar"), Modifier.weight(1.4f), ligada = digitado.isNotEmpty()) {
-                        haptico.performHapticFeedback(HapticFeedbackType.KeyboardTap)
-                        aoApagar()
+        val espaco = 6.dp
+        val unidade = (maxWidth - espaco * 9) / 10
+        fun toque(acao: () -> Unit): () -> Unit = {
+            if (!demo) {
+                haptico.performHapticFeedback(HapticFeedbackType.KeyboardTap)
+                acao()
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            for (indice in 0..1) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(espaco, Alignment.CenterHorizontally)) {
+                    for (letra in linhas[indice]) {
+                        TeclaDePalavra(unidade, letra.toString(), ligada = letrasPossiveis?.contains(letra) ?: true, forcada = apertada == letra, acao = toque { aoDigitar(letra) }) {
+                            Text(letra.toString(), fontSize = 22.sp, color = it)
+                        }
                     }
                 }
             }
-        }
-        if (aoSeguir != null) {
-            Row(Modifier.fillMaxWidth()) {
-                Tecla(tituloDoSeguir, Modifier.weight(1f), ligada = digitado.isNotEmpty(), destaque = true) { aoSeguir() }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(espaco)) {
+                Spacer(Modifier.width(unidade * 1.4f))
+                Spacer(Modifier.weight(1f))
+                for (letra in linhas[2]) {
+                    TeclaDePalavra(unidade, letra.toString(), ligada = letrasPossiveis?.contains(letra) ?: true, forcada = apertada == letra, acao = toque { aoDigitar(letra) }) {
+                        Text(letra.toString(), fontSize = 22.sp, color = it)
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                // Segurar o apagar limpa a palavra inteira.
+                TeclaDePalavra(unidade * 1.4f, t("Apagar"), ligada = digitado.isNotEmpty(), acao = toque(aoApagar), aoSegurar = aoLimpar?.let { toque(it) }) {
+                    Icone(Icones.apagarLetra, it, tamanho = 20.dp)
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(espaco), verticalAlignment = Alignment.CenterVertically) {
+                // O globo e o Seguinte com a mesma largura: o nome do teclado fica no centro.
+                if (aoSistema != null) {
+                    TeclaDePalavra(unidade * 2.5f, t("Usar o teclado do celular"), ligada = true, acao = toque(aoSistema)) {
+                        Icone(Icones.globo, it, tamanho = 20.dp)
+                    }
+                } else {
+                    Spacer(Modifier.width(unidade * 2.5f))
+                }
+                val sobre = t("Sobre o Safe Keyboard")
+                Row(
+                    Modifier.weight(1f).height(44.dp).then(if (aoSobre != null && !demo) Modifier.clickable(onClick = aoSobre) else Modifier)
+                        .semantics { contentDescription = sobre },
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icone(Icones.cadeadoCheio, Paleta.tintaApagada, tamanho = 11.dp)
+                    Text("Safe Keyboard", style = estilo(Tipo.nota), color = Paleta.tintaApagada, maxLines = 1, modifier = Modifier.padding(start = 6.dp))
+                    if (aoSobre != null) Icone(Icones.info, Paleta.tintaApagada, tamanho = 12.dp, modifier = Modifier.padding(start = 6.dp))
+                }
+                TeclaDePalavra(unidade * 2.5f, tituloDoSeguir, ligada = podeSeguir, forte = true, acao = toque(aoSeguir)) {
+                    Text(tituloDoSeguir, style = estilo(Tipo.acao), color = it, maxLines = 1)
+                }
             }
         }
     }
 }
 
+/** A altura do teclado das palavras, sem a faixa de navegacao: 4 teclas de 44, 3 vaos de 10 e as bordas. */
+val AlturaDoTecladoDePalavras = 44.dp * 4 + 10.dp * 3 + 8.dp + 6.dp
+
+/** A tecla apertada so muda de tom: nada de balao com a letra em cima, que uma gravacao leria. */
 @Composable
-private fun RowScope.Tecla(texto: String, modifier: Modifier, ligada: Boolean, destaque: Boolean = false, acao: () -> Unit) {
+private fun TeclaDePalavra(
+    largura: Dp, descricao: String, ligada: Boolean, forte: Boolean = false, forcada: Boolean = false,
+    acao: () -> Unit, aoSegurar: (() -> Unit)? = null, conteudo: @Composable (Color) -> Unit,
+) {
     val interacao = remember { MutableInteractionSource() }
     val apertada by interacao.collectIsPressedAsState()
+    val fundo = when {
+        forte && ligada -> if (apertada || forcada) Paleta.acentoApertado else Paleta.acento
+        !ligada -> Paleta.trilho
+        apertada || forcada -> Paleta.bordaForte
+        else -> Paleta.controle
+    }
+    val cor = when {
+        !ligada -> Paleta.tintaMorta
+        forte -> Paleta.sobreAcento
+        else -> Paleta.tinta
+    }
     Box(
-        modifier.height(46.dp).clip(RoundedCornerShape(7.dp))
-            .background(
-                when {
-                    destaque && ligada -> if (apertada) Paleta.acentoApertado else Paleta.acento
-                    apertada -> Paleta.bordaForte
-                    else -> Paleta.controle
-                }
+        Modifier.width(largura).height(44.dp).clip(RoundedCornerShape(8.dp)).background(fundo)
+            .then(
+                if (aoSegurar != null) Modifier.combinedClickable(interacao, indication = null, enabled = ligada, onLongClick = aoSegurar, onClick = acao)
+                else Modifier.clickable(interacao, indication = null, enabled = ligada, onClick = acao)
             )
-            .clickable(interacao, indication = null, enabled = ligada, onClick = acao),
+            .semantics { contentDescription = descricao },
         contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            texto, fontSize = if (texto.length == 1) 21.sp else 15.sp, fontWeight = if (texto.length == 1) FontWeight.Normal else FontWeight.SemiBold,
-            color = when {
-                !ligada -> Paleta.tintaMorta
-                destaque -> Paleta.sobreAcento
-                else -> Paleta.tinta
-            },
-        )
+    ) { conteudo(cor) }
+}
+
+/**
+ * As palavras pelo teclado do celular: com o Safe Keyboard desligado, ou pelo globo (frases em japones,
+ * chines ou coreano, que o teclado proprio nao escreve). Um campo sem tamanho fica com o foco e recebe as
+ * letras do teclado do celular, sem sugestao e sem aprendizado; a tela mostra o que foi digitado no campo
+ * da palavra, como no teclado proprio. Ocupa o lugar do teclado: a altura do teclado do celular.
+ * `todosOsIdiomas`: depois do globo, com a barra de candidatos que o japones e o chines pedem; antes, o
+ * teclado de senha, so letras latinas e sem sugestao nenhuma (como o asciiCapable sem correcao do iOS).
+ */
+class TecladoDoCelular {
+    internal val foco = FocusRequester()
+    internal var controle: SoftwareKeyboardController? = null
+    internal var vista: View? = null
+
+    /**
+     * De volta ao campo, com o teclado do celular aberto (o toque no campo da palavra). Fechado pelo
+     * voltar, o campo continua com o foco e o pedido do Compose nao reabre: o pedido vai direto ao Android.
+     */
+    fun mostrar() {
+        runCatching { foco.requestFocus() }
+        controle?.show()
+        vista?.let { v -> v.post { v.context.getSystemService(InputMethodManager::class.java)?.showSoftInput(v, 0) } }
     }
 }
 
 @Composable
-private fun RowScope.TeclaDeIcone(icone: androidx.compose.ui.graphics.vector.ImageVector, descricao: String, modifier: Modifier, ligada: Boolean, acao: () -> Unit) {
-    Box(
-        modifier.height(46.dp).clip(RoundedCornerShape(7.dp)).background(Paleta.trilho).clickable(enabled = ligada, onClickLabel = descricao, onClick = acao),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icone(icone, if (ligada) Paleta.tinta else Paleta.tintaMorta, tamanho = 22.dp, descricao = descricao)
+fun PalavraPeloCelular(
+    texto: String, aoMudar: (String) -> Unit, aoSeguir: () -> Unit, teclado: TecladoDoCelular,
+    todosOsIdiomas: Boolean = false, limite: Int = 12,
+) {
+    teclado.controle = LocalSoftwareKeyboardController.current
+    teclado.vista = LocalView.current
+    var campo by remember { mutableStateOf(TextFieldValue(texto, TextRange(texto.length))) }
+    LaunchedEffect(texto) { if (campo.text != texto) campo = TextFieldValue(texto, TextRange(texto.length)) }
+    LaunchedEffect(todosOsIdiomas) { teclado.mostrar() }
+    Box(Modifier.fillMaxWidth().windowInsetsBottomHeight(WindowInsets.ime.union(WindowInsets.navigationBars))) {
+        TecladoSeguro.PeloCelular(palavras = true) {
+            BasicTextField(
+                campo, { novo ->
+                    val limpo = novo.text.lowercase().filter { it.isLetter() }.take(limite)
+                    campo = if (limpo == novo.text) novo else TextFieldValue(limpo, TextRange(limpo.length))
+                    if (limpo != texto) aoMudar(limpo)
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false,
+                    keyboardType = if (todosOsIdiomas) KeyboardType.Text else KeyboardType.Password, imeAction = ImeAction.Next,
+                ),
+                keyboardActions = KeyboardActions(onNext = { aoSeguir() }),
+                modifier = Modifier.size(1.dp).alpha(0f).focusRequester(teclado.foco),
+            )
+        }
     }
 }
 

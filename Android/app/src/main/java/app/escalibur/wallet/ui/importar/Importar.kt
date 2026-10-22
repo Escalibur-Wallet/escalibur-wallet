@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
+import app.escalibur.wallet.ui.comp.acimaDoTeclado
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -45,6 +45,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -80,7 +81,11 @@ import app.escalibur.wallet.ui.comp.Rodape
 import app.escalibur.wallet.ui.comp.Segmentado
 import app.escalibur.wallet.ui.comp.SeloDaRede
 import app.escalibur.wallet.ui.comp.SugestoesDePalavra
+import app.escalibur.wallet.ui.ajustes.FolhaDoSafeKeyboard
+import app.escalibur.wallet.ui.comp.PalavraPeloCelular
 import app.escalibur.wallet.ui.comp.TecladoDePalavras
+import app.escalibur.wallet.ui.comp.TecladoDoCelular
+import app.escalibur.wallet.ui.principal.Navegacao
 import app.escalibur.wallet.ui.comp.rememberPalavra
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
 import app.escalibur.wallet.ui.novacarteira.VerificacaoDoAparelho
@@ -246,6 +251,14 @@ internal fun TelaDaFrase(
     var mostrar by remember { mutableStateOf(false) }
     var maisTamanhos by remember { mutableStateOf(false) }
     val revisao = entrada.revisao
+    // O teclado das palavras (o ImportPhraseView do iOS): o Safe Keyboard com o ajuste ligado, na
+    // primeira carteira e na conferencia da copia; o globo troca pelo do celular nesta tela, para as
+    // frases em japones, chines ou coreano. No Super Security, nunca.
+    var peloCelular by remember { mutableStateOf(false) }
+    var confirmarCelular by remember { mutableStateOf(false) }
+    val reforcado = App.estado.reforcado
+    val proprio = (App.estado.tecladoProprio || conferindo != null || App.estado.carteiras.isEmpty()) && (!peloCelular || reforcado)
+    val celular = remember { TecladoDoCelular() }
 
     // Sem internet enquanto as palavras estao na tela: a conferencia e toda local.
     DisposableEffect(Unit) {
@@ -421,6 +434,7 @@ internal fun TelaDaFrase(
                     entrada.ativa = indice
                     palavra.limpar()
                     digitando = true
+                    if (!proprio) celular.mostrar()
                 }
             }
             Row(Modifier.fillMaxWidth().padding(top = Espaco.xs), verticalAlignment = Alignment.CenterVertically) {
@@ -467,16 +481,23 @@ internal fun TelaDaFrase(
                 }
                 BotaoTerciario(t("Pronto")) { pronto() }
             }
-            TecladoDePalavras(
-                palavra.texto, letrasPossiveis = palavra.sugestoes.letras,
-                aoDigitar = { if (palavra.texto.length < 12) palavra.texto += it },
-                aoApagar = {
-                    if (palavra.texto.isNotEmpty()) palavra.texto = palavra.texto.dropLast(1)
-                    else if (entrada.preenchida(entrada.ativa)) entrada.limpar(entrada.ativa)
-                },
-                aoSeguir = { seguir() },
-                tituloDoSeguir = if (entrada.ativa < entrada.quantidade - 1) t("Próxima") else t("Pronto"),
-            )
+            if (proprio) {
+                TecladoDePalavras(
+                    palavra.texto, letrasPossiveis = palavra.sugestoes.letras,
+                    aoDigitar = { if (palavra.texto.length < 12) palavra.texto += it },
+                    aoApagar = {
+                        if (palavra.texto.isNotEmpty()) palavra.texto = palavra.texto.dropLast(1)
+                        else if (entrada.preenchida(entrada.ativa)) entrada.limpar(entrada.ativa)
+                    },
+                    aoLimpar = { palavra.limpar() },
+                    aoSeguir = { seguir() },
+                    tituloDoSeguir = if (entrada.ativa < entrada.quantidade - 1) t("Próxima") else t("Pronto"),
+                    aoSistema = if (reforcado) null else ({ confirmarCelular = true }),
+                    aoSobre = { Navegacao.folha { FolhaDoSafeKeyboard { Navegacao.fechar() } } },
+                )
+            } else {
+                PalavraPeloCelular(palavra.texto, { palavra.texto = it }, { seguir() }, celular, todosOsIdiomas = peloCelular)
+            }
         } else {
             Rodape {
                 if (escolhendo != null) {
@@ -486,6 +507,18 @@ internal fun TelaDaFrase(
                 }
             }
         }
+    }
+    if (confirmarCelular) {
+        Confirmacao(
+            t("Usar o teclado do celular?"),
+            t("Só para frases em japonês, chinês ou coreano, que o Safe Keyboard não escreve. O teclado do celular recebe as letras que você digitar."),
+            t("Usar o do celular"), destrutiva = false,
+            aoConfirmar = {
+                confirmarCelular = false
+                peloCelular = true
+            },
+            aoCancelar = { confirmarCelular = false },
+        )
     }
     if (confirmarLimpar) {
         Confirmacao(
@@ -550,6 +583,8 @@ private fun PosicaoDaFrase(
     modifier: Modifier, aoTocar: () -> Unit,
 ) {
     var segurando by remember { mutableStateOf(false) }
+    // O toque de agora: o gesto vive enquanto a posicao existe, e o que o toque faz muda (o globo).
+    val tocar by rememberUpdatedState(aoTocar)
     val forma = RoundedCornerShape(Raio.cartao)
     val preenchida = entrada.preenchida(indice)
     Row(
@@ -561,7 +596,7 @@ private fun PosicaoDaFrase(
                         tryAwaitRelease()
                         segurando = false
                     },
-                    onTap = { aoTocar() },
+                    onTap = { tocar() },
                 )
             }
             .padding(horizontal = Espaco.sm),
@@ -733,7 +768,7 @@ fun ObservarEndereco(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
         reconhecida = resposta?.optJSONObject("reconhecida")
     }
     BackHandler(onBack = aoCancelar)
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().imePadding()) {
+    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().acimaDoTeclado()) {
         CabecalhoDeFolha("", aoCancelar)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {

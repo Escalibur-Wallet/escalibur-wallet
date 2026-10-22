@@ -64,6 +64,7 @@ import app.escalibur.wallet.ui.comp.Icone
 import app.escalibur.wallet.ui.comp.Icones
 import app.escalibur.wallet.ui.comp.LogoDaMoeda
 import app.escalibur.wallet.ui.comp.TelaComBarra
+import app.escalibur.wallet.ui.comp.acimaDoTeclado
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
 import app.escalibur.wallet.ui.comp.Transferencia
 import app.escalibur.wallet.ui.comp.movimentoReduzido
@@ -248,7 +249,7 @@ fun AdicionarMoedaCustom(aoTerminar: () -> Unit) {
 
     val conferindo = token
     TelaComBarra(null, titulo = if (conferindo == null) t("Adicionar moeda") else t("Conferir moeda"), fundo = Paleta.vazio) { espaco ->
-        Column(Modifier.fillMaxSize().verticalScroll(rolagem).padding(espaco).padding(horizontal = Espaco.margem).padding(top = Espaco.sm, bottom = Espaco.xl)) {
+        Column(Modifier.fillMaxSize().acimaDoTeclado().verticalScroll(rolagem).padding(espaco).padding(horizontal = Espaco.margem).padding(top = Espaco.sm, bottom = Espaco.xl)) {
             if (conferindo != null) {
                 PreviaDaMoeda(conferindo, aoAdicionar = {
                     escopo.launch {

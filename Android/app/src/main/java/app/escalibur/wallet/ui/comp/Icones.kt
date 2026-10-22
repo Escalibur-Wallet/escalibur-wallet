@@ -149,6 +149,12 @@ object Icones {
     val lixeira = traco("lixeira", "M4.5 6.5 H19.5 M9.5 6.5 V4.5 H14.5 V6.5 M6.5 6.5 L7.5 20.5 H16.5 L17.5 6.5", "M10 10.5 V16.5 M14 10.5 V16.5")
     val apagarLetra = traco("apagarLetra", "M9 5.5 H19 A1.5 1.5 0 0 1 20.5 7 V17 A1.5 1.5 0 0 1 19 18.5 H9 L3.5 12 Z", "M11.5 9.5 L16 14 M16 9.5 L11.5 14")
     val teclado = traco("teclado", "M3.5 6.5 H20.5 V16.5 H3.5 Z", "M7 10 H7.1 M10.5 10 H10.6 M14 10 H14.1 M17.5 10 H17.6 M8 13.5 H16")
+    /** As teclas do Safe Keyboard: shift, shift.fill, return e keyboard.chevron.compact.down do iOS. */
+    val maiuscula = traco("maiuscula", "M12 4 L20 12.5 H15.5 V19.5 H8.5 V12.5 H4 Z", espessura = 1.7f)
+    val maiusculaCheia = cheioRedondo("maiusculaCheia", "M12 4 L20 12.5 H15.5 V19.5 H8.5 V12.5 H4 Z", 0.85f)
+    val retorno = traco("retorno", "M19.5 5.5 V11.5 A2 2 0 0 1 17.5 13.5 H5", "M9 9 L4.5 13.5 L9 18", espessura = 2f)
+    val fecharTeclado = traco("fecharTeclado", "M3.5 3.5 H20.5 V13.5 H3.5 Z", "M7 7 H7.1 M10.3 7 H10.4 M13.6 7 H13.7 M17 7 H17.1 M8.5 10.3 H15.5", "M9.5 17.5 L12 19.5 L14.5 17.5")
+    val wifiRiscado = traco("wifiRiscado", "M2.5 9.5 Q12 1.5 21.5 9.5", "M5.5 13 Q12 7.5 18.5 13", "M8.7 16.3 Q12 13.8 15.3 16.3", "M12 19.7 V19.8", "M4 3.5 L20 20.5")
     val qr = traco("qr", "M4 4 H10 V10 H4 Z M14 4 H20 V10 H14 Z M4 14 H10 V20 H4 Z", "M14 14 H16 M18 14 H20 V16 M14 18 V20 H16 M18 18 H20 V20 M16 16 H18 V18")
     val camera = traco("camera", "M4.5 7.5 H8 L9.5 5 H14.5 L16 7.5 H19.5 A1.5 1.5 0 0 1 21 9 V18 A1.5 1.5 0 0 1 19.5 19.5 H4.5 A1.5 1.5 0 0 1 3 18 V9 A1.5 1.5 0 0 1 4.5 7.5 Z", "M12 16.5 A3.5 3.5 0 1 0 12 9.5 A3.5 3.5 0 1 0 12 16.5 Z")
     val documento = traco("documento", "M6.5 3 H14 L18.5 7.5 V19.5 A1.5 1.5 0 0 1 17 21 H6.5 A1.5 1.5 0 0 1 5 19.5 V4.5 A1.5 1.5 0 0 1 6.5 3 Z", "M14 3 V7.5 H18.5", "M8.5 12 H15 M8.5 15.5 H15")

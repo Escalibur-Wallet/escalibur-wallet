@@ -104,7 +104,9 @@ import app.escalibur.wallet.ui.comp.Rodape
 import app.escalibur.wallet.ui.comp.SeloDaCarteira
 import app.escalibur.wallet.ui.comp.Segmentado
 import app.escalibur.wallet.ui.comp.SugestoesDePalavra
+import app.escalibur.wallet.ui.comp.PalavraPeloCelular
 import app.escalibur.wallet.ui.comp.TecladoDePalavras
+import app.escalibur.wallet.ui.comp.TecladoDoCelular
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
 import app.escalibur.wallet.ui.comp.rememberPalavra
 import app.escalibur.wallet.ui.legal.DocumentoLegal
@@ -693,6 +695,8 @@ fun ConferirPalavras(palavras: Int, aoVoltar: () -> Unit, aoDepois: (() -> Unit)
     val erros = remember { mutableStateMapOf<Int, Int>() }
     val palavra = rememberPalavra()
     val escopo = rememberCoroutineScope()
+    val proprio = App.estado.tecladoProprio
+    val celular = remember { TecladoDoCelular() }
 
     fun conferir() {
         val posicao = posicoes[atual]
@@ -717,7 +721,9 @@ fun ConferirPalavras(palavras: Int, aoVoltar: () -> Unit, aoDepois: (() -> Unit)
             Text(t("Confirme a senha da carteira"), style = estilo(Tipo.titulo), color = Paleta.tinta)
             Text(t("Digite a palavra %lld", posicoes[atual] + 1), style = estilo(Tipo.cabecalho), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.lg))
             Text(t("%lld de %lld", atual + 1, posicoes.size), style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.xxs))
-            CampoDePalavra(palavra.texto, t("palavra %lld", posicoes[atual] + 1), ativo = true, modifier = Modifier.padding(top = Espaco.md))
+            CampoDePalavra(palavra.texto, t("palavra %lld", posicoes[atual] + 1), ativo = true, modifier = Modifier.padding(top = Espaco.md)) {
+                if (!proprio) celular.mostrar()
+            }
             SugestoesDePalavra(if (palavra.texto.length >= 2) palavra.sugestoes.palavras else emptyList(), Modifier.padding(top = Espaco.sm)) {
                 palavra.texto = it
                 conferir()
@@ -729,12 +735,16 @@ fun ConferirPalavras(palavras: Int, aoVoltar: () -> Unit, aoDepois: (() -> Unit)
             Spacer(Modifier.weight(1f))
             if (aoDepois != null) BotaoTerciario(t("Anotar e confirmar depois"), Modifier.fillMaxWidth(), acao = aoDepois)
         }
-        TecladoDePalavras(
-            palavra.texto, letrasPossiveis = palavra.sugestoes.letras,
-            aoDigitar = { if (palavra.texto.length < 8) palavra.texto += it },
-            aoApagar = { palavra.texto = palavra.texto.dropLast(1) },
-            aoSeguir = { conferir() }, tituloDoSeguir = t("Confirmar"),
-        )
+        if (proprio) {
+            TecladoDePalavras(
+                palavra.texto, letrasPossiveis = palavra.sugestoes.letras,
+                aoDigitar = { if (palavra.texto.length < 8) palavra.texto += it },
+                aoApagar = { palavra.texto = palavra.texto.dropLast(1) }, aoLimpar = { palavra.limpar() },
+                aoSeguir = { conferir() }, tituloDoSeguir = t("Confirmar"),
+            )
+        } else {
+            PalavraPeloCelular(palavra.texto, { palavra.texto = it }, { conferir() }, celular, limite = 8)
+        }
     }
 }
 

@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
+import app.escalibur.wallet.ui.comp.acimaDoTeclado
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -154,7 +154,7 @@ fun FluxoDeEnviar(ativo: String?) {
             if (motivo != falha.codigo) motivo else t("O saldo deste ativo ainda não foi lido. Atualize a carteira e tente de novo.")
         if (ativo != null) Navegacao.fechar() else escolhido = null
     }
-    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().imePadding()) {
+    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().acimaDoTeclado()) {
         val retrato = controle.retrato
         when {
             escolhido == null -> EscolhaDoAtivo(aoBloquear = { simbolo, motivo -> recusa = t("Envio de %@ indisponível", simbolo) to motivo }) { escolhido = it }
