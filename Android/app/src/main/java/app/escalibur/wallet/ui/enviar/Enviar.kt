@@ -9,6 +9,7 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -184,11 +185,9 @@ private fun ColumnScope.EscolhaDoAtivo(aoBloquear: (String, String) -> Unit, aoE
     if (lista.isEmpty()) {
         Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.weight(1f))
-            Box(Modifier.size(96.dp).clip(CircleShape).background(Paleta.corpo), contentAlignment = Alignment.Center) {
-                Icone(Icones.enviar, Paleta.tintaApagada, tamanho = 36.dp)
-            }
+            ArteDoEnvioVazio(280.dp, Modifier.padding(top = Espaco.sm))
             Text(t("Ainda não há ativos para enviar"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
-                 modifier = Modifier.padding(top = Espaco.lg))
+                 modifier = Modifier.padding(top = Espaco.md))
             Text(t("Quando chegar saldo nesta carteira, ele aparece aqui para você escolher o que enviar."), style = estilo(Tipo.corpo),
                  color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
             Spacer(Modifier.weight(1f))
@@ -953,4 +952,45 @@ private fun ColumnScope.EtapaIncerta(controle: ControleDoEnvio, r: RetratoDoEnvi
         escopo.launch { controle.trabalhar("envio.retransmitir") }
     }
     BotaoTerciario(t("Fechar e acompanhar na Atividade"), Modifier.fillMaxWidth()) { Navegacao.fechar() }
+}
+
+/**
+ * "Ainda não há ativos para enviar" (o EmptySendArt do iOS): o disco de enviar no centro, com a seta
+ * subindo e voltando sem levar nada; em volta, onde estariam as moedas, so lugares vazios tracejados,
+ * girando devagar. Com o movimento reduzido, parado.
+ */
+@Composable
+private fun ArteDoEnvioVazio(altura: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
+    val parado = app.escalibur.wallet.ui.comp.movimentoReduzido()
+    val agora by app.escalibur.wallet.ui.comp.relogio(parado)
+    val lugares = 8
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth().height(altura), contentAlignment = Alignment.Center) {
+        val raio = minOf(maxWidth, maxHeight) / 2 - 18.dp
+        val tempo = if (parado) 0.0 else agora.toDouble()
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            val centro = center
+            val r = raio.toPx()
+            drawCircle(Paleta.borda, r, centro, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+            val tracejado = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 4.dp.toPx()))
+            for (i in 0 until lugares) {
+                val angulo = tempo / 70 * 2 * Math.PI + i.toDouble() / lugares * 2 * Math.PI
+                // Cada lugar vazio respira em defasagem: nada chega a ocupar.
+                val respiro = if (parado) 0.5 else (kotlin.math.sin(tempo * 1.6 + i) + 1) / 2
+                val ponto = androidx.compose.ui.geometry.Offset(centro.x + r * kotlin.math.cos(angulo).toFloat(), centro.y + r * kotlin.math.sin(angulo).toFloat())
+                drawCircle(Paleta.bordaForte.copy(alpha = (0.45 + 0.4 * respiro).toFloat()), 15.dp.toPx() - 0.75.dp.toPx(), ponto,
+                           style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx(), pathEffect = tracejado))
+            }
+        }
+        // A seta sobe e sai pelo alto do disco; volta por baixo. Sobe vazia: nao ha o que levar.
+        val fase = if (parado) 0.0 else (tempo % 2.4) / 2.4
+        val (desvio, opacidade) = when {
+            fase < 0.45 -> { val x = fase / 0.45; (-(x * x) * 70).toFloat() to (1 - x).toFloat() }
+            fase < 0.7 -> { val x = (fase - 0.45) / 0.25; ((1 - x) * 40).toFloat() to x.toFloat() }
+            else -> 0f to 1f
+        }
+        Box(Modifier.size(104.dp).clip(CircleShape).background(Paleta.trilho).border(1.dp, Paleta.borda, CircleShape), contentAlignment = Alignment.Center) {
+            Icone(Icones.enviar, Paleta.tinta, tamanho = 38.dp,
+                  modifier = Modifier.graphicsLayer { translationY = desvio * density; alpha = opacidade })
+        }
+    }
 }

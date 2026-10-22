@@ -197,6 +197,7 @@ fun Principal() {
                 }
                 "receber" -> Navegacao.folha { app.escalibur.wallet.ui.receber.FluxoDeReceber() }
                 "receber-btc" -> Navegacao.folha { app.escalibur.wallet.ui.receber.FluxoDeReceber("bitcoin:native") }
+                "copia-primeiro" -> App.estado.carteira?.let { c -> Navegacao.folha { app.escalibur.wallet.ui.receber.AntesDaCopia(c) } }
                 "lacrar" -> App.estado.carteira?.let { c -> Navegacao.cobrir { app.escalibur.wallet.ui.envelope.FluxoDeLacrar(c) } }
                 // As etapas do lacre sem abrir a carteira (como o `-tela lacrando` do iOS): nada e cifrado.
                 "lacrar-criar", "lacrar-propria", "lacrar-repetir", "lacrando" -> App.estado.carteira?.let { c ->

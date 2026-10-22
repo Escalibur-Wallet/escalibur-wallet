@@ -80,7 +80,6 @@ import app.escalibur.wallet.ui.comp.LogoDaMoeda
 import app.escalibur.wallet.ui.comp.SeloDaRede
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
 import app.escalibur.wallet.ui.comp.Transferencia
-import app.escalibur.wallet.ui.novacarteira.PapelRabiscado
 import app.escalibur.wallet.ui.objetos
 import app.escalibur.wallet.ui.principal.Navegacao
 import app.escalibur.wallet.ui.t
@@ -91,6 +90,9 @@ import app.escalibur.wallet.ui.tema.Raio
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
 import org.json.JSONObject
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 
 /** Um ativo que a carteira recebe numa rede (o `Receber.Ativo` do nucleo). */
 data class AtivoRecebivel(
@@ -177,10 +179,10 @@ fun FluxoDeReceber(preescolhido: String? = null) {
 }
 
 @Composable
-private fun AntesDaCopia(carteira: Carteira) {
+internal fun AntesDaCopia(carteira: Carteira) {
     Column(Modifier.fillMaxSize().padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs), horizontalAlignment = Alignment.CenterHorizontally) {
         CabecalhoDeFolha("", { Navegacao.fechar() })
-        PapelRabiscado(carteira.palavras ?: 12, Modifier.padding(top = Espaco.md))
+        ArteDaCopiaPrimeiro(280.dp, Modifier.padding(top = Espaco.sm))
         val passphrase = carteira.palavrasConfirmadas
         Text(
             if (passphrase) t("Confira a passphrase antes de receber") else t("Grave a senha da carteira antes de receber"),
@@ -479,4 +481,63 @@ fun avisoDaRede(ativo: AtivoRecebivel, existe: Boolean): String = when (ativo.fa
     else t("Na exchange, escolha a rede NEAR. Esta é a conta implícita da carteira: ela passa a existir no primeiro recebimento, de qualquer valor, e não precisa de memo.")
     "aptos" -> t("Na exchange, escolha a rede Aptos e envie só APT. O endereço tem o mesmo formato dos endereços Sui, e um envio pela Sui não chega aqui. A conta passa a existir no primeiro recebimento, de qualquer valor.")
     else -> ""
+}
+
+/**
+ * "Grave a senha antes de receber" (o BackupFirstArt do iOS): o papel da senha sendo escrito, posicao
+ * por posicao, ate o selo de conferido; em volta, as redes esperando em orbita. O ciclo recomeca a
+ * cada 7 segundos. Com o movimento reduzido, o papel aparece escrito e conferido, parado.
+ */
+@Composable
+private fun ArteDaCopiaPrimeiro(altura: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
+    val parado = app.escalibur.wallet.ui.comp.movimentoReduzido()
+    val agora by app.escalibur.wallet.ui.comp.relogio(parado)
+    val redes = listOf("bitcoin" to "bitcoin", "ethereum" to "ethereum", "solana" to "solana", "xrpl" to "ripple",
+                       "stellar" to "stellar", "tron" to "tron", "ton" to "the-open-network", "base" to "ethereum")
+    // Larguras do traco de cada palavra, em fracao da linha: parece letra de mao.
+    val tracos = listOf(0.72f, 0.55f, 0.86f, 0.64f, 0.5f, 0.78f, 0.6f, 0.9f, 0.58f, 0.7f, 0.82f, 0.52f)
+    val t = if (parado) 5.0 else agora.toDouble() % 7.0
+    val some = if (parado) 1f else 1f - ((t - 6.4) / 0.6).toFloat().coerceIn(0f, 1f)
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth().height(altura), contentAlignment = Alignment.Center) {
+        val raio = minOf(maxWidth, maxHeight) / 2 - 18.dp
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            drawCircle(Paleta.borda, raio.toPx(), center, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+        }
+        redes.forEachIndexed { i, (rede, coingecko) ->
+            val angulo = (if (parado) 0.0 else agora / 50.0 * 2 * Math.PI) + i.toDouble() / redes.size * 2 * Math.PI
+            SeloDaRede(rede, coingecko, 30.dp, Paleta.corpo,
+                       Modifier.offset(raio * kotlin.math.cos(angulo).toFloat(), raio * kotlin.math.sin(angulo).toFloat()))
+        }
+        // O papel, levemente torto, com as 12 posicoes sendo escritas em ordem.
+        Box(Modifier.width(186.dp).graphicsLayer { rotationZ = -3f }) {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Paleta.viva).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                for (linha in 0 until 6) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        for (coluna in 0..1) {
+                            val indice = linha * 2 + coluna
+                            val progresso = (((t - (0.4 + indice * 0.32)) / 0.28).toFloat().coerceIn(0f, 1f)) * some
+                            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text("${indice + 1}", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Paleta.placaApagada,
+                                     textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(14.dp))
+                                Box(Modifier.weight(1f).height(10.dp), contentAlignment = Alignment.CenterStart) {
+                                    Box(Modifier.fillMaxWidth().height(2.dp).offset(y = 3.dp).clip(CircleShape).background(Paleta.placaLinha))
+                                    Box(Modifier.fillMaxWidth(tracos[indice] * progresso).height(4.dp).clip(CircleShape).background(Paleta.placaTinta))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // O selo carimba: passa um pouco do tamanho e volta.
+            val selo = app.escalibur.wallet.ui.comp.saltoDeSaida(((t - 4.3) / 0.35).toFloat().coerceIn(0f, 1f))
+            if (selo > 0f) Box(
+                Modifier.align(Alignment.TopEnd).offset(14.dp, (-14).dp).size(34.dp).graphicsLayer { scaleX = selo * some; scaleY = selo * some; alpha = some }
+                    .clip(CircleShape).background(Paleta.acento).border(3.dp, Paleta.corpo, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) { Icone(Icones.visto, Paleta.sobreAcento, tamanho = 16.dp) }
+        }
+    }
 }

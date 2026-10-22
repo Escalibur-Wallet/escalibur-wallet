@@ -68,6 +68,8 @@ import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import app.escalibur.wallet.ui.comp.TelaComBarra
+import androidx.compose.ui.layout.layout
 import java.util.Date
 
 /**
@@ -86,30 +88,37 @@ fun FluxoDaCarteiraComPassphrase(base: Carteira) {
             else -> Navegacao.fechar()
         }
     }
+    if (passo == "explicacao") {
+        // Como no iOS: o conteudo rola por baixo do voltar, e o Continuar fica preso embaixo.
+        TelaComBarra({ Navegacao.fechar() }, rodape = { BotaoPrimario(t("Continuar")) { passo = "checagem" } }) { espaco ->
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(espaco).padding(horizontal = Espaco.margem).padding(vertical = Espaco.md),
+                   horizontalAlignment = Alignment.CenterHorizontally) {
+                // A parede de pixels com a porta escondida: as palavras abrem a de sempre, e a chave
+                // da passphrase revela a outra. Sobe 20 sobre o espaco de cima, como no iOS.
+                CenaDaPassphrase(CenaDaPassphrase.portaEscondida, 190.dp, Modifier.layout { medida, limites ->
+                    val peca = medida.measure(limites)
+                    val sobe = 20.dp.roundToPx()
+                    layout(peca.width, peca.height - sobe) { peca.place(0, -sobe) }
+                })
+                Text(t("Carteira com passphrase"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
+                     modifier = Modifier.padding(top = Espaco.md))
+                Text(t("Uma senha extra, escolhida por você. Junto com a senha de %@, ela abre outra carteira, com outros endereços.", base.nome),
+                     style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
+                BotaoComoFuncionaDaPassphrase(Modifier.padding(top = Espaco.md))
+                Column(
+                    Modifier.padding(top = Espaco.lg).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.base),
+                    verticalArrangement = Arrangement.spacedBy(Espaco.md),
+                ) {
+                    PontoDaPassphrase(Icones.olhoRiscado, t("Quem achar só as %lld palavras vê a carteira de sempre, não a da passphrase.", palavras))
+                    PontoDaPassphrase(Icones.lapis, t("Anote a passphrase longe das %lld. Para abrir a carteira com passphrase em outro aparelho, você vai precisar das duas.", palavras))
+                    PontoDaPassphrase(Icones.alerta, t("Esquecer a passphrase é perder o acesso à carteira com passphrase. Ninguém recupera, nem a Escalibur."))
+                }
+            }
+        }
+        return
+    }
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().acimaDoTeclado()) {
         when (passo) {
-            "explicacao" -> {
-                CabecalhoDeFolha("", null, aoVoltar = { Navegacao.fechar() })
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md),
-                       horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(Modifier.padding(top = Espaco.md).size(96.dp).clip(CircleShape).background(Paleta.corpo), contentAlignment = Alignment.Center) {
-                        Icone(Icones.chave, Paleta.tinta, tamanho = 40.dp)
-                    }
-                    Text(t("Carteira com passphrase"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
-                         modifier = Modifier.padding(top = Espaco.lg))
-                    Text(t("Uma senha extra, escolhida por você. Junto com a senha de %@, ela abre outra carteira, com outros endereços.", base.nome),
-                         style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
-                    Column(
-                        Modifier.padding(top = Espaco.lg).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.base),
-                        verticalArrangement = Arrangement.spacedBy(Espaco.md),
-                    ) {
-                        PontoDaPassphrase(Icones.olhoRiscado, t("Quem achar só as %lld palavras vê a carteira de sempre, não a da passphrase.", palavras))
-                        PontoDaPassphrase(Icones.lapis, t("Anote a passphrase longe das %lld. Para abrir a carteira com passphrase em outro aparelho, você vai precisar das duas.", palavras))
-                        PontoDaPassphrase(Icones.alerta, t("Esquecer a passphrase é perder o acesso à carteira com passphrase. Ninguém recupera, nem a Escalibur."))
-                    }
-                }
-                Rodape { BotaoPrimario(t("Continuar")) { passo = "checagem" } }
-            }
             "checagem" -> {
                 CabecalhoDeFolha("", null, aoVoltar = { passo = "explicacao" })
                 Box(Modifier.weight(1f)) { VerificacaoDoAparelho(t("Deslize para digitar a passphrase"), criando = false) { passo = "digitar" } }
