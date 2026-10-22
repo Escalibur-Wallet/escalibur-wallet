@@ -684,7 +684,8 @@ struct SendStages: View {
                         .typeStyle(.note).foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .tint(Palette.accent)
+                // Verde, como os outros interruptores de confirmacao (pedido do dono, 22/10/2026).
+                .tint(Palette.success)
                 .accessibilityIdentifier("confirmar-rede")
             }
             .padding(Space.md)

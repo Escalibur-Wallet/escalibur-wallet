@@ -23,6 +23,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -842,7 +844,10 @@ fun FluxoDeAbrirEnvelope(aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerm
         CabecalhoDeFolha("", if (passo == "abrindo") null else ({ aoCancelar() }))
         when (passo) {
             "escolher" -> {
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem), horizontalAlignment = Alignment.CenterHorizontally) {
+                // O conteudo no meio da pagina, entre o fechar e o botao; num celular baixo, rola.
+                BoxWithConstraints(Modifier.weight(1f)) {
+                Column(Modifier.fillMaxWidth().heightIn(min = maxHeight).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem),
+                       horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     // O lacre ao contrario, em pixels: o envelope abre e as palavras sobem dele.
                     CenaDoEnvelope(Modifier.padding(top = Espaco.sm, bottom = Espaco.lg), abrindo = true)
                     Text(t("Abrir um envelope criptografado"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
@@ -850,6 +855,7 @@ fun FluxoDeAbrirEnvelope(aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerm
                          style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
                     BotaoComoFunciona(Modifier.padding(top = Espaco.md))
                     erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
+                }
                 }
                 Rodape { BotaoPrimario(t("Escolher arquivo")) { escolher.launch(arrayOf("*/*")) } }
             }

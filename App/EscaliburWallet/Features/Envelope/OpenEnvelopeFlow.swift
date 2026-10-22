@@ -126,6 +126,8 @@ struct OpenEnvelopeFlow: View {
     /// envelope e revela as palavras (de exemplo).
     private var chooseView: some View {
         VStack(spacing: 0) {
+            // O conteudo no meio da pagina, entre o fechar e o botao (pedido do dono, 22/10/2026).
+            Spacer(minLength: 0)
             // O lacre ao contrario, em pixels: o envelope abre e as palavras sobem dele (pedido
             // do dono, 18/10/2026; antes, o cartao cifrado).
             EnvelopePixelScene(height: 236, opening: true).padding(.top, Space.sm).padding(.bottom, Space.lg)

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -88,7 +89,8 @@ fun GlifoDaCarteira(carteira: Carteira, tamanho: androidx.compose.ui.unit.Dp = 3
         }
         if (carteira.temPassphrase) {
             Box(
-                Modifier.align(Alignment.BottomEnd).padding(start = 0.dp).size(tamanho * 0.44f).clip(CircleShape).background(Paleta.controle)
+                // Um pouco para fora do canto, como no iOS.
+                Modifier.align(Alignment.BottomEnd).offset(tamanho * 0.12f, tamanho * 0.12f).size(tamanho * 0.44f).clip(CircleShape).background(Paleta.controle)
                     .border(2.dp, Paleta.vazio, CircleShape),
                 contentAlignment = Alignment.Center,
             ) { Icone(Icones.cadeadoCheio, Paleta.tinta, tamanho = tamanho * 0.22f) }

@@ -99,6 +99,7 @@ import app.escalibur.wallet.ui.comp.EnderecoEmBlocos
 import app.escalibur.wallet.ui.comp.Faixa
 import app.escalibur.wallet.ui.comp.Icone
 import app.escalibur.wallet.ui.comp.Icones
+import app.escalibur.wallet.ui.comp.Interruptor
 import app.escalibur.wallet.ui.comp.LogoDaMoeda
 import app.escalibur.wallet.ui.comp.SeloDaRede
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
@@ -410,9 +411,13 @@ private fun ColumnScope.EtapaDoDestino(controle: ControleDoEnvio, r: RetratoDoEn
                     Text(t("Envio pela rede %@", r.redeNome), style = estilo(Tipo.linha), color = Paleta.tinta)
                 }
                 r.notaDaRede?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaSuave) }
-                Aceite(confirmada, r.textoDaConfirmacaoDeRede ?: "", solto = true) {
-                    confirmada = it
-                    conferir("rede", it)
+                // Um interruptor verde, como no iOS.
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                    Text(r.textoDaConfirmacaoDeRede ?: "", style = estilo(Tipo.nota), color = Paleta.tinta, modifier = Modifier.weight(1f))
+                    Interruptor(confirmada, {
+                        confirmada = it
+                        conferir("rede", it)
+                    })
                 }
             }
         }

@@ -494,7 +494,7 @@ fun TelaDoRecebimento() {
     Subtela("") {
         Column(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem).padding(top = Espaco.sm), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(64.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
-                Icone(Icones.receber, Paleta.tinta, tamanho = 26.dp)
+                Icone(Icones.receberCirculo, Paleta.tinta, tamanho = 30.dp)
             }
             Text(t("Aviso de recebimento"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.sm))
             Text(t("O próprio celular confere o saldo das suas contas e avisa quando entra moeda. Sem servidor da Escalibur no caminho."),

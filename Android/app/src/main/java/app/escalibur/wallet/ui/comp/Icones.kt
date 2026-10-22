@@ -121,11 +121,17 @@ object Icones {
     val info = traco("info", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M12 11 V16.5", "M12 7.6 V7.7", espessura = 2f)
     val pergunta = traco("pergunta", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M9.5 9.3 C9.7 8 10.8 7 12.2 7 C13.6 7 14.7 8.1 14.7 9.4 C14.7 11.4 12 11.6 12 13.6", "M12 16.8 V16.9")
     val globo = traco("globo", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M3 12 H21", "M12 3 C14.5 5.5 15.5 8.7 15.5 12 C15.5 15.3 14.5 18.5 12 21 C9.5 18.5 8.5 15.3 8.5 12 C8.5 8.7 9.5 5.5 12 3 Z")
-    val sino = traco("sino", "M6 16.5 V11 A6 6 0 0 1 18 11 V16.5 L19.5 18 H4.5 Z", "M10 20.5 H14")
+    /** O bell do iOS: o pino no alto, o corpo que abre embaixo, a borda e o badalo. */
+    val sino = traco("sino",
+        "M12 2.4 V3.9",
+        "M3.6 17.2 C5.2 16 6 14.6 6 12 V9.6 C6 6.3 8.6 3.9 12 3.9 C15.4 3.9 18 6.3 18 9.6 V12 C18 14.6 18.8 16 20.4 17.2 C20.9 17.6 20.6 18.3 20 18.3 H4 C3.4 18.3 3.1 17.6 3.6 17.2 Z",
+        "M9.8 18.3 A2.2 2.2 0 0 0 14.2 18.3", espessura = 1.7f)
     val sinoCheio = cheio("sinoCheio", "M12 3 A6.5 6.5 0 0 0 5.5 9.5 V15.6 L3.9 17.4 C3.4 18 3.8 19 4.6 19 H19.4 C20.2 19 20.6 18 20.1 17.4 L18.5 15.6 V9.5 A6.5 6.5 0 0 0 12 3 Z", "M9.6 20.2 A2.5 2.5 0 0 0 14.4 20.2 Z")
     /** O sino com o ponto do aviso (o bell.badge do iOS): o contorno abre onde o ponto fica. */
-    val sinoComPonto = tracoComPonta("sinoComPonto", "M6 16.5 V11 A6 6 0 0 1 13.6 5.2 M17.95 10.2 Q18 10.6 18 11 V16.5 L19.5 18 H4.5 L6 16.5 M10 20.5 H14",
-                                     "M19 3.7 A2.5 2.5 0 1 1 18.99 3.7 Z", 1.9f)
+    val sinoComPonto = tracoComPonta("sinoComPonto",
+        "M12 2.4 V3.9 M14.6 4.4 C13.8 4.1 12.9 3.9 12 3.9 C8.6 3.9 6 6.3 6 9.6 V12 C6 14.6 5.2 16 3.6 17.2 C3.1 17.6 3.4 18.3 4 18.3 H20 C20.6 18.3 20.9 17.6 20.4 17.2 " +
+            "C18.8 16 18 14.6 18 12 V10 M9.8 18.3 A2.2 2.2 0 0 0 14.2 18.3",
+        "M21.2 5.2 A2.7 2.7 0 1 0 15.8 5.2 A2.7 2.7 0 1 0 21.2 5.2 Z", 1.7f)
     /** O simbolo do bitcoin (o bitcoinsign do iOS), para os numeros redondos. */
     val bitcoin = traco("bitcoin", "M8 5 V19", "M8 5 H13 A3.25 3.25 0 0 1 13 11.5 H8", "M8 11.5 H13.8 A3.75 3.75 0 0 1 13.8 19 H8",
                         "M10.2 3 V5 M13 3 V5 M10.2 19 V21 M13 19 V21", espessura = 1.8f)
@@ -162,7 +168,10 @@ object Icones {
     val maoLevantada = traco("maoLevantada", "M8.5 12.5 V6 A1.25 1.25 0 0 1 11 6 V11 M11 10.5 V4.5 A1.25 1.25 0 0 1 13.5 4.5 V10.5 M13.5 10.5 V5.5 A1.25 1.25 0 0 1 16 5.5 V11 M16 11 V8 A1.25 1.25 0 0 1 18.5 8 V14 C18.5 18 16 21 12.5 21 C9.8 21 8.4 19.8 7 17.6 L4.8 14 A1.3 1.3 0 0 1 6.9 12.6 L8.5 14.5")
     val setaCirculo = traco("setaCirculo", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M7.5 12 H16 M12.5 8.5 L16 12 L12.5 15.5")
     val circulo = traco("circulo", "M12 21.5 A9.5 9.5 0 1 0 12 2.5 A9.5 9.5 0 1 0 12 21.5 Z", espessura = 1.5f)
-    val teclado = traco("teclado", "M3.5 6.5 H20.5 V16.5 H3.5 Z", "M7 10 H7.1 M10.5 10 H10.6 M14 10 H14.1 M17.5 10 H17.6 M8 13.5 H16")
+    /** O keyboard do iOS: o teclado de cantos redondos com duas fileiras de seis teclas e a de baixo com a barra de espaco. */
+    val teclado = tracoComPonta("teclado", "M5 5.6 H19 A2.6 2.6 0 0 1 21.6 8.2 V15.8 A2.6 2.6 0 0 1 19 18.4 H5 A2.6 2.6 0 0 1 2.4 15.8 V8.2 A2.6 2.6 0 0 1 5 5.6 Z",
+        (0..5).joinToString(" ") { i -> val x = 5.1f + i * 2.76f; "M$x 8.6 h1.3 v1.3 h-1.3 Z M$x 11.3 h1.3 v1.3 h-1.3 Z" } +
+            " M5.1 14 h1.3 v1.3 h-1.3 Z M8.1 14 H15.9 V15.3 H8.1 Z M17.6 14 h1.3 v1.3 h-1.3 Z", 1.6f)
     /** As teclas do Safe Keyboard: shift, shift.fill, return e keyboard.chevron.compact.down do iOS. */
     val maiuscula = traco("maiuscula", "M12 4 L20 12.5 H15.5 V19.5 H8.5 V12.5 H4 Z", espessura = 1.7f)
     val maiusculaCheia = cheioRedondo("maiusculaCheia", "M12 4 L20 12.5 H15.5 V19.5 H8.5 V12.5 H4 Z", 0.85f)
@@ -187,7 +196,10 @@ object Icones {
                                   "M0.75 10.48 H6.45 L3.49 14.43 Z", espessura = 1.55f)
     val envelope = traco("envelope", "M4.5 6 H19.5 A1.5 1.5 0 0 1 21 7.5 V16.5 A1.5 1.5 0 0 1 19.5 18 H4.5 A1.5 1.5 0 0 1 3 16.5 V7.5 A1.5 1.5 0 0 1 4.5 6 Z", "M3.5 7 L12 13 L20.5 7")
     val envelopeAberto = traco("envelopeAberto", "M3 10 L12 4 L21 10 V19 A1.5 1.5 0 0 1 19.5 20.5 H4.5 A1.5 1.5 0 0 1 3 19 Z", "M3.5 10.5 L12 15.5 L20.5 10.5")
-    val chave = traco("chave", "M8 16 A4 4 0 1 0 8 8 A4 4 0 1 0 8 16 Z", "M12 12 H20.5 M17.5 12 V15 M20.5 12 V14")
+    /** O key.horizontal do iOS: a cabeca redonda a direita, com o furo, e a lamina com os dentes embaixo e a ponta a esquerda. */
+    val chave = tracoComPonta("chave",
+        "M11.66 10.4 H4.2 L2.6 12 L4.2 13.6 H5.2 L6.4 15.1 L7.6 13.6 L8.8 15.1 L10 13.6 H11.66 A5 5 0 1 0 11.66 10.4 Z",
+        "M19.5 12 A1.3 1.3 0 1 0 16.9 12 A1.3 1.3 0 1 0 19.5 12 Z", 1.6f)
     val pessoas = traco("pessoas", "M9 11 A3.5 3.5 0 1 0 9 4 A3.5 3.5 0 1 0 9 11 Z", "M3 19.5 C3 16.5 5.7 14.5 9 14.5 C12.3 14.5 15 16.5 15 19.5", "M16 4.3 A3.5 3.5 0 0 1 16 10.7 M18 14.8 C19.9 15.5 21 17.2 21 19.5")
     val microfone = traco("microfone", "M12 15 A3 3 0 0 0 15 12 V6 A3 3 0 0 0 9 6 V12 A3 3 0 0 0 12 15 Z", "M5.5 11.5 A6.5 6.5 0 0 0 18.5 11.5 M12 18 V21")
     val sair = traco("sair", "M14 4.5 H18 A1.5 1.5 0 0 1 19.5 6 V18 A1.5 1.5 0 0 1 18 19.5 H14", "M10 8 L6 12 L10 16 M6 12 H15")
