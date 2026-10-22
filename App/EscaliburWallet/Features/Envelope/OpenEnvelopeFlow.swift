@@ -104,6 +104,7 @@ struct OpenEnvelopeFlow: View {
         }
         .interactiveDismissDisabled()
         .guardedAgainstCapture()
+        .tint(Palette.accent)
         .alert("Este envelope pede uma conta pesada", isPresented: $confirmingHeavy) {
             Button("Abrir mesmo assim") {
                 heavyConfirmed = true
@@ -113,6 +114,8 @@ struct OpenEnvelopeFlow: View {
         } message: {
             Text("Abrir leva cerca de \(estimate) segundos com a tela parada. Um envelope lacrado pela Escalibur leva de 1 a 3. Se você não sabe de onde veio este arquivo, não abra.")
         }
+        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
+        .tint(Palette.ink)
         // So o envelope da Escalibur (.esclbr) fica escolhivel: com `.data`, qualquer arquivo
         // aparecia ativo no seletor (pedido do dono, 17/10/2026).
         .fileImporter(isPresented: $picking, allowedContentTypes: [.escaliburEnvelope]) { result in

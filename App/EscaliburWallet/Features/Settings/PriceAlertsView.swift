@@ -385,6 +385,7 @@ struct PriceAlertBell: View {
             let file = await PriceAlertCenter.shared.file()
             watching = file.enabled && file.watches(coin.id)
         }
+        .tint(Palette.accent)
         .alert("Notificações desligadas", isPresented: $denied) {
             Button("Abrir Ajustes do iPhone") {
                 if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
@@ -393,6 +394,8 @@ struct PriceAlertBell: View {
         } message: {
             Text("Para receber alertas de preço, ligue as notificações da Escalibur nos Ajustes do iPhone.")
         }
+        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
+        .tint(Palette.ink)
     }
 
     private func toggle() async {

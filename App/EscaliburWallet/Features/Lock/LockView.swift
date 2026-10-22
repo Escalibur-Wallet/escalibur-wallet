@@ -194,6 +194,7 @@ struct LockView: View {
         .presentationBackground(Palette.body)
         .presentationCornerRadius(Radius.sheet)
         // O alerta do proprio iPhone, no centro da tela: apagar e para sempre.
+        .tint(Palette.accent)
         .alert("Apagar as carteiras deste iPhone?", isPresented: $confirmErase) {
             Button("Apagar permanentemente", role: .destructive) {
                 forgotPIN = false
@@ -203,6 +204,8 @@ struct LockView: View {
         } message: {
             Text("Sem a senha de cada carteira ou um envelope, e a passphrase das que usam passphrase, o saldo delas fica inacessível para sempre.")
         }
+        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
+        .tint(Palette.ink)
     }
 }
 

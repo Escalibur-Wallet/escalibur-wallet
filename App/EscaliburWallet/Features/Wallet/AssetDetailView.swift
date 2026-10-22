@@ -95,12 +95,15 @@ struct AssetDetailView: View {
             }
         }
         .sheet(isPresented: $receiving) { ReceiveSheet(preselected: row.positions.first?.asset) }
+        .tint(Palette.accent)
         .alert("Remover \(row.symbol)?", isPresented: $removing) {
             Button("Cancelar", role: .cancel) {}
             Button("Remover", role: .destructive) { removeCustom() }
         } message: {
             Text("A moeda some da Carteira, de Receber e de Enviar. O saldo continua na rede, e você pode adicionar de novo.")
         }
+        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
+        .tint(Palette.ink)
     }
 
     /// Moeda custom: preco so por contrato, o contrato inteiro, o aviso e remover.

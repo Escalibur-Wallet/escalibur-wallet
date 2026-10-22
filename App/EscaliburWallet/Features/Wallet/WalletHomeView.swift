@@ -702,6 +702,7 @@ struct WalletSwitcherSheet: View {
         .presentationCornerRadius(Radius.sheet)
         .sensoryFeedback(.selection, trigger: session.selectedWallet?.id)
         .sheet(item: $copying) { wallet in CopyAddressSheet(wallet: wallet) }
+        .tint(Palette.accent)
         .alert("Nome da carteira", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Nome", text: $newName)
             Button("Cancelar", role: .cancel) { renaming = nil }
@@ -709,6 +710,8 @@ struct WalletSwitcherSheet: View {
         } message: {
             Text("Só aparece neste iPhone.")
         }
+        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
+        .tint(Palette.ink)
     }
 
     /// O nome passa pelo mesmo saneamento dos nomes vindos de envelope: sem controle,

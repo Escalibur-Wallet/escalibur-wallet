@@ -325,11 +325,14 @@ struct SendAssetPicker: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.top, Space.md)
         .task(id: session.selectedWallet?.id) { await portfolio.ensureLoaded(session.selectedWallet, session: session) }
+        .tint(Palette.accent)
         .alert("Envio de \(blocked?.symbol ?? "") indisponível", isPresented: Binding(get: { blocked != nil }, set: { if !$0 { blocked = nil } })) {
             Button("Entendi", role: .cancel) { blocked = nil }
         } message: {
             Text(blocked?.reason ?? "")
         }
+        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
+        .tint(Palette.ink)
     }
 
     /// Carteira sem saldo: a ilustracao de nada para enviar e o caminho para receber.

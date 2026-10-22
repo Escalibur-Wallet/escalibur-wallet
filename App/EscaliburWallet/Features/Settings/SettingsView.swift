@@ -333,6 +333,7 @@ struct WalletSettingsView: View {
         .fullScreenCover(isPresented: $sealing) {
             if let wallet { SealEnvelopeFlow(wallet: wallet) { sealing = false } }
         }
+        .tint(Palette.accent)
         .alert("Remover \(wallet?.name ?? "") deste iPhone?", isPresented: $confirmRemove) {
             Button("Remover permanentemente", role: .destructive) { Task { await remove() } }
             Button("Cancelar", role: .cancel) {}
@@ -343,6 +344,8 @@ struct WalletSettingsView: View {
                     ? "O saldo continua na blockchain. Sem a senha da carteira e a passphrase, ou um envelope, você não volta a acessá-lo."
                     : "O saldo continua na blockchain. Sem a senha da carteira ou um envelope, você não volta a acessá-lo."))
         }
+        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
+        .tint(Palette.ink)
     }
 
     static func day(_ date: Date) -> String {

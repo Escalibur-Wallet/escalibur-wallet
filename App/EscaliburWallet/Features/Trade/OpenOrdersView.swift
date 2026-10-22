@@ -128,6 +128,7 @@ struct OpenOrdersSection: View {
             }
         }
         // O cancelamento pergunta num popup, no meio da tela (pedido do dono, 17/10/2026).
+        .tint(Palette.accent)
         .alert("Cancelar esta ordem?", isPresented: Binding(get: { choosing != nil }, set: { if !$0 { choosing = nil } }),
                presenting: choosing) { order in
             if let via = Self.safest(order.cancellations) {
@@ -139,6 +140,8 @@ struct OpenOrdersSection: View {
         } message: { order in
             Text(Self.explanation(Self.safest(order.cancellations)))
         }
+        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
+        .tint(Palette.ink)
         .fullScreenCover(item: $reviewing) { item in
             TradeReviewFlow(item: item) { completed in
                 if completed, case .cancel(let order, _) = item.kind {
