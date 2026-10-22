@@ -148,15 +148,12 @@ struct NewWalletFlow: View {
                     }
                 }
             }
-            .tint(Palette.accent)
-            .alert("Confirmar depois?", isPresented: $askingLater) {
+            .whiteAlert("Confirmar depois?", isPresented: $askingLater) {
                 Button("Voltar e anotar", role: .cancel) {}
                 Button("Confirmar depois", role: .destructive) { cancel() }
             } message: {
                 Text("Sem a senha da carteira anotada, perder o iPhone é perder os ativos. Até você confirmar, a carteira fica marcada Palavras não confirmadas e não recebe.")
             }
-            // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
-            .tint(Palette.ink)
         }
         .interactiveDismissDisabled()
         // As palavras, a conferencia e as sugestoes da conferencia: tudo atras da guarda

@@ -98,8 +98,7 @@ struct VoiceSettingsView: View {
             guard ok else { dismiss(); return }
             await requirePhrase()
         }
-        .tint(Palette.accent)
-        .alert("Esqueceu a frase?", isPresented: $confirmReset) {
+        .whiteAlert("Esqueceu a frase?", isPresented: $confirmReset) {
             Button("Cancelar", role: .cancel) {}
             Button("Pedir a troca") {
                 VoiceGate.shared.requestReset(session)
@@ -108,8 +107,6 @@ struct VoiceSettingsView: View {
         } message: {
             Text("Os ajustes da voz abrem só com o PIN depois de 72 horas. Até lá, a voz continua pedindo a frase. Reiniciar o iPhone recomeça a espera.")
         }
-        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
-        .tint(Palette.ink)
     }
 
 
@@ -353,8 +350,7 @@ struct VoiceSettingsView: View {
                 .typeStyle(.note).foregroundStyle(settings.phraseLanguage.onDevice ? Palette.inkMuted : Palette.caution)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .tint(Palette.accent)
-        .alert("Trocar a língua da frase?", isPresented: Binding(get: { pendingLanguage != nil }, set: { if !$0 { pendingLanguage = nil } })) {
+        .whiteAlert("Trocar a língua da frase?", isPresented: Binding(get: { pendingLanguage != nil }, set: { if !$0 { pendingLanguage = nil } })) {
             Button("Cancelar", role: .cancel) { pendingLanguage = nil }
             Button("Trocar e gravar") {
                 if let language = pendingLanguage { applyLanguage(language, rerecord: true) }
@@ -363,8 +359,6 @@ struct VoiceSettingsView: View {
         } message: {
             Text("A frase gravada foi ouvida em \(settings.phraseLanguage.name). Em \(pendingLanguage?.name ?? ""), grave a frase de novo para o iPhone conferir certo.")
         }
-        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
-        .tint(Palette.ink)
     }
 
     private func chooseLanguage(_ language: VoiceLanguage) {

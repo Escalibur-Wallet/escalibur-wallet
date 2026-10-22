@@ -127,14 +127,11 @@ struct CaptureGuard: ViewModifier {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.userDidTakeScreenshotNotification)) { _ in
             screenshotWarning = true
         }
-        .tint(Palette.accent)
-        .alert("Você fez uma captura de tela", isPresented: $screenshotWarning) {
+        .whiteAlert("Você fez uma captura de tela", isPresented: $screenshotWarning) {
             Button("Entendi", role: .cancel) {}
         } message: {
             Text("A captura está na Fototeca e pode já ter subido para o iCloud. Se ela mostra as palavras da carteira, apague agora.")
         }
-        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
-        .tint(Palette.ink)
     }
 }
 

@@ -372,15 +372,12 @@ struct ImportPhraseView: View {
             #endif
             resealAll()
         }
-        .tint(Palette.accent)
-        .alert("Apagar as palavras digitadas?", isPresented: $confirmClear) {
+        .whiteAlert("Apagar as palavras digitadas?", isPresented: $confirmClear) {
             Button("Apagar", role: .destructive) { clearAll() }
             Button("Cancelar", role: .cancel) {}
         } message: {
             Text("As \(entry.filledCount) palavras saem desta tela. Você digita de novo, a partir da primeira.")
         }
-        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
-        .tint(Palette.ink)
         .background(Palette.void.ignoresSafeArea())
         .statusBarBackdrop()
         .guardedAgainstCapture()
@@ -399,15 +396,12 @@ struct ImportPhraseView: View {
         .onChange(of: entry.revision) { _, _ in lockLanguages() }
         .onChange(of: entry.active) { _, _ in lockLanguages() }
         // O globo pergunta antes: o teclado do iPhone recebe as letras (revisao, B3).
-        .tint(Palette.accent)
-        .alert("Usar o teclado do iPhone?", isPresented: $confirmSystemKeyboard) {
+        .whiteAlert("Usar o teclado do iPhone?", isPresented: $confirmSystemKeyboard) {
             Button("Usar o do iPhone") { systemKeyboard = true }
             Button("Cancelar", role: .cancel) {}
         } message: {
             Text("Só para frases em japonês, chinês ou coreano, que o Safe Keyboard não escreve. O teclado do iPhone recebe as letras que você digitar.")
         }
-        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
-        .tint(Palette.ink)
         .sheet(isPresented: $keyboardInfo) {
             KeyboardInfoSheet(onSystemKeyboard: { systemKeyboard = true }) { keyboardInfo = false }
         }

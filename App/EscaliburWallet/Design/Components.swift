@@ -693,3 +693,23 @@ extension View {
         }
     }
 }
+
+// MARK: Alertas
+
+extension View {
+    /// O alerta com os botoes em branco (pedido do dono, 22/10/2026): o alerta pega a cor de
+    /// destaque de onde e aberto, e a tela continua com o rosa por dentro.
+    func whiteAlert<Actions: View, Message: View>(_ title: LocalizedStringKey, isPresented: Binding<Bool>,
+                                                  @ViewBuilder actions: () -> Actions, @ViewBuilder message: () -> Message) -> some View {
+        tint(Palette.accent)
+            .alert(title, isPresented: isPresented, actions: actions, message: message)
+            .tint(Palette.ink)
+    }
+
+    func whiteAlert<T, Actions: View, Message: View>(_ title: LocalizedStringKey, isPresented: Binding<Bool>, presenting data: T?,
+                                                     @ViewBuilder actions: (T) -> Actions, @ViewBuilder message: (T) -> Message) -> some View {
+        tint(Palette.accent)
+            .alert(title, isPresented: isPresented, presenting: data, actions: actions, message: message)
+            .tint(Palette.ink)
+    }
+}

@@ -38,8 +38,7 @@ struct ContactsView: View {
         .navigationTitle("Endereços salvos")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $adding) { AddContactSheet() }
-        .tint(Palette.accent)
-        .alert("Apagar \(removing?.name ?? "")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+        .whiteAlert("Apagar \(removing?.name ?? "")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             Button("Apagar", role: .destructive) {
                 if let removing {
                     session.metadata.contacts.removeAll { $0.id == removing.id }
@@ -51,8 +50,6 @@ struct ContactsView: View {
         } message: {
             Text("O endereço sai da lista. Nada muda na rede.")
         }
-        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
-        .tint(Palette.ink)
     }
 
     private var empty: some View {
@@ -619,15 +616,12 @@ struct ManageAssetsView: View {
             NavigationStack { AddCustomTokenView { adding = false } }
                 .presentationBackground(Palette.void)
         }
-        .tint(Palette.accent)
-        .alert("Remover \(removing?.symbol ?? "")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+        .whiteAlert("Remover \(removing?.symbol ?? "")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             Button("Cancelar", role: .cancel) { removing = nil }
             Button("Remover", role: .destructive) { remove() }
         } message: {
             Text("A moeda some da Carteira, de Receber e de Enviar. O saldo continua na rede, e você pode adicionar de novo.")
         }
-        // Os botoes do alerta em branco; a tela continua com o rosa (pedido do dono, 22/10/2026).
-        .tint(Palette.ink)
     }
 
     private func remove() {
