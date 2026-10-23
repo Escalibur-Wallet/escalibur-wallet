@@ -384,6 +384,46 @@
     });
   }
 
+  // MARK: Seguranca que da para conferir: um pacote de pixels atravessa as quatro portas (codigo
+  // aberto, verificacoes, testes, versao assinada), e cada uma acende quando ele passa (pedido do
+  // dono, 23/10/2026). Uma vez por visita; com movimento reduzido, todas acesas e sem pacote.
+  var portas = document.querySelector("[data-portas]");
+  if (portas) {
+    var listaPortas = Array.prototype.slice.call(portas.querySelectorAll(".porta"));
+    if (!movimento) {
+      listaPortas.forEach(function (li) { li.classList.add("aberta"); });
+    } else {
+      var pacote = document.createElement("span");
+      pacote.className = "porta-pacote";
+      pacote.setAttribute("aria-hidden", "true");
+      portas.appendChild(pacote);
+      var centro = function (i) {
+        var m = listaPortas[i].querySelector(".porta-marca").getBoundingClientRect(), r = portas.getBoundingClientRect();
+        return { x: m.left - r.left + m.width / 2, y: m.top - r.top + m.height / 2 };
+      };
+      var mover = function (c) { pacote.style.transform = "translate3d(" + c.x.toFixed(1) + "px," + c.y.toFixed(1) + "px,0)"; };
+      var rodou = false;
+      new IntersectionObserver(function (entradas, obs) {
+        if (rodou || !entradas[0].isIntersecting) return;
+        rodou = true;
+        obs.disconnect();
+        var c0 = centro(0);
+        pacote.style.transition = "none";
+        mover({ x: c0.x - (portas.clientWidth > 700 ? 90 : 0), y: c0.y - (portas.clientWidth > 700 ? 0 : 60) });
+        pacote.getBoundingClientRect();
+        pacote.style.transition = "";
+        pacote.classList.add("andando");
+        listaPortas.forEach(function (li, i) {
+          setTimeout(function () {
+            mover(centro(i));
+            setTimeout(function () { li.classList.add("aberta"); }, 520);
+          }, 250 + i * 900);
+        });
+        setTimeout(function () { pacote.classList.remove("andando"); }, 250 + listaPortas.length * 900 + 500);
+      }, { threshold: 0.35 }).observe(portas);
+    }
+  }
+
   // MARK: A cadeia do PIN acende degrau por degrau.
   if (movimento) {
     var degraus = document.querySelectorAll(".cadeia-acende li");

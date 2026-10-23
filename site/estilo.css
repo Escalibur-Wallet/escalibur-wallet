@@ -1647,3 +1647,44 @@ html:not(.movimento) .abertura-bits { display: none; }
 @media (max-width: 899px) {
   .movimento .chaves-palco { align-items: flex-start; padding-top: 72px; }
 }
+
+/* MARK: "Seguranca que da para conferir" em quatro portas (pedido do dono, 23/10/2026): codigo
+   aberto, verificacoes, testes e versao assinada, ligadas por um tracejado; um pacote de pixels
+   passa por elas e cada uma acende. No celular, as portas em coluna. */
+.portas-cabeca { text-align: center; max-width: 820px; margin-inline: auto; }
+.portas-cabeca .lead { margin: 20px auto 0; max-width: 36em; }
+.portas { list-style: none; padding: 0; margin: clamp(44px, 6vw, 76px) 0 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(16px, 2.2vw, 32px); position: relative; }
+.portas::before {
+  content: ""; position: absolute; left: 12.5%; right: 12.5%; top: 31px; height: 2px;
+  background: repeating-linear-gradient(90deg, var(--edge-strong) 0 6px, transparent 6px 13px);
+}
+.porta { position: relative; display: grid; justify-items: center; align-content: start; text-align: center; gap: 10px; }
+.porta-marca {
+  position: relative; z-index: 1; width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center;
+  background: var(--void); box-shadow: inset 0 0 0 1px var(--edge-strong); transition: background 0.4s ease, box-shadow 0.4s ease;
+}
+/* O visto em pixels, feito so de sombras (sem imagem): sete quadradinhos em diagonal. */
+.porta-marca::after {
+  content: ""; width: 4px; height: 4px; color: var(--ink-muted); opacity: 0.45; transform: translate(-14px, -8px);
+  box-shadow: 0 8px, 4px 12px, 8px 16px, 12px 12px, 16px 8px, 20px 4px, 24px 0, 0 8px 0 0 currentColor;
+  transition: color 0.4s ease, opacity 0.4s ease;
+}
+.porta.aberta .porta-marca { background: var(--control); box-shadow: inset 0 0 0 1px var(--ink); }
+.porta.aberta .porta-marca::after { color: var(--ink); opacity: 1; }
+.porta-titulo { font-size: 19px; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; margin-top: 8px; }
+.porta-numero { font-variant-numeric: tabular-nums; }
+.porta-texto { font-size: 15px; line-height: 1.5; color: var(--ink-soft); max-width: 17em; }
+.porta-texto code { font: inherit; color: var(--ink); }
+.porta-pacote {
+  position: absolute; left: -6px; top: -6px; width: 12px; height: 12px; z-index: 2; background: var(--ink); opacity: 0;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08); transition: transform 0.55s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.3s ease; pointer-events: none;
+}
+.porta-pacote.andando { opacity: 1; }
+.portas-pe { display: grid; justify-items: center; gap: 18px; margin-top: clamp(40px, 5vw, 64px); }
+@media (max-width: 699px) {
+  .portas { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .portas::before { left: 31px; right: auto; top: 32px; bottom: 32px; width: 2px; height: auto; background: repeating-linear-gradient(180deg, var(--edge-strong) 0 6px, transparent 6px 13px); }
+  .porta { grid-template-columns: 64px minmax(0, 1fr); justify-items: start; text-align: left; column-gap: 16px; row-gap: 4px; }
+  .porta-marca { grid-row: 1 / span 2; }
+  .porta-titulo { margin-top: 6px; }
+}
