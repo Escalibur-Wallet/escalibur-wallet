@@ -444,7 +444,7 @@ def main():
     modelo("", "inicio.html", "", "A hot wallet mais segura: carteira cripto sem custódia, com as chaves só no seu celular. "
            f"Envie e receba em {len(ctx['redes'])} redes, troque e confira cada transação antes de assinar.")
     modelo("seguranca", "seguranca.html", "Segurança",
-           "O que protege a sua carteira na Escalibur Wallet, contra quem, e onde cada proteção para.", "seguranca")
+           "As camadas que trancam a chave da sua carteira na Escalibur Wallet, o custo de cada uma para quem ataca e onde cada uma termina.", "seguranca")
 
     gravar(saida, "auditoria", paginas.pagina_auditoria(ctx, "../"))
     rotas.append("auditoria")

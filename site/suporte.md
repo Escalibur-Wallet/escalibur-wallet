@@ -17,6 +17,6 @@ Ninguém da Escalibur pede a senha da carteira (as 12 ou 24 palavras), o PIN ou 
 
 A carteira é sua e roda só no seu celular. A Escalibur não vê, não move, não congela e não devolve saldo, e não desfaz transação. Por isso o suporte nunca vai pedir acesso à sua carteira.
 
-## Falha de segurança
+## Bug de segurança
 
-Achou uma vulnerabilidade? Escreva para security@escaliburwallet.com, com "Segurança" no assunto, sem abrir issue pública. Confirmamos o recebimento em até 72 horas, fazemos a triagem em 7 dias e corrigimos falha crítica em até 30. Pesquisa de boa-fé não é tratada como violação; não acesse fundos de outras pessoas.
+Achou um bug de segurança? Escreva para security@escaliburwallet.com, com "Segurança" no assunto, sem abrir issue pública. Confirmamos o recebimento em até 72 horas, fazemos a triagem em 7 dias e corrigimos bug crítico em até 30. Pesquisa de boa-fé não é tratada como violação; não acesse fundos de outras pessoas.

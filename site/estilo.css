@@ -1244,7 +1244,7 @@ img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
 .chaves-passos span { font-size: 15px; color: var(--ink-soft); }
 .chaves-pixels { display: grid; justify-items: center; gap: 28px; }
 .pixels-chave { width: min(420px, 86vw); aspect-ratio: 1; }
-.movimento .chaves-trilho { height: 380vh; height: 380svh; }
+.movimento .chaves-trilho { height: 600vh; height: 600svh; }
 .movimento .chaves-palco { position: sticky; top: 0; height: 100vh; height: 100svh; display: flex; align-items: center; padding: 64px 0 24px; }
 .movimento .chaves-passos li { background: transparent; padding: 12px 18px; transition: background 0.35s ease; }
 .movimento .chaves-passos li b { color: var(--ink-muted); transition: color 0.35s ease; }
@@ -1312,15 +1312,16 @@ img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
 .hash-pixels { width: min(100%, 300px); height: auto; aspect-ratio: 10 / 1; }
 .hash-texto { font-size: 12px; color: var(--ink-muted); }
 
-/* MARK: Fim: texto no meio, a moeda em cima e o podio de iPhones cortado embaixo. */
+/* MARK: Fim: texto no meio, a moeda em cima e o podio de iPhones cortado embaixo; so a parte
+   de cima das telas aparece (pedido do dono, 23/10/2026). */
 .final { padding: clamp(45px, 6.2vw, 87px) 0 0; overflow: hidden; }
 .final-texto { display: grid; justify-items: center; text-align: center; }
 .final-texto .final-moeda { width: min(220px, 52vw); margin-bottom: 12px; }
 .final-texto .lead { margin: 20px auto 0; max-width: 30em; }
 .final-texto .lojas { justify-items: center; margin-top: 32px; }
-.podio { display: flex; justify-content: center; align-items: flex-start; gap: clamp(12px, 3vw, 40px); margin-top: clamp(48px, 7vw, 88px); height: clamp(300px, 46vw, 560px); overflow: hidden; padding-inline: var(--gutter); }
+.podio { display: flex; justify-content: center; align-items: flex-start; gap: clamp(12px, 3vw, 40px); margin-top: clamp(48px, 7vw, 88px); height: clamp(160px, 20vw, 270px); overflow: hidden; padding-inline: var(--gutter); }
 .podio .aparelho { --w: clamp(150px, 24vw, 300px); flex: none; }
-.podio .aparelho.podio-lado { margin-top: clamp(40px, 7vw, 96px); }
+.podio .aparelho.podio-lado { margin-top: clamp(28px, 4vw, 56px); }
 @media (max-width: 599px) { .podio .aparelho { --w: 40vw; } .podio .aparelho.podio-lado { --w: 34vw; } .podio { gap: 10px; padding-inline: 0; } }
 .movimento .podio .aparelho { transform: translate3d(0, 80px, 0); opacity: 0; transition: transform 1.1s var(--ease), opacity 0.9s ease; }
 .movimento .podio.visivel .aparelho { transform: none; opacity: 1; }
@@ -1519,53 +1520,86 @@ html:not(.movimento) .abertura-bits { display: none; }
 .movimento .manifesto { position: relative; z-index: 5; margin-top: -13vh; margin-top: -13svh; }
 @media (max-width: 899px) { .movimento .manifesto { margin-top: -6vh; margin-top: -6svh; } }
 
-/* MARK: Uma frase, as redes (quarta rodada): as 12 palavras cifradas e, embaixo, as redes,
-   cada uma com o desenho do endereco em pixels. Nada de orbita nem esfera. */
-.redes-grade { grid-template-columns: minmax(0, 1fr) !important; gap: 40px; }
+/* MARK: As redes num favo (quinta rodada, pedido do dono: so as logos, sem orbita nem esfera).
+   Fileiras de 7 e 6 no largo, de 5, 4 e 3 no celular; as pares andam meia ficha. As fichas
+   flutuam numa onda lenta da esquerda para a direita, e a borda acende na crista. */
+.redes-grade { grid-template-columns: minmax(0, 1fr) !important; gap: clamp(36px, 5vw, 64px); }
 .redes-cabeca { max-width: 860px; }
-.frase-redes { display: grid; gap: 18px; }
-.frase-cartao { background: var(--body); border-radius: var(--r-tile); padding: clamp(18px, 2.4vw, 28px); }
-.frase-titulo { font-size: 15px; font-weight: 600; color: var(--ink-soft); margin-bottom: 14px; }
-.frase-palavras { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (min-width: 700px) { .frase-palavras { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
-.frase-palavras li { display: flex; align-items: baseline; gap: 8px; background: var(--void); border-radius: 10px; padding: 10px 12px; min-width: 0; }
-.frase-n { font-size: 12px; color: var(--ink-muted); min-width: 1.4em; }
-.frase-glifos { font: 600 15px/1.2 var(--mono); color: var(--ink); letter-spacing: 0.04em; overflow: hidden; white-space: nowrap; }
-.frase-seta { display: flex; justify-content: center; height: 30px; }
-.frase-seta span { width: 6px; height: 6px; margin-top: 2px; background: var(--ink-soft); border-radius: 1.5px; box-shadow: 0 10px 0 var(--ink-soft), 0 20px 0 var(--ink-soft); }
-.movimento .frase-seta span { animation: seta-pixels 1.2s infinite steps(1); }
-@keyframes seta-pixels {
-  0% { box-shadow: 0 10px 0 #4A4A52, 0 20px 0 #4A4A52; background: var(--ink); }
-  33% { box-shadow: 0 10px 0 var(--ink), 0 20px 0 #4A4A52; background: #4A4A52; }
-  66% { box-shadow: 0 10px 0 #4A4A52, 0 20px 0 var(--ink); background: #4A4A52; }
+.favo {
+  --ficha: clamp(50px, calc((100vw - 2 * var(--gutter)) / 5.3), 112px);
+  list-style: none; margin: 0 auto; padding: 0 0 12px; display: grid; justify-content: center;
+  grid-template-columns: repeat(10, calc(var(--ficha) / 2)); grid-auto-rows: calc(var(--ficha) * 0.88);
 }
-.redes-fichas { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (min-width: 600px) { .redes-fichas { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (min-width: 900px) { .redes-fichas { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@media (min-width: 1200px) { .redes-fichas { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
-/* A nota fecha a ultima fileira em toda largura: 26 redes + a nota, sem ficha sozinha. */
-.ficha-nota { grid-column: span 2; display: flex; align-items: center; padding: 12px 14px; color: var(--ink-muted); font-size: 13px; line-height: 1.45; border: 1px solid var(--edge); border-radius: var(--r-caixa); }
-@media (min-width: 600px) { .ficha-nota { grid-column: span 1; } }
-@media (min-width: 900px) { .ficha-nota { grid-column: span 2; } }
-@media (min-width: 1200px) { .ficha-nota { grid-column: span 4; } }
+.favo-item { grid-column: span 2; position: relative; display: grid; place-items: center; height: var(--ficha); }
+.favo-item:nth-child(6), .favo-item:nth-child(15) { grid-column: 2 / span 2; }
+.favo-item:nth-child(24) { grid-column: 3 / span 2; }
+@media (min-width: 700px) {
+  .favo { --ficha: clamp(84px, calc((100vw - 2 * var(--gutter)) / 7.6), 128px); grid-template-columns: repeat(14, calc(var(--ficha) / 2)); }
+  .favo-item:nth-child(6), .favo-item:nth-child(15), .favo-item:nth-child(24) { grid-column: span 2; }
+  .favo-item:nth-child(8), .favo-item:nth-child(21) { grid-column: 2 / span 2; }
+}
+.favo-disco {
+  position: relative; width: calc(var(--ficha) - 10px); height: calc(var(--ficha) - 10px); border-radius: 50%;
+  background: var(--body); box-shadow: inset 0 0 0 1px var(--edge); display: grid; place-items: center;
+}
+.favo-disco::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--ink-soft); opacity: 0; }
+.favo-disco .logo { width: 52%; height: 52%; }
+.favo-nome { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (hover: hover) {
+  .favo-item:hover .favo-nome {
+    width: auto; height: auto; margin: 0; clip: auto; overflow: visible; left: 50%; top: calc(100% - 4px); transform: translateX(-50%); z-index: 2;
+    font-size: 13px; font-weight: 600; color: var(--ink); background: var(--control); padding: 4px 10px; border-radius: 999px;
+  }
+}
+.movimento .favo-item { opacity: 0; transform: scale(0.6); transition: opacity 0.7s ease, transform 0.9s var(--ease); }
+.movimento .favo.visivel .favo-item { opacity: 1; transform: none; }
+.movimento .favo.visivel .anel-1 { transition-delay: 0.08s; }
+.movimento .favo.visivel .anel-2 { transition-delay: 0.16s; }
+.movimento .favo.visivel .anel-3 { transition-delay: 0.24s; }
+.movimento .favo.visivel .anel-4 { transition-delay: 0.32s; }
+.movimento .favo.visivel .anel-5 { transition-delay: 0.4s; }
+.movimento .favo-disco { animation: favo-onda 6.4s ease-in-out infinite; }
+.movimento .favo-disco::after { animation: favo-crista 6.4s ease-in-out infinite; }
+.movimento .favo-item:hover .favo-disco { animation-play-state: paused; }
+@keyframes favo-onda { 0%, 100% { transform: translateY(3px); } 50% { transform: translateY(-5px); } }
+@keyframes favo-crista { 0%, 30%, 70%, 100% { opacity: 0; } 50% { opacity: 0.9; } }
+.onda-0 .favo-disco, .onda-0 .favo-disco::after { animation-delay: 0.0s; }
+.onda-1 .favo-disco, .onda-1 .favo-disco::after { animation-delay: -0.3s; }
+.onda-2 .favo-disco, .onda-2 .favo-disco::after { animation-delay: -0.6s; }
+.onda-3 .favo-disco, .onda-3 .favo-disco::after { animation-delay: -0.9s; }
+.onda-4 .favo-disco, .onda-4 .favo-disco::after { animation-delay: -1.2s; }
+.onda-5 .favo-disco, .onda-5 .favo-disco::after { animation-delay: -1.5s; }
+.onda-6 .favo-disco, .onda-6 .favo-disco::after { animation-delay: -1.8s; }
+.onda-7 .favo-disco, .onda-7 .favo-disco::after { animation-delay: -2.1s; }
+.onda-8 .favo-disco, .onda-8 .favo-disco::after { animation-delay: -2.4s; }
+.onda-9 .favo-disco, .onda-9 .favo-disco::after { animation-delay: -2.7s; }
+.onda-10 .favo-disco, .onda-10 .favo-disco::after { animation-delay: -3.0s; }
+.onda-11 .favo-disco, .onda-11 .favo-disco::after { animation-delay: -3.3s; }
+.onda-12 .favo-disco, .onda-12 .favo-disco::after { animation-delay: -3.6s; }
+.onda-13 .favo-disco, .onda-13 .favo-disco::after { animation-delay: -3.9s; }
 .carrossel-abas { max-width: 1100px; }
-.rede-ficha {
-  display: grid; grid-template-columns: 34px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 10px; row-gap: 8px; align-items: center;
-  background: var(--body); border-radius: var(--r-caixa); padding: 12px 14px;
-}
-.rede-ficha .logo { width: 34px; height: 34px; }
-.rede-nome { color: var(--ink); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ficha-hash { grid-column: 1 / -1; width: 100%; aspect-ratio: 10 / 1; height: auto; }
-.movimento .rede-ficha { opacity: 0.25; transform: scale(0.97); transition: opacity 0.5s ease, transform 0.5s var(--ease); }
-.movimento .rede-ficha.acesa { opacity: 1; transform: none; }
 /* Rodape: os selos das lojas, no mesmo estado da abertura. */
 .rodape .lojas { margin-top: 18px; }
 .rodape .selo-loja img { height: 40px; }
 .rodape .lojas-nota { font-size: 13px; }
-@media (max-width: 699px) { .frase-palavras { gap: 6px; } .frase-palavras li { padding: 9px 9px; gap: 6px; } .frase-glifos { font-size: 13px; letter-spacing: 0; } }
 
 /* Espaco entre uma lista ou um mosaico e o paragrafo de apoio logo embaixo (pagina Redes:
    "Tem um envelope Escalibur?", e os outros iguais). */
 .bloco .wrap > ul + .apoio, .bloco .wrap > ol + .apoio, .bloco .wrap > .mosaico + .apoio,
 .bloco .wrap > .apoio + .apoio, .bloco .wrap > .verificacoes + .apoio, .bloco .wrap > div + .apoio { margin-top: 20px; }
 .entrega.destacada h2 { text-decoration: underline; text-decoration-color: var(--edge-strong); text-underline-offset: 6px; }
+
+/* Quinta rodada: os icones da chave por carteira, da chave raiz e do Argon2id em pixels, na
+   linguagem do cadeado (sem icone de biblioteca). Na memoria, alguns blocos trocam de tom. */
+.promessa-icone svg.pixel-icone { width: 26px; height: 22px; }
+.cadeia .no svg.pixel-icone { width: 22px; height: 22px; }
+.movimento .pixel-icone .pisca { animation: pixel-pisca 2.4s steps(1) infinite; }
+.movimento .pixel-icone .p2 { animation-delay: -0.8s; }
+.movimento .pixel-icone .p3 { animation-delay: -1.6s; }
+@keyframes pixel-pisca { 0% { opacity: 1; } 33% { opacity: 0.3; } 66% { opacity: 0.6; } }
+/* Manifesto centralizado (quinta rodada). */
+.manifesto-texto { margin-inline: auto; text-align: center; text-wrap: balance; max-width: 17em; }
+.manifesto-texto .palavra { display: inline-block; }
+/* O cabecalho das redes no centro, sobre o favo. */
+.redes-cabeca { margin-inline: auto; text-align: center; }
+.redes-cabeca .lead { margin-inline: auto; max-width: 40em; }

@@ -8,6 +8,7 @@ Policy so deixa carregar o estilo e o script do proprio site.
 
 import hashlib
 import html
+import math
 import os
 import re
 from datetime import datetime
@@ -199,27 +200,26 @@ def estado_ci_curto(ctx):
             f'<span><span class="ci-rotulo">Commit </span><a href="{dados.REPO}/commit/{sha}">{sha[:7]}</a> · {data_curta(commit["data"])}{parte_ci}</span></p>')
 
 
-def frase_e_redes(ctx, base):
-    """"Uma frase, 26 redes" (quarta rodada): no alto, as 12 palavras da frase como o app as
-    mostra enquanto se digita, em glifos que cifram; embaixo, as redes, cada uma com o seu
-    endereco proprio desenhado em pixels (um desenho tirado do nome da rede, nao o endereco de
-    ninguem). O site.js acende as redes em onda, e os pixels de cada endereco decifram.
-    Sem JS ou com movimento reduzido, tudo aparece parado."""
+def favo_de_redes(ctx, base):
+    """"26 redes. Uma frase." (quinta rodada, pedido do dono: so as logos). As 26 redes num
+    favo, fileiras de 7 e 6 no largo e de 5, 4 e 3 no celular (o CSS desloca as fileiras
+    pares meia ficha). As fichas flutuam numa onda lenta, da esquerda para a direita, e
+    aparecem do centro para fora. Sem orbita e sem esfera. Com movimento reduzido, paradas."""
     redes = ctx["redes"]
-    palavras = "".join(f'<li><span class="frase-n">{i + 1}</span><span class="frase-glifos" data-glifos="{4 + (i * 5) % 4}">{"•" * (4 + (i * 5) % 4)}</span></li>'
-                       for i in range(12))
+    # A posicao no favo largo (7, 6, 7, 6): a coluna em meias fichas, para a onda, e a
+    # distancia ao centro, para a ordem de entrada.
+    fileiras = [7, 6, 7, 6]
+    posicoes = []
+    for f, n in enumerate(fileiras):
+        for k in range(n):
+            posicoes.append((f, k * 2 + (f % 2)))
     itens = []
     for k, r in enumerate(redes):
-        desenho = hashlib.sha256(("escalibur/site/" + r["id"]).encode()).hexdigest()[:40]
-        itens.append(f'<li class="rede-ficha">{logo_rede(ctx, base, r)}<span class="rede-nome">{e(r["nome"])}</span>'
-                     f'<canvas class="pixels-hash ficha-hash" data-hashes="{desenho}" data-colunas="20" data-linhas="2" data-atraso="{0.25 + k * 0.045:.2f}" aria-hidden="true"></canvas></li>')
-    return (f'<div class="frase-redes">'
-            f'<div class="frase-cartao"><p class="frase-titulo">Uma frase de 12 palavras</p>'
-            f'<ol class="frase-palavras" aria-label="As 12 palavras, cifradas na tela como no app">{palavras}</ol></div>'
-            f'<div class="frase-seta" aria-hidden="true"><span></span></div>'
-            f'<ul class="redes-fichas" aria-label="As {len(redes)} redes que a frase abre">{"".join(itens)}'
-            f'<li class="ficha-nota">Cada endereço sai da mesma frase, pelo caminho padrão da rede. '
-            f'Os desenhos em pixels aqui são ilustrativos, não são endereços de ninguém.</li></ul></div>')
+        f, meia = posicoes[k] if k < len(posicoes) else (len(fileiras), 0)
+        anel = min(5, round(math.hypot((meia - 6) / 2, (f - 1.5) * 0.87)))
+        itens.append(f'<li class="favo-item onda-{meia % 14} anel-{anel}"><span class="favo-disco">{logo_rede(ctx, base, r)}</span>'
+                     f'<span class="favo-nome">{e(r["nome"])}</span></li>')
+    return f'<ul class="favo" aria-label="As {len(redes)} redes da carteira" data-revelar>{"".join(itens)}</ul>'
 
 
 def redes_com_tag(ctx):
@@ -739,7 +739,7 @@ def preencher(ctx, base, modelo, origem):
             "telas_passos": lambda: telas_do_app(ctx, base)[1],
             "n_redes_troca": lambda: str(len(dados_da_troca(ctx)["redes"])),
             "verificacoes_feed": lambda: feed_de_verificacoes(ctx, base),
-            "redes_frase": lambda: frase_e_redes(ctx, base),
+            "redes_favo": lambda: favo_de_redes(ctx, base),
             "estado_ci_curto": lambda: estado_ci_curto(ctx),
         }
         if nome not in valores:
@@ -749,8 +749,14 @@ def preencher(ctx, base, modelo, origem):
     return _MARCADOR.sub(troca, modelo)
 
 
+def _texto_security():
+    """O SECURITY.md, com o que a pessoa relata chamado de bug no site (pedido do dono,
+    23/10/2026: "Achou um bug?")."""
+    return (dados.RAIZ / "SECURITY.md").read_text(encoding="utf-8").replace("falha crítica", "bug crítico")
+
+
 def prazos_seguranca():
-    texto = (dados.RAIZ / "SECURITY.md").read_text(encoding="utf-8")
+    texto = _texto_security()
     bloco = re.search(r"Prazos que assumimos:\n((?:- .+\n?)+)", texto)
     if not bloco:
         return ""
@@ -760,7 +766,7 @@ def prazos_seguranca():
 
 def prazos_linha():
     """Os prazos do SECURITY.md numa linha do tempo: o prazo grande, o que acontece nele."""
-    texto = (dados.RAIZ / "SECURITY.md").read_text(encoding="utf-8")
+    texto = _texto_security()
     bloco = re.search(r"Prazos que assumimos:\n((?:- .+\n?)+)", texto)
     if not bloco:
         return ""
@@ -1261,7 +1267,7 @@ def pagina_suporte(ctx, base, itens, email, inline):
     palavras = next((v for k, v in secoes.items() if k.startswith("Nunca mande")), [])
     duvidas = next((v for k, v in secoes.items() if k.startswith("Antes de escrever")), [])
     nao_faz = next((v for k, v in secoes.items() if k.startswith("O que a Escalibur")), [])
-    falha_titulo = next((k for k in secoes if k.startswith("Falha")), "")
+    falha_titulo = next((k for k in secoes if k.startswith("Bug")), "")
     falha = secoes.get(falha_titulo, [])
 
     opcoes = "".join(

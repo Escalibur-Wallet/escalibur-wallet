@@ -133,9 +133,10 @@
     var aparelhoAbertura = abertura.querySelector(".abertura-aparelho");
     var telaAbertura = aparelhoAbertura.querySelector(".tela");
     var legenda = abertura.querySelector(".abertura-legenda");
-    // A imersao: a tela do app vira bits (os tons da propria gravacao, em 0 e 1 e nos glifos
-    // do app) enquanto a camera entra nela; os bits se desfazem no fundo da pagina e o texto
-    // seguinte ja vem subindo por cima, sem tela preta.
+    // A imersao (quinta rodada): a tela do app vira pixels, nos tons da propria gravacao,
+    // enquanto a camera entra nela; os pixels se juntam no cadeado de pixels do site e do app,
+    // que trava, e a camera atravessa o cadeado pelo buraco da fechadura. So depois o texto
+    // seguinte sobe, sem tela preta.
     var bits = document.createElement("canvas");
     bits.className = "abertura-bits";
     bits.setAttribute("aria-hidden", "true");
@@ -166,62 +167,112 @@
     };
     medirBits();
     window.EscaliburRelogio.aoMedir(medirBits);
-    // A travessia em 3D: a tela do app vira bits (os tons da propria gravacao) e a camera
-    // atravessa; atras dela vem um tunel de planos de bits, do fundo para a frente, que passam
-    // pela camera e somem. So depois disso o texto seguinte sobe.
-    var grade = function (x0, y0, w, h, cols, linhas, luz, tom0, tique, semente) {
-      var cw = w / cols, ch = h / linhas;
-      var tamanho = Math.max(5, Math.min(cw, ch * 1.6) * 0.8);
-      if (tamanho > 260) return;
-      gBits.font = "600 " + tamanho.toFixed(1) + "px Inter, system-ui, sans-serif";
-      var c0 = Math.max(0, Math.floor(-x0 / cw)), c1 = Math.min(cols, Math.ceil((bits.width - x0) / cw));
-      var l0 = Math.max(0, Math.floor(-y0 / ch)), l1 = Math.min(linhas, Math.ceil((bits.height - y0) / ch));
-      var niveis = [[], [], [], [], [], []];
-      for (var l = l0; l < l1; l++) for (var c = c0; c < c1; c++) {
-        var base = luz ? 0.3 + luz[l * cols + c] * 0.7 : 0.25 + ruidoBits(c, l, semente) * 0.75;
-        var tom = base * (0.6 + 0.4 * ruidoBits(c, l, tique + semente)) * tom0;
-        var n = Math.min(5, Math.floor(tom * 6));
-        if (n >= 1) niveis[n].push(l * cols + c);
+    // Os pixels: um por celula da tela (28 x 61). Os que viram cadeado guardam a celula do
+    // cadeado (o mesmo desenho da pagina Seguranca e das Chaves, numa grade de 32); os outros
+    // passam pela camera e somem.
+    var pixelsAbertura = null, cadeadoCaixa = null;
+    var montarPixels = function () {
+      var celulas = [];
+      for (var k = 0; k < CADEADO_FECHADO.length; k++) if (CADEADO_FECHADO[k] > 0) celulas.push({ x: k % GC, y: (k / GC) | 0 });
+      var x0 = 99, x1 = -1, y0 = 99, y1 = -1;
+      celulas.forEach(function (c) { x0 = Math.min(x0, c.x); x1 = Math.max(x1, c.x); y0 = Math.min(y0, c.y); y1 = Math.max(y1, c.y); });
+      cadeadoCaixa = { cols: x1 - x0 + 1, linhas: y1 - y0 + 1 };
+      // A fechadura: o miolo vazio da parte de baixo do cadeado, onde a camera passa.
+      var furo = { x: 0, y: 0, n: 0 };
+      var cheia = function (x, y) { return CADEADO_FECHADO[y * GC + x] > 0; };
+      for (var y = Math.ceil(y0 + (y1 - y0) / 2); y <= y1; y++) for (var x = x0 + 1; x < x1; x++) {
+        if (cheia(x, y)) continue;
+        var esquerda = false, direita = false;
+        for (var xe = x0; xe < x; xe++) if (cheia(xe, y)) esquerda = true;
+        for (var xd = x + 1; xd <= x1; xd++) if (cheia(xd, y)) direita = true;
+        if (esquerda && direita) { furo.x += x; furo.y += y; furo.n++; }
       }
-      for (var n2 = 1; n2 < 6; n2++) {
-        var lista = niveis[n2];
-        if (!lista.length) continue;
-        var v = Math.round(70 + n2 * 37);
-        gBits.fillStyle = "rgb(" + v + "," + v + "," + (v + 2) + ")";
-        for (var q = 0; q < lista.length; q++) {
-          var kk = lista[q], cc = kk % cols, ll = (kk / cols) | 0;
-          var g = ruidoBits(cc, ll, tique + 7 + semente) > 0.82 ? GLIFOS[Math.floor(ruidoBits(cc, ll, tique + 3) * 16)] : (ruidoBits(cc, ll, tique + 11 + semente) > 0.5 ? "1" : "0");
-          gBits.fillText(g, x0 + (cc + 0.5) * cw, y0 + (ll + 0.5) * ch);
-        }
+      cadeadoCaixa.furoX = furo.n ? furo.x / furo.n - x0 + 0.5 : cadeadoCaixa.cols / 2;
+      cadeadoCaixa.furoY = furo.n ? furo.y / furo.n - y0 + 0.5 : cadeadoCaixa.linhas * 0.7;
+      var lista = [], dono = {};
+      celulas.forEach(function (c) {
+        // A celula da tela no mesmo lugar relativo: a tela se condensa no desenho.
+        var u = (c.x - x0 + 0.5) / cadeadoCaixa.cols, v = (c.y - y0 + 0.5) / cadeadoCaixa.linhas;
+        var col = Math.min(COLS_BITS - 1, Math.floor(u * COLS_BITS)), lin = Math.min(LINHAS_BITS - 1, Math.floor((0.12 + v * 0.76) * LINHAS_BITS));
+        dono[lin * COLS_BITS + col] = { cx: c.x - x0 + 0.5, cy: c.y - y0 + 0.5 };
+      });
+      for (var l = 0; l < LINHAS_BITS; l++) for (var c2 = 0; c2 < COLS_BITS; c2++) {
+        var k2 = l * COLS_BITS + c2;
+        lista.push({ c: c2, l: l, alvo: dono[k2] || null, sorte: ruidoBits(c2, l, 5), fundo: 0.35 + 0.65 * ruidoBits(c2, l, 9) });
       }
+      pixelsAbertura = lista;
     };
+    var TONS_BITS = 14;
     var desenharBits = function (p, t) {
-      var entra = suave(0.8, 0.87, p), voo = suave(0.86, 0.99, p), fim = 1 - suave(0.965, 1, p);
+      var entra = suave(0.8, 0.86, p), forma = suave(0.855, 0.915, p), trava = suave(0.91, 0.925, p);
+      var passa = suave(0.945, 0.995, p), fim = 1 - suave(0.985, 1, p);
       gBits.clearRect(0, 0, bits.width, bits.height);
       if (entra <= 0) return;
+      if (!pixelsAbertura) montarPixels();
+      var W = bits.width, H = bits.height;
       var rp = palco.getBoundingClientRect(), rt = telaAbertura.getBoundingClientRect();
       var x0 = (rt.left - rp.left) * dprBits, y0 = (rt.top - rp.top) * dprBits, w = rt.width * dprBits, h = rt.height * dprBits;
-      var tique = Math.floor(t * 10);
-      gBits.textAlign = "center";
-      gBits.textBaseline = "middle";
-      // O fundo da pagina cobre a tela do app: quando os bits passam, fica a pagina.
+      // O fundo da pagina cobre a tela do app: os pixels ficam no lugar da gravacao.
       gBits.globalAlpha = entra;
       gBits.fillStyle = "#0B0B0C";
-      gBits.fillRect(Math.max(0, x0), Math.max(0, y0), Math.min(bits.width, x0 + w) - Math.max(0, x0), Math.min(bits.height, y0 + h) - Math.max(0, y0));
+      gBits.fillRect(Math.max(0, x0), Math.max(0, y0), Math.min(W, x0 + w) - Math.max(0, x0), Math.min(H, y0 + h) - Math.max(0, y0));
       gBits.globalAlpha = 1;
-      // O tunel: planos de bits do fundo para a frente, em perspectiva, centrados na tela.
-      var cx = bits.width / 2, cy = bits.height / 2, lado = Math.min(bits.width, bits.height);
-      for (var k = 6; k >= 1; k--) {
-        var d = 1 + k * 0.75 - voo * 4.6;
-        if (d <= 0.12) continue;
-        var alfa = suave(0.12, 0.45, d) * (1 - suave(2.4, 3.6, d)) * voo * fim;
-        if (alfa <= 0.01) continue;
-        var pw = lado * 0.62 / d, ph = pw * 1.9;
-        grade(cx - pw / 2, cy - ph / 2, pw, ph, 14, 27, null, alfa, tique, k * 101);
+      var cw = w / COLS_BITS, ch = h / LINHAS_BITS, ladoTela = Math.min(cw, ch) * 0.8;
+      // O cadeado no meio do palco, com a celula do tamanho certo para caber.
+      var celula = Math.min(W, H) * 0.5 / Math.max(cadeadoCaixa.cols, cadeadoCaixa.linhas);
+      var cxC = W / 2 - cadeadoCaixa.cols * celula / 2, cyC = H / 2 - cadeadoCaixa.linhas * celula / 2;
+      var furoX = cxC + cadeadoCaixa.furoX * celula, furoY = cyC + cadeadoCaixa.furoY * celula;
+      // A trava: um pulso de luz quando o desenho fecha.
+      var pulso = trava * (1 - suave(0.93, 0.95, p));
+      var tique = Math.floor(t * 9);
+      var baldes = [];
+      for (var b = 0; b < TONS_BITS; b++) baldes.push([]);
+      for (var k = 0; k < pixelsAbertura.length; k++) {
+        var px = pixelsAbertura[k];
+        var tom0 = luzBits ? 0.25 + luzBits[px.l * COLS_BITS + px.c] * 0.75 : px.fundo;
+        var sx = x0 + (px.c + 0.5) * cw, sy = y0 + (px.l + 0.5) * ch;
+        var x, y, lado, tom, alfa;
+        if (px.alvo) {
+          // Cada pixel do cadeado sai da sua celula da tela num instante proprio.
+          var f = suave(0, 1, forma * 1.35 - px.sorte * 0.35);
+          var ex = cxC + px.alvo.cx * celula, ey = cyC + px.alvo.cy * celula;
+          x = sx + (ex - sx) * f; y = sy + (ey - sy) * f;
+          lado = ladoTela + (celula * 0.84 - ladoTela) * f;
+          tom = tom0 + (0.82 + 0.18 * ruidoBits(px.c, px.l, tique) - tom0) * f;
+          tom = Math.min(1, tom + pulso * 0.35);
+          lado *= 1 + pulso * 0.06;
+          alfa = entra;
+          // A camera passa pela fechadura: cada pixel numa profundidade propria.
+          if (passa > 0) {
+            var z = 1 - passa * (0.92 + 0.12 * px.sorte);
+            if (z <= 0.04) continue;
+            var s = 1 / z;
+            x = furoX + (x - furoX) * s; y = furoY + (y - furoY) * s; lado *= s;
+            alfa *= 1 - suave(5, 12, s);
+          }
+        } else {
+          // Os outros passam pela camera, para fora, e somem enquanto o cadeado se forma.
+          var s2 = 1 + forma * 1.6;
+          x = W / 2 + (sx - W / 2) * s2; y = H / 2 + (sy - H / 2) * s2; lado = ladoTela * s2;
+          tom = tom0 * (0.7 + 0.3 * ruidoBits(px.c, px.l, tique + 3));
+          alfa = entra * (1 - suave(0.05, 0.75, forma + px.sorte * 0.2));
+        }
+        alfa *= fim;
+        if (alfa <= 0.02 || lado < 0.5) continue;
+        if (x + lado < 0 || y + lado < 0 || x - lado > W || y - lado > H) continue;
+        var nivel = Math.min(TONS_BITS - 1, Math.floor(tom * alfa * TONS_BITS));
+        if (nivel < 1) continue;
+        baldes[nivel].push(x - lado / 2, y - lado / 2, lado);
       }
-      // A propria tela, virada bits, passando pela camera.
-      var tela = entra * (1 - suave(0.88, 0.95, p));
-      if (tela > 0.01) grade(x0, y0, w, h, COLS_BITS, LINHAS_BITS, luzBits, tela, tique, 0);
+      for (var n = 1; n < TONS_BITS; n++) {
+        var lista = baldes[n];
+        if (!lista.length) continue;
+        var v = Math.round(18 + (n / (TONS_BITS - 1)) * 232);
+        gBits.fillStyle = "rgb(" + v + "," + v + "," + Math.min(255, v + 2) + ")";
+        gBits.beginPath();
+        for (var q = 0; q < lista.length; q += 3) gBits.rect(lista[q], lista[q + 1], lista[q + 2], lista[q + 2]);
+        gBits.fill();
+      }
     };
     var medida = null, ultimo = -1;
     var medirAbertura = function () {
@@ -1216,7 +1267,6 @@
   // Os desenhos das Chaves, numa grade de 32: o cadeado e o mesmo da pagina Seguranca.
   var GC = 32;
   var CADEADO_FECHADO = deTexto(["..#####..", ".##...##.", ".#.....#.", ".#.....#.", "#########", "#########", "####.####", "####.####", "#########", "#########"], GC, GC, 7, 6, 2);
-  var CADEADO_ABERTO = deTexto(["..#####..", ".##...##.", ".#.....#.", ".#.......", ".#.......", "#########", "#########", "####.####", "####.####", "#########", "#########"], GC, GC, 7, 4, 2);
   var DESENHOS_CHAVE = [
     // O PIN: seis pontos.
     deTexto(["###.###.###", "###.###.###", "###.###.###", "...........", "###.###.###", "###.###.###", "###.###.###"], GC, GC, 5, 8, 2),
@@ -1242,6 +1292,9 @@
     var botoesChaves = Array.prototype.slice.call(document.querySelectorAll(".chaves-passo"));
     var numeroChaves = document.querySelector("[data-chaves-n]");
     var etapa = -1, travaAte = 0, prontaEm = 0;
+    // A velocidade da rolagem, em telas por segundo, suavizada: so a rolagem longa e rapida
+    // pula passos.
+    var yAntes = null, tAntes = 0, velocidade = 0, gesto = null;
     var pxChaves;
     var mostrarEtapa = function (n, t) {
       if (n === etapa) return;
@@ -1268,13 +1321,28 @@
     };
     pxChaves = cenaParticulas(telaChaves, GC, GC, function (pt, t) {
       if (etapa < 0) mostrarEtapa(movimento ? Math.floor(progressoDe() * 5) : 0, t);
+      if (movimento) {
+        var yAgora = window.pageYOffset;
+        if (yAntes !== null && t > tAntes) {
+          var instante = Math.abs(yAgora - yAntes) / window.innerHeight / (t - tAntes);
+          velocidade += (Math.min(instante, 20) - velocidade) * Math.min(1, (t - tAntes) * 6);
+        }
+        yAntes = yAgora; tAntes = t;
+      }
       if (movimento && t > travaAte) {
-        // Um passo de cada vez, depois que o desenho anterior montou. Rolagem rapida (dois
-        // passos ou mais de diferenca) vai direto, para nao atrasar quem passa depressa.
-        var alvo = Math.floor(progressoDe() * 5);
+        // Cada passo ocupa uma tela inteira de rolagem e so troca depois de passar 35% do
+        // trecho seguinte (pedido do dono, 23/10/2026: pulava com um toque leve do trackpad).
+        // Um passo de cada vez, depois que o desenho anterior montou. So a rolagem longa e
+        // rapida vai direto: mais de 2 telas por segundo, por dois passos inteiros ou mais
+        // desde o comeco do gesto.
+        var seg = progressoDe() * 5, alvo = etapa;
+        if (velocidade > 2 && gesto === null) gesto = seg;
+        else if (velocidade < 0.5) gesto = null;
+        if (seg >= etapa + 1.35) alvo = Math.min(4, Math.floor(seg - 0.35));
+        else if (seg < etapa - 0.35) alvo = Math.max(0, Math.floor(seg + 0.35));
         if (alvo !== etapa) {
-          if (Math.abs(alvo - etapa) >= 2) mostrarEtapa(alvo, t);
-          else if (t >= prontaEm) mostrarEtapa(alvo, t);
+          if (gesto !== null && Math.abs(seg - gesto) >= 2) mostrarEtapa(alvo, t);
+          else if (t >= prontaEm) mostrarEtapa(etapa + (alvo > etapa ? 1 : -1), t);
         }
       }
       pt.desenhar(t, {
@@ -1304,8 +1372,9 @@
     });
   }
 
-  // MARK: Seguranca: o cadeado de pixels se monta das particulas espalhadas, a haste fecha, e
-  // depois se desfaz e se monta de novo. Sozinho, sem anel e sem fundo.
+  // MARK: Seguranca: o cadeado de pixels se monta das particulas espalhadas ja travado (a
+  // haste fechada desde o inicio, pedido do dono, 23/10/2026), fica, se desfaz e se monta de
+  // novo. Sozinho, sem anel e sem fundo.
   var telaCadeado = document.querySelector(".pixels-cadeado");
   if (telaCadeado) {
     var ciclo = null, fase = 0;
@@ -1315,50 +1384,12 @@
         pt.desenhar(t, { calmo: true });
         return false;
       }
-      if (ciclo === null) { ciclo = t; fase = 0; pt.formar(CADEADO_ABERTO, t, { de: "espalhado", duracao: 1.3, espalha: 0.6 }); }
+      if (ciclo === null) { ciclo = t; fase = 1; pt.formar(CADEADO_FECHADO, t, { de: "espalhado", duracao: 1.3, espalha: 0.6 }); }
       var dentro = t - ciclo;
-      if (fase === 0 && dentro > 2.4) { fase = 1; pt.formar(CADEADO_FECHADO, t, { duracao: 0.45, espalha: 0.1 }); }
       if (fase === 1 && dentro > 6.2) { fase = 2; pt.espalhar(t); }
       if (fase === 2 && dentro > 7.4) { ciclo = null; pt.lista = []; }
       pt.desenhar(t, {});
     });
-  }
-
-  // MARK: Uma frase, as redes: as 12 palavras em glifos que cifram, trocando como no app
-  // (LiveCipher, num relogio proprio), e as redes acendendo em onda, cada uma com o desenho
-  // do seu endereco decifrando. Parado com movimento reduzido.
-  var fraseRedes = document.querySelector(".frase-redes");
-  if (fraseRedes) {
-    var glifosFrase = Array.prototype.slice.call(fraseRedes.querySelectorAll(".frase-glifos"));
-    var fichas = Array.prototype.slice.call(fraseRedes.querySelectorAll(".rede-ficha"));
-    var sortearGlifos = function (tique) {
-      glifosFrase.forEach(function (el, i) {
-        var n = Number(el.getAttribute("data-glifos")) || 5, s = "";
-        for (var k = 0; k < n; k++) s += "0123456789ABCDEF"[Math.floor(ruidoBits(i * 13 + k, tique, 77) * 16)];
-        el.textContent = s;
-      });
-    };
-    sortearGlifos(1);
-    var fraseNaTela = false, ultimoTique = -1;
-    if (observa) {
-      new IntersectionObserver(function (e) {
-        fraseNaTela = e[0].isIntersecting;
-        if (fraseNaTela) {
-          fichas.forEach(function (f, i) { if (!f.classList.contains("acesa")) setTimeout(function () { f.classList.add("acesa"); }, movimento ? 300 + i * 70 : 0); });
-          pedir();
-        }
-      }, { threshold: 0.2 }).observe(fraseRedes);
-    } else {
-      fichas.forEach(function (f) { f.classList.add("acesa"); });
-    }
-    if (movimento) {
-      window.EscaliburRelogio.registrar(function (e) {
-        if (!fraseNaTela || document.hidden) return false;
-        var tique = Math.floor(e.t * 9);
-        if (tique !== ultimoTique) { ultimoTique = tique; sortearGlifos(tique); }
-        return true;
-      });
-    }
   }
 
   // MARK: Privacidade: cada icone se monta em pixels quando aparece.
