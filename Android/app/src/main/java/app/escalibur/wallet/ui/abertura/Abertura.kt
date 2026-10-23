@@ -238,7 +238,7 @@ private fun BoasVindas(aparelhoComBloqueio: Boolean, aoComecar: () -> Unit, aoAb
 private fun AceiteDosDocumentos(aoAbrir: (DocumentoLegal) -> Unit) {
     val termos = t("Termos de uso")
     val privacidade = t("Política de privacidade")
-    val modelo = t("Ao continuar, você aceita os [Termos de uso](escalibur-doc:termos) e a [Política de privacidade](escalibur-doc:privacidade).")
+    val modelo = t("Ao continuar, você aceita os [Termos de uso](escalibur-doc:termos)\ne a [Política de privacidade](escalibur-doc:privacidade).")
     val texto = androidx.compose.ui.text.buildAnnotatedString {
         val link = Regex("\\[([^\\]]+)]\\(escalibur-doc:([a-z]+)\\)")
         var posicao = 0

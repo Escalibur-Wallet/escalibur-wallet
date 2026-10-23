@@ -90,7 +90,7 @@ struct OnboardingFlow: View {
                 step = .tour
             }
             .padding(.top, Space.lg)
-            Text("Ao continuar, você aceita os [Termos de uso](escalibur-doc:termos) e a [Política de privacidade](escalibur-doc:privacidade).")
+            Text("Ao continuar, você aceita os [Termos de uso](escalibur-doc:termos)\ne a [Política de privacidade](escalibur-doc:privacidade).")
                 .typeStyle(.note)
                 .foregroundStyle(Palette.inkMuted)
                 .tint(Palette.inkSoft)

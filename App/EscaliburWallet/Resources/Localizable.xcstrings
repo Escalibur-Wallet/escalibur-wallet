@@ -37989,78 +37989,78 @@
         }
       }
     },
-    "Ao continuar, você aceita os [Termos de uso](escalibur-doc:termos) e a [Política de privacidade](escalibur-doc:privacidade)." : {
+    "Ao continuar, você aceita os [Termos de uso](escalibur-doc:termos)\ne a [Política de privacidade](escalibur-doc:privacidade)." : {
       "localizations" : {
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "بالمتابعة، أنت توافق على [شروط الاستخدام](escalibur-doc:termos) و[سياسة الخصوصية](escalibur-doc:privacidade)."
+            "value" : "بالمتابعة، أنت توافق على [شروط الاستخدام](escalibur-doc:termos)\nو[سياسة الخصوصية](escalibur-doc:privacidade)."
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wenn du fortfährst, akzeptierst du die [Nutzungsbedingungen](escalibur-doc:termos) und die [Datenschutzrichtlinie](escalibur-doc:privacidade)."
+            "value" : "Wenn du fortfährst, akzeptierst du die [Nutzungsbedingungen](escalibur-doc:termos)\nund die [Datenschutzrichtlinie](escalibur-doc:privacidade)."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "By continuing, you accept the [Terms of use](escalibur-doc:termos) and the [Privacy policy](escalibur-doc:privacidade)."
+            "value" : "By continuing, you accept the [Terms of use](escalibur-doc:termos)\nand the [Privacy policy](escalibur-doc:privacidade)."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Al continuar, aceptas los [Términos de uso](escalibur-doc:termos) y la [Política de privacidad](escalibur-doc:privacidade)."
+            "value" : "Al continuar, aceptas los [Términos de uso](escalibur-doc:termos)\ny la [Política de privacidad](escalibur-doc:privacidade)."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "En continuant, vous acceptez les [Conditions d’utilisation](escalibur-doc:termos) et la [Politique de confidentialité](escalibur-doc:privacidade)."
+            "value" : "En continuant, vous acceptez les [Conditions d’utilisation](escalibur-doc:termos)\net la [Politique de confidentialité](escalibur-doc:privacidade)."
           }
         },
         "hi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "आगे बढ़कर, आप [उपयोग की शर्तें](escalibur-doc:termos) और [गोपनीयता नीति](escalibur-doc:privacidade) स्वीकार करते हैं."
+            "value" : "आगे बढ़कर, आप [उपयोग की शर्तें](escalibur-doc:termos)\nऔर [गोपनीयता नीति](escalibur-doc:privacidade) स्वीकार करते हैं."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dengan melanjutkan, Anda menyetujui [Ketentuan penggunaan](escalibur-doc:termos) dan [Kebijakan privasi](escalibur-doc:privacidade)."
+            "value" : "Dengan melanjutkan, Anda menyetujui [Ketentuan penggunaan](escalibur-doc:termos)\ndan [Kebijakan privasi](escalibur-doc:privacidade)."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "続けると、[利用規約](escalibur-doc:termos)と[プライバシーポリシー](escalibur-doc:privacidade)に同意したことになります。"
+            "value" : "続けると、[利用規約](escalibur-doc:termos)と\n[プライバシーポリシー](escalibur-doc:privacidade)に同意したことになります。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "계속하면 [이용 약관](escalibur-doc:termos) 및 [개인정보 처리방침](escalibur-doc:privacidade)에 동의하게 됩니다."
+            "value" : "계속하면 [이용 약관](escalibur-doc:termos)\n및 [개인정보 처리방침](escalibur-doc:privacidade)에 동의하게 됩니다."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Devam ederek [Kullanım Koşulları](escalibur-doc:termos) ve [Gizlilik Politikası](escalibur-doc:privacidade) metinlerini kabul etmiş olursun."
+            "value" : "Devam ederek [Kullanım Koşulları](escalibur-doc:termos)\nve [Gizlilik Politikası](escalibur-doc:privacidade) metinlerini kabul etmiş olursun."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Khi tiếp tục, bạn đồng ý với [Điều khoản sử dụng](escalibur-doc:termos) và [Chính sách quyền riêng tư](escalibur-doc:privacidade)."
+            "value" : "Khi tiếp tục, bạn đồng ý với [Điều khoản sử dụng](escalibur-doc:termos)\nvà [Chính sách quyền riêng tư](escalibur-doc:privacidade)."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "继续即表示你接受[使用条款](escalibur-doc:termos)和[隐私政策](escalibur-doc:privacidade)。"
+            "value" : "继续即表示你接受[使用条款](escalibur-doc:termos)\n和[隐私政策](escalibur-doc:privacidade)。"
           }
         }
       }
