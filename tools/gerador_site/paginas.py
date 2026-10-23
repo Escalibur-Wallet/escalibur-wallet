@@ -217,14 +217,11 @@ def favo_de_redes(ctx, base):
     for k, r in enumerate(redes):
         f, meia = posicoes[k] if k < len(posicoes) else (len(fileiras), 0)
         anel = min(5, round(math.hypot((meia - 6) / 2, (f - 1.5) * 0.87)))
-        # Ao passar o mouse (ou focar), a ficha se abre numa capsula com a rede, a moeda e o tempo
-        # tipico de confirmacao (pedido do dono, 23/10/2026: expandir, e nao so dizer o nome). As
-        # da metade direita abrem para a esquerda, para nao passar da borda.
-        lado = " abre-esquerda" if meia > 6 else ""
-        tempo = f'≈ {round(r["segundos"] / 60)} min' if r.get("segundos", 0) >= 90 else f'≈ {max(1, round(r.get("segundos") or 1))} s'
-        itens.append(f'<li class="favo-item onda-{meia % 14} anel-{anel}{lado}" tabindex="0">'
-                     f'<span class="favo-disco">{logo_rede(ctx, base, r)}'
-                     f'<span class="favo-info"><b>{e(r["nome"])}</b><span>{e(r["simbolo"])} · {e(tempo)}</span></span></span></li>')
+        # Ao passar o mouse (ou focar), a ficha so cresce (pedido do dono, 23/10/2026); o nome fica
+        # para o leitor de tela.
+        itens.append(f'<li class="favo-item onda-{meia % 14} anel-{anel}" tabindex="0">'
+                     f'<span class="favo-disco">{logo_rede(ctx, base, r)}</span>'
+                     f'<span class="favo-nome">{e(r["nome"])}</span></li>')
     return f'<ul class="favo" aria-label="As {len(redes)} redes da carteira" data-revelar>{"".join(itens)}</ul>'
 
 
