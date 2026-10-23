@@ -332,7 +332,9 @@
   // MARK: Manifesto: cada palavra comeca cifrada, em glifos que trocam como os do app, e
   // decifra quando a rolagem chega nela.
   var manifesto = document.querySelector("[data-palavras]");
-  if (manifesto && movimento) {
+  var secaoManifesto = document.getElementById("manifesto");
+  var prontoDesde = 0;
+  if (manifesto && secaoManifesto && movimento) {
     var inteiro = manifesto.textContent.trim();
     var palavrasM = inteiro.split(/\s+/);
     manifesto.textContent = "";
@@ -356,7 +358,16 @@
     window.EscaliburRelogio.registrar(function (e) {
       var r = manifesto.getBoundingClientRect();
       if (r.bottom < -40 || r.top > e.vh + 40) return false;
-      var p = limitar((e.vh * 0.9 - r.top) / (e.vh * 0.45 + r.height * 0.55), 0, 1);
+      // O manifesto nasce no centro da tela, no fim do mergulho (pedido do dono, 23/10/2026): ele
+      // ocupa a ultima tela da abertura, invisivel ate o cadeado fechar, e entao decifra ali mesmo,
+      // pelo tempo. Voltando a rolagem para dentro do mergulho, some e cifra de novo.
+      var abertura = window.EscaliburAbertura;
+      var pronto = !abertura || abertura.p >= 0.985;
+      if (pronto !== secaoManifesto.classList.contains("pronto")) {
+        secaoManifesto.classList.toggle("pronto", pronto);
+        prontoDesde = e.t;
+      }
+      var p = pronto ? limitar((e.t - prontoDesde - 0.15) / 0.9, 0, 1) : 0;
       var n = palavrasCifra.length, tique = Math.floor(e.t * 11);
       palavrasCifra.forEach(function (w, i) {
         var abrir = p * (n + 2) - i > 0.5;

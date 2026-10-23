@@ -1596,3 +1596,15 @@ html:not(.movimento) .abertura-bits { display: none; }
 /* O cabecalho das redes no centro, sobre o favo. */
 .redes-cabeca { margin-inline: auto; text-align: center; }
 .redes-cabeca .lead { margin-inline: auto; max-width: 40em; }
+
+/* MARK: O manifesto nasce no centro, no fim do mergulho (pedido do dono, 23/10/2026): a secao ocupa
+   a ultima tela da abertura, com o texto no meio, invisivel ate o cadeado fechar (site.js poe
+   "pronto"). Assim ele aparece ja no centro, sem subir do pe da tela. */
+.movimento .manifesto {
+  margin-top: -100vh; margin-top: -100svh; min-height: 100vh; min-height: 100svh;
+  display: flex; align-items: center; justify-content: center; padding: 0;
+  opacity: 0; transition: opacity 0.45s ease; pointer-events: none;
+}
+.movimento .manifesto.pronto { opacity: 1; pointer-events: auto; }
+@media (max-width: 899px) { .movimento .manifesto { margin-top: -100vh; margin-top: -100svh; } }
+@media (prefers-reduced-motion: reduce) { .movimento .manifesto { opacity: 1; } }
