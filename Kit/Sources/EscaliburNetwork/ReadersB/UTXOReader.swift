@@ -174,34 +174,49 @@ public struct UTXOReader: Sendable {
         return total
     }
 
-    /// O saldo confirmado do aviso de recebimento, com o menor rastro e sem aviso falso.
+    /// O saldo confirmado de cada endereco para o aviso de recebimento, com o menor rastro e sem
+    /// aviso falso (revisoes de 23/10/2026).
     ///
-    /// - Cada endereco vai sempre ao mesmo provedor da lista fixa (nao da dos que estao no ar),
-    ///   escolhido pelo HMAC do sal desta instalacao. Sem contingencia: com o provedor dele fora do
-    ///   ar ou em pausa, a conta nao e lida nesta rodada (erro), e o saldo visto fica.
-    /// - Quando a soma muda em relacao a `previous`, um provedor de outro dono, fixo tambem, le cada
-    ///   endereco. Na subida vale o menor de cada endereco; na queda, o maior. Se a conferencia nao
-    ///   confirma o sentido, volta `previous`: o saldo visto nao muda e nada avisa. Assim um
-    ///   provedor sozinho nao inventa recebimento, nem baixa o saldo visto para depois "devolver"
-    ///   (pentest de 14/10/2026, M1; revisao de 23/10/2026).
-    /// - Sem `previous` (a leitura que marca o saldo de partida), um so: ela nunca avisa.
-    public func receiptBalance(addresses: [String], salt: UInt64, previous: UInt64?) async throws -> UInt64 {
-        let providers = pool.providers
+    /// - Cada endereco vai sempre ao mesmo provedor (`fixedProvider`), sem contingencia.
+    /// - Quando o valor muda em relacao a `previous` do endereco, ou ainda nao ha valor visto (o
+    ///   saldo de partida), um provedor de outro dono (`witnessProvider`) le o mesmo endereco, e
+    ///   os dois tem de bater exatamente. Se nao batem, ou um falha, o endereco fica com o valor
+    ///   anterior (ou sem valor, no saldo de partida). Um provedor sozinho nao inventa
+    ///   recebimento, nem baixa o saldo para depois "devolver", nem pega carona num recebimento
+    ///   de verdade.
+    /// - Um provedor fora do ar cala so os enderecos dele, nao a conta.
+    ///
+    /// Devolve o valor confirmado de cada endereco que tem um (os sem valor ficam de fora).
+    public func receiptBalances(addresses: [String], salt: UInt64, previous: [String: UInt64]) async throws -> [String: UInt64] {
+        let providers = Self.receiptProviders(chain: chain, pool.providers)
         guard Set(providers.map(\.operatorName)).count >= 2 else {
             throw ChainReaderError.notEnoughSources(needed: 2, got: Set(providers.map(\.operatorName)).count)
         }
         let live = Set(await pool.available().map(\.baseURL))
-        let first = try await ReaderConcurrency.map(addresses, limit: Self.parallelism) { address in
-            try await self.confirmedReading(address, provider: Self.fixedProvider(address, salt: salt, providers: providers), live: live)
+        let values = try await ReaderConcurrency.map(addresses, limit: Self.parallelism) { address -> UInt64? in
+            let before = previous[address]
+            guard let first = try? await self.confirmedReading(address, provider: Self.fixedProvider(address, salt: salt, providers: providers), live: live)
+            else { return before }
+            if let before, first == before { return first }
+            let second = try? await self.confirmedReading(address, provider: Self.witnessProvider(address, salt: salt, providers: providers), live: live)
+            return second == first ? first : before
         }
-        let total = try Self.sum(first)
-        guard let previous, total != previous else { return total }
-        let second = try await ReaderConcurrency.map(addresses, limit: Self.parallelism) { address in
-            try await self.confirmedReading(address, provider: Self.witnessProvider(address, salt: salt, providers: providers), live: live)
+        var out: [String: UInt64] = [:]
+        for (address, value) in zip(addresses, values) { if let value { out[address] = value } }
+        return out
+    }
+
+    /// Quem le os enderecos do aviso: na Litecoin e na Dogecoin, so os donos que nao leem a outra
+    /// rede na frente, para a mesma empresa nao receber as duas na mesma rodada.
+    static func receiptProviders(chain: Chain, _ providers: [ProviderPool.Provider]) -> [ProviderPool.Provider] {
+        let allowed: Set<String>
+        switch chain.id {
+        case Chain.litecoin.id: allowed = ["litecoinspace", "bitcore"]
+        case Chain.dogecoin.id: allowed = ["atomic", "blockcypher"]
+        default: return providers
         }
-        let rising = total > previous
-        let checked = try Self.sum(zip(first, second).map { rising ? min($0, $1) : max($0, $1) })
-        return (rising ? checked > previous : checked < previous) ? checked : previous
+        let kept = providers.filter { allowed.contains($0.operatorName) }
+        return Set(kept.map(\.operatorName)).count >= 2 ? kept : providers
     }
 
     /// O provedor fixo de um endereco nesta instalacao, na lista inteira.
@@ -647,7 +662,8 @@ public struct UTXOReader: Sendable {
 
     /// Esplora, Blockbook e Bitcore antes da Blockcypher e da Blockchair, que cortam por IP e
     /// respondem incompleto. A ordem da lista separa as familias de redes so na leitura dos
-    /// enderecos; status e taxa nao levam endereco.
+    /// enderecos. A taxa nao leva nada da carteira; o status leva um txid, que na cadeia aponta os
+    /// enderecos da transacao, e e consultado so para acompanhar um envio ou um recebimento.
     static func completeFirst(_ providers: [ProviderPool.Provider]) -> [ProviderPool.Provider] {
         providers.filter { UTXOBackend.of($0).sharesAddressLoad } + providers.filter { !UTXOBackend.of($0).sharesAddressLoad }
     }

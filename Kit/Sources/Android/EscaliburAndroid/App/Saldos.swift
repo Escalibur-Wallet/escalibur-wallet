@@ -247,7 +247,11 @@ final class Saldos: @unchecked Sendable {
         if !comPrecoPorContrato.isEmpty {
             // Os ja reconhecidos pelo contrato exato vao num pedido so, pelo id do CoinGecko, e nao
             // um pedido por contrato (auditoria de privacidade, 22/10/2026).
-            let reconhecidos = (Sessao.shared.metadata.recognizedTokens ?? [:]).mapValues(\.coingeckoID)
+            // So o reconhecimento que ainda vale para o contrato: o que venceu volta ao preco por contrato.
+            let identidades = Sessao.shared.metadata.recognizedTokens ?? [:]
+            let reconhecidos = Dictionary(comPrecoPorContrato.compactMap { ativo in
+                identidades[ativo.id].flatMap { TokenRecognitionRules.isValid($0, for: ativo, now: .now) ? (ativo.id, $0.coingeckoID) : nil }
+            }, uniquingKeysWith: { mantido, _ in mantido })
             let achados = await MarketService.shared.tokenQuotes(comPrecoPorContrato, currency: moeda, knownIDs: reconhecidos)
             let aindaNaMoeda = Sessao.shared.metadata.settings.currency == moeda
             trava.withLock {

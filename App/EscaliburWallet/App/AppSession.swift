@@ -117,6 +117,7 @@ final class AppSession {
         LimitOrderWatchStore.erase()
         PriceAlertStore.erase()
         WidgetFeed.erase()
+        ImageLoader.eraseStored()
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
         center.removeAllDeliveredNotifications()
@@ -558,6 +559,7 @@ final class AppSession {
         }
         metadata.wallets.removeAll { $0.id == wallet.id }
         metadata.balanceCache[wallet.id] = nil
+        ImageLoader.eraseStored()
         if metadata.selectedWalletID == wallet.id { metadata.selectedWalletID = metadata.wallets.first?.id }
         try? persist()
     }

@@ -85,14 +85,18 @@ public struct ChainBalance: Sendable, Codable, Hashable {
     /// se sabe se zeraram. O aviso de recebimento nao os conta como enviados (senao a volta
     /// deles avisava o saldo inteiro como recebido). `nil` no cache antigo e onde tudo foi lido.
     public let unread: [String]?
+    /// So no aviso de recebimento das redes UTXO: o valor confirmado de cada endereco, para
+    /// guardar e comparar endereco por endereco na proxima rodada.
+    public let perAddress: [String: UInt64]?
 
     public init(
         chainID: String, holdings: [Holding], accountExists: Bool, unknownTokenCount: Int, fetchedAt: Date,
-        unlisted: [UnlistedHolding]? = nil, reservedNative: BigUInt? = nil, unread: [String]? = nil
+        unlisted: [UnlistedHolding]? = nil, reservedNative: BigUInt? = nil, unread: [String]? = nil, perAddress: [String: UInt64]? = nil
     ) {
         self.chainID = chainID
         self.reservedNative = reservedNative
         self.unread = unread
+        self.perAddress = perAddress
         self.holdings = holdings
         self.accountExists = accountExists
         self.unknownTokenCount = unlisted?.count ?? unknownTokenCount
@@ -385,20 +389,104 @@ public actor BalanceService {
     /// Pelo `UTXOReader`: a mesma lista de provedores, a mesma contingencia e o mesmo
     /// banco por rede da varredura e do envio (Litecoin e Dogecoin tem cinco e quatro
     /// fontes; antes o saldo do Litecoin dependia so do litecoinspace).
-    /// O saldo que o aviso de recebimento compara. Nas redes UTXO, so o confirmado, e o que
-    /// subiu em dois provedores (`UTXOReader.receiptBalance`); nas outras, o mesmo da exibicao, ja
-    /// sem mempool (EVM em `latest`, Solana `confirmed`, XRP Ledger e Stellar validados).
+    /// O saldo que o aviso de recebimento compara, sem aviso falso (revisoes de 23/10/2026).
     ///
-    /// Nas redes UTXO, `salt` (um por instalacao) fixa o provedor de cada endereco, e `previous`
-    /// (o ultimo saldo visto) decide se um segundo provedor confere: so quando subiu.
-    public func receiptBalance(chain: Chain, addresses: [String], salt: UInt64, previous: BigUInt?) async throws -> ChainBalance {
-        guard chain.family == .utxo else { return try await balance(chain: chain, addresses: addresses) }
-        let reader = try UTXOReader(chain: chain, transport: utxoTransport)
-        let total = try await reader.receiptBalance(addresses: addresses, salt: salt, previous: previous.map { $0.uint64 ?? .max })
+    /// `seen`: o ultimo saldo visto de cada ativo (`Asset.id`) da conta; `seenAddresses`, nas redes
+    /// UTXO, o de cada endereco.
+    /// - UTXO: `UTXOReader.receiptBalances`, endereco por endereco. O saldo da moeda e o visto mais
+    ///   o que mudou nos enderecos que ja tinham valor; um endereco que ganha valor agora entra na
+    ///   base sem contar como recebido. `perAddress` volta com o valor de cada um, para guardar.
+    /// - Outras redes: a leitura de exibicao (ja sem mempool), e o ativo que mudou, ou que ainda nao
+    ///   tem valor visto, e relido num provedor de outro dono (`secondOpinion`). Na subida vale o
+    ///   menor, na queda o maior; sem confirmar o sentido, fica o visto. No saldo de partida os
+    ///   dois tem de bater. O que fica com o visto, ou sem valor, vai em `unread`. Na Sui, Cardano,
+    ///   Polkadot, NEAR e Aptos a segunda leitura sai do mesmo leitor da primeira.
+    public func receiptBalance(
+        chain: Chain, addresses: [String], salt: UInt64, seen: [String: BigUInt], seenAddresses: [String: UInt64]
+    ) async throws -> ChainBalance {
+        if chain.family == .utxo {
+            let reader = try UTXOReader(chain: chain, transport: utxoTransport)
+            let values = try await reader.receiptBalances(addresses: addresses, salt: salt, previous: seenAddresses)
+            let native = Asset.native(chain)
+            var amount = values.values.reduce(BigUInt()) { $0 + BigUInt($1) }
+            if let base = seen[native.id] {
+                var up = BigUInt(), down = BigUInt()
+                for (address, value) in values {
+                    guard let before = seenAddresses[address] else { continue }
+                    if value >= before { up = up + BigUInt(value - before) } else { down = down + BigUInt(before - value) }
+                }
+                amount = (base + up).subtractingReportingUnderflow(down) ?? BigUInt()
+            }
+            return ChainBalance(
+                chainID: chain.id, holdings: [Holding(asset: native, amount: amount)], accountExists: true, unknownTokenCount: 0,
+                fetchedAt: .now, perAddress: values
+            )
+        }
+        let first = try await balance(chain: chain, addresses: addresses)
+        guard !Self.changed(first, seen: seen).isEmpty else { return first }
+        let second = try? await Self.secondOpinion.balance(chain: chain, addresses: addresses)
+        return Self.confirmed(first, second: second, seen: seen)
+    }
+
+    /// Os ativos lidos (ou ja vistos) cujo valor difere do visto, fora os que nao foram lidos.
+    static func changed(_ first: ChainBalance, seen: [String: BigUInt]) -> Set<String> {
+        let held = Dictionary(first.holdings.map { ($0.asset.id, $0.amount) }, uniquingKeysWith: { kept, _ in kept })
+        return Set(held.keys).union(seen.keys).subtracting(first.unread ?? []).filter { (held[$0] ?? BigUInt()) != seen[$0] }
+    }
+
+    /// A regra da segunda opiniao, ativo por ativo, sobre os que mudaram: na subida o menor, na
+    /// queda o maior, no saldo de partida os dois iguais; o resto fica com o visto (`unread`).
+    static func confirmed(_ first: ChainBalance, second: ChainBalance?, seen: [String: BigUInt]) -> ChainBalance {
+        let changed = changed(first, seen: seen)
+        guard !changed.isEmpty else { return first }
+        var held = Dictionary(first.holdings.map { ($0.asset.id, $0) }, uniquingKeysWith: { kept, _ in kept })
+        let firstUnread = Set(first.unread ?? [])
+        let secondHeld = Dictionary((second?.holdings ?? []).map { ($0.asset.id, $0) }, uniquingKeysWith: { kept, _ in kept })
+        var unread = firstUnread
+        for key in changed {
+            let mine = held[key]?.amount ?? BigUInt()
+            var value: BigUInt?
+            if let second, !(second.unread ?? []).contains(key) {
+                let other = secondHeld[key]?.amount ?? BigUInt()
+                switch seen[key] {
+                case nil: value = mine == other ? mine : nil
+                case let before? where mine > before: value = min(mine, other) > before ? min(mine, other) : before
+                case let before?: value = max(mine, other) < before ? max(mine, other) : before
+                }
+            }
+            guard let value, value != seen[key] || held[key] != nil else {
+                // Fica com o visto (ou sem valor no saldo de partida): fora de `holdings`, em `unread`.
+                held[key] = nil
+                unread.insert(key)
+                continue
+            }
+            if value.isZero {
+                held[key] = nil
+            } else if let asset = held[key]?.asset ?? secondHeld[key]?.asset {
+                held[key] = Holding(asset: asset, amount: value)
+            } else {
+                held[key] = nil
+                unread.insert(key)
+            }
+        }
+        let holdings = first.holdings.compactMap { held[$0.asset.id] } + held.values.filter { holding in !first.holdings.contains { $0.asset.id == holding.asset.id } }
         return ChainBalance(
-            chainID: chain.id, holdings: [Holding(asset: .native(chain), amount: BigUInt(total))],
-            accountExists: true, unknownTokenCount: 0, fetchedAt: .now
+            chainID: first.chainID, holdings: holdings, accountExists: first.accountExists, unknownTokenCount: first.unknownTokenCount,
+            fetchedAt: first.fetchedAt, unlisted: first.unlisted, reservedNative: first.reservedNative, unread: unread.isEmpty ? nil : unread.sorted()
         )
+    }
+
+    /// A segunda opiniao do aviso: as mesmas listas de provedores, com o dono que vai na frente de
+    /// cada uma passado para o fim. Sem o indexador de tokens: so a lista conferida.
+    static let secondOpinion = BalanceService(
+        client: .shared, transport: HTTPClient.shared, evm: Endpoints.evm.mapValues(otherFirst), xrpl: otherFirst(Endpoints.xrpl),
+        tokenIndex: [:], solana: otherFirst(Endpoints.solana), tron: otherFirst(Endpoints.tron), ton: otherFirst(Endpoints.ton),
+        stellar: otherFirst(Endpoints.stellar), listScan: false
+    )
+
+    static func otherFirst(_ providers: [ProviderPool.Provider]) -> [ProviderPool.Provider] {
+        guard let lead = providers.first?.operatorName else { return providers }
+        return providers.filter { $0.operatorName != lead } + providers.filter { $0.operatorName == lead }
     }
 
     private func utxo(_ chain: Chain, addresses: [String]) async throws -> ChainBalance {

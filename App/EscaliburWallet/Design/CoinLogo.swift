@@ -52,7 +52,8 @@ struct CoinLogo: View {
                 remote = SafeImage.decode(data)
                 return
             }
-            guard !unverified, bundled == nil, let remoteURL, let data = await ImageLoader.shared.data(for: remoteURL) else { return }
+            // Logo de moeda da lista ou do Mercado, a mesma para todo mundo: pode ficar guardada.
+            guard !unverified, bundled == nil, let remoteURL, let data = await ImageLoader.shared.data(for: remoteURL, persist: true) else { return }
             remote = SafeImage.decode(data)
         }
     }

@@ -51,6 +51,9 @@ struct ReceiptWatchFile: Codable, Equatable {
     var lastCheck: Date?
     /// Sorteado ao ligar: fixa o provedor de cada endereco UTXO nesta instalacao.
     var salt: UInt64?
+    /// Nas redes UTXO, o ultimo valor confirmado de cada endereco ("rede|endereco"): a conferencia
+    /// e endereco por endereco (`BalanceService.receiptBalance`).
+    var addressSeen: [String: UInt64]?
     /// As carteiras de so observar tambem entram. Comeca desligado: em geral e a carteira fria,
     /// e conferi-la junto com as outras liga as duas no provedor.
     var includeWatchOnly: Bool?
@@ -157,6 +160,7 @@ actor ReceiptWatchCenter {
             file.salt = file.salt ?? (try? SecureRandom.uint64())
             file.accounts = file.admitted(accounts)
             file.seen = [:]
+            file.addressSeen = [:]
         }
         // A primeira leitura, a que marca o saldo de partida, segue por baixo: esperando por
         // ela, o "Ligar o aviso" ficava carregando o tempo de ler todas as redes (visto pelo
@@ -178,9 +182,11 @@ actor ReceiptWatchCenter {
         if file().enabled, file().salt == nil, let salt = try? SecureRandom.uint64() { update { $0.salt = salt } }
         guard file().enabled, file().accounts != accounts else { return }
         let keep = Set(accounts.map { "\($0.chainID)|\($0.key)" })
+        let addresses = Set(accounts.flatMap { account in account.addresses.map { "\(account.chainID)|\($0)" } })
         update { file in
             file.accounts = accounts
             file.seen = file.seen.filter { key, _ in keep.contains(key.split(separator: "|").prefix(2).joined(separator: "|")) }
+            file.addressSeen = file.addressSeen?.filter { addresses.contains($0.key) }
         }
     }
 
@@ -217,12 +223,14 @@ actor ReceiptWatchCenter {
             // redes nao saem juntas, no mesmo segundo, a cada rodada.
             for account in (try? SecureRandom.mixed(before.accounts)) ?? before.accounts {
                 guard let chain = Chain.all.first(where: { $0.id == account.chainID }), !account.addresses.isEmpty else { continue }
-                let previous = before.seen["\(account.chainID)|\(account.key)|\(Asset.native(chain).id)"]?.amount
-                // So o que ja entrou num bloco, e nas redes UTXO o que subiu em dois provedores:
-                // o aviso diz que o saldo ja esta na carteira (pentest de 14/10/2026, M1).
+                let (seen, seenAddresses) = Self.seen(for: account, in: before)
+                // So o que ja entrou num bloco, e toda mudanca conferida por outro dono: o aviso diz
+                // que o saldo ja esta na carteira (pentest de 14/10/2026, M1; revisoes de 23/10/2026).
                 group.addTask {
                     try? await Task.sleep(for: .milliseconds((try? SecureRandom.index(below: Self.maxJitterMilliseconds + 1)) ?? 0))
-                    return (account, try? await BalanceService.shared.receiptBalance(chain: chain, addresses: account.addresses, salt: salt, previous: previous))
+                    return (account, try? await BalanceService.shared.receiptBalance(
+                        chain: chain, addresses: account.addresses, salt: salt, seen: seen, seenAddresses: seenAddresses
+                    ))
                 }
             }
             var out: [(ReceiptWatchFile.Account, ChainBalance)] = []
@@ -233,6 +241,9 @@ actor ReceiptWatchCenter {
         var value = file()
         guard value.enabled else { return }
         let events = Self.compare(balances, seen: &value.seen)
+        for (account, balance) in balances {
+            for (address, amount) in balance.perAddress ?? [:] { value.addressSeen = (value.addressSeen ?? [:]).merging(["\(account.chainID)|\(address)": amount]) { $1 } }
+        }
         value.lastCheck = now
         current = value
         try? ReceiptWatchStore.save(value)
@@ -243,6 +254,16 @@ actor ReceiptWatchCenter {
         if value.showDetails, let event = events.first(where: { $0.coingeckoID != nil }), let id = event.coingeckoID {
             await WidgetFeed.shared.received(coinID: id, symbol: event.symbol, name: event.name ?? event.symbol)
         }
+    }
+
+    /// O saldo visto da conta, por ativo, e o de cada endereco dela.
+    static func seen(for account: ReceiptWatchFile.Account, in file: ReceiptWatchFile) -> (assets: [String: BigUInt], addresses: [String: UInt64]) {
+        let prefix = "\(account.chainID)|\(account.key)|"
+        var assets: [String: BigUInt] = [:]
+        for (key, seen) in file.seen where key.hasPrefix(prefix) { assets[String(key.dropFirst(prefix.count))] = seen.amount }
+        var addresses: [String: UInt64] = [:]
+        for address in account.addresses { if let value = file.addressSeen?["\(account.chainID)|\(address)"] { addresses[address] = value } }
+        return (assets, addresses)
     }
 
     /// O que subiu desde o ultimo saldo visto, atualizando o visto. Ativo visto pela

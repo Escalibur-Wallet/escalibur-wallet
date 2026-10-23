@@ -250,7 +250,13 @@ final class Portfolio {
 
     /// O id do CoinGecko dos tokens ja reconhecidos pelo contrato exato: o preco deles vai num
     /// pedido so, pelo id, e nao um pedido por contrato (auditoria de privacidade, 22/10/2026).
-    private var recognizedIDs: [String: String] { recognizedTokens.mapValues(\.coingeckoID) }
+    private var recognizedIDs: [String: String] {
+        // So o reconhecimento que ainda vale para o contrato: o que venceu volta ao preco por contrato.
+        let assets = balances.values.flatMap { $0.unlisted ?? [] }.map(\.asset)
+        return Dictionary(assets.compactMap { asset in
+            recognizedTokens[asset.id].flatMap { TokenRecognitionRules.isValid($0, for: asset, now: .now) ? (asset.id, $0.coingeckoID) : nil }
+        }, uniquingKeysWith: { kept, _ in kept })
+    }
 
     /// A ultima leitura boa da rede nao tinha saldo nem token nenhum.
     static func knownEmpty(_ balance: ChainBalance?) -> Bool {

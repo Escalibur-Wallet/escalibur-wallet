@@ -1199,10 +1199,11 @@ public actor MarketService {
 /// hosts conhecidos, so PNG ou JPEG (decodificador de imagem e superficie de ataque
 /// dentro do processo que assina), tamanho limitado.
 ///
-/// Cada logo, e cada logo que nao existe, fica guardada no aparelho (Caches, fora do backup,
-/// protecao completa): baixar de novo a cada abertura dizia ao GitHub e ao CoinGecko, toda vez,
-/// quais tokens raros a carteira tem (auditoria de privacidade, 22/10/2026). O guardado passa
-/// pelas mesmas regras ao ser lido.
+/// So as logos que todo mundo ve (`persist`: as moedas da lista e do Mercado) ficam guardadas no
+/// aparelho (Caches, fora do backup, protecao completa), e passam pelas mesmas regras ao ser
+/// lidas. A de token fora da lista, e a marca de que ela nao existe, ficam so na memoria: no
+/// disco, sobreviviam a remocao da carteira e diziam a quem abrisse o iPhone quais tokens raros
+/// ela tinha (revisao de 23/10/2026). `eraseStored` apaga a pasta.
 public actor ImageLoader {
     public static let shared = ImageLoader()
     /// De onde as logos podem vir. Entram no hosts.lock e na Politica de privacidade
@@ -1224,10 +1225,10 @@ public actor ImageLoader {
         (url.scheme == "https" && allowedHosts.contains(url.host ?? "")) || TokenLogos.isLogo(url)
     }
 
-    public func data(for url: URL) async -> Data? {
+    public func data(for url: URL, persist: Bool = false) async -> Data? {
         if let cached = cache[url] { return cached }
         guard Self.isAllowed(url), !missing.contains(url) else { return nil }
-        switch Self.stored(url) {
+        switch persist ? Self.stored(url) : nil {
         case .image(let data):
             remember(data, for: url)
             return data
@@ -1242,16 +1243,22 @@ public actor ImageLoader {
             fetched = try await HTTPClient.shared.get(url, timeout: 8)
         } catch HTTPClient.Failure.status(404) {
             missing.insert(url)
-            Self.store(nil, for: url)
+            if persist { Self.store(nil, for: url) }
             return nil
         } catch {
             return nil
         }
         let data = fetched
         guard data.count <= Self.maxBytes, Self.isPNGOrJPEG(data) else { return nil }
-        Self.store(data, for: url)
+        if persist { Self.store(data, for: url) }
         remember(data, for: url)
         return data
+    }
+
+    /// Apaga as logos guardadas no aparelho (remover carteira, apagar tudo).
+    public static func eraseStored() {
+        guard let directory else { return }
+        try? FileManager.default.removeItem(at: directory)
     }
 
     private func remember(_ data: Data, for url: URL) {

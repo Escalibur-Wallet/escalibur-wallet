@@ -127,9 +127,8 @@ public enum Endpoints {
     ///
     /// Nenhuma empresa le na frente as duas redes (auditoria de privacidade, 22/10/2026): na
     /// Litecoin os enderecos se repartem entre o litecoinspace e a Bitcore, e a Atomic fica
-    /// depois da Blockcypher; na Dogecoin a Atomic le sozinha na frente (a Bitcore da Dogecoin
-    /// tem historico e status incompletos, visto ao vivo em 23/10/2026), e a Bitcore fica
-    /// depois da Blockcypher.
+    /// depois da Blockcypher; na Dogecoin a Atomic le sozinha na frente, e a Bitcore fica depois
+    /// da Blockcypher. Status e taxa nao seguem esta ordem (`UTXOReader.completeFirst`).
     public static let litecoinExtra: [ProviderPool.Provider] = [
         .init(name: "blockcypher", baseURL: url("https://api.blockcypher.com/v1/ltc/main")),
         .init(name: "blockchair", baseURL: url("https://api.blockchair.com/litecoin")),

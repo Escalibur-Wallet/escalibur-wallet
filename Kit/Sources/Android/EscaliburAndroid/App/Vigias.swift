@@ -284,6 +284,9 @@ struct ReceiptWatchFile: Codable, Equatable {
     var chosen: Bool?
     /// Sorteado ao ligar: fixa o provedor de cada endereco UTXO nesta instalacao.
     var salt: UInt64?
+    /// Nas redes UTXO, o ultimo valor confirmado de cada endereco ("rede|endereco"): a conferencia e
+    /// endereco por endereco (`BalanceService.receiptBalance`).
+    var addressSeen: [String: UInt64]?
     /// As carteiras de so observar tambem entram. Comeca desligado: em geral e a carteira fria, e
     /// conferi-la junto com as outras liga as duas no provedor.
     var includeWatchOnly: Bool?
@@ -367,6 +370,7 @@ enum AvisoDeRecebimento {
             arquivo.salt = arquivo.salt ?? (try? SecureRandom.uint64())
             arquivo.accounts = arquivo.admitted(contas)
             arquivo.seen = [:]
+            arquivo.addressSeen = [:]
         }
     }
 
@@ -386,9 +390,11 @@ enum AvisoDeRecebimento {
         let contas = atual.admitted(todas)
         guard atual.enabled, atual.accounts != contas else { return }
         let manter = Set(contas.map { "\($0.chainID)|\($0.key)" })
+        let enderecos = Set(contas.flatMap { conta in conta.addresses.map { "\(conta.chainID)|\($0)" } })
         mudar { arquivo in
             arquivo.accounts = contas
             arquivo.seen = arquivo.seen.filter { chave, _ in manter.contains(chave.split(separator: "|").prefix(2).joined(separator: "|")) }
+            arquivo.addressSeen = arquivo.addressSeen?.filter { enderecos.contains($0.key) }
         }
     }
 
@@ -411,12 +417,14 @@ enum AvisoDeRecebimento {
             // nao saem juntas, no mesmo segundo, a cada rodada.
             for conta in (try? SecureRandom.mixed(antes.accounts)) ?? antes.accounts {
                 guard let rede = Chain.all.first(where: { $0.id == conta.chainID }), !conta.addresses.isEmpty else { continue }
-                let anterior = antes.seen["\(conta.chainID)|\(conta.key)|\(Asset.native(rede).id)"]?.amount
-                // So o que ja entrou num bloco, e nas redes UTXO o que subiu em dois provedores: o
-                // aviso diz que o saldo ja esta na carteira.
+                let (visto, vistoPorEndereco) = vistos(de: conta, em: antes)
+                // So o que ja entrou num bloco, e toda mudanca conferida por outro dono: o aviso diz que
+                // o saldo ja esta na carteira.
                 grupo.addTask {
                     try? await Task.sleep(nanoseconds: UInt64((try? SecureRandom.index(below: atrasoMaximo + 1)) ?? 0) * 1_000_000)
-                    return (conta, try? await BalanceService.shared.receiptBalance(chain: rede, addresses: conta.addresses, salt: sal, previous: anterior))
+                    return (conta, try? await BalanceService.shared.receiptBalance(
+                        chain: rede, addresses: conta.addresses, salt: sal, seen: visto, seenAddresses: vistoPorEndereco
+                    ))
                 }
             }
             var saida: [(ReceiptWatchFile.Account, ChainBalance)] = []
@@ -428,6 +436,9 @@ enum AvisoDeRecebimento {
         let depois = mudar { valor in
             guard valor.enabled else { return }
             eventos = comparar(saldos, visto: &valor.seen)
+            for (conta, saldo) in saldos {
+                for (endereco, quantia) in saldo.perAddress ?? [:] { valor.addressSeen = (valor.addressSeen ?? [:]).merging(["\(conta.chainID)|\(endereco)": quantia]) { $1 } }
+            }
             valor.lastCheck = agora
         }
         guard !eventos.isEmpty, depois.enabled else { return [] }
@@ -452,6 +463,16 @@ enum AvisoDeRecebimento {
         let symbol: String
         let decimals: Int
         let amount: BigUInt
+    }
+
+    /// O saldo visto da conta, por ativo, e o de cada endereco dela.
+    static func vistos(de conta: ReceiptWatchFile.Account, em arquivo: ReceiptWatchFile) -> ([String: BigUInt], [String: UInt64]) {
+        let prefixo = "\(conta.chainID)|\(conta.key)|"
+        var ativos: [String: BigUInt] = [:]
+        for (chave, visto) in arquivo.seen where chave.hasPrefix(prefixo) { ativos[String(chave.dropFirst(prefixo.count))] = visto.amount }
+        var enderecos: [String: UInt64] = [:]
+        for endereco in conta.addresses { if let valor = arquivo.addressSeen?["\(conta.chainID)|\(endereco)"] { enderecos[endereco] = valor } }
+        return (ativos, enderecos)
     }
 
     /// O que subiu desde o ultimo saldo visto, atualizando o visto. Ativo visto pela primeira vez so

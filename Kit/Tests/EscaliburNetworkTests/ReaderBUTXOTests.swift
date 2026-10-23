@@ -160,8 +160,8 @@ struct ReaderBUTXOTests {
         }
     }
 
-    @Test("Aviso de recebimento: provedor fixo sem contingencia, e outro dono confere toda mudanca (revisao de 23/10/2026)")
-    func receiptBalanceChecksBothWays() async throws {
+    @Test("Aviso de recebimento: endereco por endereco, provedor fixo sem contingencia, outro dono confere toda mudanca")
+    func receiptBalancesPerAddress() async throws {
         let address = T.abandonReceive0
         let providers = T.esploraProviders
         func host(_ provider: ProviderPool.Provider) -> String { provider.baseURL.host ?? "" }
@@ -170,7 +170,8 @@ struct ReaderBUTXOTests {
             UTXOReader.fixedProvider(address, salt: salt, providers: providers) == providers[0]
                 && UTXOReader.witnessProvider(address, salt: salt, providers: providers) == providers[1]
         })
-        func reader(_ values: [String: Int?]) throws -> UTXOReader {
+        let (a, b, c) = (host(providers[0]), host(providers[1]), host(providers[2]))
+        func read(_ values: [String: Int?], previous: UInt64?) async throws -> UInt64? {
             let transport = ReaderBFakeTransport()
             for provider in providers {
                 let key = "\(host(provider))/api/address/\(address)/utxo"
@@ -180,29 +181,46 @@ struct ReaderBUTXOTests {
                     transport.on(key, status: 500)
                 }
             }
-            return try UTXOReader(chain: .bitcoin, transport: transport, providers: providers)
+            let reader = try UTXOReader(chain: .bitcoin, transport: transport, providers: providers)
+            return try await reader.receiptBalances(addresses: [address], salt: salt, previous: previous.map { [address: $0] } ?? [:])[address]
         }
-        let (a, b, c) = (host(providers[0]), host(providers[1]), host(providers[2]))
 
-        // O caso da revisao: o fixo (A) cai, B mente 1 BTC, C diz a verdade. Nada e lido nesta
-        // rodada: nunca o valor de B.
-        await #expect(throws: (any Error).self) {
-            _ = try await reader([a: nil, b: 100_000_000, c: 0]).receiptBalance(addresses: [address], salt: salt, previous: 0)
+        // A revisao: o fixo (A) cai, B mente 1 BTC, C diz a verdade. Fica o valor anterior, nunca o de B.
+        #expect(try await read([a: nil, b: 100_000_000, c: 0], previous: 0) == 0)
+        // Subida: o fixo e o outro dono tem de bater exatamente.
+        #expect(try await read([a: 50_000, b: 50_000, c: 0], previous: 0) == 50_000)
+        #expect(try await read([a: 60_000, b: 50_000, c: 0], previous: 0) == 0)
+        // O fixo inventa e o outro dono nao confirma: fica o anterior.
+        #expect(try await read([a: 100_000_000, b: 0, c: 0], previous: 0) == 0)
+        // O fixo diz 0 com 1 BTC na verdade: a queda nao e aceita.
+        #expect(try await read([a: 0, b: 100_000_000, c: 0], previous: 100_000_000) == 100_000_000)
+        // Queda de verdade, nos dois donos.
+        #expect(try await read([a: 40_000, b: 40_000, c: 0], previous: 100_000) == 40_000)
+        // Sem mudanca: um so.
+        #expect(try await read([a: 70_000, b: nil, c: nil], previous: 70_000) == 70_000)
+        // Saldo de partida: os dois donos iguais; o fixo mentindo 0 nao vira base.
+        #expect(try await read([a: 70_000, b: 70_000, c: nil], previous: nil) == 70_000)
+        #expect(try await read([a: 0, b: 100_000_000, c: 0], previous: nil) == nil)
+        #expect(try await read([a: 70_000, b: nil, c: 70_000], previous: nil) == nil)
+        #expect(try await read([a: nil, b: 70_000, c: 70_000], previous: nil) == nil)
+    }
+
+    @Test("Aviso: um provedor fora do ar cala so os enderecos dele, e os outros seguem")
+    func receiptOneOwnerDown() async throws {
+        let providers = T.esploraProviders
+        let addresses = try (0..<6).map { try ReaderBTest.abandonAccount().address(change: false, index: UInt32($0)).address }
+        let down = providers[0].baseURL.host ?? ""
+        let transport = ReaderBFakeTransport()
+        for provider in providers where provider.baseURL.host != down {
+            for address in addresses { transport.on("\(provider.baseURL.host ?? "")/api/address/\(address)/utxo", data: Self.esploraUTXO([(10_000, true)])) }
         }
-        // Subida confirmada pelo outro dono: vale o menor.
-        #expect(try await reader([a: 60_000, b: 50_000, c: 0]).receiptBalance(addresses: [address], salt: salt, previous: 0) == 50_000)
-        // O fixo inventa e o outro dono nao confirma: o saldo visto fica.
-        #expect(try await reader([a: 100_000_000, b: 0, c: 0]).receiptBalance(addresses: [address], salt: salt, previous: 0) == 0)
-        // O fixo diz 0 com 1 BTC na verdade: a queda nao e aceita, e nao ha aviso falso depois.
-        #expect(try await reader([a: 0, b: 100_000_000, c: 0]).receiptBalance(addresses: [address], salt: salt, previous: 100_000_000) == 100_000_000)
-        // Queda de verdade, nos dois donos: vale o maior.
-        #expect(try await reader([a: 30_000, b: 40_000, c: 0]).receiptBalance(addresses: [address], salt: salt, previous: 100_000) == 40_000)
-        // Sem mudanca, um so; sem saldo visto (a primeira leitura), um so.
-        #expect(try await reader([a: 70_000, b: nil, c: nil]).receiptBalance(addresses: [address], salt: salt, previous: 70_000) == 70_000)
-        #expect(try await reader([a: 70_000, b: nil, c: nil]).receiptBalance(addresses: [address], salt: salt, previous: nil) == 70_000)
-        // Mudou e o outro dono esta fora do ar: nada e lido nesta rodada.
-        await #expect(throws: (any Error).self) {
-            _ = try await reader([a: 90_000, b: nil, c: 90_000]).receiptBalance(addresses: [address], salt: salt, previous: 70_000)
+        for address in addresses { transport.on("\(down)/api/address/\(address)/utxo", status: 500) }
+        let reader = try UTXOReader(chain: .bitcoin, transport: transport, providers: providers)
+        let salt: UInt64 = 7
+        let read = try await reader.receiptBalances(addresses: addresses, salt: salt, previous: [:])
+        for address in addresses {
+            let touched = [UTXOReader.fixedProvider(address, salt: salt, providers: providers), UTXOReader.witnessProvider(address, salt: salt, providers: providers)]
+            #expect((read[address] != nil) == !touched.contains { $0.baseURL.host == down }, "\(address)")
         }
     }
 
