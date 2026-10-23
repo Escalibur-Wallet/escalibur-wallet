@@ -336,14 +336,17 @@ enum EVMTradeHarness {
     /// um `MarketService` sem rede, para a idade do preco).
     static func engine(
         chain: Chain = .base, state: FakeTradeChain = FakeTradeChain(), cow: FakeCoW = FakeCoW(), prices: [String: String]? = nil,
-        oracleDelay: Duration = .zero, oracle: (any EVMPriceOracle)? = nil, sources: [any TradeQuoteSource], transport: EVMFixtureTransport
+        oracleDelay: Duration = .zero, oracle: (any EVMPriceOracle)? = nil, sources: [any TradeQuoteSource], transport: EVMFixtureTransport,
+        quoteAddress: @escaping @Sendable (EVMAddress) -> EVMAddress = { $0 }
     ) -> EVMTradeEngine {
         let reader = EVMReader(transport: transport, rpc: [chain.id: testProviders("a", "b")], history: [:],
                                privateRelays: testProviders("relay1", "relay2"))
         let services = EVMTradeServices(
             aggregator: TradeAggregator(sources: sources), chainState: state, reader: reader, cow: cow,
             prices: oracle ?? FakeOracle(prices: prices, delay: oracleDelay),
-            pendingOrders: EVMPendingLimitOrders(), confirmation: EVMConfirmationPolicy(interval: .milliseconds(1), attempts: 3)
+            pendingOrders: EVMPendingLimitOrders(), confirmation: EVMConfirmationPolicy(interval: .milliseconds(1), attempts: 3),
+            // As respostas gravadas foram montadas para o dono: a cotacao usa o proprio dono.
+            quoteAddress: quoteAddress
         )
         return EVMTradeEngine(chain: chain, services: services)!
     }

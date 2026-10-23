@@ -17,8 +17,14 @@ struct EVMTradeContext {
     let sell: EVMResolvedAsset
     let buy: EVMResolvedAsset
     let intent: TradeIntent
+    /// A mesma intencao com um endereco sorteado nesta rodada no lugar do dono: e a que vai aos
+    /// agregadores enquanto o dono so cota. Cada um montava a transacao para o endereco dele, a
+    /// cada 15 s, antes de ele decidir (auditoria de privacidade, 22/10/2026). A validacao confere
+    /// a calldata contra o endereco sorteado do mesmo jeito; o plano pede a troca de novo, com o
+    /// dono, so ao provedor escolhido.
+    let quoteIntent: TradeIntent
 
-    init(_ request: TradeRequest, chain: Chain) throws {
+    init(_ request: TradeRequest, chain: Chain, quoteAddress: (EVMAddress) -> EVMAddress = { _ in EVMTradeContext.randomAddress() }) throws {
         guard request.chain.id == chain.id else { throw EVMEngineFailure.wrongChain }
         self.chain = chain
         account = try EVMEngineSupport.account(request.account, chain: chain)
@@ -29,6 +35,18 @@ struct EVMTradeContext {
             owner: account.address, sell: sell.tradeAsset(on: chain), buy: buy.tradeAsset(on: chain),
             amountIn: request.amountIn, slippageBps: slippage
         )
+        quoteIntent = try TradeIntent(
+            owner: quoteAddress(account.address), sell: intent.sell, buy: intent.buy, amountIn: intent.amountIn, slippageBps: intent.slippageBps
+        )
+    }
+
+    /// Um endereco que ninguem controla e que nao liga a ninguem: 20 bytes sorteados. Sem
+    /// sorteio possivel, um endereco fixo de fora (o mesmo para todo mundo), nunca o do dono.
+    static func randomAddress() -> EVMAddress {
+        for _ in 0..<4 {
+            if let bytes = try? SecureRandom.bytes(20), let address = EVMAddress(bytes: bytes), !address.isZero { return address }
+        }
+        return EVMAddress(bytes: Array(repeating: 0x11, count: 20))!
     }
 
     var sellIsStable: Bool { Self.isStable(sell, chain: chain) }

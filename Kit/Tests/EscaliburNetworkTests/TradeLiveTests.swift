@@ -52,6 +52,20 @@ struct TradeLiveTests {
         ])
     }
 
+    @Test("Cotacao com um endereco sorteado (o que a carteira manda enquanto o dono so cota): os agregadores cotam e a calldata valida contra ele")
+    func randomOwnerQuotes() async throws {
+        let chain = Chain.base
+        let owner = try #require(EVMAddress(bytes: try SecureRandom.bytes(20)))
+        let intent = try TradeIntent(owner: owner, sell: .token(Self.usdc["base"]!), buy: .native(chain), amountIn: BigUInt(100_000_000), slippageBps: 50)
+        let reader = TradeStateReader()
+        let network = try await reader.network(chain: chain, owner: owner)
+        let costs = TradeCostModel(gasPriceWei: network.baseFeePerGas + network.priorityFees.normal, l1FeePerTransactionWei: 0, nativeToBuy: .identity)
+        let set = await TradeAggregator().quote(intent, market: await Self.market(intent), costs: costs, useCache: false)
+        let answered = Set(set.ranked.map(\.quote.provider))
+        print("cotaram com endereco sorteado:", answered.map(\.rawValue).sorted(), "falhas:", set.failures.mapValues { "\($0)" })
+        #expect(answered.count >= 3)
+    }
+
     @Test("100 USDC -> ETH na Base e na Arbitrum: todos os provedores cotam, validam, simulam e viram plano", arguments: ["base", "arbitrum"])
     func quoteValidatePlan(chainID: String) async throws {
         let chain = Chain.find(chainID)!

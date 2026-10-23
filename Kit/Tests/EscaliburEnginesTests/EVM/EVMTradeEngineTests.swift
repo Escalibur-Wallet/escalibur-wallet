@@ -23,6 +23,40 @@ struct EVMTradeEngineTests {
 
     // MARK: Cotacao
 
+    /// Guarda o dono de cada pedido que chega ao agregador, e nao cota.
+    actor OwnerRecorder {
+        var owners: [EVMAddress] = []
+        func add(_ owner: EVMAddress) { owners.append(owner) }
+    }
+
+    struct RecordingSource: TradeQuoteSource {
+        let provider = TradeProvider.velora
+        let recorder: OwnerRecorder
+        func propose(_ request: TradeQuoteRequest) async throws -> TradeProposal {
+            await recorder.add(request.intent.owner)
+            throw TradeProviderError.noRoute(provider)
+        }
+    }
+
+    @Test("Cotacao: aos agregadores vai um endereco sorteado a cada rodada, nunca o do dono")
+    func quoteHidesOwner() async throws {
+        let recorder = OwnerRecorder()
+        let engine = H.engine(sources: [RecordingSource(recorder: recorder)], transport: try H.baseTransport(),
+                              quoteAddress: { _ in EVMTradeContext.randomAddress() })
+        let request = try F.request()
+        _ = try? await engine.quote(request)
+        _ = try? await engine.quote(request)
+        let owners = await recorder.owners
+        let account = try EVMTestAccounts.testAccount(on: .base).address
+        #expect(owners.count == 2)
+        #expect(!owners.contains { $0.description.lowercased() == account.lowercased() })
+        #expect(Set(owners).count == 2)
+        // O plano usa o dono: a intencao de verdade continua a da conta.
+        let context = try EVMTradeContext(request, chain: .base)
+        #expect(context.intent.owner.description.lowercased() == account.lowercased())
+        #expect(context.quoteIntent.owner != context.intent.owner)
+    }
+
     @Test("Cotacao: quatro provedores comparados, minimo garantido decodificado da calldata, alternativas e autorizacao")
     func quote() async throws {
         let counter = EVMCallCounter()

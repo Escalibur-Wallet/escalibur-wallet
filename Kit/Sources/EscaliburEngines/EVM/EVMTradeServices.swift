@@ -93,6 +93,11 @@ struct EVMTradeServices: Sendable {
     let prices: any EVMPriceOracle
     let pendingOrders: EVMPendingLimitOrders
     let confirmation: EVMConfirmationPolicy
+    /// O endereco que vai aos agregadores na cotacao, a partir do dono: sorteado a cada rodada
+    /// (`EVMTradeContext.quoteIntent`). Os testes com respostas gravadas usam o proprio dono.
+    var quoteAddress: @Sendable (EVMAddress) -> EVMAddress = { _ in EVMTradeContext.randomAddress() }
+    /// As ordens abertas do dono na CoW, guardadas para a cotacao.
+    var openOrders = CoWOpenOrdersCache()
 
     static let live = EVMTradeServices(
         aggregator: TradeAggregator(), chainState: TradeStateReader(), reader: .shared, cow: CoWClient(),

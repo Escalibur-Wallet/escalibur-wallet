@@ -60,10 +60,11 @@ public struct EVMTradeEngine: TradeEngine {
     }
 
     func makeQuote(_ request: TradeRequest) async throws -> TradeQuote {
-        let context = try EVMTradeContext(request, chain: chain)
+        let context = try EVMTradeContext(request, chain: chain, quoteAddress: services.quoteAddress)
         let market = try await EVMTradeMarket.read(context, services: services)
         async let cowRound = cowCandidate(context, market: market)
-        let set = await services.aggregator.quote(context.intent, market: market.reference, costs: market.costs)
+        // Aos agregadores vai o endereco sorteado da rodada, nunca o do dono (`quoteIntent`).
+        let set = await services.aggregator.quote(context.quoteIntent, market: market.reference, costs: market.costs)
         let cow = await cowRound
 
         // Os agregadores: a melhor cotacao ancorada, ou a divisao entre eles.

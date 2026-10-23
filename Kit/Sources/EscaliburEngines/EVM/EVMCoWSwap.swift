@@ -78,9 +78,13 @@ extension EVMTradeEngine {
         let owner = context.account.address
         let cow = services.cow
         let chain = self.chain
-        async let open = try? cow.openSellTotal(owner: owner, sellToken: tokens.sell, chain: chain)
+        // A cotacao vai com o endereco sorteado da rodada. As ordens abertas do dono sao uma
+        // consulta a parte, guardada por 5 minutos: nao sai a cada recotacao.
+        async let open = try? services.openOrders.total(owner: owner, sellToken: tokens.sell, chain: chain) {
+            try await cow.openSellTotal(owner: owner, sellToken: tokens.sell, chain: chain)
+        }
         async let allowance = try? services.chainState.token(chain: chain, token: tokens.sell, owner: owner, spender: CoWProtocol.vaultRelayer)
-        guard let quote = try? await cow.quote(sellToken: tokens.sell, buyToken: tokens.buy, sellAmount: intent.amountIn, owner: owner,
+        guard let quote = try? await cow.quote(sellToken: tokens.sell, buyToken: tokens.buy, sellAmount: intent.amountIn, owner: context.quoteIntent.owner,
                                               chain: chain, appData: .limitOrder),
               let openTotal = await open, openTotal.isZero
         else { return nil }
@@ -253,5 +257,21 @@ extension TradeQuote {
             alternatives: alternatives + [Alternative(provider: "CoW", out: cow.guaranteed)], providersCompared: providersCompared + 1,
             needsApproval: needsApproval, expiresAt: expiresAt, execution: execution, parts: option
         )
+    }
+}
+
+/// As ordens abertas do dono na CoW por token, guardadas por 5 minutos para a cotacao: a API da
+/// CoW nao recebe o endereco a cada recotacao. O plano consulta de novo, sem o cache.
+actor CoWOpenOrdersCache {
+    static let lifetime: TimeInterval = 5 * 60
+    private var entries: [String: (total: BigUInt, at: Date)] = [:]
+
+    func total(owner: EVMAddress, sellToken: EVMAddress, chain: Chain, read: @Sendable () async throws -> BigUInt) async throws -> BigUInt {
+        let key = "\(chain.id)|\(owner)|\(sellToken)"
+        if let entry = entries[key], Date().timeIntervalSince(entry.at) < Self.lifetime { return entry.total }
+        let total = try await read()
+        if entries.count > 64 { entries.removeAll() }
+        entries[key] = (total, Date())
+        return total
     }
 }

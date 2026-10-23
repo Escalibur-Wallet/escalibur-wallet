@@ -5,8 +5,9 @@ import Foundation
 // Os quatro clientes de cotacao sem API key. Formatos conferidos ao vivo em 26/09/2026
 // (respostas gravadas em Tests/EscaliburChainsTests/Fixtures/trade).
 //
-// Todos pedem: `amountIn` exato, venda (exact in), a tolerancia do dono, `from` = dono e
-// destinatario = dono. Nenhum recebe taxa de integrador (hoje zero). A resposta vira uma
+// Todos pedem: `amountIn` exato, venda (exact in), a tolerancia do dono, e `from` e
+// destinatario = o endereco da intencao: sorteado a cada rodada enquanto o dono so cota, e o
+// do dono so no plano, ao provedor escolhido (`EVMTradeContext.quoteIntent`). Nenhum recebe taxa de integrador (hoje zero). A resposta vira uma
 // `TradeProposal` crua; a validacao decide.
 
 // MARK: Velora
