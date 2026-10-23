@@ -18,7 +18,7 @@ android {
         minSdk = 30
         targetSdk = 36
         // De 1001 em diante: os builds do Android nunca usam um numero de build do iOS.
-        versionCode = 1003
+        versionCode = 1004
         versionName = "1.0.0"
         // O nucleo so existe para arm64 (todos os aparelhos Android atuais e o emulador do Mac
         // com chip da Apple).

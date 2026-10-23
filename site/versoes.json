@@ -2,12 +2,12 @@
   "assinaturas" : [
     {
       "chave" : "escalibur-mac-1",
-      "p256" : "TqMiCGWm7IywZ+YY46sp8BIHLXuIezWU0eUxi1v8diJla1EXI6gP5pV1pjwKAiLWB9+LTVpvpY+eEXIN3LazNQ=="
+      "p256" : "nrdE9vxl9ZyBz3UCyGVxYHUeRUYDRW7NGbIE6Xi5oq4gZOvDqvXsNMpqIPXuY1GYOot1E/sRqAYjKq0+vRbGXQ=="
     },
     {
       "chave" : "mac-thomaz-1",
-      "p256" : "TqMiCGWm7IywZ+YY46sp8BIHLXuIezWU0eUxi1v8diJla1EXI6gP5pV1pjwKAiLWB9+LTVpvpY+eEXIN3LazNQ=="
+      "p256" : "nrdE9vxl9ZyBz3UCyGVxYHUeRUYDRW7NGbIE6Xi5oq4gZOvDqvXsNMpqIPXuY1GYOot1E/sRqAYjKq0+vRbGXQ=="
     }
   ],
-  "manifesto" : "{\"app\":\"app.escalibur.wallet\",\"emitido\":\"2026-10-23T01:07:01Z\",\"formato\":1,\"versoes\":[{\"builds\":[\"7\",\"8\",\"9\",\"10\",\"11\",\"1001\",\"1002\",\"1003\"],\"publicada\":\"2026-10-18\",\"versao\":\"1.0.0\"}]}"
+  "manifesto" : "{\"app\":\"app.escalibur.wallet\",\"emitido\":\"2026-10-23T02:00:41Z\",\"formato\":1,\"versoes\":[{\"builds\":[\"7\",\"8\",\"9\",\"10\",\"11\",\"1001\",\"1002\",\"1003\",\"1004\"],\"publicada\":\"2026-10-18\",\"versao\":\"1.0.0\"}]}"
 }
