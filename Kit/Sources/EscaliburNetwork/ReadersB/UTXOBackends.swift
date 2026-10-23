@@ -102,6 +102,18 @@ struct UTXOAddressDelta: Sendable, Equatable {
 
 // MARK: Esplora
 
+/// O caminho de Merkle de uma transacao (`/tx/{txid}/merkle-proof`).
+struct EsploraMerkleProof: Decodable, Sendable {
+    let blockHeight: UInt32
+    let merkle: [String]
+    let pos: UInt32
+
+    enum CodingKeys: String, CodingKey {
+        case blockHeight = "block_height"
+        case merkle, pos
+    }
+}
+
 struct EsploraStatus: Decodable, Sendable, Equatable {
     let confirmed: Bool
     let blockHeight: UInt32?
@@ -630,6 +642,30 @@ struct UTXOProviderClient: Sendable {
     }
 
     /// A transacao crua inteira. O txid dela e conferido por quem chama.
+    // MARK: Prova de inclusao (SPV, so Esplora)
+
+    func merkleProof(_ txid: UTXOTxID) async throws -> EsploraMerkleProof {
+        guard case .esplora = backend else { throw Unsupported() }
+        return try await get(EsploraMerkleProof.self, "tx/\(txid.hex)/merkle-proof")
+    }
+
+    /// O hash do bloco da altura, na ordem interna.
+    func blockHash(atHeight height: UInt32) async throws -> [UInt8] {
+        guard case .esplora = backend else { throw Unsupported() }
+        let text = try ReaderDecode.text(try await transport.fetch(try url("block-height/\(height)")), field: "block-height")
+        return try BitcoinSPV.internalHash(hex: text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// O cabecalho de 80 bytes do bloco (hash na ordem interna).
+    func blockHeader(_ hash: [UInt8]) async throws -> BitcoinSPV.Header {
+        guard case .esplora = backend else { throw Unsupported() }
+        let hex = Hex.encode(Array(hash.reversed()))
+        let text = try ReaderDecode.text(try await transport.fetch(try url("block/\(hex)/header")), field: "header")
+        let header = try BitcoinSPV.Header(raw: try ReaderDecode.hexBytes(text.trimmingCharacters(in: .whitespacesAndNewlines), field: "header"))
+        guard header.hash == hash else { throw BitcoinSPV.Failure.malformed }
+        return header
+    }
+
     func rawTransaction(_ txid: UTXOTxID) async throws -> [UInt8] {
         switch backend {
         case .esplora:

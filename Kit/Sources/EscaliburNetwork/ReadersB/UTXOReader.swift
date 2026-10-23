@@ -26,6 +26,10 @@ public struct UTXOReader: Sendable {
     public let chain: Chain
     let pool: ProviderPool
     let transport: ChainReaderTransport
+    /// Moeda e recebimento "confirmados" so com a prova de que estao num bloco minerado
+    /// (`BitcoinSPV`). Ligado no Bitcoin com os provedores do app; os testes que montam
+    /// provedores de mentira so ligam quando pedem.
+    let provesInclusion: Bool
 
     /// Teto de enderecos varridos por cadeia (recebimento ou troco). Uma conta real
     /// nao chega perto; um provedor que diz "usado" para tudo nao prende o app.
@@ -36,8 +40,13 @@ public struct UTXOReader: Sendable {
     static let parallelism = 4
 
     public init(chain: Chain, transport: ChainReaderTransport? = nil, providers: [ProviderPool.Provider]? = nil) throws {
+        try self.init(chain: chain, transport: transport, providers: providers, provesInclusion: chain == .bitcoin && providers == nil)
+    }
+
+    public init(chain: Chain, transport: ChainReaderTransport?, providers: [ProviderPool.Provider]?, provesInclusion: Bool) throws {
         guard chain.family == .utxo else { throw ChainReaderError.unsupportedAccount }
         self.chain = chain
+        self.provesInclusion = provesInclusion
         self.transport = transport ?? PacedChainTransport(base: HTTPReaderTransport(), intervals: Endpoints.utxoPacing)
         self.pool = providers.map(ProviderPool.init) ?? Self.sharedPool(for: chain)
     }
@@ -316,7 +325,77 @@ public struct UTXOReader: Sendable {
                 values[claim.outpoint] = output.value
             }
         }
-        return UTXOCoinReading(coins: coins, rejected: rejected, tipHeight: tip, values: values)
+        guard provesInclusion else { return UTXOCoinReading(coins: coins, rejected: rejected, tipHeight: tip, values: values) }
+        // Confirmada so com a prova de que a transacao esta num bloco minerado. A que nao
+        // prova sai do envio como nao conferida; a da mempool nao tem o que provar.
+        var proven = Set<UTXOTxID>()
+        let confirmedTxids = Array(Set(coins.filter { $0.confirmations > 0 }.map(\.outpoint.txid)))
+        let results = try await ReaderConcurrency.map(confirmedTxids, limit: 2) { txid in
+            (txid, (try? await self.proveInclusion(txid, tip: tip)) != nil)
+        }
+        for (txid, ok) in results where ok { proven.insert(txid) }
+        var kept: [UTXOCoin] = []
+        for coin in coins {
+            if coin.confirmations == 0 || proven.contains(coin.outpoint.txid) {
+                kept.append(coin)
+            } else {
+                rejected.append(UTXORejectedCoin(outpoint: coin.outpoint, reason: .notProvenInBlock))
+                values[coin.outpoint] = nil
+            }
+        }
+        return UTXOCoinReading(coins: kept, rejected: rejected, tipHeight: tip, values: values)
+    }
+
+    /// Prova por SPV que `txid` entrou no bloco que o provedor diz, com ate
+    /// `BitcoinSPV.depth` cabecalhos encadeados e com trabalho real (o do bloco e os
+    /// seguintes, ate o topo). Um provedor de outro dono, quando responde, tem de dizer o
+    /// mesmo bloco naquela altura.
+    func proveInclusion(_ txid: UTXOTxID, tip: UInt32) async throws {
+        let esplora = await pool.available().filter { if case .esplora = UTXOBackend.of($0) { return true } else { return false } }
+        var found: (proof: EsploraMerkleProof, source: ProviderPool.Provider)?
+        for provider in esplora where found == nil {
+            do {
+                found = (try await client(provider).merkleProof(txid), provider)
+            } catch {
+                await report(provider, error)
+            }
+        }
+        guard let (proof, source) = found else { throw BitcoinSPV.Failure.notInBlock }
+        let branch = try proof.merkle.map { try BitcoinSPV.internalHash(hex: $0) }
+        let height = proof.blockHeight
+        guard height <= tip + Self.tipTolerance else { throw BitcoinSPV.Failure.brokenChain }
+        let last = min(height + BitcoinSPV.depth - 1, max(tip, height))
+
+        var headers: [BitcoinSPV.Header] = []
+        for current in height...last {
+            let header: BitcoinSPV.Header
+            if let known = await BitcoinHeaderCache.shared.header(at: current) {
+                header = known
+            } else {
+                let fetched = try await client(source).blockHeader(try await client(source).blockHash(atHeight: current))
+                guard BitcoinSPV.hasWork(fetched) else { throw BitcoinSPV.Failure.weakWork }
+                header = fetched
+            }
+            if let previous = headers.last { guard header.previous == previous.hash else { throw BitcoinSPV.Failure.brokenChain } }
+            headers.append(header)
+        }
+        guard let block = headers.first,
+              try BitcoinSPV.merkleRoot(txid: txid, branch: branch, position: proof.pos) == block.merkleRoot
+        else { throw BitcoinSPV.Failure.notInBlock }
+
+        // Um segundo dono, quando responde, tem de ver o mesmo bloco nesta altura.
+        for provider in esplora where provider.operatorName != source.operatorName {
+            let other: [UInt8]
+            do {
+                other = try await client(provider).blockHash(atHeight: height)
+            } catch {
+                await report(provider, error)
+                continue
+            }
+            guard other == block.hash else { throw BitcoinSPV.Failure.providersDisagree }
+            break
+        }
+        for (offset, header) in headers.enumerated() { await BitcoinHeaderCache.shared.store(header, at: height + UInt32(offset)) }
     }
 
     /// Teto de moedas conferidas numa leitura. Cada uma custa uma transacao anterior
@@ -525,7 +604,13 @@ public struct UTXOReader: Sendable {
             }
         }
         guard let first = answers.first else { throw HTTPClient.Failure.offline }
-        return answers.count == 2 ? try ChainTransactionStatus.combine(first, answers[1]) : first
+        let combined = answers.count == 2 ? try ChainTransactionStatus.combine(first, answers[1]) : first
+        // "Confirmado" so com a prova de que esta num bloco minerado: recebimento confirmado
+        // por provedor mentiroso e golpe comum em negociacao P2P.
+        if provesInclusion, case .confirmed = combined, let tip {
+            guard (try? await proveInclusion(id, tip: tip)) != nil else { return .pending }
+        }
+        return combined
     }
 
     // MARK: Historico

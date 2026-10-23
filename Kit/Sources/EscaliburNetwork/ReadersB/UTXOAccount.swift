@@ -152,6 +152,9 @@ public struct UTXORejectedCoin: Sendable, Equatable {
         case uneconomic
         /// Alem do teto de moedas conferidas numa leitura, que ficam com as maiores.
         case overLimit
+        /// O provedor diz que a moeda esta confirmada, mas nao provou (SPV) que a
+        /// transacao dela esta num bloco minerado de verdade (`BitcoinSPV`).
+        case notProvenInBlock
     }
 
     public let outpoint: UTXOOutpoint
@@ -170,7 +173,7 @@ extension UTXORejectedCoin.Reason {
         case .uneconomic: return .uneconomic
         case .overLimit: return .overLimit
         case .previousTransactionUnavailable, .previousTransactionMalformed, .previousTransactionMismatch,
-             .outputIndexOutOfRange, .notOurScript, .claimedValueMismatch:
+             .outputIndexOutOfRange, .notOurScript, .claimedValueMismatch, .notProvenInBlock:
             return .unverified
         }
     }
