@@ -344,7 +344,7 @@ a.selo-loja:hover { opacity: 0.86; }
 .com-3d .abertura-3d { opacity: 1; }
 .com-3d .abertura-moedas-paradas { opacity: 0; }
 .abertura-legenda {
-  position: absolute; z-index: 3; left: var(--gutter); right: var(--gutter); top: 76px;
+  position: absolute; z-index: 3; left: var(--gutter); right: var(--gutter); top: max(96px, 22vh); top: max(96px, 22svh);
   text-align: center; opacity: 0; pointer-events: none; will-change: transform, opacity;
 }
 .abertura-legenda .titulo-secao { font-size: clamp(28px, 7.6vw, 56px); }
@@ -1319,7 +1319,7 @@ img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
 .final-texto .final-moeda { width: min(220px, 52vw); margin-bottom: 12px; }
 .final-texto .lead { margin: 20px auto 0; max-width: 30em; }
 .final-texto .lojas { justify-items: center; margin-top: 32px; }
-.podio { display: flex; justify-content: center; align-items: flex-start; gap: clamp(12px, 3vw, 40px); margin-top: clamp(48px, 7vw, 88px); height: clamp(160px, 20vw, 270px); overflow: hidden; padding-inline: var(--gutter); }
+.podio { display: flex; justify-content: center; align-items: flex-start; gap: clamp(12px, 3vw, 40px); margin-top: clamp(48px, 7vw, 88px); height: clamp(195px, 24vw, 325px); overflow: hidden; padding-inline: var(--gutter); }
 .podio .aparelho { --w: clamp(150px, 24vw, 300px); flex: none; }
 .podio .aparelho.podio-lado { margin-top: clamp(28px, 4vw, 56px); }
 @media (max-width: 599px) { .podio .aparelho { --w: 40vw; } .podio .aparelho.podio-lado { --w: 34vw; } .podio { gap: 10px; padding-inline: 0; } }
@@ -1539,12 +1539,27 @@ html:not(.movimento) .abertura-bits { display: none; }
 .favo-disco::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--ink-soft); opacity: 0; }
 .favo-disco .logo { width: 52%; height: 52%; }
 .favo-nome { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-@media (hover: hover) {
-  .favo-item:hover .favo-nome {
-    width: auto; height: auto; margin: 0; clip: auto; overflow: visible; left: 50%; top: calc(100% - 4px); transform: translateX(-50%); z-index: 2;
-    font-size: 13px; font-weight: 600; color: var(--ink); background: var(--control); padding: 4px 10px; border-radius: 999px;
-  }
+/* A ficha que se abre (pedido do dono, 23/10/2026): a logo fica no lugar, a capsula cresce para o
+   lado e mostra a rede, a moeda e o tempo de confirmacao. */
+.favo-item { outline: none; }
+.favo-disco { --d: calc(var(--ficha) - 10px); transition: width 0.35s var(--ease), background 0.25s ease, box-shadow 0.25s ease; }
+.favo-disco .logo { position: absolute; top: 50%; left: calc(var(--d) / 2); transform: translate(-50%, -50%); width: calc(var(--d) * 0.52); height: calc(var(--d) * 0.52); }
+.abre-esquerda .favo-disco .logo { left: auto; right: calc(var(--d) / 2); transform: translate(50%, -50%); }
+.favo-info {
+  position: absolute; top: 50%; left: calc(var(--d) - 4px); transform: translateY(-50%); text-align: left;
+  white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
 }
+.abre-esquerda .favo-info { left: auto; right: calc(var(--d) - 4px); text-align: right; }
+.favo-info b { display: block; font-size: 15px; font-weight: 700; color: var(--ink); line-height: 1.2; }
+.favo-info span { font-size: 13px; color: var(--ink-muted); }
+.favo-item:hover, .favo-item:focus-visible { z-index: 4; }
+.favo-item:hover .favo-disco, .favo-item:focus-visible .favo-disco {
+  position: absolute; top: 50%; left: 5px; width: calc(var(--d) + 150px); height: var(--d); transform: translateY(-50%);
+  border-radius: 999px; background: var(--control); box-shadow: inset 0 0 0 1px var(--ink-soft); animation: none;
+}
+.abre-esquerda:hover .favo-disco, .abre-esquerda:focus-visible .favo-disco { left: auto; right: 5px; }
+.favo-item:hover .favo-info, .favo-item:focus-visible .favo-info { opacity: 1; transition-delay: 0.12s; }
+.favo-item:hover .favo-disco::after, .favo-item:focus-visible .favo-disco::after { opacity: 0; animation: none; }
 .movimento .favo-item { opacity: 0; transform: scale(0.6); transition: opacity 0.7s ease, transform 0.9s var(--ease); }
 .movimento .favo.visivel .favo-item { opacity: 1; transform: none; }
 .movimento .favo.visivel .anel-1 { transition-delay: 0.08s; }
@@ -1608,3 +1623,27 @@ html:not(.movimento) .abertura-bits { display: none; }
 .movimento .manifesto.pronto { opacity: 1; pointer-events: auto; }
 @media (max-width: 899px) { .movimento .manifesto { margin-top: -100vh; margin-top: -100svh; } }
 @media (prefers-reduced-motion: reduce) { .movimento .manifesto { opacity: 1; } }
+
+/* MARK: "Tudo o que uma carteira precisa" em tres colunas no computador (pedido do dono,
+   23/10/2026): as telas numa coluna a esquerda, o iPhone no meio e o detalhe da tela a direita. */
+.passeio-legenda .passo { display: none; }
+@media (min-width: 900px) {
+  .passeio {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; justify-items: stretch;
+    column-gap: clamp(32px, 5vw, 96px); row-gap: 12px; width: 100%; max-width: 1180px; margin-inline: auto;
+  }
+  .passeio-abas { grid-column: 1; grid-row: 1 / span 2; flex-direction: column; flex-wrap: nowrap; align-items: flex-end; justify-content: center; max-width: none; gap: 6px; }
+  .aba-tela { min-width: 220px; justify-content: flex-start; }
+  .passeio-aparelho { grid-column: 2; grid-row: 1; justify-self: center; }
+  .passeio .passeio-pausar { grid-column: 2; grid-row: 2; justify-self: center; }
+  .passeio-legendas { grid-column: 3; grid-row: 1 / span 2; justify-self: start; text-align: left; max-width: 24em; min-height: 0; }
+  .passeio-legenda { font-size: 18px; line-height: 1.55; }
+  .passeio-legenda .passo { display: block; font-size: 14px; font-weight: 600; color: var(--ink-muted); margin-bottom: 10px; }
+  .passeio-legenda b { font-size: clamp(26px, 2.4vw, 34px); letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 12px; }
+}
+
+/* No celular, o palco das chaves comeca logo abaixo do texto: centralizado na tela inteira, ele
+   deixava um vao grande depois de "Ela nasce no aparelho..." (pedido do dono, 23/10/2026). */
+@media (max-width: 899px) {
+  .movimento .chaves-palco { align-items: flex-start; padding-top: 72px; }
+}

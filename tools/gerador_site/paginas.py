@@ -217,8 +217,14 @@ def favo_de_redes(ctx, base):
     for k, r in enumerate(redes):
         f, meia = posicoes[k] if k < len(posicoes) else (len(fileiras), 0)
         anel = min(5, round(math.hypot((meia - 6) / 2, (f - 1.5) * 0.87)))
-        itens.append(f'<li class="favo-item onda-{meia % 14} anel-{anel}"><span class="favo-disco">{logo_rede(ctx, base, r)}</span>'
-                     f'<span class="favo-nome">{e(r["nome"])}</span></li>')
+        # Ao passar o mouse (ou focar), a ficha se abre numa capsula com a rede, a moeda e o tempo
+        # tipico de confirmacao (pedido do dono, 23/10/2026: expandir, e nao so dizer o nome). As
+        # da metade direita abrem para a esquerda, para nao passar da borda.
+        lado = " abre-esquerda" if meia > 6 else ""
+        tempo = f'≈ {round(r["segundos"] / 60)} min' if r.get("segundos", 0) >= 90 else f'≈ {max(1, round(r.get("segundos") or 1))} s'
+        itens.append(f'<li class="favo-item onda-{meia % 14} anel-{anel}{lado}" tabindex="0">'
+                     f'<span class="favo-disco">{logo_rede(ctx, base, r)}'
+                     f'<span class="favo-info"><b>{e(r["nome"])}</b><span>{e(r["simbolo"])} · {e(tempo)}</span></span></span></li>')
     return f'<ul class="favo" aria-label="As {len(redes)} redes da carteira" data-revelar>{"".join(itens)}</ul>'
 
 
@@ -551,8 +557,9 @@ ICONES_TELAS = {
 def telas_do_app(ctx, base):
     """"Por dentro do app" (quinta rodada, pedido do dono): um iPhone so, no meio, parado na
     tela enquanto a pessoa rola, trocando a gravacao a cada passo (receber, enviar, trocar,
-    ordem limite, ponte, pagina da moeda, Safe Keyboard). As abas em cima levam ao passo, a
-    legenda embaixo acompanha. Sem fundo atras do iPhone. Com movimento reduzido, as abas
+    ordem limite, ponte, pagina da moeda, Safe Keyboard). No computador, as abas ficam numa coluna
+    a esquerda e o detalhe da tela a direita (pedido do dono, 23/10/2026); no celular, as abas em
+    cima e a legenda embaixo. Sem fundo atras do iPhone. Com movimento reduzido, as abas
     trocam a tela sem rolagem; sem JS, fica a primeira."""
     abas, telas, legendas = [], [], []
     for i, (cena, titulo, texto, rotulo) in enumerate(TELAS):
@@ -566,7 +573,8 @@ def telas_do_app(ctx, base):
             f'<div class="passeio-tela{" ativa" if primeira else ""}" id="tela-{cena}" role="tabpanel" aria-labelledby="aba-{cena}">'
             f'<img class="capa" src="{base}midia/{cena}.webp" alt="{e(rotulo)}" width="720" height="1566" loading="{"eager" if primeira else "lazy"}" decoding="async">'
             f'<video muted loop playsinline preload="none" data-manual aria-hidden="true" tabindex="-1"><source src="{base}midia/{cena}.mp4" type="video/mp4"></video></div>')
-        legendas.append(f'<p class="passeio-legenda"{"" if primeira else " hidden"}><b>{e(titulo)}</b>{e(texto)}</p>')
+        legendas.append(f'<p class="passeio-legenda"{"" if primeira else " hidden"}><span class="passo">{i + 1} de {len(TELAS)}</span>'
+                        f'<b>{e(titulo)}</b>{e(texto)}</p>')
     return (f'<div class="passeio" data-passeio>'
             f'<div class="passeio-abas" role="tablist" aria-label="Telas do app">{"".join(abas)}</div>'
             f'<div class="aparelho passeio-aparelho"><div class="tela">{"".join(telas)}</div></div>'

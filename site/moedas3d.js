@@ -965,9 +965,17 @@
       cenas.forEach(function (c) {
         if (c.parada || !c.visivel || document.hidden) return;
         algum = true;
-        c.palco.desenhar(c.diretor(c.palco, t));
+        var lista = c.diretor(c.palco, t);
+        c.ids = (lista || []).map(function (m) { return m && m.id; }).filter(Boolean);
+        c.palco.desenhar(lista);
       });
-      if (algum && primeiro) { primeiro = false; raiz.classList.add("com-3d"); }
+      // A imagem parada so sai quando as faces de todas as moedas na tela ficaram prontas: antes, ela sumia
+      // no primeiro quadro e as moedas 3D ainda iam aparecendo uma a uma, e a cabeca da pagina
+      // Redes piscava vazia (pedido do dono, 23/10/2026).
+      var facesProntas = cenas.every(function (c) {
+        return c.parada || !c.visivel || (c.ids || []).every(function (id) { return faces[id]; });
+      });
+      if (algum && primeiro && facesProntas) { primeiro = false; raiz.classList.add("com-3d"); }
       // O governador: se o quadro passa do tempo, a resolucao cai; se nem assim, as moedas
       // param e a imagem parada volta.
       if (algum) {
@@ -982,7 +990,10 @@
           if (media > 26) {
             var abaixou = false;
             cenas.forEach(function (c) {
-              if (c.palco.dpr > 1.01) { c.palco.dpr = Math.max(1, c.palco.dpr - 0.5); c.palco.redimensionar(); abaixou = true; }
+              // Piso de 1,5 em tela de alta densidade: abaixo disso a moeda pixela no celular
+              // (pedido do dono, 23/10/2026).
+              var piso = Math.min(window.devicePixelRatio || 1, 1.5);
+              if (c.palco.dpr > piso + 0.01) { c.palco.dpr = Math.max(piso, c.palco.dpr - 0.5); c.palco.redimensionar(); abaixou = true; }
             });
             if (!abaixou && media > 36) desistir();
           }
