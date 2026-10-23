@@ -48641,78 +48641,78 @@
         }
       }
     },
-    "Carteiras com passphrase e carteiras com as palavras ainda não confirmadas ficam de fora. As de só observar também, a não ser que você ligue acima. Desligar apaga o arquivo." : {
+    "Carteiras com as palavras ou a passphrase ainda não confirmadas ficam de fora. As de só observar também, a não ser que você ligue acima. Desligar apaga o arquivo." : {
       "localizations" : {
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "المحافظ التي تستخدم passphrase والمحافظ التي لم تُؤكَّد كلماتها بعد مستثناة. وكذلك محافظ المراقبة فقط، ما لم تفعّلها أعلاه. الإيقاف يحذف الملف."
+            "value" : "المحافظ التي لم تُؤكَّد كلماتها أو passphrase الخاصة بها بعد مستثناة. وكذلك محافظ المراقبة فقط، ما لم تفعّلها أعلاه. الإيقاف يحذف الملف."
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wallets mit Passphrase und Wallets, deren Wörter noch nicht bestätigt sind, bleiben außen vor. Nur-ansehen-Wallets auch, außer du schaltest sie oben ein. Ausschalten löscht die Datei."
+            "value" : "Wallets, deren Wörter oder Passphrase noch nicht bestätigt sind, bleiben außen vor. Nur-ansehen-Wallets auch, außer du schaltest sie oben ein. Ausschalten löscht die Datei."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wallets with a passphrase and wallets whose words haven't been confirmed yet are left out. So are watch-only wallets, unless you turn them on above. Turning it off deletes the file."
+            "value" : "Wallets whose words or passphrase haven't been confirmed yet are left out. So are watch-only wallets, unless you turn them on above. Turning it off deletes the file."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Las billeteras con passphrase y las billeteras con las palabras aún sin confirmar quedan fuera. Las de solo lectura también, salvo que las actives arriba. Desactivarlo borra el archivo."
+            "value" : "Las billeteras con las palabras o la passphrase aún sin confirmar quedan fuera. Las de solo lectura también, salvo que las actives arriba. Desactivarlo borra el archivo."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Les portefeuilles avec passphrase et ceux dont les mots ne sont pas encore confirmés sont exclus. Les portefeuilles en lecture seule aussi, sauf si vous les activez ci-dessus. Désactiver supprime le fichier."
+            "value" : "Les portefeuilles dont les mots ou la passphrase ne sont pas encore confirmés sont exclus. Les portefeuilles en lecture seule aussi, sauf si vous les activez ci-dessus. Désactiver supprime le fichier."
           }
         },
         "hi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "passphrase वाले वॉलेट और जिन वॉलेट के शब्द अभी पुष्ट नहीं हुए, वे बाहर रहते हैं. केवल देखने वाले वॉलेट भी, जब तक आप ऊपर चालू न करें. बंद करने पर फ़ाइल मिट जाती है."
+            "value" : "जिन वॉलेट के शब्द या passphrase अभी पुष्ट नहीं हुए, वे बाहर रहते हैं. केवल देखने वाले वॉलेट भी, जब तक आप ऊपर चालू न करें. बंद करने पर फ़ाइल मिट जाती है."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dompet dengan passphrase dan dompet yang kata-katanya belum dikonfirmasi tidak disertakan. Dompet hanya pantau juga, kecuali Anda menyalakannya di atas. Mematikannya menghapus file."
+            "value" : "Dompet yang kata-kata atau passphrase-nya belum dikonfirmasi tidak disertakan. Dompet hanya pantau juga, kecuali Anda menyalakannya di atas. Mematikannya menghapus file."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "passphrase 付きのウォレットと、単語をまだ確認していないウォレットは対象外です。閲覧のみのウォレットも、上でオンにしない限り対象外です。オフにするとファイルは削除されます。"
+            "value" : "単語または passphrase をまだ確認していないウォレットは対象外です。閲覧のみのウォレットも、上でオンにしない限り対象外です。オフにするとファイルは削除されます。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "passphrase가 있는 지갑과 단어를 아직 확인하지 않은 지갑은 제외됩니다. 보기 전용 지갑도 위에서 켜지 않으면 제외됩니다. 끄면 파일이 삭제됩니다."
+            "value" : "단어나 passphrase를 아직 확인하지 않은 지갑은 제외됩니다. 보기 전용 지갑도 위에서 켜지 않으면 제외됩니다. 끄면 파일이 삭제됩니다."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Passphrase'li cüzdanlar ve kelimeleri henüz onaylanmamış cüzdanlar dışarıda kalır. Yalnızca izleme cüzdanları da, yukarıda açmadığınız sürece dışarıda kalır. Kapatmak dosyayı siler."
+            "value" : "Kelimeleri veya passphrase'i henüz onaylanmamış cüzdanlar dışarıda kalır. Yalnızca izleme cüzdanları da, yukarıda açmadığınız sürece dışarıda kalır. Kapatmak dosyayı siler."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ví có passphrase và ví chưa xác nhận các từ sẽ không được tính. Ví chỉ theo dõi cũng vậy, trừ khi bạn bật ở trên. Tắt đi sẽ xóa tệp."
+            "value" : "Ví chưa xác nhận các từ hoặc passphrase sẽ không được tính. Ví chỉ theo dõi cũng vậy, trừ khi bạn bật ở trên. Tắt đi sẽ xóa tệp."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "带 passphrase 的钱包和助记词尚未确认的钱包不包含在内。仅观察钱包也不包含，除非您在上方开启。关闭会删除该文件。"
+            "value" : "助记词或 passphrase 尚未确认的钱包不包含在内。仅观察钱包也不包含，除非您在上方开启。关闭会删除该文件。"
           }
         }
       }

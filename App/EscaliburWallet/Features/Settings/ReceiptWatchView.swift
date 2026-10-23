@@ -22,7 +22,7 @@ enum ReceiptAccounts {
         // As de so observar por ultimo: com o mesmo endereco numa carteira normal, vale a normal
         // (senao ela ficava sem aviso enquanto a de so observar estivesse de fora).
         let wallets = session.metadata.wallets.filter { !$0.isWatchOnly } + session.metadata.wallets.filter(\.isWatchOnly)
-        for wallet in wallets where !wallet.hasPassphrase && (wallet.hasBackup || wallet.isWatchOnly) {
+        for wallet in wallets where wallet.hasBackup || wallet.isWatchOnly {
             for account in wallet.accounts {
                 guard let chain = Chain.all.first(where: { $0.id == account.chainID }), !disabled.contains(chain.id) else { continue }
                 // A conta da Tron com outra chave no controle nao recebe por caminho nenhum.
@@ -133,7 +133,7 @@ struct ReceiptWatchView: View {
                     note(String(localized: "Por segurança, a Escalibur não tem servidor: não existe ninguém para avisar o iPhone na hora em que a moeda chega. Quem confere é o próprio iPhone, quando o iOS deixa: algumas vezes por hora em uso, menos parado ou com pouca bateria. Por isso o aviso pode chegar alguns minutos depois. Com o app aberto, a conferência é a cada 2 minutos."))
                     note(ReceiptWatchOffer.price)
                     note(String(localized: "Cada conferência consulta os provedores de cada rede com os endereços das suas carteiras, do IP em que o iPhone estiver. Nas redes como o Bitcoin, só o próximo endereço de recebimento e os dois últimos usados."))
-                    note(String(localized: "Carteiras com passphrase e carteiras com as palavras ainda não confirmadas ficam de fora. As de só observar também, a não ser que você ligue acima. Desligar apaga o arquivo."))
+                    note(String(localized: "Carteiras com as palavras ou a passphrase ainda não confirmadas ficam de fora. As de só observar também, a não ser que você ligue acima. Desligar apaga o arquivo."))
                     note(String(localized: "Contam a moeda de cada rede e os tokens da lista conferida. Token fora da lista não avisa: é por ele que chega o spam."))
                 }
                 .padding(.horizontal, Space.gutter).padding(.top, Space.lg)

@@ -331,7 +331,7 @@ enum AvisoDeRecebimento {
         var vistas = Set<String>()
         // As de so observar por ultimo: com o mesmo endereco numa carteira normal, vale a normal.
         let carteiras = metadata.wallets.filter { !$0.isWatchOnly } + metadata.wallets.filter(\.isWatchOnly)
-        for carteira in carteiras where !carteira.hasPassphrase && (carteira.hasBackup || carteira.isWatchOnly) {
+        for carteira in carteiras where carteira.hasBackup || carteira.isWatchOnly {
             for conta in carteira.accounts {
                 guard let rede = Chain.all.first(where: { $0.id == conta.chainID }), !desligadas.contains(rede.id) else { continue }
                 // A conta da Tron com outra chave no controle nao recebe por caminho nenhum.
