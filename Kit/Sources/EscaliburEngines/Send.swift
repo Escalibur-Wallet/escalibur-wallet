@@ -179,6 +179,12 @@ public struct UTXOUsage: Codable, Equatable, Hashable, Sendable {
         self.receiveUsed = receiveUsed
         self.changeUsed = changeUsed
     }
+
+    /// Os indices de recebimento que o aviso de recebimento confere: os dois ultimos usados e o
+    /// proximo. Troco e moeda do proprio dono, nao recebimento; e conferir todos os usados juntos,
+    /// do mesmo IP, de tempos em tempos, entregava ao provedor a ligacao entre eles (auditoria de
+    /// privacidade, 22/10/2026).
+    public var receiptIndices: ClosedRange<Int> { max(0, receiveUsed - 2)...max(0, receiveUsed) }
 }
 
 /// Os motores disponiveis nesta versao. Cada familia registra os seus no proprio

@@ -476,11 +476,13 @@ fun TelaDoRecebimento() {
     val pedir = rememberPermissaoDeNotificar()
     var ligado by remember { mutableStateOf<Boolean?>(null) }
     var detalhes by remember { mutableStateOf(false) }
+    var soObservar by remember { mutableStateOf(false) }
     var negado by remember { mutableStateOf(false) }
     LaunchedEffect(Ciclo.vinda) {
         runCatching { Api.objeto("recebimentos.estado") }.getOrNull()?.let {
             ligado = it.optBoolean("ligado")
             detalhes = it.optBoolean("detalhes")
+            soObservar = it.optBoolean("soObservar")
         }
         negado = ligado == true && !Vigia.permitido(contexto)
     }
@@ -489,6 +491,7 @@ fun TelaDoRecebimento() {
         resposta ?: return
         ligado = resposta.optBoolean("ligado")
         detalhes = resposta.optBoolean("detalhes")
+        soObservar = resposta.optBoolean("soObservar")
     }
 
     Subtela("") {
@@ -526,6 +529,13 @@ fun TelaDoRecebimento() {
                     detalhes = novo
                     escopo.launch { aplicar(runCatching { Api.objeto("recebimentos.detalhes", JSONObject().put("ligado", novo)) }.getOrNull()) }
                 }
+                if (App.estado.carteiras.any { it.observacao }) {
+                    LinhaComInterruptor(Icones.binoculo, t("Carteiras de só observar"), soObservar,
+                                        detalhe = t("Conferir junto liga elas às suas no provedor")) { novo ->
+                        soObservar = novo
+                        escopo.launch { aplicar(runCatching { Api.objeto("recebimentos.soObservar", JSONObject().put("ligado", novo)) }.getOrNull()) }
+                    }
+                }
             }
         }
         if (negado) {
@@ -534,9 +544,10 @@ fun TelaDoRecebimento() {
                   tituloDaAcao = t("Abrir ajustes do Android")) { Vigia.abrirAjustesDoSistema(contexto) }
         }
         Column(Modifier.padding(top = Espaco.lg), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-            NotaDeAjuste(t("Por segurança, a Escalibur não tem servidor: não existe ninguém para avisar o celular na hora em que a moeda chega. Quem confere é o próprio celular, quando o Android deixa: algumas vezes por hora em uso, menos parado ou com pouca bateria. Por isso o aviso pode chegar alguns minutos depois. Com o app aberto, a conferência é a cada 2 minutos."))
+            NotaDeAjuste(t("Por segurança, a Escalibur não tem servidor: não existe ninguém para avisar o celular na hora em que a moeda chega. Quem confere é o próprio celular, quando o Android deixa: cerca de uma vez por hora, menos com o celular parado ou com pouca bateria. Por isso o aviso pode chegar um tempo depois. Com o app aberto, a conferência é a cada 2 minutos."))
+            NotaDeAjuste(t("Cada conferência consulta os provedores de cada rede com os endereços das suas carteiras, do IP em que o celular estiver. Nas redes como o Bitcoin, só o próximo endereço de recebimento e os dois últimos usados."))
             NotaDeAjuste(t("Para conferir com o app travado, os endereços públicos das suas carteiras e o último saldo visto de cada moeda ficam num arquivo à parte, que abre depois do primeiro desbloqueio do celular, fora dos dados cifrados da carteira. Quem extrair os dados de um celular nesse estado lê esses endereços. Nenhuma chave, frase ou nome de carteira entra nele."))
-            NotaDeAjuste(t("Carteiras com passphrase e carteiras com as palavras ainda não confirmadas ficam de fora. Desligar apaga o arquivo."))
+            NotaDeAjuste(t("Carteiras com passphrase e carteiras com as palavras ainda não confirmadas ficam de fora. As de só observar também, a não ser que você ligue acima. Desligar apaga o arquivo."))
             NotaDeAjuste(t("Contam a moeda de cada rede e os tokens da lista conferida. Token fora da lista não avisa: é por ele que chega o spam."))
         }
         Spacer(Modifier.height(Espaco.md))

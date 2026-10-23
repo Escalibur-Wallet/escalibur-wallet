@@ -91,6 +91,13 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
+    override fun onWindowFocusChanged(temFoco: Boolean) {
+        super.onWindowFocusChanged(temFoco)
+        // Com o foco o Android deixa ler a area de transferencia: a copia do app que venceu enquanto ele
+        // estava em segundo plano e apagada agora.
+        if (temFoco) app.escalibur.wallet.ui.comp.Transferencia.apagarSeVenceu(this, comFoco = true)
+    }
+
     override fun onStop() {
         lifecycleScope.launch { Ciclo.foiParaSegundoPlano() }
         super.onStop()

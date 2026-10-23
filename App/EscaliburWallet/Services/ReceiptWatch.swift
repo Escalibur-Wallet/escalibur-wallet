@@ -8,11 +8,12 @@ import UserNotifications
 // tempos em tempos (quando o iOS deixa, a mesma checagem dos alertas de preco) e avisa
 // com notificacao local. Nenhuma notificacao remota, nenhum servidor sabendo os enderecos.
 //
-// O preco disso, dito no botao que liga: para conferir com o iPhone bloqueado, os
-// enderecos publicos das contas ficam num arquivo proprio, com a protecao ate o primeiro
-// desbloqueio (classe C), fora dos metadados cifrados. Nada de chave, frase ou nome de
-// carteira. Oferecido a todos desde 14/10/2026, a pedido do dono, numa folha que diz o
-// preco em Ajustes (`ReceiptWatchOffer.price`); desligar apaga o arquivo e vale para sempre.
+// O preco disso, dito em Ajustes, Aviso de recebimento, onde ele liga: para conferir com o
+// iPhone bloqueado, os enderecos publicos das contas ficam num arquivo proprio, com a protecao
+// ate o primeiro desbloqueio (classe C), fora dos metadados cifrados. Nada de chave, frase ou
+// nome de carteira. Comeca desligado e so liga pelo dono (auditoria de privacidade,
+// 22/10/2026: ligado sozinho, mandava os enderecos de todas as carteiras aos provedores varias
+// vezes por dia); desligar apaga o arquivo.
 //
 // Este arquivo nao toca no cofre, no chaveiro nem nos metadados cifrados, e verificar.sh
 // confere: os enderecos chegam de fora, pelo app destravado (`sync`).
@@ -21,8 +22,16 @@ import UserNotifications
 struct ReceiptWatchFile: Codable, Equatable {
     struct Account: Codable, Equatable, Hashable {
         let chainID: String
-        /// Um endereco; nas redes UTXO, os de recebimento e troco ja usados e o proximo.
+        /// Um endereco; nas redes UTXO, os dois ultimos de recebimento usados e o proximo
+        /// (`UTXOUsage.receiptIndices`).
         let addresses: [String]
+        /// A conta, sem endereco: um resumo da rede e do primeiro endereco dela. E a chave do
+        /// saldo visto, que nao muda quando o endereco UTXO de recebimento anda.
+        var owner: String? = nil
+        /// De uma carteira de so observar: so entra com `includeWatchOnly`.
+        var watchOnly: Bool? = nil
+
+        var key: String { owner ?? addresses.first ?? "" }
     }
 
     struct Seen: Codable, Equatable {
@@ -37,9 +46,19 @@ struct ReceiptWatchFile: Codable, Equatable {
     /// "Recebeu 10.000 USDT" na tela bloqueada, no relogio ou no Mac marca o dono como alvo.
     var showDetails = false
     var accounts: [Account] = []
-    /// "rede|endereco|ativo" -> o ultimo saldo visto.
+    /// "rede|conta|ativo" -> o ultimo saldo visto.
     var seen: [String: Seen] = [:]
     var lastCheck: Date?
+    /// Sorteado ao ligar: fixa o provedor de cada endereco UTXO nesta instalacao.
+    var salt: UInt64?
+    /// As carteiras de so observar tambem entram. Comeca desligado: em geral e a carteira fria,
+    /// e conferi-la junto com as outras liga as duas no provedor.
+    var includeWatchOnly: Bool?
+
+    /// As contas que entram, pela escolha de so observar.
+    func admitted(_ all: [Account]) -> [Account] {
+        includeWatchOnly == true ? all : all.filter { $0.watchOnly != true }
+    }
 }
 
 /// O arquivo do aviso, num diretorio proprio com protecao ate o primeiro desbloqueio
@@ -101,6 +120,9 @@ actor ReceiptWatchCenter {
     static let shared = ReceiptWatchCenter()
 
     nonisolated static let category = "recebimentos"
+    /// O atraso maximo de cada rede numa rodada. Pouco: o iOS da cerca de 30 s a checagem
+    /// do segundo plano.
+    static let maxJitterMilliseconds = 2_500
     /// Com o app aberto, uma checagem a cada 2 minutos no maximo.
     static let foregroundInterval: TimeInterval = 2 * 60
     static let maxPerCheck = 4
@@ -130,7 +152,8 @@ actor ReceiptWatchCenter {
     func enable(accounts: [ReceiptWatchFile.Account]) async {
         update { file in
             file.enabled = true
-            file.accounts = accounts
+            file.salt = file.salt ?? (try? SecureRandom.uint64())
+            file.accounts = file.admitted(accounts)
             file.seen = [:]
         }
         // A primeira leitura, a que marca o saldo de partida, segue por baixo: esperando por
@@ -147,13 +170,20 @@ actor ReceiptWatchCenter {
     }
 
     /// As contas de agora, do app destravado. Conta que saiu leva junto o saldo visto.
-    func sync(accounts: [ReceiptWatchFile.Account]) {
+    func sync(accounts all: [ReceiptWatchFile.Account]) {
+        let accounts = file().admitted(all)
         guard file().enabled, file().accounts != accounts else { return }
-        let keep = Set(accounts.flatMap { account in account.addresses.map { "\(account.chainID)|\($0)" } })
+        let keep = Set(accounts.map { "\($0.chainID)|\($0.key)" })
         update { file in
             file.accounts = accounts
             file.seen = file.seen.filter { key, _ in keep.contains(key.split(separator: "|").prefix(2).joined(separator: "|")) }
         }
+    }
+
+    /// Carteiras de so observar no aviso, ou fora dele.
+    func setIncludeWatchOnly(_ on: Bool, accounts all: [ReceiptWatchFile.Account]) {
+        update { $0.includeWatchOnly = on }
+        sync(accounts: all)
     }
 
     func setShowDetails(_ on: Bool) {
@@ -174,12 +204,19 @@ actor ReceiptWatchCenter {
         checking = true
         defer { checking = false }
 
+        let salt = before.salt ?? 0
         let balances = await withTaskGroup(of: (ReceiptWatchFile.Account, ChainBalance?).self) { group in
-            for account in before.accounts {
+            // Em ordem sorteada e cada rede com um atraso proprio: as consultas de todas as
+            // redes nao saem juntas, no mesmo segundo, a cada rodada.
+            for account in (try? SecureRandom.mixed(before.accounts)) ?? before.accounts {
                 guard let chain = Chain.all.first(where: { $0.id == account.chainID }), !account.addresses.isEmpty else { continue }
-                // So o que ja entrou num bloco, e nas redes UTXO em dois provedores: o aviso
-                // diz que o saldo ja esta na carteira (pentest de 14/10/2026, M1).
-                group.addTask { (account, try? await BalanceService.shared.receiptBalance(chain: chain, addresses: account.addresses)) }
+                let previous = before.seen["\(account.chainID)|\(account.key)|\(Asset.native(chain).id)"]?.amount
+                // So o que ja entrou num bloco, e nas redes UTXO o que subiu em dois provedores:
+                // o aviso diz que o saldo ja esta na carteira (pentest de 14/10/2026, M1).
+                group.addTask {
+                    try? await Task.sleep(for: .milliseconds((try? SecureRandom.index(below: Self.maxJitterMilliseconds + 1)) ?? 0))
+                    return (account, try? await BalanceService.shared.receiptBalance(chain: chain, addresses: account.addresses, salt: salt, previous: previous))
+                }
             }
             var out: [(ReceiptWatchFile.Account, ChainBalance)] = []
             for await (account, balance) in group { if let balance { out.append((account, balance)) } }
@@ -207,8 +244,7 @@ actor ReceiptWatchCenter {
     static func compare(_ balances: [(ReceiptWatchFile.Account, ChainBalance)], seen: inout [String: ReceiptWatchFile.Seen]) -> [ReceiptEvent] {
         var events: [ReceiptEvent] = []
         for (account, balance) in balances {
-            let owner = account.addresses.first ?? ""
-            let prefix = "\(account.chainID)|\(owner)|"
+            let prefix = "\(account.chainID)|\(account.key)|"
             let present = Set(balance.holdings.map { "\(prefix)\($0.asset.id)" })
             for key in seen.keys where key.hasPrefix(prefix) && !present.contains(key) { seen[key]?.amount = 0 }
             for holding in balance.holdings {

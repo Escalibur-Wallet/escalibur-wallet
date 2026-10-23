@@ -46001,6 +46001,82 @@
         }
       }
     },
+    "Cada conferência consulta os provedores de cada rede com os endereços das suas carteiras, do IP em que o iPhone estiver. Nas redes como o Bitcoin, só o próximo endereço de recebimento e os dois últimos usados." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "كل فحص يسأل مزوّدي كل شبكة عن عناوين محافظك، من عنوان IP الذي يكون عليه iPhone. في شبكات مثل Bitcoin، فقط عنوان الاستلام التالي وآخر عنوانين مستخدمين."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jede Prüfung fragt die Anbieter jedes Netzwerks nach den Adressen deiner Wallets, von der IP, in der das iPhone gerade ist. In Netzwerken wie Bitcoin nur die nächste Empfangsadresse und die zwei zuletzt benutzten."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Each check asks each network's providers about your wallets' addresses, from whatever IP the iPhone is on. On networks like Bitcoin, only the next receiving address and the last two used ones."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cada revisión consulta a los proveedores de cada red con las direcciones de tus billeteras, desde la IP en la que esté el iPhone. En redes como Bitcoin, solo la próxima dirección de recepción y las dos últimas usadas."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chaque vérification interroge les fournisseurs de chaque réseau avec les adresses de vos portefeuilles, depuis l’IP où se trouve l’iPhone. Sur les réseaux comme Bitcoin, seulement la prochaine adresse de réception et les deux dernières utilisées."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "हर जाँच में हर नेटवर्क के प्रोवाइडर से आपके वॉलेट के पतों के बारे में पूछा जाता है, उस IP से जिस पर iPhone उस समय है. Bitcoin जैसे नेटवर्क पर सिर्फ़ अगला प्राप्ति पता और आख़िरी दो इस्तेमाल किए गए पते."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setiap pemeriksaan menanyakan alamat dompet Anda ke penyedia tiap jaringan, dari IP tempat iPhone berada. Di jaringan seperti Bitcoin, hanya alamat penerimaan berikutnya dan dua alamat terakhir yang dipakai."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認のたびに、iPhone がその時いる IP から、各ネットワークのプロバイダーにウォレットのアドレスを問い合わせます。Bitcoin などのネットワークでは、次の受け取りアドレスと最後に使った 2 つだけです。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확인할 때마다 iPhone이 연결된 IP에서 각 네트워크의 제공업체에 지갑 주소를 조회합니다. Bitcoin 같은 네트워크에서는 다음 받기 주소와 마지막으로 사용한 두 주소만 조회합니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Her kontrol, iPhone o sırada hangi IP'deyse oradan, her ağın sağlayıcılarına cüzdanlarınızın adreslerini sorar. Bitcoin gibi ağlarda yalnızca bir sonraki alma adresi ve son kullanılan iki adres."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mỗi lần kiểm tra sẽ hỏi nhà cung cấp của từng mạng về địa chỉ ví của bạn, từ IP mà iPhone đang dùng. Trên các mạng như Bitcoin, chỉ địa chỉ nhận tiếp theo và hai địa chỉ dùng gần nhất."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次查询都会从 iPhone 当时所在的 IP，向各网络的服务商查询您钱包的地址。在 Bitcoin 等网络上，只查询下一个收款地址和最近用过的两个。"
+          }
+        }
+      }
+    },
     "Cada envio de USDT leva %@ para a rede, e o que sobra volta, mais a taxa de cerca de %@." : {
       "localizations" : {
         "ar" : {
@@ -48565,6 +48641,82 @@
         }
       }
     },
+    "Carteiras com passphrase e carteiras com as palavras ainda não confirmadas ficam de fora. As de só observar também, a não ser que você ligue acima. Desligar apaga o arquivo." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "المحافظ التي تستخدم passphrase والمحافظ التي لم تُؤكَّد كلماتها بعد مستثناة. وكذلك محافظ المراقبة فقط، ما لم تفعّلها أعلاه. الإيقاف يحذف الملف."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wallets mit Passphrase und Wallets, deren Wörter noch nicht bestätigt sind, bleiben außen vor. Nur-ansehen-Wallets auch, außer du schaltest sie oben ein. Ausschalten löscht die Datei."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wallets with a passphrase and wallets whose words haven't been confirmed yet are left out. So are watch-only wallets, unless you turn them on above. Turning it off deletes the file."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las billeteras con passphrase y las billeteras con las palabras aún sin confirmar quedan fuera. Las de solo lectura también, salvo que las actives arriba. Desactivarlo borra el archivo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les portefeuilles avec passphrase et ceux dont les mots ne sont pas encore confirmés sont exclus. Les portefeuilles en lecture seule aussi, sauf si vous les activez ci-dessus. Désactiver supprime le fichier."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "passphrase वाले वॉलेट और जिन वॉलेट के शब्द अभी पुष्ट नहीं हुए, वे बाहर रहते हैं. केवल देखने वाले वॉलेट भी, जब तक आप ऊपर चालू न करें. बंद करने पर फ़ाइल मिट जाती है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dompet dengan passphrase dan dompet yang kata-katanya belum dikonfirmasi tidak disertakan. Dompet hanya pantau juga, kecuali Anda menyalakannya di atas. Mematikannya menghapus file."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "passphrase 付きのウォレットと、単語をまだ確認していないウォレットは対象外です。閲覧のみのウォレットも、上でオンにしない限り対象外です。オフにするとファイルは削除されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "passphrase가 있는 지갑과 단어를 아직 확인하지 않은 지갑은 제외됩니다. 보기 전용 지갑도 위에서 켜지 않으면 제외됩니다. 끄면 파일이 삭제됩니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passphrase'li cüzdanlar ve kelimeleri henüz onaylanmamış cüzdanlar dışarıda kalır. Yalnızca izleme cüzdanları da, yukarıda açmadığınız sürece dışarıda kalır. Kapatmak dosyayı siler."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ví có passphrase và ví chưa xác nhận các từ sẽ không được tính. Ví chỉ theo dõi cũng vậy, trừ khi bạn bật ở trên. Tắt đi sẽ xóa tệp."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "带 passphrase 的钱包和助记词尚未确认的钱包不包含在内。仅观察钱包也不包含，除非您在上方开启。关闭会删除该文件。"
+          }
+        }
+      }
+    },
     "Carteiras com passphrase e carteiras com as palavras ainda não confirmadas ficam de fora. Desligar apaga o arquivo." : {
       "localizations" : {
         "ar" : {
@@ -48714,6 +48866,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用 passphrase 的钱包不包括在内。可以在“设置”>“到账提醒”中更改。"
+          }
+        }
+      }
+    },
+    "Carteiras de só observar" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "محافظ المراقبة فقط"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur-ansehen-Wallets"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Watch-only wallets"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Billeteras de solo lectura"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Portefeuilles en lecture seule"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "केवल देखने वाले वॉलेट"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dompet hanya pantau"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "閲覧のみのウォレット"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보기 전용 지갑"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yalnızca izleme cüzdanları"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ví chỉ theo dõi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅观察钱包"
           }
         }
       }
@@ -52733,6 +52961,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "立即核对"
+          }
+        }
+      }
+    },
+    "Conferir junto liga elas às suas no provedor" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "فحصها معًا يربطها بمحافظك لدى مزوّد الخدمة"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemeinsam geprüft, verknüpft der Anbieter sie mit deinen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking them together links them to yours at the provider"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revisarlas juntas las vincula con las tuyas ante el proveedor"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les vérifier ensemble les relie aux vôtres chez le fournisseur"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "साथ में जाँचने से प्रोवाइडर उन्हें आपके वॉलेट से जोड़ सकता है"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memeriksanya bersamaan mengaitkannya dengan dompet Anda di penyedia"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一緒に確認すると、プロバイダーでご自身のウォレットと結び付きます"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "함께 확인하면 제공업체에서 내 지갑과 연결됩니다"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Birlikte kontrol etmek, sağlayıcıda onları sizinkilerle ilişkilendirir"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kiểm tra cùng lúc sẽ khiến nhà cung cấp liên kết chúng với ví của bạn"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一起查询会让服务商把它们和您的钱包关联起来"
           }
         }
       }

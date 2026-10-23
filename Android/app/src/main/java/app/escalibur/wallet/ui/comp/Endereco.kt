@@ -58,20 +58,49 @@ fun ImagemDoQR(texto: String, tamanho: Dp, modifier: Modifier = Modifier) {
  * A area de transferencia do app: o que sai daqui e marcado como sensivel (o Android nao mostra o
  * conteudo na previa) e e apagado sozinho, se ainda for o que o app copiou. O endereco vale 2
  * minutos; a frase, 1.
+ *
+ * Desde o Android 10, o app em segundo plano nao le a area de transferencia, e e justamente quando
+ * o dono foi colar em outro app que o prazo vence. Por isso a copia leva um rotulo sorteado, e o
+ * rotulo e o prazo ficam num arquivo (sem o texto): no prazo, ou quando o app volta a ter o foco,
+ * mesmo depois de o processo morrer, a copia vencida que ainda for a do app e apagada.
  */
 object Transferencia {
     private val escopo = CoroutineScope(Dispatchers.Main)
+    private const val ARQUIVO = "transferencia.pendente"
 
     fun copiar(contexto: Context, texto: String, segundos: Long = 120, rotulo: String = "Escalibur") {
         val gerente = contexto.getSystemService(ClipboardManager::class.java)
-        val clipe = ClipData.newPlainText(rotulo, texto)
+        val sorteio = ByteArray(8).also { java.security.SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
+        val marca = "$rotulo $sorteio"
+        val clipe = ClipData.newPlainText(marca, texto)
         clipe.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
         gerente.setPrimaryClip(clipe)
+        val aplicativo = contexto.applicationContext
+        runCatching { java.io.File(aplicativo.noBackupFilesDir, ARQUIVO).writeText("$marca\n${System.currentTimeMillis() + segundos * 1000}") }
         escopo.launch {
             delay(segundos * 1000)
-            val atual = runCatching { gerente.primaryClip?.getItemAt(0)?.text?.toString() }.getOrNull()
-            if (atual == texto) runCatching { gerente.clearPrimaryClip() }
+            apagarSeVenceu(aplicativo, comFoco = false)
         }
+    }
+
+    /**
+     * Apaga a copia do app se o prazo passou e ela ainda esta la. Sem o foco, o Android nao deixa
+     * ler: fica para quando o app voltar (`comFoco`).
+     */
+    fun apagarSeVenceu(contexto: Context, comFoco: Boolean) {
+        val arquivo = java.io.File(contexto.noBackupFilesDir, ARQUIVO)
+        val linhas = runCatching { arquivo.readLines() }.getOrNull() ?: return
+        val marca = linhas.getOrNull(0) ?: return
+        val prazo = linhas.getOrNull(1)?.toLongOrNull() ?: return
+        if (System.currentTimeMillis() < prazo) return
+        val gerente = contexto.getSystemService(ClipboardManager::class.java)
+        val descricao = runCatching { gerente.primaryClipDescription }.getOrNull()
+        if (descricao == null) {
+            if (comFoco) arquivo.delete()
+            return
+        }
+        if (descricao.label?.toString() == marca) runCatching { gerente.clearPrimaryClip() }
+        arquivo.delete()
     }
 }
 

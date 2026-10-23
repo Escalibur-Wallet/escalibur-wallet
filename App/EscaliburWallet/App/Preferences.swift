@@ -18,15 +18,14 @@ enum Preferences {
     }
 
     /// O aviso de recebimento ja foi ligado ou desligado (pelo dono ou pelo padrao)? So um
-    /// sim ou nao: nada da carteira. Ver `ReceiptAccounts.shouldOffer`.
+    /// sim ou nao: nada da carteira. Ver `ReceiptWatchView`.
     static var receiptWatchChosen: Bool {
         get { UserDefaults.standard.bool(forKey: receiptChoiceKey) }
         set { UserDefaults.standard.set(newValue, forKey: receiptChoiceKey) }
     }
 
-    /// A folha do aviso de recebimento, que diz o preco antes do "sim", ja foi respondida
-    /// (ou o dono mexeu no aviso em Ajustes)? So um sim ou nao. Ver
-    /// `ReceiptAccounts.shouldOffer`.
+    /// O dono ja mexeu no aviso de recebimento em Ajustes? So um sim ou nao. Ver
+    /// `ReceiptWatchView`.
     static var receiptOfferSeen: Bool {
         get { UserDefaults.standard.bool(forKey: receiptOfferKey) }
         set { UserDefaults.standard.set(newValue, forKey: receiptOfferKey) }

@@ -1,10 +1,13 @@
 import EscaliburChains
 import EscaliburCore
+import EscaliburEngines
+import EscaliburKeys
 import EscaliburNetwork
 import SwiftUI
 
 /// As contas que o aviso de recebimento confere: as das carteiras que podem receber, nas
-/// redes ligadas, so os enderecos publicos.
+/// redes ligadas, so os enderecos publicos. As de so observar vem marcadas, e so entram se o
+/// dono quiser (`ReceiptWatchFile.includeWatchOnly`).
 ///
 /// A carteira com passphrase fica de fora (auditoria 4, C7-03): o arquivo do aviso abre
 /// com o iPhone bloqueado depois do primeiro desbloqueio, e com ela nele quem extrai os
@@ -21,37 +24,27 @@ enum ReceiptAccounts {
                 guard let chain = Chain.all.first(where: { $0.id == account.chainID }), !disabled.contains(chain.id) else { continue }
                 // A conta da Tron com outra chave no controle nao recebe por caminho nenhum.
                 if chain.family == .tron, wallet.tronForeignControl == true { continue }
-                let addresses = Portfolio.addresses(for: account, chain: chain, usage: wallet.utxoUsage[chain.id])
-                guard seen.insert("\(chain.id)|\(addresses.first ?? "")").inserted else { continue }
-                out.append(.init(chainID: chain.id, addresses: addresses))
+                let addresses = Self.addresses(for: account, chain: chain, usage: wallet.utxoUsage[chain.id])
+                guard seen.insert("\(chain.id)|\(account.address)").inserted else { continue }
+                out.append(.init(chainID: chain.id, addresses: addresses, owner: owner(chain, account.address), watchOnly: wallet.isWatchOnly))
             }
         }
         return out
     }
 
-    /// Oferecido na primeira vez que a carteira abre (pedido do dono, 14/10/2026: o aviso
-    /// vem para todo mundo). A permissao de notificacao nao vale como aceite do arquivo
-    /// legivel com o iPhone bloqueado (auditoria 4, C7-03): antes dela, uma folha diz o
-    /// preco (hoje liga sozinho, sem a folha). Quem ja tinha o aviso ligado pelo
-    /// padrao antigo, sem folha, ve a folha uma vez; "Agora nao" desliga.
-    @MainActor
-    static func shouldOffer(_ session: AppSession) -> Bool {
-        guard !Preferences.receiptOfferSeen, session.phase == .unlocked, !session.metadata.wallets.isEmpty else { return false }
-        #if DEBUG
-        if DebugDemo.enabled { return false }
-        #endif
-        return true
+    /// Nas redes UTXO, so o recebimento: os dois ultimos enderecos usados e o proximo.
+    static func addresses(for account: DerivedAccount, chain: Chain, usage: UTXOUsage?) -> [String] {
+        guard chain.family == .utxo, let xpub = account.accountXPub else { return [account.address] }
+        let out = (usage ?? UTXOUsage()).receiptIndices.compactMap { index -> String? in
+            guard let key = try? xpub.derive([0, UInt32(index)]) else { return nil }
+            return try? Address.from(publicKey: key.publicKey, chain: chain)
+        }
+        return out.isEmpty ? [account.address] : out
     }
 
-    /// O "sim" da folha: pede a permissao de notificacao e liga. Sem permissao, fica
-    /// desligado. Qualquer resposta vale para sempre.
-    @MainActor
-    static func accept(_ session: AppSession) async {
-        Preferences.receiptWatchChosen = true
-        Preferences.receiptOfferSeen = true
-        let accounts = all(session)
-        guard await PriceAlertCenter.requestPermission() else { return }
-        await ReceiptWatchCenter.shared.enable(accounts: accounts)
+    /// A conta no arquivo sem o endereco: 8 bytes do SHA-256 da rede e do primeiro endereco.
+    static func owner(_ chain: Chain, _ address: String) -> String {
+        Hex.encode(Array(Hash.sha256(Array("\(chain.id)|\(address)".utf8)).prefix(8)))
     }
 
     /// Muda quando as contas mudam: carteira nova, rede ligada ou desligada, endereco
@@ -104,6 +97,21 @@ struct ReceiptWatchView: View {
                         }
                         .tint(Palette.success)
                         .padding(.horizontal, Space.md).frame(minHeight: Height.rowCompact)
+                        if session.metadata.wallets.contains(where: \.isWatchOnly) {
+                            Toggle(isOn: Binding(get: { file.includeWatchOnly == true }, set: { on in
+                                file.includeWatchOnly = on
+                                let accounts = ReceiptAccounts.all(session)
+                                Task {
+                                    await ReceiptWatchCenter.shared.setIncludeWatchOnly(on, accounts: accounts)
+                                    file = await ReceiptWatchCenter.shared.file()
+                                }
+                            })) {
+                                label("binoculars", String(localized: "Carteiras de só observar"),
+                                      String(localized: "Conferir junto liga elas às suas no provedor"))
+                            }
+                            .tint(Palette.success)
+                            .padding(.horizontal, Space.md).frame(minHeight: Height.rowCompact)
+                        }
                     }
                 }
                 .padding(.top, Space.lg)
@@ -120,7 +128,8 @@ struct ReceiptWatchView: View {
                 VStack(alignment: .leading, spacing: Space.sm) {
                     note(String(localized: "Por segurança, a Escalibur não tem servidor: não existe ninguém para avisar o iPhone na hora em que a moeda chega. Quem confere é o próprio iPhone, quando o iOS deixa: algumas vezes por hora em uso, menos parado ou com pouca bateria. Por isso o aviso pode chegar alguns minutos depois. Com o app aberto, a conferência é a cada 2 minutos."))
                     note(ReceiptWatchOffer.price)
-                    note(String(localized: "Carteiras com passphrase e carteiras com as palavras ainda não confirmadas ficam de fora. Desligar apaga o arquivo."))
+                    note(String(localized: "Cada conferência consulta os provedores de cada rede com os endereços das suas carteiras, do IP em que o iPhone estiver. Nas redes como o Bitcoin, só o próximo endereço de recebimento e os dois últimos usados."))
+                    note(String(localized: "Carteiras com passphrase e carteiras com as palavras ainda não confirmadas ficam de fora. As de só observar também, a não ser que você ligue acima. Desligar apaga o arquivo."))
                     note(String(localized: "Contam a moeda de cada rede e os tokens da lista conferida. Token fora da lista não avisa: é por ele que chega o spam."))
                 }
                 .padding(.horizontal, Space.gutter).padding(.top, Space.lg)
@@ -176,9 +185,9 @@ struct ReceiptWatchView: View {
     }
 }
 
-/// O preco do aviso de recebimento, dito em Ajustes, Aviso de recebimento. A folha que
-/// oferecia o aviso saiu (pedido do dono, 17/10/2026): ele liga sozinho, como os alertas de
-/// preco, e este texto fica nos Ajustes.
+/// O preco do aviso de recebimento, dito em Ajustes, Aviso de recebimento, onde ele liga. A
+/// folha que oferecia o aviso saiu (pedido do dono, 17/10/2026), e ele nao liga mais sozinho
+/// (auditoria de privacidade, 22/10/2026).
 enum ReceiptWatchOffer {
     static var price: String {
         String(localized: "Para conferir com o iPhone bloqueado, os endereços públicos das suas carteiras e o último saldo visto de cada moeda ficam num arquivo à parte, que abre depois do primeiro desbloqueio do iPhone, fora dos dados cifrados da carteira. Quem extrair os dados de um iPhone nesse estado lê esses endereços. Nenhuma chave, frase ou nome de carteira entra nele.")

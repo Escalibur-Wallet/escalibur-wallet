@@ -170,6 +170,82 @@ public struct UTXOReader: Sendable {
         return total
     }
 
+    /// O saldo confirmado do aviso de recebimento, com o menor rastro: cada endereco vai sempre
+    /// ao mesmo provedor (sorteado por `salt`, um por instalacao), e um segundo provedor so entra
+    /// quando a soma passou de `previous`, e so para os enderecos com saldo. Um provedor que
+    /// inventa recebimento continua barrado: o que subiu vale o menor dos dois (pentest de
+    /// 14/10/2026, M1). Sem `previous` (a leitura que marca o saldo de partida), um so.
+    public func receiptBalance(addresses: [String], salt: UInt64, previous: UInt64?) async throws -> UInt64 {
+        let providers = await pool.available()
+        guard providers.count >= 2 else { throw ChainReaderError.notEnoughSources(needed: 2, got: providers.count) }
+        let first = try await ReaderConcurrency.map(addresses, limit: Self.parallelism) { address in
+            try await self.confirmedReadings(address, providers: providers, start: Self.stableIndex(address, salt: salt, count: providers.count), count: 1)[0]
+        }
+        let total = try Self.sum(first)
+        guard let previous, total > previous else { return total }
+        let entries = Array(zip(addresses, first))
+        let confirmed = try await ReaderConcurrency.map(entries, limit: Self.parallelism) { address, reading -> UInt64 in
+            guard reading > 0 else { return 0 }
+            let start = Self.stableIndex(address, salt: salt, count: providers.count)
+            let readings = try await self.confirmedReadings(address, providers: providers, start: start + 1, count: 1, skip: providers[start])
+            return min(reading, readings[0])
+        }
+        return try Self.sum(confirmed)
+    }
+
+    /// O provedor fixo de um endereco nesta instalacao: FNV-1a do sal e do endereco.
+    static func stableIndex(_ address: String, salt: UInt64, count: Int) -> Int {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        let bytes = withUnsafeBytes(of: salt.littleEndian, Array.init) + Array(address.utf8)
+        for byte in bytes {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x0000_0100_0000_01b3
+        }
+        return Int(hash % UInt64(max(count, 1)))
+    }
+
+    private static func sum(_ values: [UInt64]) throws -> UInt64 {
+        var total: UInt64 = 0
+        for value in values {
+            let (next, overflow) = total.addingReportingOverflow(value)
+            guard !overflow else { throw ChainReaderError.malformedResponse(field: "balance") }
+            total = next
+        }
+        return total
+    }
+
+    /// `count` leituras do que ja entrou num bloco, em provedores diferentes a partir de
+    /// `start`, pulando `skip`; um que falha da a vez ao seguinte.
+    private func confirmedReadings(
+        _ address: String, providers: [ProviderPool.Provider], start: Int, count: Int, skip: ProviderPool.Provider? = nil
+    ) async throws -> [UInt64] {
+        var readings: [UInt64] = []
+        var lastError: Error = ChainReaderError.notEnoughSources(needed: count, got: 0)
+        for step in 0..<providers.count where readings.count < count {
+            let provider = providers[(start + step) % providers.count]
+            if let skip, provider.baseURL == skip.baseURL { continue }
+            do {
+                let claims = try await client(provider).unspent(address)
+                var sum: UInt64 = 0
+                for claim in claims where claim.height != nil {
+                    let (next, overflow) = sum.addingReportingOverflow(claim.claimedValue)
+                    guard !overflow else { throw ChainReaderError.malformedResponse(field: "value") }
+                    sum = next
+                }
+                readings.append(sum)
+                await pool.reportSuccess(provider)
+            } catch {
+                await report(provider, error)
+                lastError = error
+            }
+        }
+        guard readings.count == count else {
+            if readings.isEmpty { throw lastError }
+            throw ChainReaderError.notEnoughSources(needed: count, got: readings.count)
+        }
+        return readings
+    }
+
     /// Dois provedores diferentes, a partir de `start` (espalha a carga entre enderecos);
     /// um que falha da a vez ao seguinte.
     private func confirmedInTwo(_ address: String, providers: [ProviderPool.Provider], start: Int) async throws -> UInt64 {

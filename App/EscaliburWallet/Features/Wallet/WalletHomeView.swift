@@ -109,13 +109,9 @@ struct WalletHomeView: View {
             let disabled = session.metadata.settings.disabledChainIDs
             let balances = portfolio.balances
             Task { await ActivityFeed.shared.load(wallet, disabled: disabled, session: session, balances: balances) }
-            // O aviso de recebimento liga sozinho, sem folha, como os alertas de preco (pedido
-            // do dono, 17/10/2026: a folha aparecia e nao se entendia). So o pedido de permissao
-            // do iOS aparece; o preco do aviso fica em Ajustes, Aviso de recebimento. Um depois
-            // do outro: dois pedidos de permissao juntos se atropelavam.
-            if ReceiptAccounts.shouldOffer(session) {
-                await ReceiptAccounts.accept(session)
-            }
+            // O aviso de recebimento nao liga sozinho: liga em Ajustes, Aviso de recebimento,
+            // onde o preco dele esta dito (auditoria de privacidade, 22/10/2026). Os alertas de
+            // preco, que so levam a lista de moedas e nenhum endereco, seguem ligados de fabrica.
             await PriceAlertDefaults.enableByDefault(session)
             #if DEBUG
             // As telas que dependem do saldo esperam a leitura acima.

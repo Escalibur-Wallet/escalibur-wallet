@@ -41,14 +41,20 @@ import kotlin.math.floor
  * e diz o que aconteceu; aqui viram notificacoes locais, com o texto na lingua e no formato do
  * aparelho. Nenhuma notificacao remota, nenhum token de push.
  *
- * A tela bloqueada mostra a versao publica de cada uma ("Alerta de preço", "Recebimento"): o
- * conteudo so aparece com o aparelho destravado, como a previa escondida do iOS.
+ * A tela bloqueada: a versao publica de cada uma ("Alerta de preço", "Recebimento") so vale se o
+ * dono escondeu o conteudo sensivel nos ajustes do Android, e o padrao do sistema mostra tudo. Por
+ * isso o recebimento com valor nunca vai para a tela bloqueada: com o celular travado, sai o texto
+ * discreto; destravado, sai com o valor e some da tela bloqueada (VISIBILITY_SECRET).
  */
 object Vigia {
     private const val TRABALHO = 4107
-    /** O Android decide quando roda; isto e so o intervalo pedido. */
-    private const val INTERVALO = 20 * 60 * 1000L
-    private const val FLEXIBILIDADE = 10 * 60 * 1000L
+    /**
+     * O Android decide quando roda; isto e so o intervalo pedido. Uma hora: a cada rodada os
+     * provedores recebem os enderecos do IP do momento, e 20 minutos davam ate 72 por dia (auditoria
+     * de privacidade, 22/10/2026).
+     */
+    private const val INTERVALO = 60 * 60 * 1000L
+    private const val FLEXIBILIDADE = 15 * 60 * 1000L
     /** O rosa do icone do app, atras da espada. */
     private const val ROSA = 0xFFFF007B.toInt()
 
@@ -139,10 +145,13 @@ object Vigia {
         if (avisos == null || avisos.length() == 0 || !permitido(contexto)) return
         criarCanais(contexto)
         val gerente = contexto.getSystemService(NotificationManager::class.java)
+        val travado = contexto.getSystemService(android.app.KeyguardManager::class.java)?.isDeviceLocked ?: true
         for (indice in 0 until avisos.length()) {
             val aviso = avisos.optJSONObject(indice) ?: continue
-            val (titulo, texto) = textos(aviso)
             val canal = aviso.optString("canal", "precos")
+            // "Recebeu 10.000 USDT" na tela bloqueada marca o dono como alvo (pentest de 14/10/2026, B1).
+            val comValor = canal == "recebimentos" && aviso.optString("tipo") in setOf("recebeu", "mais")
+            val (titulo, texto) = if (comValor && travado) t("Entrou moeda na carteira") to t("Abra a Escalibur para ver.") else textos(aviso)
             val id = aviso.optString("id")
             val publica = Notification.Builder(contexto, canal)
                 .setSmallIcon(R.drawable.ic_notificacao)
@@ -156,7 +165,7 @@ object Vigia {
                 .setContentText(texto)
                 .setStyle(Notification.BigTextStyle().bigText(texto))
                 .setAutoCancel(true)
-                .setVisibility(Notification.VISIBILITY_PRIVATE)
+                .setVisibility(if (comValor && !travado) Notification.VISIBILITY_SECRET else Notification.VISIBILITY_PRIVATE)
                 .setPublicVersion(publica)
                 .setContentIntent(abrir(contexto, id, aviso))
                 .build()

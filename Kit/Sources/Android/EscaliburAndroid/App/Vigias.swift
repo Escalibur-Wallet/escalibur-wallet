@@ -1,5 +1,7 @@
 import EscaliburChains
 import EscaliburCore
+import EscaliburEngines
+import EscaliburKeys
 import EscaliburNetwork
 import Foundation
 
@@ -254,8 +256,16 @@ enum AlertasDePreco {
 struct ReceiptWatchFile: Codable, Equatable {
     struct Account: Codable, Equatable, Hashable {
         let chainID: String
-        /// Um endereco; nas redes UTXO, os de recebimento e troco ja usados e o proximo.
+        /// Um endereco; nas redes UTXO, os dois ultimos de recebimento usados e o proximo
+        /// (`UTXOUsage.receiptIndices`).
         let addresses: [String]
+        /// A conta, sem endereco: um resumo da rede e do primeiro endereco dela. E a chave do saldo
+        /// visto, que nao muda quando o endereco UTXO de recebimento anda.
+        var owner: String? = nil
+        /// De uma carteira de so observar: so entra com `includeWatchOnly`.
+        var watchOnly: Bool? = nil
+
+        var key: String { owner ?? addresses.first ?? "" }
     }
 
     struct Seen: Codable, Equatable {
@@ -268,14 +278,26 @@ struct ReceiptWatchFile: Codable, Equatable {
     /// Valor e moeda na notificacao. Desligado, a tela bloqueada so diz que entrou moeda.
     var showDetails = false
     var accounts: [Account] = []
-    /// "rede|endereco|ativo" -> o ultimo saldo visto.
+    /// "rede|conta|ativo" -> o ultimo saldo visto.
     var seen: [String: Seen] = [:]
     var lastCheck: Date?
     var chosen: Bool?
+    /// Sorteado ao ligar: fixa o provedor de cada endereco UTXO nesta instalacao.
+    var salt: UInt64?
+    /// As carteiras de so observar tambem entram. Comeca desligado: em geral e a carteira fria, e
+    /// conferi-la junto com as outras liga as duas no provedor.
+    var includeWatchOnly: Bool?
+
+    /// As contas que entram, pela escolha de so observar.
+    func admitted(_ all: [Account]) -> [Account] {
+        includeWatchOnly == true ? all : all.filter { $0.watchOnly != true }
+    }
 }
 
 enum AvisoDeRecebimento {
     static let nome = "recebimentos.json"
+    /// O atraso maximo de cada rede numa rodada: as consultas de todas as redes nao saem juntas.
+    static let atrasoMaximo = 2_500
     /// Com o app aberto, uma checagem a cada 2 minutos no maximo.
     static let intervaloAberto: TimeInterval = 2 * 60
     static let maximoPorVez = 4
@@ -296,7 +318,8 @@ enum AvisoDeRecebimento {
     }
 
     /// As contas que o aviso confere: as das carteiras que podem receber, nas redes ligadas, so os
-    /// enderecos publicos. A carteira com passphrase fica de fora: o arquivo abre com o app travado,
+    /// enderecos publicos. As de so observar vem marcadas, e so entram se o dono quiser
+    /// (`ReceiptWatchFile.includeWatchOnly`). A carteira com passphrase fica de fora: o arquivo abre com o app travado,
     /// e com ela nele quem extrai os dados do aparelho acha a carteira que o dono quis esconder. A
     /// que ainda nao tem copia conferida tambem: ela nao recebe.
     static func contas(_ metadata: Metadata) -> [ReceiptWatchFile.Account] {
@@ -308,12 +331,27 @@ enum AvisoDeRecebimento {
                 guard let rede = Chain.all.first(where: { $0.id == conta.chainID }), !desligadas.contains(rede.id) else { continue }
                 // A conta da Tron com outra chave no controle nao recebe por caminho nenhum.
                 if rede.family == .tron, carteira.tronForeignControl == true { continue }
-                let enderecos = Saldos.enderecos(conta, rede: rede, uso: carteira.utxoUsage[rede.id])
-                guard vistas.insert("\(rede.id)|\(enderecos.first ?? "")").inserted else { continue }
-                saida.append(.init(chainID: rede.id, addresses: enderecos))
+                let enderecos = enderecosDoAviso(conta, rede: rede, uso: carteira.utxoUsage[rede.id])
+                guard vistas.insert("\(rede.id)|\(conta.address)").inserted else { continue }
+                saida.append(.init(chainID: rede.id, addresses: enderecos, owner: dono(rede, conta.address), watchOnly: carteira.isWatchOnly))
             }
         }
         return saida
+    }
+
+    /// Nas redes UTXO, so o recebimento: os dois ultimos enderecos usados e o proximo.
+    static func enderecosDoAviso(_ conta: DerivedAccount, rede: Chain, uso: UTXOUsage?) -> [String] {
+        guard rede.family == .utxo, let xpub = conta.accountXPub else { return [conta.address] }
+        let saida = (uso ?? UTXOUsage()).receiptIndices.compactMap { indice -> String? in
+            guard let chave = try? xpub.derive([0, UInt32(indice)]) else { return nil }
+            return try? Address.from(publicKey: chave.publicKey, chain: rede)
+        }
+        return saida.isEmpty ? [conta.address] : saida
+    }
+
+    /// A conta no arquivo sem o endereco: 8 bytes do SHA-256 da rede e do primeiro endereco.
+    static func dono(_ rede: Chain, _ endereco: String) -> String {
+        Hex.encode(Array(Hash.sha256(Array("\(rede.id)|\(endereco)".utf8)).prefix(8)))
     }
 
     /// Liga com as contas de agora. A primeira leitura so marca o saldo de partida: ligar nao
@@ -324,7 +362,8 @@ enum AvisoDeRecebimento {
             arquivo.enabled = true
             arquivo.chosen = true
             arquivo.showDetails = detalhes
-            arquivo.accounts = contas
+            arquivo.salt = arquivo.salt ?? (try? SecureRandom.uint64())
+            arquivo.accounts = arquivo.admitted(contas)
             arquivo.seen = [:]
         }
     }
@@ -338,10 +377,11 @@ enum AvisoDeRecebimento {
     }
 
     /// As contas de agora, do app destravado. Conta que saiu leva junto o saldo visto.
-    static func acompanhar(contas: [ReceiptWatchFile.Account]) {
+    static func acompanhar(contas todas: [ReceiptWatchFile.Account]) {
         let atual = arquivo()
+        let contas = atual.admitted(todas)
         guard atual.enabled, atual.accounts != contas else { return }
-        let manter = Set(contas.flatMap { conta in conta.addresses.map { "\(conta.chainID)|\($0)" } })
+        let manter = Set(contas.map { "\($0.chainID)|\($0.key)" })
         mudar { arquivo in
             arquivo.accounts = contas
             arquivo.seen = arquivo.seen.filter { chave, _ in manter.contains(chave.split(separator: "|").prefix(2).joined(separator: "|")) }
@@ -361,12 +401,19 @@ enum AvisoDeRecebimento {
         }) else { return [] }
         defer { Vigias.trava.withLock { conferindo = false } }
 
+        let sal = antes.salt ?? 0
         let saldos = await withTaskGroup(of: (ReceiptWatchFile.Account, ChainBalance?).self) { grupo in
-            for conta in antes.accounts {
+            // Em ordem sorteada e cada rede com um atraso proprio: as consultas de todas as redes
+            // nao saem juntas, no mesmo segundo, a cada rodada.
+            for conta in (try? SecureRandom.mixed(antes.accounts)) ?? antes.accounts {
                 guard let rede = Chain.all.first(where: { $0.id == conta.chainID }), !conta.addresses.isEmpty else { continue }
-                // So o que ja entrou num bloco, e nas redes UTXO em dois provedores: o aviso diz que
-                // o saldo ja esta na carteira.
-                grupo.addTask { (conta, try? await BalanceService.shared.receiptBalance(chain: rede, addresses: conta.addresses)) }
+                let anterior = antes.seen["\(conta.chainID)|\(conta.key)|\(Asset.native(rede).id)"]?.amount
+                // So o que ja entrou num bloco, e nas redes UTXO o que subiu em dois provedores: o
+                // aviso diz que o saldo ja esta na carteira.
+                grupo.addTask {
+                    try? await Task.sleep(nanoseconds: UInt64((try? SecureRandom.index(below: atrasoMaximo + 1)) ?? 0) * 1_000_000)
+                    return (conta, try? await BalanceService.shared.receiptBalance(chain: rede, addresses: conta.addresses, salt: sal, previous: anterior))
+                }
             }
             var saida: [(ReceiptWatchFile.Account, ChainBalance)] = []
             for await (conta, saldo) in grupo { if let saldo { saida.append((conta, saldo)) } }
@@ -409,8 +456,7 @@ enum AvisoDeRecebimento {
     static func comparar(_ saldos: [(ReceiptWatchFile.Account, ChainBalance)], visto: inout [String: ReceiptWatchFile.Seen]) -> [ReceiptEvent] {
         var eventos: [ReceiptEvent] = []
         for (conta, saldo) in saldos {
-            let dono = conta.addresses.first ?? ""
-            let prefixo = "\(conta.chainID)|\(dono)|"
+            let prefixo = "\(conta.chainID)|\(conta.key)|"
             let presentes = Set(saldo.holdings.map { "\(prefixo)\($0.asset.id)" })
             for chave in visto.keys where chave.hasPrefix(prefixo) && !presentes.contains(chave) { visto[chave]?.amount = 0 }
             for posicao in saldo.holdings {
@@ -584,6 +630,7 @@ extension Vigias {
     struct EstadoDoRecebimento: Encodable {
         let ligado: Bool
         let detalhes: Bool
+        let soObservar: Bool
     }
 
     static func estadoDosAlertas() -> EstadoDosAlertas {
@@ -594,7 +641,7 @@ extension Vigias {
 
     static func estadoDoRecebimento() -> EstadoDoRecebimento {
         let arquivo = AvisoDeRecebimento.arquivo()
-        return EstadoDoRecebimento(ligado: arquivo.enabled, detalhes: arquivo.showDetails)
+        return EstadoDoRecebimento(ligado: arquivo.enabled, detalhes: arquivo.showDetails, soObservar: arquivo.includeWatchOnly == true)
     }
 
     static func chamar(_ metodo: String, _ pedido: JSONValue) throws -> Data {
@@ -646,25 +693,28 @@ extension Vigias {
         case "recebimentos.desligar":
             AvisoDeRecebimento.desligar(escolhido: true)
             return try Nucleo.json(estadoDoRecebimento())
+        case "recebimentos.soObservar":
+            // Carteiras de so observar no aviso, ou fora dele.
+            let ligado = pedido["ligado"]?.boolValue ?? false
+            AvisoDeRecebimento.mudar { $0.includeWatchOnly = ligado }
+            if Sessao.shared.fase == .unlocked { AvisoDeRecebimento.acompanhar(contas: AvisoDeRecebimento.contas(Sessao.shared.metadata)) }
+            return try Nucleo.json(estadoDoRecebimento())
         case "recebimentos.detalhes":
             let ligado = pedido["ligado"]?.boolValue ?? false
             AvisoDeRecebimento.mudar { $0.showDetails = ligado }
             return try Nucleo.json(estadoDoRecebimento())
         case "vigias.padrao":
-            // Os alertas de preco e o aviso de recebimento vem ligados de fabrica: na primeira vez que a
-            // carteira abre sem o dono ter escolhido, o app pede a permissao e liga.
+            // Os alertas de preco vem ligados de fabrica: na primeira vez que a carteira abre sem o dono
+            // ter escolhido, o app pede a permissao e liga. O aviso de recebimento nao: ele so liga em
+            // Ajustes, onde o preco dele esta dito (auditoria de privacidade, 22/10/2026).
             let oferecer = Sessao.shared.fase == .unlocked && !Sessao.shared.metadata.wallets.isEmpty
-                && (AlertasDePreco.arquivo().chosen != true || AvisoDeRecebimento.arquivo().chosen != true)
+                && AlertasDePreco.arquivo().chosen != true
             return try Nucleo.json(["oferecer": oferecer])
         case "vigias.ligarDeFabrica":
             // Qualquer resposta vale para sempre; sem permissao, fica desligado.
             guard Sessao.shared.fase == .unlocked, !Sessao.shared.metadata.wallets.isEmpty else { return try Nucleo.json(["ok": false]) }
             let permitido = pedido["permitido"]?.boolValue ?? false
             let metadata = Sessao.shared.metadata
-            if AvisoDeRecebimento.arquivo().chosen != true {
-                if permitido { AvisoDeRecebimento.ligar(contas: AvisoDeRecebimento.contas(metadata), detalhes: false) }
-                else { AvisoDeRecebimento.desligar(escolhido: true) }
-            }
             AlertasDePreco.mudar { arquivo in
                 guard arquivo.chosen != true else { return }
                 arquivo.chosen = true
