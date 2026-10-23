@@ -649,11 +649,19 @@ struct UTXOProviderClient: Sendable {
         return try await get(EsploraMerkleProof.self, "tx/\(txid.hex)/merkle-proof")
     }
 
-    /// O hash do bloco da altura, na ordem interna.
+    /// O hash do bloco da altura, na ordem interna. Esplora e Blockbook (o segundo dono da
+    /// Litecoin, onde so ha um Esplora).
     func blockHash(atHeight height: UInt32) async throws -> [UInt8] {
-        guard case .esplora = backend else { throw Unsupported() }
-        let text = try ReaderDecode.text(try await transport.fetch(try url("block-height/\(height)")), field: "block-height")
-        return try BitcoinSPV.internalHash(hex: text.trimmingCharacters(in: .whitespacesAndNewlines))
+        switch backend {
+        case .esplora:
+            let text = try ReaderDecode.text(try await transport.fetch(try url("block-height/\(height)")), field: "block-height")
+            return try BitcoinSPV.internalHash(hex: text.trimmingCharacters(in: .whitespacesAndNewlines))
+        case .blockbook:
+            struct Index: Decodable { let blockHash: String }
+            return try BitcoinSPV.internalHash(hex: try await get(Index.self, "block-index/\(height)").blockHash)
+        default:
+            throw Unsupported()
+        }
     }
 
     /// O cabecalho de 80 bytes do bloco (hash na ordem interna).

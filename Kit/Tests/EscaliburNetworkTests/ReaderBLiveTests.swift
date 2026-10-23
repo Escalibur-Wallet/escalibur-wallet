@@ -68,6 +68,10 @@ struct ReaderBLiveTests {
         #expect(reading.tipHeight > 3_000_000)
         let destination = try T.abandonAccount(chain: .litecoin).address(change: false, index: 0).address
         try Self.plan(chain: .litecoin, address: address, reading: reading, fees: fees, to: destination)
+        // A prova de inclusao de verdade, sem o recuo: o litecoinspace da a prova, o scrypt
+        // fecha e o Blockbook ve o mesmo bloco na altura.
+        let txid = try #require(UTXOTxID(hex: "812eed7d52a8a83961582d90c797e8b3e9aed887424ee1ff1ac597db3a80591e"))
+        try await reader.proveInclusion(txid, tip: reading.tipHeight)
     }
 
     // MARK: Dogecoin

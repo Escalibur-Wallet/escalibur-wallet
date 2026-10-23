@@ -42,7 +42,7 @@ public struct UTXOReader: Sendable {
     public init(chain: Chain, transport: ChainReaderTransport? = nil, providers: [ProviderPool.Provider]? = nil) throws {
         guard chain.family == .utxo else { throw ChainReaderError.unsupportedAccount }
         self.chain = chain
-        self.provesInclusion = chain == .bitcoin && providers == nil
+        self.provesInclusion = (chain == .bitcoin || chain == .litecoin) && providers == nil
         self.transport = transport ?? PacedChainTransport(base: HTTPReaderTransport(), intervals: Endpoints.utxoPacing)
         self.pool = providers.map(ProviderPool.init) ?? Self.sharedPool(for: chain)
     }
@@ -338,7 +338,7 @@ public struct UTXOReader: Sendable {
         var proven = Set<UTXOTxID>()
         let confirmedTxids = Array(Set(coins.filter { $0.confirmations > 0 }.map(\.outpoint.txid)))
         let results = try await ReaderConcurrency.map(confirmedTxids, limit: 2) { txid in
-            (txid, (try? await self.proveInclusion(txid, tip: tip)) != nil)
+            (txid, await self.provenOrUnavailable(txid, tip: tip))
         }
         for (txid, ok) in results where ok { proven.insert(txid) }
         var kept: [UTXOCoin] = []
@@ -351,6 +351,21 @@ public struct UTXOReader: Sendable {
             }
         }
         return UTXOCoinReading(coins: kept, rejected: rejected, tipHeight: tip, values: values)
+    }
+
+    /// Provada, ou sem prova possivel agora numa rede de um provedor de prova so (Litecoin):
+    /// la, sem o litecoinspace, vale o consenso de antes em vez de travar o envio. Prova que
+    /// chega e nao fecha e sempre recusa. No Bitcoin, com tres provedores de prova, nao ha
+    /// esse recuo.
+    func provenOrUnavailable(_ txid: UTXOTxID, tip: UInt32) async -> Bool {
+        do {
+            try await proveInclusion(txid, tip: tip)
+            return true
+        } catch BitcoinSPV.Failure.unavailable {
+            return chain == .litecoin
+        } catch {
+            return false
+        }
     }
 
     /// Prova por SPV que `txid` entrou no bloco que o provedor diz, com ate
@@ -367,7 +382,7 @@ public struct UTXOReader: Sendable {
                 await report(provider, error)
             }
         }
-        guard let (proof, source) = found else { throw BitcoinSPV.Failure.notInBlock }
+        guard let (proof, source) = found else { throw BitcoinSPV.Failure.unavailable }
         let branch = try proof.merkle.map { try BitcoinSPV.internalHash(hex: $0) }
         let height = proof.blockHeight
         guard height <= tip + Self.tipTolerance else { throw BitcoinSPV.Failure.brokenChain }
@@ -376,11 +391,11 @@ public struct UTXOReader: Sendable {
         var headers: [BitcoinSPV.Header] = []
         for current in height...last {
             let header: BitcoinSPV.Header
-            if let known = await BitcoinHeaderCache.shared.header(at: current) {
+            if let known = await BitcoinHeaderCache.shared.header(chain, at: current) {
                 header = known
             } else {
                 let fetched = try await client(source).blockHeader(try await client(source).blockHash(atHeight: current))
-                guard BitcoinSPV.hasWork(fetched) else { throw BitcoinSPV.Failure.weakWork }
+                guard BitcoinSPV.hasWork(fetched, chain: chain) else { throw BitcoinSPV.Failure.weakWork }
                 header = fetched
             }
             if let previous = headers.last { guard header.previous == previous.hash else { throw BitcoinSPV.Failure.brokenChain } }
@@ -390,8 +405,12 @@ public struct UTXOReader: Sendable {
               try BitcoinSPV.merkleRoot(txid: txid, branch: branch, position: proof.pos) == block.merkleRoot
         else { throw BitcoinSPV.Failure.notInBlock }
 
-        // Um segundo dono, quando responde, tem de ver o mesmo bloco nesta altura.
-        for provider in esplora where provider.operatorName != source.operatorName {
+        // Um segundo dono, quando responde, tem de ver o mesmo bloco nesta altura (Esplora ou
+        // Blockbook: na Litecoin o outro dono e o Blockbook).
+        let witnesses = await pool.available().filter {
+            switch UTXOBackend.of($0) { case .esplora, .blockbook: return true; default: return false }
+        }
+        for provider in witnesses where provider.operatorName != source.operatorName {
             let other: [UInt8]
             do {
                 other = try await client(provider).blockHash(atHeight: height)
@@ -402,7 +421,7 @@ public struct UTXOReader: Sendable {
             guard other == block.hash else { throw BitcoinSPV.Failure.providersDisagree }
             break
         }
-        for (offset, header) in headers.enumerated() { await BitcoinHeaderCache.shared.store(header, at: height + UInt32(offset)) }
+        for (offset, header) in headers.enumerated() { await BitcoinHeaderCache.shared.store(header, chain, at: height + UInt32(offset)) }
     }
 
     /// Teto de moedas conferidas numa leitura. Cada uma custa uma transacao anterior
@@ -615,7 +634,7 @@ public struct UTXOReader: Sendable {
         // "Confirmado" so com a prova de que esta num bloco minerado: recebimento confirmado
         // por provedor mentiroso e golpe comum em negociacao P2P.
         if provesInclusion, case .confirmed = combined, let tip {
-            guard (try? await proveInclusion(id, tip: tip)) != nil else { return .pending }
+            guard await provenOrUnavailable(id, tip: tip) else { return .pending }
         }
         return combined
     }

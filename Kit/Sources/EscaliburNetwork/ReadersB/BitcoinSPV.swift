@@ -2,7 +2,7 @@ import EscaliburChains
 import EscaliburCore
 import Foundation
 
-/// A prova de que uma transacao Bitcoin esta num bloco minerado de verdade (SPV), sem
+/// A prova de que uma transacao Bitcoin ou Litecoin esta num bloco minerado de verdade (SPV), sem
 /// acreditar no provedor (docs/seguranca.md §5.5).
 ///
 /// O provedor diz em que bloco a transacao entrou e da o caminho de Merkle ate a raiz. O
@@ -12,14 +12,19 @@ import Foundation
 /// "confirmada" passa a custar mineracao de verdade. Quando um provedor de outro dono
 /// responde, o bloco daquela altura tem de ser o mesmo nos dois.
 public enum BitcoinSPV {
-    /// O alvo mais facil aceito: 16 vezes o do bloco 972.695 (22/10/2026, dificuldade
-    /// 1,4 x 10^14). A dificuldade do Bitcoin nunca caiu perto disso, e um cabecalho falso
-    /// com esse alvo ainda custa horas de um pool grande, cada um.
-    static let easiestBits: UInt32 = 0x1720_0930
+    /// O alvo mais facil aceito. Bitcoin: 16 vezes o do bloco 972.695 (22/10/2026,
+    /// dificuldade 1,4 x 10^14). Litecoin: 16 vezes o do bloco 3.199.922 (22/10/2026). A
+    /// dificuldade das duas nunca caiu perto disso, e um cabecalho falso com esse alvo ainda
+    /// custa horas de um pool grande, cada um.
+    static func easiestBits(for chain: Chain) -> UInt32 {
+        chain == .litecoin ? 0x1A02_ED12 : 0x1720_0930
+    }
     /// Quantos cabecalhos, contando o do bloco da transacao, o app confere.
     static let depth: UInt32 = 6
 
     public enum Failure: Error, Equatable, Sendable {
+        /// Nenhum provedor entregou a prova agora (fora do ar, limite). Nao e prova falsa.
+        case unavailable
         /// Resposta que nao tem o formato de uma prova.
         case malformed
         /// A raiz de Merkle nao bate: a transacao nao esta no bloco dito.
@@ -61,10 +66,13 @@ public enum BitcoinSPV {
         return out
     }
 
-    /// O hash do cabecalho cabe no alvo dele, e o alvo dele nao e mais facil que o piso.
-    static func hasWork(_ header: Header) -> Bool {
-        guard let own = target(bits: header.bits), let floor = target(bits: easiestBits) else { return false }
-        return atMost(own, floor) && atMost(Array(header.hash.reversed()), own)
+    /// O hash de trabalho do cabecalho cabe no alvo dele, e o alvo dele nao e mais facil que
+    /// o piso da rede. No Litecoin o trabalho e medido pelo scrypt; o id do bloco continua o
+    /// SHA-256 duplo.
+    static func hasWork(_ header: Header, chain: Chain = .bitcoin) -> Bool {
+        guard let own = target(bits: header.bits), let floor = target(bits: easiestBits(for: chain)) else { return false }
+        let work = chain == .litecoin ? LitecoinScrypt.hash(header.raw) : header.hash
+        return atMost(own, floor) && atMost(Array(work.reversed()), own)
     }
 
     private static func atMost(_ lhs: [UInt8], _ rhs: [UInt8]) -> Bool { !rhs.lexicographicallyPrecedes(lhs) }
@@ -90,16 +98,17 @@ public enum BitcoinSPV {
     }
 }
 
-/// Os cabecalhos ja conferidos nesta sessao, por altura: moedas do mesmo trecho da
+/// Os cabecalhos ja conferidos nesta sessao, por rede e altura: moedas do mesmo trecho da
 /// cadeia nao pedem de novo o que ja foi provado.
 actor BitcoinHeaderCache {
     static let shared = BitcoinHeaderCache()
-    private var headers: [UInt32: BitcoinSPV.Header] = [:]
+    private struct Key: Hashable { let chain: Chain; let height: UInt32 }
+    private var headers: [Key: BitcoinSPV.Header] = [:]
 
-    func header(at height: UInt32) -> BitcoinSPV.Header? { headers[height] }
+    func header(_ chain: Chain, at height: UInt32) -> BitcoinSPV.Header? { headers[Key(chain: chain, height: height)] }
 
-    func store(_ header: BitcoinSPV.Header, at height: UInt32) {
+    func store(_ header: BitcoinSPV.Header, _ chain: Chain, at height: UInt32) {
         if headers.count > 4_000 { headers.removeAll() }
-        headers[height] = header
+        headers[Key(chain: chain, height: height)] = header
     }
 }
