@@ -17,15 +17,32 @@ struct AllocationDonut: View {
         let coingeckoID: String?
     }
 
+    /// A fatia menor que isto do total entra em "Outros": uma fatia de bilionesimos (a BNB
+    /// Frog Inu, com preco perto de 10^-19) derrubava o Swift Charts ao desenhar a troca de
+    /// moeda (crash do TestFlight, build 11, 22/10/2026).
+    static let minimumShare = 0.01
+    /// Cada fatia desenhada ocupa pelo menos isto da volta; a legenda mostra a porcentagem real.
+    static let minimumDrawnShare = 0.02
+
     private var slices: [Slice] {
         let valued = rows.compactMap { row -> Slice? in
-            guard let value = row.fiatValue, value > 0 else { return nil }
+            guard let value = row.fiatValue, value.isFinite, value > 0 else { return nil }
             return Slice(id: row.id, symbol: row.symbol, value: value, color: LogoColor.dominant(for: row.coingeckoID), coingeckoID: row.coingeckoID)
         }
         .sorted { $0.value > $1.value }
-        guard valued.count > 6 else { return valued }
-        let rest = valued.dropFirst(5).reduce(0) { $0 + $1.value }
-        return Array(valued.prefix(5)) + [Slice(id: "outros", symbol: String(localized: "Outros"), value: rest, color: Palette.inkDead, coingeckoID: nil)]
+        let sum = valued.reduce(0) { $0 + $1.value }
+        guard sum.isFinite, sum > 0 else { return [] }
+        let large = valued.filter { $0.value / sum >= Self.minimumShare }
+        // Ate seis fatias: com "Outros", cinco por nome.
+        let named = Array(large.prefix(valued.count > large.count || large.count > 6 ? 5 : 6))
+        let rest = valued.dropFirst(named.count).reduce(0) { $0 + $1.value }
+        guard rest > 0 else { return named }
+        return named + [Slice(id: "outros", symbol: String(localized: "Outros"), value: rest, color: Palette.inkDead, coingeckoID: nil)]
+    }
+
+    /// O valor de cada fatia no desenho, com o minimo da volta.
+    private static func drawn(_ slice: Slice, total: Double) -> Double {
+        max(slice.value, total * minimumDrawnShare)
     }
 
     private var total: Double { slices.reduce(0) { $0 + $1.value } }
@@ -34,7 +51,7 @@ struct AllocationDonut: View {
         guard let selectedAngle else { return nil }
         var running = 0.0
         for slice in slices {
-            running += slice.value
+            running += Self.drawn(slice, total: total)
             if selectedAngle <= running { return slice }
         }
         return nil
@@ -42,11 +59,12 @@ struct AllocationDonut: View {
 
     var body: some View {
         let slices = self.slices
+        let total = self.total
         if slices.count >= 2, total > 0 {
             HStack(alignment: .center, spacing: Space.lg) {
                 Chart(slices) { slice in
                     SectorMark(
-                        angle: .value("Valor", slice.value),
+                        angle: .value("Valor", Self.drawn(slice, total: total)),
                         innerRadius: .ratio(0.64),
                         outerRadius: .ratio(selected?.id == slice.id ? 1.0 : 0.94),
                         angularInset: 1.5
@@ -57,6 +75,10 @@ struct AllocationDonut: View {
                 }
                 .chartLegend(.hidden)
                 .chartAngleSelection(value: $selectedAngle)
+                // Os valores mudam sem animar (troca de moeda, preco que chega): o Charts
+                // interpolando fatias que entram e saem foi onde o app caiu.
+                .animation(nil, value: slices.map(\.id))
+                .animation(nil, value: slices.map(\.value))
                 .frame(width: 132, height: 132)
                 .overlay {
                     VStack(spacing: 0) {

@@ -597,13 +597,23 @@ private fun LinhaDeOutroToken(outro: Outro, oculto: Boolean, moeda: String) {
 private fun Distribuicao(linhas: List<Linha>, oculto: Boolean) {
     val contexto = LocalContext.current
     data class Fatia(val id: String, val simbolo: String, val valor: Double, val cor: Color)
+    // A fatia menor que 1% do total entra em "Outros", e cada fatia desenhada ocupa pelo menos 2% da
+    // volta (a legenda mostra a porcentagem real), como no iOS: la uma fatia de bilionesimos (a BNB
+    // Frog Inu) derrubava o grafico na troca de moeda.
     val fatias = remember(linhas) {
-        val comValor = linhas.mapNotNull { l -> l.valor?.takeIf { it > 0 }?.let { Fatia(l.id, l.simbolo, it, CorDoLogo.de(contexto, l.coingecko)) } }.sortedByDescending { it.valor }
-        if (comValor.size <= 6) comValor
-        else comValor.take(5) + Fatia("outros", t("Outros"), comValor.drop(5).sumOf { it.valor }, Paleta.tintaMorta)
+        val comValor = linhas.mapNotNull { l -> l.valor?.takeIf { it.isFinite() && it > 0 }?.let { Fatia(l.id, l.simbolo, it, CorDoLogo.de(contexto, l.coingecko)) } }
+            .sortedByDescending { it.valor }
+        val soma = comValor.sumOf { it.valor }
+        if (!soma.isFinite() || soma <= 0) return@remember emptyList()
+        val grandes = comValor.filter { it.valor / soma >= 0.01 }
+        val nomeadas = grandes.take(if (comValor.size > grandes.size || grandes.size > 6) 5 else 6)
+        val resto = comValor.drop(nomeadas.size).sumOf { it.valor }
+        if (resto > 0) nomeadas + Fatia("outros", t("Outros"), resto, Paleta.tintaMorta) else nomeadas
     }
     val total = fatias.sumOf { it.valor }
     if (fatias.size < 2 || total <= 0) return
+    fun desenhado(f: Fatia) = maxOf(f.valor, total * 0.02)
+    val totalDesenhado = fatias.sumOf { desenhado(it) }
     var escolhida by remember { mutableStateOf<String?>(null) }
     val toque = toqueDeSelecao()
     fun porcento(parte: Double): String {
@@ -619,7 +629,7 @@ private fun Distribuicao(linhas: List<Linha>, oculto: Boolean) {
                 var angulo = Math.toDegrees(kotlin.math.atan2((p.y - c.y).toDouble(), (p.x - c.x).toDouble())) + 90
                 if (angulo < 0) angulo += 360
                 var corrido = 0.0
-                val alvo = fatias.firstOrNull { corrido += it.valor / total * 360; angulo <= corrido }?.id
+                val alvo = fatias.firstOrNull { corrido += desenhado(it) / totalDesenhado * 360; angulo <= corrido }?.id
                 escolhida = if (escolhida == alvo) null else alvo
                 toque()
             }
@@ -628,7 +638,7 @@ private fun Distribuicao(linhas: List<Linha>, oculto: Boolean) {
                 var inicio = -90f
                 val raio = size.minDimension / 2
                 for (f in fatias) {
-                    val varre = (f.valor / total * 360).toFloat()
+                    val varre = (desenhado(f) / totalDesenhado * 360).toFloat()
                     val fora = raio * (if (escolhida == f.id) 1f else 0.94f)
                     val dentro = raio * 0.64f
                     val espessura = fora - dentro

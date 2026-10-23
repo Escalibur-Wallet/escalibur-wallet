@@ -70,6 +70,8 @@ public enum PriceAlertRules {
     /// A potencia de 10 do algarismo mais alto do preco, sem o erro do `log10` nas
     /// pontas (1.000 e 0,001).
     static func magnitude(_ price: Double) -> Int {
+        // Preco zero, negativo ou infinito daria log10 infinito, e o Int dele derruba o app.
+        guard price.isFinite, price > 0 else { return 0 }
         var exponent = Int(floor(log10(price)))
         if power(exponent) > price { exponent -= 1 }
         if power(exponent + 1) <= price { exponent += 1 }
