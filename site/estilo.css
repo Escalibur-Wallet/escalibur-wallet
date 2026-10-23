@@ -963,7 +963,7 @@ html:not(.js) .chamado .passo, html:not(.js) .chamado .botao, html:not(.js) .cha
 .ameaca .defesa p:last-child, .ameaca .sobra p:last-child { font-size: 16px; }
 .rotulo-faz, .rotulo-sobra { font-size: 13px; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 7px; }
 .rotulo-faz { color: var(--success); }
-.rotulo-sobra { color: var(--caution); }
+.rotulo-sobra { color: var(--ink); }
 .rotulo-faz::before, .rotulo-sobra::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .ameaca .sobra { background: var(--void); border-radius: var(--r-card); padding: 14px 16px; }
 .ameaca .sobra p:last-child { color: var(--ink-soft); }
@@ -975,6 +975,10 @@ html:not(.js) .chamado .passo, html:not(.js) .chamado .botao, html:not(.js) .cha
 .seg-final { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 900px) { .seg-final { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .seg-final .painel h2 { font-size: clamp(26px, 3vw, 34px); }
+/* Auditoria e Bugs iguais aos cartoes de cima (camadas e casos): sem o contorno, mesmo respiro
+   (pedido do dono, 23/10/2026). */
+.seg-final .painel { box-shadow: none; padding: clamp(24px, 3vw, 32px); }
+.seg-final .painel .botoes { margin-top: 28px; }
 .prazos { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 6px; }
 .prazos li { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 16px; padding: 12px 16px; align-items: baseline; background: var(--void); border-radius: var(--r-card); }
 .prazos b { color: var(--ink); font-size: 19px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }

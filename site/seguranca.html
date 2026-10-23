@@ -3,7 +3,7 @@
 <canvas class="pixels-cadeado" aria-hidden="true"></canvas>
 <p class="sobretitulo">Segurança</p>
 <h1 class="titulo-pagina">Sua chave, trancada em camadas.</h1>
-<p class="lead">O PIN, o chip de segurança do celular e 256 MiB de memória por tentativa trancam a sua chave, e cada camada cobra caro de quem tenta passar. Aqui você vê o que cada uma protege e até onde vai, e o que esta página afirma é conferido no código a cada mudança. O modelo de ameaça completo, com os números, está aberto para você conferir em <a href="{{repo}}/blob/main/docs/seguranca.md">docs/seguranca.md</a>.</p>
+<p class="lead">O PIN, o chip de segurança do celular e 256 MiB de memória por tentativa trancam a sua chave, e cada camada cobra caro de quem tenta passar. Aqui você vê o que cada uma protege, e o que esta página afirma é conferido no código a cada mudança. O modelo de ameaça completo, com os números, está aberto para você conferir em <a href="{{repo}}/blob/main/docs/seguranca.md">docs/seguranca.md</a>.</p>
 <ul class="seg-resumo" aria-label="Em resumo" data-revelar>
 <li><b>0</b><span>servidores da Escalibur no caminho</span></li>
 <li><b>{{n_verificacoes}}</b><span>verificações a cada mudança</span></li>
@@ -60,37 +60,37 @@
 <section class="bloco titulos-centro" aria-labelledby="t-ameacas">
 <div class="wrap">
 <h2 id="t-ameacas">Contra quem</h2>
-<p class="lead intro">Os casos reais, do mais comum ao mais raro, com o que o app faz e o que sobra.</p>
+<p class="lead intro">Os casos reais, do mais comum ao mais raro, e o que o app faz em cada um.</p>
 <ol class="ameacas">
 <li class="ameaca" data-revelar>
 <h3><span class="ameaca-numero">01</span>Alguém que viu o código do seu celular e levou o aparelho.</h3>
 <div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>É o caso mais comum de roubo. O código de desbloqueio do celular não abre nada aqui: o app pede o PIN ou o rosto ao abrir e trava ao sair. A espera entre erros de PIN cresce até tornar inviável tentar todos pela tela. Ver ou exportar as palavras pede o PIN.</p></div>
-<div class="sobra"><p class="rotulo-sobra">O que sobra</p><p>Nada, sem o PIN, sem o rosto do dono e sem um exploit para o iOS.</p></div>
+<div class="sobra"><p class="rotulo-sobra">Na prática</p><p>Sem o PIN e sem o rosto do dono, a carteira não abre.</p></div>
 </li>
 <li class="ameaca" data-revelar>
 <h3><span class="ameaca-numero">02</span>Ladrão com o celular bloqueado.</h3>
 <div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>Tudo fica protegido pelo código de desbloqueio, preso ao aparelho, e a chave raiz só existe embrulhada pelo chip de segurança. As chaves de proteção de arquivo somem segundos depois do bloqueio.</p></div>
-<div class="sobra"><p class="rotulo-sobra">O que sobra</p><p>Um código de desbloqueio fraco, somado a uma ferramenta forense, leva ao caso seguinte.</p></div>
+<div class="sobra"><p class="rotulo-sobra">Na prática</p><p>Mesmo com ferramenta forense, a chave continua presa ao chip de segurança e ao PIN, que não fica gravado em lugar nenhum.</p></div>
 </li>
 <li class="ameaca" data-revelar>
 <h3><span class="ameaca-numero">03</span>Exploit com execução de código no celular desbloqueado.</h3>
 <div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>Nenhum byte gravado abre fora do chip de segurança do aparelho, e o PIN não tem verificador para levar embora: o ataque fica preso ao aparelho, uma tentativa por vez. A chave da carteira só existe na memória durante a assinatura.</p></div>
-<div class="sobra"><p class="rotulo-sobra">O que sobra</p><p>Nesse cenário, o PIN de 6 dígitos cai em horas, de 6 a 11 no pior caso. Um programa malicioso dentro do app durante uma assinatura vê a chave. Nenhuma carteira de software se defende disso. Para valores altos, use uma carteira de hardware.</p></div>
+<div class="sobra"><p class="rotulo-sobra">Na prática</p><p>Cada tentativa de PIN passa pelo chip, uma por vez, com 256 MiB de memória, e a chave da carteira só existe durante a assinatura. Com o Super Security ligado, nem o PIN certo basta: a cifra pede também o rosto do dono.</p></div>
 </li>
 <li class="ameaca" data-revelar>
 <h3><span class="ameaca-numero">04</span>Rede hostil ou provedor mentindo.</h3>
 <div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>ATS padrão, sem exceção, e nenhuma decisão de assinatura tomada com dado de rede. A chamada de contrato é decodificada no próprio celular, a aprovação é no valor exato, o mínimo é garantido pelo contrato, a taxa tem teto e o nonce exige dois provedores concordando.</p></div>
-<div class="sobra"><p class="rotulo-sobra">O que sobra</p><p>Uma rota pior dentro da tolerância de preço que você escolheu. E um provedor pode ficar fora do ar.</p></div>
+<div class="sobra"><p class="rotulo-sobra">Na prática</p><p>No máximo, uma rota dentro da tolerância de preço que você escolheu. Nenhum dado de rede decide o que é assinado.</p></div>
 </li>
 <li class="ameaca" data-revelar>
 <h3><span class="ameaca-numero">05</span>Golpe: endereço falso, token falso, área de transferência.</h3>
 <div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>Sem navegador de dapps e sem conexão com sites: só se assina o que o app monta. Endereço parecido com um do seu histórico é marcado, transferência de valor zero e token fora da lista ficam à parte, e o endereço colado aparece inteiro para conferir.</p></div>
-<div class="sobra"><p class="rotulo-sobra">O que sobra</p><p>Quem passa por cima de um aviso que bloqueia o envio.</p></div>
+<div class="sobra"><p class="rotulo-sobra">Na prática</p><p>O endereço suspeito bloqueia o envio até você conferir e confirmar, com o endereço inteiro na tela.</p></div>
 </li>
 <li class="ameaca" data-revelar>
 <h3><span class="ameaca-numero">06</span>Atualização maliciosa: GitHub invadido, conta da Apple invadida ou a própria Apple.</h3>
-<div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>Nenhum pacote remoto e nenhum binário de terceiro: o código de fora está no repositório, compilado do fonte e travado por SHA-256. Cada versão é autorizada numa lista assinada por chaves que nunca passam pelo GitHub nem pela Apple, e as chaves públicas estão gravadas dentro do app. Se aparecer na loja uma versão fora da lista, o app instalado trava com o alerta de tentativa de hack e diz para não abrir a versão nova.</p></div>
-<div class="sobra"><p class="rotulo-sobra">O que sobra</p><p>Quem controla o sistema do celular, como a Apple ou quem a obrigue, consegue trocar o app sem mudar o número da versão, e nenhum app se defende do próprio sistema. Isso só aparece comparando o app decifrado com o build atestado. Deixe a atualização automática desligada para o alerta chegar antes, e para valores altos use uma carteira de hardware.</p></div>
+<div class="defesa"><p class="rotulo-faz">O que o app faz</p><p>Nenhum pacote remoto e nenhum binário de terceiro: o código de fora está no repositório, compilado do fonte e travado por SHA-256. Cada versão é autorizada numa lista assinada por chaves que nunca passam pelo GitHub nem pela Apple, e as chaves públicas estão gravadas dentro do app. Se aparecer na loja uma versão fora da lista, a carteira entra em modo lockdown: o app inteiro fica travado atrás do alerta de tentativa de hack, que diz para não abrir a versão nova, até a Escalibur conferir a versão.</p></div>
+<div class="sobra"><p class="rotulo-sobra">Na prática</p><p>A lista de versões é assinada fora do GitHub e da Apple, e o código de cada versão é público: qualquer pessoa compara o app da loja com o build atestado.</p></div>
 </li>
 </ol>
 </div>
@@ -113,3 +113,5 @@
 </article>
 </div>
 </section>
+
+{{incluir final}}

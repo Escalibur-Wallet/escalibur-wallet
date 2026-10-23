@@ -150,7 +150,7 @@
 <canvas class="pixels-chave" aria-hidden="true"></canvas>
 <p class="chaves-detalhe" aria-hidden="true"></p>
 <p class="chaves-legenda"><span data-chaves-n>1</span> de 5</p>
-<a class="mais" href="{{base}}seguranca/">Como a Escalibur protege, e onde a proteção para</a>
+<a class="mais" href="{{base}}seguranca/">Como a Escalibur protege a sua chave</a>
 </div>
 </div>
 </div>
@@ -339,19 +339,4 @@
 </div>
 </section>
 
-<section class="final" id="baixar" aria-labelledby="t-final">
-<div class="wrap final-texto">
-<div class="final-moeda">
-<img class="final-moeda-parada" src="{{base}}midia/moeda-escalibur.webp" alt="" width="640" height="640" loading="lazy" decoding="async" draggable="false">
-<canvas class="final-3d" aria-hidden="true"></canvas>
-</div>
-<h2 class="titulo-secao" id="t-final">Sua chave. Seu celular.<br>Mais ninguém.</h2>
-<p class="lead">Sem conta, sem servidor da Escalibur e sem ninguém do nosso lado com acesso ao seu saldo. Só você assina. {{situacao_loja}}</p>
-{{botoes_baixar}}
-</div>
-<div class="podio" aria-label="Telas do app, em inglês">
-{{capa foto-carteira | A Carteira no app, em inglês: o saldo total e a lista de ativos | podio-lado}}
-<figure class="podio-foto"><img src="{{base}}midia/foto-mao-bitcoin.webp" alt="Uma mão segurando o celular na página do bitcoin no app, em inglês: o preço e o gráfico das últimas 24 horas" width="940" height="1672" loading="lazy" decoding="async" draggable="false"></figure>
-{{capa foto-trocar | A troca no app, em inglês: 250 XRP por RLUSD no XRP Ledger, com a cotação | podio-lado}}
-</div>
-</section>
+{{incluir final}}

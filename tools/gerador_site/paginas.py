@@ -811,6 +811,12 @@ def preencher(ctx, base, modelo, origem):
         partes = [p.strip() for p in argumento.split("|")] if argumento else []
         if nome == "base":
             return base
+        # Um trecho de site/ repetido em mais de uma pagina (a secao final do Inicio tambem fecha
+        # a pagina Seguranca, pedido do dono, 23/10/2026).
+        if nome == "incluir":
+            if not re.fullmatch(r"[a-z-]+", argumento):
+                raise ValueError(f"trecho invalido: {argumento}")
+            return preencher(ctx, base, (dados.RAIZ / "site" / f"{argumento}.html").read_text(encoding="utf-8"), origem)
         classe = partes[2] if len(partes) > 2 else ""
         cedo = "cedo" in classe.split()
         classe = " ".join(c for c in classe.split() if c != "cedo")
