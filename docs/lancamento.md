@@ -122,7 +122,7 @@ vinculado à identidade e sem rastreamento. Motivo (auditoria de privacidade, 22
 definição da Apple, guardar além do atendimento em tempo real é coleta, e o painel da Alchemy
 mostra à Escalibur, por 10 dias, o endereço e a resposta de cada consulta feita com a chave do
 app. O app não tem servidor nem SDK de terceiros. O e-mail de suporte chega fora do app e não
-entra no rótulo. O rótulo muda só na App Store Connect, pelo dono.
+entra no rótulo. Já está assim na App Store Connect desde o envio (o dono, 23/10/2026).
 
 **Criptografia:** `ITSAppUsesNonExemptEncryption = false`, já no Info.plist. A cifra é só a
 do iOS (CryptoKit e Security); o código próprio é hash, assinatura e Argon2. Sem
