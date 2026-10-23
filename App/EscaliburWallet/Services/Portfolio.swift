@@ -145,7 +145,7 @@ final class Portfolio {
         recompute(wallet)
         let priced = Self.contractPriced(balances)
         if !priced.isEmpty {
-            let found = await MarketService.shared.tokenQuotes(priced, currency: base)
+            let found = await MarketService.shared.tokenQuotes(priced, currency: base, knownIDs: recognizedIDs)
             guard walletID == wallet.id, stillIn(base, session) else { return }
             tokenQuotes.merge(found) { $1 }
             recompute(wallet)
@@ -247,6 +247,10 @@ final class Portfolio {
     private var pendingRefresh = false
     /// Os reconhecimentos guardados nos metadados, para montar as linhas.
     private var recognizedTokens: [String: TokenIdentity] = [:]
+
+    /// O id do CoinGecko dos tokens ja reconhecidos pelo contrato exato: o preco deles vai num
+    /// pedido so, pelo id, e nao um pedido por contrato (auditoria de privacidade, 22/10/2026).
+    private var recognizedIDs: [String: String] { recognizedTokens.mapValues(\.coingeckoID) }
 
     /// A ultima leitura boa da rede nao tinha saldo nem token nenhum.
     static func knownEmpty(_ balance: ChainBalance?) -> Bool {
@@ -396,7 +400,7 @@ final class Portfolio {
         // esta na tela.
         let priced = Self.contractPriced(balances)
         if !priced.isEmpty {
-            let found = await MarketService.shared.tokenQuotes(priced, currency: base)
+            let found = await MarketService.shared.tokenQuotes(priced, currency: base, knownIDs: recognizedIDs)
             guard walletID == wallet.id else { return }
             if stillIn(base, session) { tokenQuotes.merge(found) { $1 } }
             recompute(wallet)
@@ -629,7 +633,7 @@ final class Portfolio {
             recompute(wallet)
             let priced = Self.contractPriced([chain.id: balance])
             guard !priced.isEmpty else { return }
-            let found = await MarketService.shared.tokenQuotes(priced, currency: currency)
+            let found = await MarketService.shared.tokenQuotes(priced, currency: currency, knownIDs: recognizedIDs)
             guard walletID == wallet.id, stillIn(currency, session) else { return }
             tokenQuotes.merge(found) { $1 }
             recompute(wallet)

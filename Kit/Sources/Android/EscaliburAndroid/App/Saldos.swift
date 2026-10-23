@@ -245,7 +245,10 @@ final class Saldos: @unchecked Sendable {
         // Preco por contrato: moedas custom e outros tokens sem suspeita. Nunca pelo simbolo.
         let comPrecoPorContrato = Self.precificadosPorContrato(trava.withLock { saldos })
         if !comPrecoPorContrato.isEmpty {
-            let achados = await MarketService.shared.tokenQuotes(comPrecoPorContrato, currency: moeda)
+            // Os ja reconhecidos pelo contrato exato vao num pedido so, pelo id do CoinGecko, e nao
+            // um pedido por contrato (auditoria de privacidade, 22/10/2026).
+            let reconhecidos = (Sessao.shared.metadata.recognizedTokens ?? [:]).mapValues(\.coingeckoID)
+            let achados = await MarketService.shared.tokenQuotes(comPrecoPorContrato, currency: moeda, knownIDs: reconhecidos)
             let aindaNaMoeda = Sessao.shared.metadata.settings.currency == moeda
             trava.withLock {
                 if carteiraID == wallet.id, aindaNaMoeda { cotacoesPorContrato.merge(achados) { $1 } }

@@ -588,6 +588,37 @@ struct TokenDiscoveryTests {
         let reserve = await market.tokenQuotes([arb], currency: "brl")
         #expect(reserve[arb.id]?.price == 1.05)
     }
+
+    @Test("Token ja reconhecido: o preco vai pelo id do CoinGecko, nunca por contrato (auditoria de privacidade)")
+    func recognizedTokenPricedByID() async throws {
+        let arb = Asset(chainID: "arbitrum", kind: .token(contract: "0x912CE59144191C1204E64559FE8253a0e49E6548"), symbol: "ARB", name: "Arbitrum",
+                        decimals: 18, coingeckoID: nil, isStablecoin: false, origin: .discovered)
+        let transport = FixtureTransport([{ request, _ in
+            let url = request.url.absoluteString
+            #expect(!url.contains("token_price") && !url.contains("/contracts/") && !url.contains("0x912"), "consulta por contrato: \(url)")
+            if url.contains("simple/price") { return Data(#"{"arbitrum":{"brl":1.07,"brl_24h_change":1.5}}"#.utf8) }
+            return nil
+        }])
+        let market = MarketService(transport: transport, now: { LockedClock().now })
+        let found = await market.tokenQuotes([arb], currency: "brl", knownIDs: [arb.id: "arbitrum"])
+        #expect(found[arb.id]?.price == 1.07)
+        #expect(transport.requests.count == 1)
+    }
+
+    @Test("Logo guardada no aparelho: lida de volta pelas mesmas regras; 'nao existe' vale 30 dias")
+    func logoStoredOnDevice() throws {
+        let url = try #require(URL(string: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xTeste/logo.png"))
+        let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3])
+        ImageLoader.store(png, for: url)
+        guard case .image(let data)? = ImageLoader.stored(url) else { Issue.record("sem a logo guardada"); return }
+        #expect(data == png)
+        ImageLoader.store(Data("<svg>".utf8), for: url)
+        #expect(ImageLoader.stored(url) == nil)
+        ImageLoader.store(nil, for: url)
+        guard case .missing? = ImageLoader.stored(url) else { Issue.record("sem a marca de logo que nao existe"); return }
+        #expect(ImageLoader.stored(url, now: .now.addingTimeInterval(ImageLoader.missingLifetime + 60)) == nil)
+        if let file = ImageLoader.file(for: url) { try? FileManager.default.removeItem(at: file) }
+    }
 }
 
 extension Asset {

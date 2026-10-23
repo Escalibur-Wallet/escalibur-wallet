@@ -1,4 +1,5 @@
 import EscaliburChains
+import EscaliburCore
 import Foundation
 
 /// Uma moeda na lista de mercado.
@@ -455,7 +456,10 @@ public actor MarketService {
         "near": ("near-protocol", "near-near-protocol"), "cardano": ("cardano", "ada-cardano"),
     ]
 
-    static let tokenPriceLifetime: TimeInterval = 300
+    /// 15 minutos: cada consulta por contrato diz ao CoinGecko que este aparelho tem este token, e
+    /// a cada 5 minutos o conjunto de tokens raros virava uma assinatura do aparelho (auditoria de
+    /// privacidade, 22/10/2026).
+    static let tokenPriceLifetime: TimeInterval = 900
     /// "Sem preco" vale meia hora: o CoinGecko sem chave aceita um contrato por chamada
     /// e poucas chamadas por minuto, e a maioria dos tokens que chegam sozinhos nunca vai
     /// ter preco.
@@ -468,7 +472,10 @@ public actor MarketService {
     /// (contrato para moeda em `/contracts/{plataforma}`, preco em `/tickers/{id}`). Nunca
     /// pelo simbolo: qualquer um cria um "USDC". Devolve por `Asset.id`; o que nao tem
     /// preco nao aparece.
-    public func tokenQuotes(_ assets: [Asset], currency: String) async -> [String: Quote] {
+    ///
+    /// `knownIDs` (`Asset.id` para o id do CoinGecko, dos tokens ja reconhecidos pelo contrato
+    /// exato): esses vao todos num pedido so, pelo id, e nao um pedido por contrato.
+    public func tokenQuotes(_ assets: [Asset], currency: String, knownIDs: [String: String] = [:]) async -> [String: Quote] {
         let moment = now()
         var out: [String: Quote] = [:]
         var pending: [Asset] = []
@@ -481,6 +488,19 @@ public actor MarketService {
                 continue
             }
             pending.append(asset)
+        }
+        let byID = pending.compactMap { asset in knownIDs[asset.id].map { (asset: asset, id: $0) } }
+        if !byID.isEmpty {
+            if let found = try? await quotes(ids: Array(Set(byID.map(\.id))).sorted(), currency: currency) {
+                for entry in byID {
+                    let quote = found[entry.id]
+                    tokenPrices[currency, default: [:]][entry.asset.id] = (moment, quote)
+                    if let quote { out[entry.asset.id] = quote }
+                }
+            } else {
+                for entry in byID { if let stale = tokenPrices[currency]?[entry.asset.id]?.quote { out[entry.asset.id] = stale } }
+            }
+            pending.removeAll { knownIDs[$0.id] != nil }
         }
         for asset in pending.prefix(Self.tokenLookupsPerCall) {
             guard let answer = await tokenQuote(asset, currency: currency) else {
@@ -1177,7 +1197,12 @@ public actor MarketService {
 
 /// Baixa logos da lista de mercado, com as regras de docs/seguranca.md §5.4: so
 /// hosts conhecidos, so PNG ou JPEG (decodificador de imagem e superficie de ataque
-/// dentro do processo que assina), tamanho limitado, cache so em memoria.
+/// dentro do processo que assina), tamanho limitado.
+///
+/// Cada logo, e cada logo que nao existe, fica guardada no aparelho (Caches, fora do backup,
+/// protecao completa): baixar de novo a cada abertura dizia ao GitHub e ao CoinGecko, toda vez,
+/// quais tokens raros a carteira tem (auditoria de privacidade, 22/10/2026). O guardado passa
+/// pelas mesmas regras ao ser lido.
 public actor ImageLoader {
     public static let shared = ImageLoader()
     /// De onde as logos podem vir. Entram no hosts.lock e na Politica de privacidade
@@ -1202,21 +1227,73 @@ public actor ImageLoader {
     public func data(for url: URL) async -> Data? {
         if let cached = cache[url] { return cached }
         guard Self.isAllowed(url), !missing.contains(url) else { return nil }
+        switch Self.stored(url) {
+        case .image(let data):
+            remember(data, for: url)
+            return data
+        case .missing:
+            missing.insert(url)
+            return nil
+        case nil:
+            break
+        }
         let fetched: Data
         do {
             fetched = try await HTTPClient.shared.get(url, timeout: 8)
         } catch HTTPClient.Failure.status(404) {
             missing.insert(url)
+            Self.store(nil, for: url)
             return nil
         } catch {
             return nil
         }
         let data = fetched
         guard data.count <= Self.maxBytes, Self.isPNGOrJPEG(data) else { return nil }
+        Self.store(data, for: url)
+        remember(data, for: url)
+        return data
+    }
+
+    private func remember(_ data: Data, for url: URL) {
         cache[url] = data
         order.append(url)
         if order.count > 300 { cache[order.removeFirst()] = nil }
-        return data
+    }
+
+    // MARK: Guardado no aparelho
+
+    enum Stored { case image(Data), missing }
+
+    /// Quanto vale "esta logo nao existe": depois disso, pergunta de novo uma vez.
+    static let missingLifetime: TimeInterval = 30 * 24 * 3600
+
+    static var directory: URL? {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("Logos", isDirectory: true)
+    }
+
+    static func file(for url: URL) -> URL? {
+        directory?.appendingPathComponent(Hex.encode(Hash.sha256(Array(url.absoluteString.utf8))))
+    }
+
+    static func stored(_ url: URL, now: Date = .now) -> Stored? {
+        guard let file = file(for: url), let data = try? Data(contentsOf: file) else { return nil }
+        if data.isEmpty {
+            let date = (try? FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date) ?? .distantPast
+            return now.timeIntervalSince(date) < missingLifetime ? .missing : nil
+        }
+        guard data.count <= maxBytes, isPNGOrJPEG(data) else { return nil }
+        return .image(data)
+    }
+
+    /// `nil` guarda "nao existe" (arquivo vazio).
+    static func store(_ data: Data?, for url: URL) {
+        guard let directory, let file = file(for: url) else { return }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        #if os(iOS)
+        try? (data ?? Data()).write(to: file, options: [.atomic, .completeFileProtection])
+        #else
+        try? (data ?? Data()).write(to: file, options: [.atomic])
+        #endif
     }
 
     static func isPNGOrJPEG(_ data: Data) -> Bool {
