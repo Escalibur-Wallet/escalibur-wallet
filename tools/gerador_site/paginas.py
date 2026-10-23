@@ -554,32 +554,82 @@ ICONES_TELAS = {
 }
 
 
+# As anotacoes de cada tela (pedido do dono, 23/10/2026: redesenho completo da secao): (lado,
+# x, y, titulo, texto). x e y sao a posicao, de 0 a 1, do ponto da tela de que a anotacao fala,
+# medida na capa de cada gravacao; o lado e onde o texto fica. So o que aparece na gravacao.
+NOTAS = {
+    "receber": [
+        ("esq", 0.5, 0.38, "QR com a moeda", "O código leva o endereço e mostra a rede no meio."),
+        ("dir", 0.3, 0.65, "Começo e fim em destaque", "Para você conferir o endereço antes de passar adiante."),
+        ("esq", 0.5, 0.8, "Copiar ou compartilhar", "O endereço inteiro, sem cortar no meio."),
+    ],
+    "envio": [
+        ("dir", 0.5, 0.5, "A moeda a caminho", "O app acompanha a transação até a rede confirmar."),
+        ("esq", 0.5, 0.62, "Destino conferido", "Valor, destino e taxa conferidos antes de assinar."),
+    ],
+    "trocar": [
+        ("esq", 0.3, 0.27, "Você paga", "Com 25%, 50% e Máx a partir do saldo."),
+        ("dir", 0.45, 0.42, "Cotação comparada", "Protocolos públicos de cada rede, comparados entre si."),
+        ("esq", 0.5, 0.56, "Tolerância", "O mínimo que você aceita receber, antes de assinar."),
+        ("dir", 0.3, 0.8, "Taxa da Escalibur: 0%", "A taxa da rede aparece na revisão."),
+    ],
+    "limite": [
+        ("dir", 0.3, 0.42, "O seu preço", "A ordem executa quando a moeda chega ao valor escolhido."),
+        ("esq", 0.4, 0.71, "Prazo", "Um dia, uma semana, um mês ou até cancelar."),
+    ],
+    "ponte": [
+        ("esq", 0.5, 0.24, "De uma rede para outra", "USDC da Base para a Arbitrum, entre outras rotas."),
+        ("dir", 0.3, 0.61, "Rápida ou padrão", "A taxa e o tempo de cada rota, antes de assinar."),
+        ("esq", 0.5, 0.78, "Para a sua própria conta", "O destino é sempre a mesma carteira, na outra rede."),
+    ],
+    "moeda": [
+        ("dir", 0.6, 0.35, "Gráfico em cinco períodos", "De 24 horas a todo o histórico."),
+        ("esq", 0.5, 0.53, "Toque para voltar no tempo", "O preço de qualquer ponto do gráfico."),
+        ("dir", 0.3, 0.7, "Os números do mercado", "Capitalização, volume, posição e a faixa de 24 horas."),
+    ],
+    "teclado": [
+        ("dir", 0.8, 0.29, "Liga e desliga em Ajustes", "No Super Security, fica sempre ligado."),
+        ("esq", 0.5, 0.55, "Desenhado pelo app", "As palavras da carteira num teclado próprio."),
+        ("dir", 0.4, 0.82, "O teclado do seu celular não vê as letras", "Nada previsto, ditado ou aprendido."),
+    ],
+}
+
+
 def telas_do_app(ctx, base):
-    """"Por dentro do app" (quinta rodada, pedido do dono): um iPhone so, no meio, parado na
-    tela enquanto a pessoa rola, trocando a gravacao a cada passo (receber, enviar, trocar,
-    ordem limite, ponte, pagina da moeda, Safe Keyboard). No computador, as abas ficam numa coluna
-    a esquerda e o detalhe da tela a direita (pedido do dono, 23/10/2026); no celular, as abas em
-    cima e a legenda embaixo. Sem fundo atras do iPhone. Com movimento reduzido, as abas
-    trocam a tela sem rolagem; sem JS, fica a primeira."""
+    """"Por dentro do app" (redesenho do dono, 23/10/2026): um iPhone grande no meio, parado
+    enquanto a pessoa rola, com anotacoes em volta, cada uma com uma linha fina ate o ponto da
+    tela de que ela fala. A cada passo a gravacao troca, e as anotacoes mudam de lugar e de texto.
+    Embaixo, os pontos do progresso (que tambem levam ao passo). No celular, as anotacoes viram
+    uma lista embaixo do iPhone. Com movimento reduzido, os pontos trocam a tela sem rolagem; sem
+    JS, fica a primeira."""
     abas, telas, legendas = [], [], []
+    n = len(TELAS)
     for i, (cena, titulo, texto, rotulo) in enumerate(TELAS):
         primeira = i == 0
         abas.append(
             f'<button type="button" class="aba-tela" role="tab" id="aba-{cena}" data-cena="{cena}" aria-controls="tela-{cena}" '
             f'aria-selected="{"true" if primeira else "false"}" tabindex="{0 if primeira else -1}">'
-            f'<span class="aba-icone" aria-hidden="true"><svg viewBox="0 0 24 24">{ICONES_TELAS.get(cena, "")}</svg></span>'
             f'<span class="aba-nome">{e(titulo)}</span></button>')
         telas.append(
             f'<div class="passeio-tela{" ativa" if primeira else ""}" id="tela-{cena}" role="tabpanel" aria-labelledby="aba-{cena}">'
             f'<img class="capa" src="{base}midia/{cena}.webp" alt="{e(rotulo)}" width="720" height="1566" loading="{"eager" if primeira else "lazy"}" decoding="async">'
             f'<video muted loop playsinline preload="none" data-manual aria-hidden="true" tabindex="-1"><source src="{base}midia/{cena}.mp4" type="video/mp4"></video></div>')
-        legendas.append(f'<p class="passeio-legenda"{"" if primeira else " hidden"}><span class="passo">{i + 1} de {len(TELAS)}</span>'
-                        f'<b>{e(titulo)}</b>{e(texto)}</p>')
-    return (f'<div class="passeio" data-passeio>'
-            f'<div class="passeio-abas" role="tablist" aria-label="Telas do app">{"".join(abas)}</div>'
+        notas = "".join(
+            f'<li class="nota nota-{lado}" data-x="{x}" data-y="{y}"><b>{e(t)}</b><span>{e(d)}</span></li>'
+            for lado, x, y, t, d in NOTAS.get(cena, []))
+        legendas.append(
+            f'<div class="passeio-legenda{" ativa" if primeira else ""}"{"" if primeira else " hidden"}>'
+            f'<p class="notas-titulo"><span class="passo">{i + 1} de {n}</span>{e(titulo)}</p>'
+            f'<ul class="notas">{notas}</ul></div>')
+    return (f'<div class="passeio anotado" data-passeio>'
+            f'<div class="passeio-centro">'
             f'<div class="aparelho passeio-aparelho"><div class="tela">{"".join(telas)}</div></div>'
             f'<div class="passeio-legendas">{"".join(legendas)}</div>'
+            f'</div>'
+            f'<div class="passeio-pe">'
+            f'<div class="passeio-abas" role="tablist" aria-label="Telas do app">{"".join(abas)}</div>'
             f'<button class="pausar passeio-pausar" type="button" data-estado="pausado" aria-label="Tocar a animação">{ICONE_PAUSA}{ICONE_TOCAR}</button>'
+            f'</div>'
             f'</div>')
 
 

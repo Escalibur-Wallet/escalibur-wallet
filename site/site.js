@@ -440,6 +440,12 @@
   // de rolagem e so troca depois de passar 35% do trecho seguinte, um de cada vez, depois
   // que a tela anterior apareceu. So a rolagem longa e rapida vai direto.
   var passeio = document.querySelector("[data-passeio]");
+  // A posicao de cada anotacao vem dos atributos: a CSP do site recusa estilo escrito no HTML,
+  // e o CSSOM pode.
+  cada(".nota[data-x]", function (nota) {
+    nota.style.setProperty("--x", nota.getAttribute("data-x"));
+    nota.style.setProperty("--y", nota.getAttribute("data-y"));
+  });
   if (passeio) {
     var abasP = Array.prototype.slice.call(passeio.querySelectorAll(".aba-tela"));
     var telasP = Array.prototype.slice.call(passeio.querySelectorAll(".passeio-tela"));
@@ -464,7 +470,7 @@
       var antes = atualP;
       atualP = n;
       telasP.forEach(function (tela, k) { tela.classList.toggle("ativa", k === n); });
-      legendasP.forEach(function (l, k) { l.hidden = k !== n; });
+      legendasP.forEach(function (l, k) { l.hidden = false; l.classList.toggle("ativa", k === n); });
       abasP.forEach(function (a, k) { a.setAttribute("aria-selected", String(k === n)); a.tabIndex = k === n ? 0 : -1; });
       if (foco) abasP[n].focus();
       var fileira = abasP[n].parentNode;

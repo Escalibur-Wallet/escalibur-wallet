@@ -1624,23 +1624,6 @@ html:not(.movimento) .abertura-bits { display: none; }
 @media (max-width: 899px) { .movimento .manifesto { margin-top: -100vh; margin-top: -100svh; } }
 @media (prefers-reduced-motion: reduce) { .movimento .manifesto { opacity: 1; } }
 
-/* MARK: "Tudo o que uma carteira precisa" em tres colunas no computador (pedido do dono,
-   23/10/2026): as telas numa coluna a esquerda, o iPhone no meio e o detalhe da tela a direita. */
-.passeio-legenda .passo { display: none; }
-@media (min-width: 900px) {
-  .passeio {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; justify-items: stretch;
-    column-gap: clamp(32px, 5vw, 96px); row-gap: 12px; width: 100%; max-width: 1180px; margin-inline: auto;
-  }
-  .passeio-abas { grid-column: 1; grid-row: 1 / span 2; flex-direction: column; flex-wrap: nowrap; align-items: flex-end; justify-content: center; max-width: none; gap: 6px; }
-  .aba-tela { min-width: 220px; justify-content: flex-start; }
-  .passeio-aparelho { grid-column: 2; grid-row: 1; justify-self: center; }
-  .passeio .passeio-pausar { grid-column: 2; grid-row: 2; justify-self: center; }
-  .passeio-legendas { grid-column: 3; grid-row: 1 / span 2; justify-self: start; text-align: left; max-width: 24em; min-height: 0; }
-  .passeio-legenda { font-size: 18px; line-height: 1.55; }
-  .passeio-legenda .passo { display: block; font-size: 14px; font-weight: 600; color: var(--ink-muted); margin-bottom: 10px; }
-  .passeio-legenda b { font-size: clamp(26px, 2.4vw, 34px); letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 12px; }
-}
 
 /* No celular, o palco das chaves comeca logo abaixo do texto: centralizado na tela inteira, ele
    deixava um vao grande depois de "Ela nasce no aparelho..." (pedido do dono, 23/10/2026). */
@@ -1691,3 +1674,59 @@ html:not(.movimento) .abertura-bits { display: none; }
 
 /* A versao em pixels no topo da pagina Novidades. */
 .pixels-versao { display: block; width: min(360px, 70vw); height: auto; aspect-ratio: 17 / 7; margin: 0 auto 36px; }
+
+/* MARK: "Tudo o que uma carteira precisa" anotado (redesenho do dono, 23/10/2026): o iPhone no meio,
+   parado na rolagem, e as anotacoes em volta, cada uma com uma linha fina ate o ponto da tela. */
+.passeio.anotado { display: grid; justify-items: center; gap: 22px; width: 100%; }
+.passeio-centro { position: relative; width: var(--w-tela); margin-top: 56px; }
+.passeio.anotado .passeio-aparelho { --w: var(--w-tela); }
+.js .passeio-legenda { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity 0.4s ease, visibility 0s linear 0.4s; pointer-events: none; }
+.js .passeio-legenda.ativa { opacity: 1; visibility: visible; transition: opacity 0.45s ease 0.15s, visibility 0s; }
+.passeio-legenda[hidden] { display: none; }
+.notas-titulo {
+  position: absolute; left: 50%; bottom: calc(100% + 18px); transform: translateX(-50%); margin: 0; white-space: nowrap;
+  font-size: clamp(22px, 2vw, 28px); font-weight: 700; letter-spacing: -0.02em; color: var(--ink); text-align: center;
+}
+.notas-titulo .passo { display: block; font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--ink-muted); margin-bottom: 4px; }
+.notas { list-style: none; margin: 0; padding: 0; }
+.nota { --gap: clamp(36px, 4vw, 64px); position: absolute; top: calc(var(--y) * 100%); width: min(270px, calc((100vw - var(--w-tela)) / 2 - var(--gap) - 40px)); transform: translateY(-50%); }
+.nota b { display: block; font-size: 17px; font-weight: 700; color: var(--ink); line-height: 1.25; }
+.nota span { display: block; margin-top: 4px; font-size: 14.5px; line-height: 1.45; color: var(--ink-soft); }
+.nota-esq { right: calc(100% + var(--gap)); text-align: right; }
+.nota-dir { left: calc(100% + var(--gap)); text-align: left; }
+/* A linha: do texto ate o ponto da tela, com um ponto na ponta. */
+.nota::before { content: ""; position: absolute; top: 50%; height: 1px; background: var(--ink-muted); opacity: 0.7; }
+.nota::after { content: ""; position: absolute; top: 50%; width: 7px; height: 7px; margin-top: -3px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12); }
+.nota-esq::before { left: calc(100% + 12px); width: calc(var(--gap) - 12px + var(--x) * var(--w-tela)); }
+.nota-esq::after { left: calc(100% + var(--gap) + var(--x) * var(--w-tela) - 3px); }
+.nota-dir::before { right: calc(100% + 12px); width: calc(var(--gap) - 12px + (1 - var(--x)) * var(--w-tela)); }
+.nota-dir::after { right: calc(100% + var(--gap) + (1 - var(--x)) * var(--w-tela) - 3px); }
+.movimento .passeio-legenda .nota { opacity: 0; transform: translateY(calc(-50% + 8px)); transition: opacity 0.4s ease, transform 0.5s var(--ease); }
+.movimento .passeio-legenda.ativa .nota { opacity: 1; transform: translateY(-50%); }
+.movimento .passeio-legenda.ativa .nota:nth-child(2) { transition-delay: 0.12s; }
+.movimento .passeio-legenda.ativa .nota:nth-child(3) { transition-delay: 0.24s; }
+.movimento .passeio-legenda.ativa .nota:nth-child(4) { transition-delay: 0.36s; }
+.passeio-pe { display: flex; align-items: center; gap: 14px; }
+/* Os pontos do progresso: cada um leva a uma tela; o nome so para leitor de tela. */
+.passeio.anotado .passeio-abas { display: flex; flex-wrap: nowrap; gap: 6px; max-width: none; overflow: visible; width: auto; margin: 0; padding: 0; }
+.passeio.anotado .aba-tela { min-width: 0; min-height: 0; width: 28px; height: 28px; padding: 0; border-radius: 50%; background: transparent; display: grid; place-items: center; }
+.passeio.anotado .aba-tela::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--edge-strong); transition: background 0.25s ease, width 0.3s var(--ease); }
+.passeio.anotado .aba-tela[aria-selected="true"] { background: transparent; }
+.passeio.anotado .aba-tela[aria-selected="true"]::before { background: var(--ink); width: 22px; border-radius: 4px; }
+.passeio.anotado .aba-nome { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.passeio.anotado .passeio-pausar { position: static; transform: none; margin: 0; }
+/* No celular (e em tela estreita), so os titulos das anotacoes, em linha, embaixo do iPhone; o
+   nome da tela continua em cima. */
+@media (max-width: 999px) {
+  .passeio-centro { margin-top: 64px; margin-bottom: 56px; }
+  .notas { position: absolute; left: 50%; top: calc(100% + 14px); width: min(90vw, 440px); transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; }
+  .js .nota, .js .nota-esq, .js .nota-dir { position: static; width: auto; transform: none; text-align: center; }
+  .movimento .passeio-legenda .nota, .movimento .passeio-legenda.ativa .nota { transform: none; }
+  .nota::before, .nota::after, .nota span { display: none; }
+  .nota b { font-size: 14px; font-weight: 600; color: var(--ink-soft); }
+}
+
+/* Sem JS, nada de linhas: a primeira tela com a lista embaixo. */
+html:not(.js) .nota { position: static; width: auto; transform: none; text-align: center; margin-top: 10px; }
+html:not(.js) .nota::before, html:not(.js) .nota::after { display: none; }
+html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16px; }
