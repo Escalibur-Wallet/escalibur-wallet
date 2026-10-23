@@ -124,6 +124,8 @@ object Navegacao {
         var saindo by mutableStateOf(false)
         /** A folha na altura media (metade da tela) ou ja puxada para cima. */
         var alta by mutableStateOf(!media)
+        /** De 0 (na altura media) a 1 (no alto): quanto o que fica atras encolhe. */
+        val subida = Animatable(if (media) 0f else 1f)
         /** Quem abriu fica sabendo quando ela termina de sair (a folha aberta de dentro de uma tela). */
         var aoSair: (() -> Unit)? = null
     }
@@ -320,6 +322,7 @@ private fun Folha(entrada: Navegacao.Entrada, deCima: Navegacao.Entrada?, largur
     val topoAnimado by androidx.compose.animation.core.animateFloatAsState(if (entrada.alta) topoAlto else altura * 0.5f,
         spring(dampingRatio = 0.86f, stiffness = 420f), label = "detent")
     val topo = with(densidade) { topoAnimado.toDp() }
+    LaunchedEffect(entrada.alta) { entrada.subida.animateTo(if (entrada.alta) 1f else 0f, spring(dampingRatio = 0.86f, stiffness = 420f)) }
     val alturaDaFolha = altura - topoAnimado
     fun soltar(velocidade: Float) {
         escopo.launch {
@@ -422,11 +425,13 @@ private fun Modifier.recuo(acima: Navegacao.Entrada?, largura: Float): Modifier 
             if (acima.modo == Navegacao.Modo.empurrada) {
                 translationX = -largura * 0.3f * r
             } else {
-                val escala = 1f - 0.075f * r
+                // Na altura media, como no iOS, o de tras fica do tamanho que estava; so escurece.
+                val encolhe = r * acima.subida.value
+                val escala = 1f - 0.075f * encolhe
                 scaleX = escala
                 scaleY = escala
-                shape = RoundedCornerShape((Raio.folha.value * 1.4f * r).dp)
-                clip = r > 0f
+                shape = RoundedCornerShape((Raio.folha.value * 1.4f * encolhe).dp)
+                clip = encolhe > 0f
             }
         }
         .drawWithContent {

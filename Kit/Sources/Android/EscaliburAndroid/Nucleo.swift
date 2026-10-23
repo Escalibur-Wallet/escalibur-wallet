@@ -678,7 +678,9 @@ struct Estado: Encodable {
 }
 
 struct CarteiraResumo: Encodable {
-    struct Conta: Encodable { let rede: String; let endereco: String }
+    /// `curto`: o comeco e o fim do endereco como o iOS mostra (o prefixo que a rede impoe
+    /// inteiro, e 6 mais 4 do corpo).
+    struct Conta: Encodable { let rede: String; let endereco: String; let curto: String }
 
     let id: String
     let nome: String
@@ -716,7 +718,7 @@ struct CarteiraResumo: Encodable {
         pedePassphrase = PortaDaPassphrase.pede(wallet)
         self.selecionada = selecionada
         digital = wallet.fingerprint?.uppercased()
-        contas = wallet.accounts.map { Conta(rede: $0.chainID, endereco: $0.address) }
+        contas = wallet.accounts.map { Conta(rede: $0.chainID, endereco: $0.address, curto: Fmt.endereco($0.address, chain: Chain.find($0.chainID))) }
         copiaConfirmadaEm = wallet.backupConfirmedAt
         passphraseConferidaEm = wallet.passphraseConfirmedAt
         envelopeLacradoEm = wallet.envelopeSealedAt

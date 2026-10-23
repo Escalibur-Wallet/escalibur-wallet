@@ -25,12 +25,17 @@ data class Carteira(
     val selecionada: Boolean,
     val digital: String?,
     val contas: List<Pair<String, String>>,
+    /** O comeco e o fim de cada endereco, por rede, como o iOS mostra (vem do nucleo). */
+    val curtos: Map<String, String> = emptyMap(),
     val copiaConfirmadaEm: Date? = null,
     val passphraseConferidaEm: Date? = null,
     val envelopeLacradoEm: Date? = null,
     val vistaEm: Date? = null,
 ) {
     fun endereco(rede: String): String? = contas.firstOrNull { it.first == rede }?.second
+
+    /** "bc1qcr8te4…6fyu": o endereco curto da rede, como no iOS. */
+    fun curto(rede: String): String? = curtos[rede] ?: endereco(rede)?.let { Formato.endereco(it) }
 
     companion object {
         fun de(json: JSONObject) = Carteira(
@@ -48,6 +53,7 @@ data class Carteira(
             selecionada = json.optBoolean("selecionada"),
             digital = json.optString("digital").takeIf { it.isNotEmpty() && it != "null" },
             contas = json.optJSONArray("contas").objetos().map { it.getString("rede") to it.getString("endereco") },
+            curtos = json.optJSONArray("contas").objetos().filter { it.has("curto") }.associate { it.getString("rede") to it.getString("curto") },
             copiaConfirmadaEm = json.data("copiaConfirmadaEm"),
             passphraseConferidaEm = json.data("passphraseConferidaEm"),
             envelopeLacradoEm = json.data("envelopeLacradoEm"),

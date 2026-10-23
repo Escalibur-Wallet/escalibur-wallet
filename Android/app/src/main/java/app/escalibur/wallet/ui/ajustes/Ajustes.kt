@@ -54,6 +54,9 @@ import app.escalibur.wallet.ui.carteira.AdicionarCarteira
 import app.escalibur.wallet.ui.carteira.CopiaAgora
 import app.escalibur.wallet.ui.carteira.FluxoDeRevelar
 import app.escalibur.wallet.ui.carteira.GlifoDaCarteira
+import app.escalibur.wallet.ui.carteira.rememberOrdemDasCarteiras
+import app.escalibur.wallet.ui.carteira.arrastavel
+import androidx.compose.ui.zIndex
 import app.escalibur.wallet.ui.carteira.Redes
 import app.escalibur.wallet.ui.comp.Avisos
 import app.escalibur.wallet.ui.comp.BotaoDestrutivo
@@ -130,15 +133,19 @@ fun TelaDeCarteiras() {
     // A linha com o apagar a mostra, e a carteira no popup de apagar.
     var aberta by remember { mutableStateOf<String?>(null) }
     var apagando by remember { mutableStateOf<Carteira?>(null) }
-    Subtela(t("Carteiras")) {
+    val ordem = rememberOrdemDasCarteiras(estado.carteiras)
+    Subtela(t("Carteiras"), rola = ordem.arrastando == null) {
         GrupoDeAjustes(Modifier.padding(top = Espaco.md)) {
-            for (carteira in estado.carteiras) {
-                LinhaQueApaga(carteira.id, aberta, { aberta = it }, { apagando = carteira }) {
+            ordem.ordem.forEachIndexed { indice, carteira ->
+                val esta = ordem.arrastando == carteira.id
+                LinhaQueApaga(carteira.id, aberta, { aberta = it }, { apagando = carteira }, Modifier.zIndex(if (esta) 1f else 0f)) {
                 Row(
-                    Modifier.fillMaxWidth().height(Altura.linha).clickable { Navegacao.abrir { AjustesDaCarteira(carteira.id) } }.padding(horizontal = Espaco.md),
+                    Modifier.fillMaxWidth().height(Altura.linha).arrastavel(ordem, carteira, indice)
+                        .background(if (esta) Paleta.trilho else Paleta.corpo)
+                        .clickable { Navegacao.abrir { AjustesDaCarteira(carteira.id) } }.padding(horizontal = Espaco.md),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
                 ) {
-                    GlifoDaCarteira(carteira, 32.dp, selecionada = true)
+                    GlifoDaCarteira(carteira, 32.dp, selecionada = true, simples = true)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(carteira.nome, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
                         val emDia = carteira.temCopia || carteira.observacao
@@ -151,6 +158,10 @@ fun TelaDeCarteiras() {
                 }
                 }
             }
+        }
+        if (ordem.ordem.size > 1) {
+            Text(t("Segure uma carteira e arraste para mudar a ordem."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
+                 modifier = Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.xs))
         }
         BotaoSecundario(t("Adicionar carteira"), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg)) {
             Navegacao.cobrir { AdicionarCarteira(primeira = false) { Navegacao.fechar() } }

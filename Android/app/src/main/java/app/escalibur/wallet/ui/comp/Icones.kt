@@ -81,7 +81,9 @@ object Icones {
     val abaixo = traco("abaixo", "M5 9 L12 16 L19 9", espessura = 2.2f)
     val acima = traco("acima", "M5 15 L12 8 L19 15", espessura = 2.2f)
     val fechar = traco("fechar", "M6 6 L18 18 M18 6 L6 18", espessura = 2.2f)
-    val visto = traco("visto", "M4.5 12.5 L9.5 17.5 L19.5 6.5", espessura = 2.4f)
+    // O checkmark do iOS: a perna curta e a longa, mais em pe (medido na foto, 22/10/2026). No
+    // tamanho da fonte do iOS, sai do tamanho do simbolo semibold.
+    val visto = traco("visto", "M3.3 12.3 L9.9 19.8 L20.7 3.6", espessura = 2.5f)
     val mais = traco("mais", "M12 5 V19 M5 12 H19", espessura = 2.2f)
     val menos = traco("menos", "M5 12 H19", espessura = 2.2f)
 
@@ -93,11 +95,16 @@ object Icones {
     val setaDiagonal = traco("setaDiagonal", "M7 17 L17 7 M9 7 H17 V15")
     val atualizar = traco("atualizar", "M19.5 12 A7.5 7.5 0 1 1 17.3 6.7 M19.5 4 V8.5 H15")
 
+    // O doc.on.doc do iOS: duas folhas com a ponta dobrada, a da frente embaixo e a esquerda, a de
+    // tras aparecendo em volta dela (medido na foto, 22/10/2026). Ocupa a altura toda: no iOS o
+    // simbolo e 1,2 vez a fonte, entao o tamanho aqui e a fonte do iOS vezes 1,2.
     val copiar = traco(
         "copiar",
-        // Duas folhas em pe, como o doc.on.doc do iOS.
-        "M10 7 H17.5 A1.8 1.8 0 0 1 19.3 8.8 V19.2 A1.8 1.8 0 0 1 17.5 21 H10 A1.8 1.8 0 0 1 8.2 19.2 V8.8 A1.8 1.8 0 0 1 10 7 Z",
-        "M15.6 4.8 A1.8 1.8 0 0 0 13.8 3 H6.5 A1.8 1.8 0 0 0 4.7 4.8 V15.2 A1.8 1.8 0 0 0 6.5 17 H8.2",
+        "M5.3 6.44 H9.5 L16.0 12.94 V20.94 A2.2 2.2 0 0 1 13.8 23.14 H5.3 A2.2 2.2 0 0 1 3.1 20.94 V8.64 A2.2 2.2 0 0 1 5.3 6.44 Z",
+        "M9.5 6.9 V11.5 Q9.5 12.94 10.9 12.94 H15.6",
+        "M8.0 4.6 V3.06 A2.2 2.2 0 0 1 10.2 0.86 H14.4 L20.9 7.36 V15.56 A2.2 2.2 0 0 1 18.7 17.76 H17.9",
+        "M14.4 1.32 V5.92 Q14.4 7.36 15.8 7.36 H20.44",
+        espessura = 1.72f,
     )
     /** O list.bullet: tres pontos e tres linhas. */
     val lista = traco("lista", "M9.5 6.5 H20", "M9.5 12 H20", "M9.5 17.5 H20", "M4.6 6.5 H4.7", "M4.6 12 H4.7", "M4.6 17.5 H4.7", espessura = 2.1f)
@@ -122,7 +129,10 @@ object Icones {
     )
     val celular = traco("celular", "M8 2.5 H16 A2 2 0 0 1 18 4.5 V19.5 A2 2 0 0 1 16 21.5 H8 A2 2 0 0 1 6 19.5 V4.5 A2 2 0 0 1 8 2.5 Z", "M10.5 18.5 H13.5")
     val celularRiscado = traco("celularRiscado", "M3.5 3.5 L20.5 20.5", "M9 2.5 H16 A2 2 0 0 1 18 4.5 V14.5 M18 18.5 V19.5 A2 2 0 0 1 16 21.5 H8 A2 2 0 0 1 6 19.5 V6.5")
-    val lapis = traco("lapis", "M15.5 4.5 L19.5 8.5 L8.5 19.5 L4 20 L4.5 15.5 Z", "M13.5 6.5 L17.5 10.5")
+    // O pencil do iOS: fino, na diagonal, com a ponta afinando embaixo a esquerda e a borracha
+    // separada no alto a direita (medido na foto, 22/10/2026).
+    val lapis = composto("lapis", listOf("M7.0 17.0 L16.9 7.1" to 2.6f, "M19.3 4.7 L19.5 4.5" to 2.8f),
+                         listOf("M7.92 17.92 L6.08 16.08 L3.4 20.6 Z"))
     val relogio = traco("relogio", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M12 7 V12 L15.5 14")
     val ampulheta = traco("ampulheta", "M6.5 3.5 H17.5 M6.5 20.5 H17.5 M7.5 3.5 C7.5 8 12 9.5 12 12 C12 14.5 7.5 16 7.5 20.5 M16.5 3.5 C16.5 8 12 9.5 12 12 C12 14.5 16.5 16 16.5 20.5")
     val busca = traco("busca", "M10.5 17.5 A7 7 0 1 0 10.5 3.5 A7 7 0 1 0 10.5 17.5 Z", "M15.6 15.6 L20.5 20.5")

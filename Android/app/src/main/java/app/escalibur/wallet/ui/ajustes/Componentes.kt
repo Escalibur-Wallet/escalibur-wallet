@@ -119,8 +119,8 @@ fun NotaDeAjuste(texto: String, cor: Color = Paleta.tintaApagada, modifier: Modi
  * conteudo rolando por baixo dela e terminando acima da barra de abas.
  */
 @Composable
-fun Subtela(titulo: String, conteudo: @Composable ColumnScope.() -> Unit) {
+fun Subtela(titulo: String, rola: Boolean = true, conteudo: @Composable ColumnScope.() -> Unit) {
     TelaComBarra(aoVoltar = { Navegacao.fechar() }, titulo = titulo.ifEmpty { null }) { espaco ->
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(espaco).padding(bottom = Espaco.xl), content = conteudo)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState(), enabled = rola).padding(espaco).padding(bottom = Espaco.xl), content = conteudo)
     }
 }
