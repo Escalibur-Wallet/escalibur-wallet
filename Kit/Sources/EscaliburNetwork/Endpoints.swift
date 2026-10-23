@@ -173,8 +173,8 @@ public enum Endpoints {
 
     public static let xrpl: [ProviderPool.Provider] = [
         .init(name: "xrplcluster", baseURL: url("https://xrplcluster.com")),
-        .init(name: "ripple-s2", baseURL: url("https://s2.ripple.com:51234")),
-        .init(name: "ripple-s1", baseURL: url("https://s1.ripple.com:51234")),
+        .init(name: "ripple-s2", baseURL: url("https://s2.ripple.com:51234"), operatorName: "ripple"),
+        .init(name: "ripple-s1", baseURL: url("https://s1.ripple.com:51234"), operatorName: "ripple"),
     ]
 
     public static let stellar: [ProviderPool.Provider] = [

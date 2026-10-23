@@ -215,7 +215,7 @@ enum Quorum {
         throw lastError
     }
 
-    /// Respostas de ate `count` provedores diferentes, na ordem de preferencia. A primeira
+    /// Respostas de ate `count` provedores de donos diferentes, na ordem de preferencia. A primeira
     /// onda pergunta a `firstWave` provedores em paralelo (padrao: `count`); as seguintes,
     /// a um de cada vez. Provedor que falha e trocado pelo proximo da lista; `until`
     /// encerra antes quando as respostas ja bastam.
@@ -247,6 +247,8 @@ enum Quorum {
                 switch result {
                 case .success(let value):
                     await pool.reportSuccess(wave[offset])
+                    // Um segundo endereco do mesmo dono nao e uma segunda opiniao.
+                    guard !answers.contains(where: { $0.provider.operatorName == wave[offset].operatorName }) else { continue }
                     answers.append((wave[offset], value))
                 case .failure(let error):
                     await record(error, wave[offset], pool)

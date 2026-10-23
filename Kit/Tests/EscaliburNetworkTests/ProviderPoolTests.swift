@@ -66,4 +66,43 @@ struct ProviderPoolReasonTests {
         await pool.reportFailure(providers[1], error: HTTPClient.Failure.status(429), now: now)
         #expect(await pool.benched(providers[1]) == now.addingTimeInterval(900))
     }
+
+    static func owned(_ pairs: [(String, String)]) -> [ProviderPool.Provider] {
+        pairs.map { ProviderPool.Provider(name: $0.0, baseURL: URL(string: "https://\($0.0).example")!, operatorName: $0.1) }
+    }
+
+    @Test("Donos diferentes na frente: os dois primeiros de um consenso sao de duas empresas")
+    func spreadsOperators() async {
+        let pool = ProviderPool(Self.owned([("cluster", "xrpl"), ("s2", "ripple"), ("s1", "ripple"), ("outro", "outro")]))
+        #expect(await pool.available().map(\.name) == ["cluster", "s2", "outro", "s1"])
+        // Com o primeiro no banco, os dois da Ripple nao ficam juntos na frente.
+        for _ in 0..<3 { await pool.reportFailure(pool.providers[0]) }
+        #expect(await pool.available().map(\.name) == ["s2", "outro", "s1"])
+    }
+
+    @Test("Dois enderecos do mesmo dono nao fazem consenso")
+    func sameOperatorIsOneAnswer() async throws {
+        let pool = ProviderPool(Self.owned([("s2", "ripple"), ("s1", "ripple"), ("cluster", "xrpl")]))
+        let answers = ["s2": 7, "s1": 7, "cluster": 8]
+        await #expect(throws: ConsensusFailure.self) { try await pool.agreeing { answers[$0.name] ?? 0 } }
+        let honest = ["s2": 7, "s1": 7, "cluster": 7]
+        #expect(try await pool.agreeing { honest[$0.name] ?? 0 } == 7)
+        let alone = ProviderPool(Self.owned([("s2", "ripple"), ("s1", "ripple")]))
+        await #expect(throws: ConsensusFailure.self) { try await alone.agreeing { _ in 7 } }
+    }
+
+    @Test("Quorum: a concordancia de um dono so nao vale, nem como duas respostas")
+    func quorumNeedsTwoOperators() async throws {
+        let providers = Self.owned([("s2", "ripple"), ("s1", "ripple")])
+        let pool = ProviderPool(providers)
+        await #expect(throws: ReaderError.self) {
+            _ = try await Quorum.agree(providers, pool: pool, field: "x") { _ in 5 }
+        }
+        await #expect(throws: ReaderError.self) {
+            _ = try await Quorum.collect(providers, pool: pool, count: 2) { _ in 5 }
+        }
+        let mixed = Self.owned([("s2", "ripple"), ("s1", "ripple"), ("cluster", "xrpl")])
+        let both = try await Quorum.collect(mixed, pool: ProviderPool(mixed), count: 2) { _ in 5 }
+        #expect(Set(both.map(\.provider.operatorName)) == ["ripple", "xrpl"])
+    }
 }

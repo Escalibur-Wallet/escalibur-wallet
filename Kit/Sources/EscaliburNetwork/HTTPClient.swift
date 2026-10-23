@@ -311,10 +311,18 @@ public actor ProviderPool {
     public struct Provider: Sendable, Hashable {
         public let name: String
         public let baseURL: URL
+        /// A empresa que opera o no. Dois enderecos do mesmo dono (os dois servidores da
+        /// Ripple) contam como um so no consenso: um dono que mente, mente nos dois.
+        public let operatorName: String
 
         public init(name: String, baseURL: URL) {
+            self.init(name: name, baseURL: baseURL, operatorName: name)
+        }
+
+        public init(name: String, baseURL: URL, operatorName: String) {
             self.name = name
             self.baseURL = baseURL
+            self.operatorName = operatorName
         }
     }
 
@@ -323,13 +331,25 @@ public actor ProviderPool {
     private var benchedUntil: [String: Date] = [:]
 
     public init(_ providers: [Provider]) {
-        self.providers = providers
+        self.providers = Self.spreadingOperators(providers)
     }
 
-    /// Os provedores disponiveis agora, na ordem de preferencia.
+    /// Os provedores disponiveis agora, na ordem de preferencia, com donos diferentes na
+    /// frente: quem pega os dois primeiros para um consenso pega dois donos.
     public func available(now: Date = .now) -> [Provider] {
         let live = providers.filter { (benchedUntil[$0.name] ?? .distantPast) <= now }
-        return live.isEmpty ? providers : live
+        return Self.spreadingOperators(live.isEmpty ? providers : live)
+    }
+
+    /// A mesma ordem, mas cada dono aparece uma vez antes de qualquer repeticao.
+    static func spreadingOperators(_ providers: [Provider]) -> [Provider] {
+        var seen = Set<String>()
+        var first: [Provider] = []
+        var repeated: [Provider] = []
+        for provider in providers {
+            if seen.insert(provider.operatorName).inserted { first.append(provider) } else { repeated.append(provider) }
+        }
+        return first + repeated
     }
 
     public func reportSuccess(_ provider: Provider) {
@@ -392,17 +412,18 @@ public actor ProviderPool {
     ///
     /// Nunca aceita uma resposta so: com menos de dois provedores respondendo, falha.
     /// Os que estao no banco do circuit breaker entram no fim da fila, porque um
-    /// consenso que so tem um provedor vivo nao e consenso.
+    /// consenso que so tem um provedor vivo nao e consenso. Dois enderecos do mesmo
+    /// dono valem uma resposta so.
     public func agreeing<T: Sendable & Equatable>(_ operation: @Sendable (Provider) async throws -> T) async throws -> T {
         let live = available()
-        let candidates = live + providers.filter { !live.contains($0) }
-        var answers: [T] = []
-        for provider in candidates {
+        let candidates = Self.spreadingOperators(live + providers.filter { !live.contains($0) })
+        var answers: [(operatorName: String, value: T)] = []
+        for provider in candidates where !answers.contains(where: { $0.operatorName == provider.operatorName }) {
             do {
                 let value = try await operation(provider)
                 reportSuccess(provider)
-                if answers.contains(value) { return value }
-                answers.append(value)
+                if answers.contains(where: { $0.value == value }) { return value }
+                answers.append((provider.operatorName, value))
             } catch {
                 reportFailure(provider)
             }
