@@ -45,6 +45,16 @@ object Icones {
                     strokeLineWidth = espessura * 0.5f, strokeLineJoin = StrokeJoin.Round)
         }.build()
 
+    /** Tracos de espessuras diferentes e partes cheias: os simbolos com um cadeado dentro. */
+    private fun composto(nome: String, tracos: List<Pair<String, Float>>, cheios: List<String>): ImageVector =
+        ImageVector.Builder(nome, 24.dp, 24.dp, 24f, 24f).apply {
+            for ((caminho, espessura) in tracos) {
+                addPath(PathParser().parsePathString(caminho).toNodes(), stroke = SolidColor(Color.Black), strokeLineWidth = espessura,
+                        strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round)
+            }
+            for (caminho in cheios) addPath(PathParser().parsePathString(caminho).toNodes(), fill = SolidColor(Color.Black))
+        }.build()
+
     private fun cheio(nome: String, vararg caminhos: String): ImageVector =
         ImageVector.Builder(nome, 24.dp, 24.dp, 24f, 24f).apply {
             for (caminho in caminhos) addPath(PathParser().parsePathString(caminho).toNodes(), fill = SolidColor(Color.Black), pathFillType = androidx.compose.ui.graphics.PathFillType.EvenOdd)
@@ -65,8 +75,6 @@ object Icones {
     val rede = traco("rede", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M12 3 C9.3 5.5 8.2 8.7 8.2 12 C8.2 15.3 9.3 18.5 12 21 C14.7 18.5 15.8 15.3 15.8 12 C15.8 8.7 14.7 5.5 12 3 Z",
                      "M3 12 H21", "M4.4 7.2 H19.6", "M4.4 16.8 H19.6", "M12 3 V21", espessura = 1.4f)
     val receberCirculo = traco("receberCirculo", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M12 7.5 V16", "M8.3 12.5 L12 16.2 L15.7 12.5", espessura = 1.55f)
-    val celularComCadeado = traco("celularComCadeado", "M8 2.5 H16 A2 2 0 0 1 18 4.5 V19.5 A2 2 0 0 1 16 21.5 H8 A2 2 0 0 1 6 19.5 V4.5 A2 2 0 0 1 8 2.5 Z",
-        "M10.2 11 V9.8 A1.8 1.8 0 0 1 13.8 9.8 V11", "M9.6 11 H14.4 V15 H9.6 Z", espessura = 1.7f)
     val chevronsDireita = traco("chevronsDireita", "M5.5 6 L11.5 12 L5.5 18 M12.5 6 L18.5 12 L12.5 18", espessura = 2.6f)
     val voltar = traco("voltar", "M15 4.5 L7.5 12 L15 19.5", espessura = 2.2f)
     val avancar = traco("avancar", "M9 4.5 L16.5 12 L9 19.5", espessura = 2.2f)
@@ -184,6 +192,16 @@ object Icones {
     /** text.word.spacing do iOS: palavras em quatro linhas. */
     val palavras = traco("palavras", "M3 4.5 H13.5", "M16.7 4.5 H20.9", "M3 9.5 H4.7", "M8 9.5 H12.6", "M16.2 9.5 H20.9",
                          "M3 14.6 H6.8", "M10.4 14.6 H20.9", "M3 19.5 H12.9", espessura = 2.1f)
+    /** lock.iphone do iOS: o celular com um cadeado dentro. */
+    val celularComCadeado = composto("celularComCadeado",
+        listOf("M8.8 2.7 H15.3 A2.3 2.3 0 0 1 17.6 5 V18.8 A2.3 2.3 0 0 1 15.3 21.1 H8.8 A2.3 2.3 0 0 1 6.5 18.8 V5 A2.3 2.3 0 0 1 8.8 2.7 Z" to 1.9f,
+               "M10.75 11 V10.2 A1.25 1.25 0 0 1 13.25 10.2 V11" to 0.95f),
+        listOf("M10.2 11 H13.8 A0.6 0.6 0 0 1 14.4 11.6 V14.6 A0.6 0.6 0 0 1 13.8 15.2 H10.2 A0.6 0.6 0 0 1 9.6 14.6 V11.6 A0.6 0.6 0 0 1 10.2 11 Z"))
+    /** lock.shield do iOS: o escudo com um cadeado dentro. */
+    val escudoComCadeado = composto("escudoComCadeado",
+        listOf("M12 3.2 C14.6 4.6 17 5.4 19.2 5.7 V11.8 C19.2 16.3 16.3 19.4 12 21.1 C7.7 19.4 4.8 16.3 4.8 11.8 V5.7 C7 5.4 9.4 4.6 12 3.2 Z" to 1.9f,
+               "M9.87 10 V9.1 A2.05 2.05 0 0 1 13.97 9.1 V10" to 1.25f),
+        listOf("M9.4 10 H14.5 A0.9 0.9 0 0 1 15.4 10.9 V15.5 A0.9 0.9 0 0 1 14.5 16.4 H9.4 A0.9 0.9 0 0 1 8.5 15.5 V10.9 A0.9 0.9 0 0 1 9.4 10 Z"))
     val teclado = tracoComPonta("teclado", "M5 5.6 H19 A2.6 2.6 0 0 1 21.6 8.2 V15.8 A2.6 2.6 0 0 1 19 18.4 H5 A2.6 2.6 0 0 1 2.4 15.8 V8.2 A2.6 2.6 0 0 1 5 5.6 Z",
         (0..5).joinToString(" ") { i -> val x = 5.1f + i * 2.76f; "M$x 8.6 h1.3 v1.3 h-1.3 Z M$x 11.3 h1.3 v1.3 h-1.3 Z" } +
             " M5.1 14 h1.3 v1.3 h-1.3 Z M8.1 14 H15.9 V15.3 H8.1 Z M17.6 14 h1.3 v1.3 h-1.3 Z", 1.6f)

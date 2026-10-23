@@ -425,16 +425,16 @@ fun Responsabilidade(tituloDoSeguir: String, carregando: Boolean = false, aoSegu
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(top = Espaco.xs, bottom = Espaco.xs)) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                 Box(Modifier.size(60.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
-                    Icone(Icones.escudo, Paleta.tinta, tamanho = 28.dp)
+                    Icone(Icones.escudoComCadeado, Paleta.tinta, tamanho = 26.dp)
                 }
                 Text(t("Só você tem a chave"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
                 Text(t("A carteira é só sua. Por isso, o cuidado com ela também é."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
             }
             Column(Modifier.padding(top = Espaco.lg), verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
-                Ponto(Icones.celular, t("Criptografada, só neste celular"), t("Tudo da carteira é criptografado e fica guardado somente aqui."))
+                Ponto(Icones.celularComCadeado, t("Criptografada, só neste celular"), t("Tudo da carteira é criptografado e fica guardado somente aqui."))
                 Ponto(Icones.olhoRiscado, t("A Escalibur não tem acesso"), t("As chaves nunca saem deste celular. Ninguém da Escalibur consegue ver nem recuperar a sua carteira."))
                 Ponto(Icones.chave, t("As palavras recuperam"), t("A senha da carteira, as 12 ou 24 palavras, é a única forma de trazer a carteira de volta."))
-                Ponto(Icones.pessoas, t("Ninguém da Escalibur pede"), t("Nem por suporte, e-mail ou mensagem. Quem pedir as palavras quer o seu saldo."))
+                Ponto(Icones.maoLevantada, t("Ninguém da Escalibur pede"), t("Nem por suporte, e-mail ou mensagem. Quem pedir as palavras quer o seu saldo."))
             }
             Aceite(aceito, t("Entendo que só eu guardo a senha desta carteira. Se eu perder a senha ou alguém tiver acesso a ela, a Escalibur não tem como recuperar meus ativos. Li e aceito os Termos de uso."),
                    Modifier.padding(top = Espaco.lg)) { aceito = it }

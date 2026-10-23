@@ -146,6 +146,9 @@ struct OpenEnvelopeFlow: View {
             .padding(.top, Space.md)
             .accessibilityIdentifier("envelope-como-funciona")
             if let error { Banner(kind: .failure, title: error).padding(.top, Space.md) }
+            // 24 pontos acima do meio: o botao rosa pesa embaixo, e no meio exato o conjunto
+            // parecia baixo (pedido do dono, 22/10/2026).
+            Color.clear.frame(height: 48)
             Spacer()
             PrimaryButton(title: String(localized: "Escolher arquivo")) { picking = true }
         }

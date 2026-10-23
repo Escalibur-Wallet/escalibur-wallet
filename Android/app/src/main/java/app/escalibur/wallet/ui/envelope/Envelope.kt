@@ -861,6 +861,9 @@ fun FluxoDeAbrirEnvelope(aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerm
                          style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
                     BotaoComoFunciona(Modifier.padding(top = Espaco.md))
                     erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
+                    // 24 dp acima do meio: o botao rosa pesa embaixo, e no meio exato o conjunto
+                    // parecia baixo (pedido do dono, 22/10/2026).
+                    Spacer(Modifier.height(48.dp))
                 }
                 }
                 Rodape { BotaoPrimario(t("Escolher arquivo")) { escolher.launch(arrayOf("*/*")) } }
