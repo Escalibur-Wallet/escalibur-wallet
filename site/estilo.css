@@ -2,8 +2,17 @@
 /* Escalibur Wallet: o site.
    A paleta e a do app (App/EscaliburWallet/Design/Palette.swift): fundo quase preto,
    superficies em degraus, tinta em tres tons, o rosa so para acao e selecao, o lima so
-   para o que passou e o vermelho para o que falhou. Fonte do sistema (SF Pro nos
-   aparelhos Apple), nenhuma baixada. Celular primeiro. */
+   para alta e ganho e o vermelho para queda e falha. A letra e a Inter, da propria pasta
+   (fontes/, a mesma do app Android), nenhuma baixada de fora. Celular primeiro. Movimento
+   so em transform e opacity; com "reduzir movimento", tudo parado e a vista. */
+
+@font-face {
+  font-family: "Inter";
+  src: url("fontes/inter.woff2") format("woff2");
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   --void: #0B0B0C;
@@ -31,13 +40,15 @@
   --success: #32D74B;
 
   --gutter: 20px;
-  --wide: 1120px;
+  --wide: 1200px;
   --text: 640px;
   --r-card: 12px;
   --r-button: 14px;
+  --r-caixa: 16px;
   --r-tile: 28px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 
-  --font: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, Arial, sans-serif;
+  --font: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   color-scheme: dark;
 }
@@ -59,7 +70,8 @@ body {
   margin: 0;
   background: var(--void);
   color: var(--ink-soft);
-  font: 17px/1.52 var(--font);
+  font: 17px/1.55 var(--font);
+  font-optical-sizing: auto;
   letter-spacing: -0.011em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -68,17 +80,19 @@ body {
 
 /* O rodape fica no pe da tela mesmo em pagina curta (404). */
 body { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
-main { flex: 1 0 auto; }
+/* clip, e nao hidden: corta o que passa da largura sem criar rolagem, e o sticky continua valendo. */
+main { flex: 1 0 auto; overflow-x: clip; }
 
-img, video, svg { display: block; max-width: 100%; }
+img, video, svg, canvas { display: block; max-width: 100%; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; text-underline-offset: 3px; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
 ::selection { background: var(--accent); color: #fff; }
 strong { color: var(--ink); font-weight: 600; }
-code { font: 0.92em/1.4 var(--mono); color: var(--ink); overflow-wrap: anywhere; }
-h1, h2, h3, h4 { color: var(--ink); margin: 0; font-weight: 600; }
+code { font: 0.9em/1.4 var(--mono); color: var(--ink); overflow-wrap: anywhere; }
+h1, h2, h3, h4 { color: var(--ink); margin: 0; font-weight: 650; }
 p { margin: 0; }
+button { font-family: inherit; }
 
 .pular {
   position: absolute; left: 12px; top: -48px; z-index: 50;
@@ -93,10 +107,14 @@ p { margin: 0; }
 /* MARK: Topo */
 
 .topo {
-  position: sticky; top: 0; z-index: 20;
+  position: sticky; top: 0; z-index: 30;
   background: rgba(11, 11, 12, 0.94);
 }
-.topo-barra { display: flex; align-items: center; gap: 24px; height: 56px; }
+/* Na pagina inicial, o topo fica sobre a abertura, sem fundo, e ganha o fundo quando a
+   pagina rola. Sem JS, fica como nas outras paginas. */
+.js .inicio .topo { position: fixed; left: 0; right: 0; background: transparent; transition: background 0.35s ease; }
+.js.rolou .inicio .topo, .js .inicio .topo:focus-within { background: rgba(11, 11, 12, 0.94); }
+.topo-barra { display: flex; align-items: center; gap: 24px; height: 60px; }
 .marca {
   display: inline-flex; align-items: center; gap: 10px; flex: none;
   color: var(--ink); font-weight: 650; font-size: 17px; letter-spacing: -0.02em;
@@ -105,7 +123,8 @@ p { margin: 0; }
 .marca img { width: 28px; height: 28px; border-radius: 7px; }
 .nav-largo { display: none; margin-left: auto; gap: 4px; }
 .nav-largo a {
-  color: var(--ink-soft); font-size: 14px; font-weight: 500; padding: 8px 12px; border-radius: 999px;
+  color: var(--ink-soft); font-size: 14px; font-weight: 550; padding: 8px 12px; border-radius: 999px;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 .nav-largo a:hover { color: var(--ink); text-decoration: none; background: var(--body); }
 .nav-largo a[aria-current="page"] { color: var(--ink); background: var(--rail); }
@@ -126,50 +145,58 @@ p { margin: 0; }
 .nav-curto[open] .icone-menu::before { top: 5px; transform: rotate(45deg); }
 .nav-curto[open] .icone-menu::after { top: 5px; transform: rotate(-45deg); }
 .nav-curto-lista {
-  position: absolute; left: 0; right: 0; top: 56px;
+  position: absolute; left: 0; right: 0; top: 60px;
   background: var(--void); box-shadow: 0 24px 40px -12px rgba(0, 0, 0, 0.8);
   padding: 8px var(--gutter) 24px; display: grid;
 }
 .nav-curto-lista a {
-  color: var(--ink); font-size: 24px; font-weight: 650; letter-spacing: -0.025em; padding: 12px 0;
+  color: var(--ink); font-size: 26px; font-weight: 650; letter-spacing: -0.03em; padding: 12px 0;
 }
 .nav-curto-lista a[aria-current="page"] { color: var(--accent); }
+.js .inicio .topo:has(.nav-curto[open]) { background: var(--void); }
 
 @media (min-width: 900px) {
   .nav-largo { display: flex; }
   .nav-curto { display: none; }
 }
 
-/* MARK: Tipografia de secao */
+/* MARK: Tipografia */
 
 .sobretitulo {
-  color: var(--ink-soft); font-size: 17px; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 12px;
+  color: var(--ink-soft); font-size: 16px; font-weight: 600; letter-spacing: -0.012em; margin-bottom: 16px;
 }
 .titulo-grande {
-  font-size: clamp(40px, 6.6vw, 80px); line-height: 1.05; letter-spacing: -0.025em; font-weight: 600;
+  font-size: clamp(52px, 8.6vw, 128px); line-height: 0.95; letter-spacing: -0.048em; font-weight: 720;
 }
 .titulo-secao {
-  font-size: clamp(34px, 5.4vw, 60px); line-height: 1.07; letter-spacing: -0.022em; font-weight: 600;
+  font-size: clamp(38px, 5.6vw, 76px); line-height: 1.0; letter-spacing: -0.04em; font-weight: 700; color: var(--ink);
+  text-wrap: balance;
 }
 .titulo-pagina {
-  font-size: clamp(36px, 5.8vw, 68px); line-height: 1.07; letter-spacing: -0.022em; font-weight: 600;
+  font-size: clamp(38px, 5.8vw, 72px); line-height: 1.02; letter-spacing: -0.038em; font-weight: 700;
+  text-wrap: balance;
 }
 .lead {
-  font-size: clamp(19px, 2.1vw, 23px); line-height: 1.42; letter-spacing: -0.018em; color: var(--ink-soft); font-weight: 450;
+  font-size: clamp(18px, 1.6vw, 22px); line-height: 1.45; letter-spacing: -0.015em; color: var(--ink-soft); font-weight: 420;
+  text-wrap: pretty;
 }
 .lead strong { color: var(--ink); font-weight: 600; }
+.lead a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 4px; }
 .apoio { font-size: 15px; color: var(--ink-muted); }
 .apoio a { color: var(--ink-soft); text-decoration: underline; text-decoration-color: var(--edge-strong); text-underline-offset: 3px; }
 .apoio a:hover { color: var(--ink); }
+
+.secao-cabeca { max-width: 860px; }
+.secao-cabeca .lead { margin-top: 24px; max-width: 36em; }
 
 /* MARK: Botoes */
 
 .botoes { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .botao {
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
-  min-height: 52px; padding: 0 24px; border-radius: 999px;
+  min-height: 52px; padding: 0 26px; border-radius: 999px;
   font-size: 17px; font-weight: 600; letter-spacing: -0.015em; white-space: nowrap;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: background 0.15s ease, transform 0.12s ease;
 }
 /* Como <button> tambem: sem a borda nem a fonte que o navegador poe por padrao. */
 button.botao { border: 0; font-family: inherit; cursor: pointer; -webkit-appearance: none; appearance: none; }
@@ -210,9 +237,10 @@ a.selo-loja:hover { opacity: 0.86; }
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.10),
     inset 0 0 0 calc(var(--borda) * 0.45) #0D0D0F,
-    0 40px 80px -30px rgba(0, 0, 0, 0.9),
+    0 50px 90px -30px rgba(0, 0, 0, 0.95),
     0 0 0 1px rgba(0, 0, 0, 0.6);
 }
+.aparelho.pequeno { --w: min(230px, 62vw); }
 /* Botoes laterais: acao e volume a esquerda, ligar a direita. */
 .aparelho::before, .aparelho::after {
   content: ""; position: absolute; width: 3px; border-radius: 2px; background: #2A2A2F;
@@ -250,186 +278,8 @@ a.selo-loja:hover { opacity: 0.86; }
 .pausar[data-estado="pausado"] .tocar { display: block; }
 .pausar[data-estado="pausado"] .pausa { display: none; }
 
-.legenda-aparelho { margin-top: 18px; text-align: center; font-size: 15px; color: var(--ink-muted); }
-.legenda-aparelho strong { display: block; color: var(--ink); font-size: 17px; font-weight: 600; letter-spacing: -0.015em; }
+/* MARK: Logos */
 
-/* MARK: Abertura */
-
-.abertura { padding: 64px 0 0; overflow: hidden; }
-.abertura-texto { text-align: center; display: grid; justify-items: center; }
-.abertura-icone { width: 64px; height: 64px; border-radius: 15px; margin-bottom: 24px; }
-.abertura .titulo-grande { max-width: 11.5em; }
-.abertura .lead { max-width: 33em; margin-top: 22px; }
-.abertura .lojas { justify-items: center; margin-top: 32px; width: 100%; }
-.abertura .botoes, .final .botoes { justify-content: center; }
-.abertura .apoio { margin-top: 18px; }
-.abertura-aparelhos {
-  display: flex; justify-content: center; align-items: flex-start;
-  margin-top: 56px; padding-bottom: 56px;
-}
-.abertura-aparelhos .aparelho { --w: min(300px, 74vw); }
-.abertura-aparelhos .lado { display: none; }
-
-@media (min-width: 760px) {
-  .abertura { padding-top: 56px; }
-  .abertura-aparelhos { margin-top: 48px; }
-  .abertura-aparelhos .aparelho { --w: 320px; }
-}
-/* Os aparelhos laterais so quando cabem inteiros, sem um cobrir o outro. */
-@media (min-width: 1000px) {
-  .abertura-aparelhos { gap: 24px; }
-  .abertura-aparelhos .lado { display: block; --w: 270px; margin-top: 64px; }
-  .abertura-aparelhos .lado .tela { filter: brightness(0.82); }
-}
-@media (min-width: 1100px) {
-  .abertura-aparelhos .aparelho { --w: 340px; }
-  .abertura-aparelhos .lado { --w: 290px; }
-}
-
-/* MARK: Moedas da abertura
-   Logos de verdade em tres profundidades em volta dos iPhones: perto (grande, nitida), meio
-   e longe (pequena, apagada). Elas entram uma a uma e flutuam devagar; rolando a pagina,
-   cada uma voa para a tela do iPhone do meio e some dentro dele (--p, de 0 a 1, e --s, os
-   pixels rolados, vem do site.js; --tx e --ty sao o caminho de cada uma ate a tela). As de
-   perto sobem mais rapido que a pagina, as de longe mais devagar: profundidade. Com
-   movimento reduzido, ou sem JS, ficam paradas no lugar. */
-
-.abertura { position: relative; }
-.abertura-texto, .abertura-aparelhos { position: relative; z-index: 1; }
-.abertura-moedas { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
-.moeda {
-  --t: 46px; --o: 0.8; --sobe: 0.2;
-  position: absolute; left: var(--x); top: var(--y);
-  width: var(--t); height: var(--t); margin: calc(var(--t) / -2) 0 0 calc(var(--t) / -2);
-  border-radius: 50%; overflow: hidden; background: var(--control);
-  box-shadow: 0 18px 34px -14px rgba(0, 0, 0, 0.8);
-  opacity: calc(var(--o) * (1 - var(--p, 0) * 0.92));
-  transform:
-    translate(calc(var(--tx, 0px) * var(--p, 0)), calc(var(--ty, 0px) * var(--p, 0) - var(--s, 0px) * var(--sobe)))
-    scale(calc(1 - var(--p, 0) * 0.72));
-  animation:
-    moeda-entrar 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) var(--entra, 0s) backwards,
-    moeda-flutuar var(--f, 7s) ease-in-out var(--entra, 0s) infinite alternate;
-  will-change: transform, opacity;
-}
-.moeda img { width: 100%; height: 100%; object-fit: cover; }
-.moeda.perto { --t: 64px; --o: 1; --sobe: 0.34; }
-.moeda.meio { --t: 46px; --o: 0.78; --sobe: 0.2; }
-.moeda.longe { --t: 32px; --o: 0.5; --sobe: 0.08; filter: blur(0.6px); }
-@keyframes moeda-entrar { from { scale: 0; } }
-@keyframes moeda-flutuar { from { translate: 0 0; rotate: -5deg; } to { translate: 0 -14px; rotate: 5deg; } }
-
-/* Celular: so as de perto e as do meio, menores, nas beiradas, em volta do iPhone. */
-.moeda:nth-child(1)  { --x: 9%;  --y: 30%; --entra: 0.10s; --f: 6.4s; }
-.moeda:nth-child(2)  { --x: 89%; --y: 25%; --entra: 0.18s; --f: 7.2s; }
-.moeda:nth-child(3)  { --x: 15%; --y: 50%; --entra: 0.26s; --f: 6.8s; }
-.moeda:nth-child(4)  { --x: 84%; --y: 57%; --entra: 0.34s; --f: 7.6s; }
-.moeda:nth-child(5)  { --x: 6%;  --y: 67%; --entra: 0.42s; --f: 6.2s; }
-.moeda:nth-child(6)  { --x: 93%; --y: 44%; --entra: 0.50s; --f: 8.0s; }
-.moeda:nth-child(7)  { --x: 15%; --y: 13%; --entra: 0.58s; --f: 7.0s; }
-.moeda:nth-child(8)  { --x: 86%; --y: 11%; --entra: 0.66s; --f: 6.6s; }
-.moeda:nth-child(9)  { --x: 12%; --y: 84%; --entra: 0.74s; --f: 7.4s; }
-.moeda:nth-child(10) { --x: 90%; --y: 79%; --entra: 0.82s; --f: 6.9s; }
-.moeda:nth-child(11) { --x: 3%;  --y: 44%; --entra: 0.90s; --f: 7.8s; }
-.moeda:nth-child(12) { --x: 79%; --y: 88%; --entra: 0.98s; --f: 6.3s; }
-.moeda:nth-child(13) { --x: 23%; --y: 74%; --entra: 1.06s; --f: 7.1s; }
-.moeda:nth-child(14) { --x: 97%; --y: 64%; --entra: 1.14s; --f: 6.7s; }
-.moeda:nth-child(15) { --x: 4%;  --y: 16%; --entra: 1.22s; --f: 7.5s; }
-.moeda:nth-child(16) { --x: 83%; --y: 36%; --entra: 1.30s; --f: 6.5s; }
-@media (max-width: 759px) {
-  .moeda.longe { display: none; }
-  .moeda.perto { --t: 44px; }
-  .moeda.meio { --t: 34px; }
-  .moeda:nth-child(1) { --x: 7%;  --y: 58%; }
-  .moeda:nth-child(2) { --x: 93%; --y: 54%; }
-  .moeda:nth-child(3) { --x: 6%;  --y: 74%; }
-  .moeda:nth-child(4) { --x: 94%; --y: 70%; }
-  .moeda:nth-child(5) { --x: 8%;  --y: 89%; }
-  .moeda:nth-child(6) { --x: 92%; --y: 86%; }
-  .moeda:nth-child(8) { --x: 94%; --y: 52%; }
-  .moeda:nth-child(10) { --x: 6%; --y: 50%; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .moeda { animation: none; transform: none; opacity: var(--o); }
-}
-
-/* MARK: Manifesto */
-
-.manifesto { padding: clamp(96px, 14vw, 180px) 0 clamp(72px, 10vw, 140px); }
-.manifesto p {
-  font-size: clamp(28px, 4.4vw, 52px); line-height: 1.17; letter-spacing: -0.018em; font-weight: 600;
-  color: #6E6E76; max-width: 21em;
-}
-.manifesto p b { color: var(--ink); font-weight: 600; }
-
-/* MARK: Recurso (texto e aparelhos) */
-
-.recurso { padding: clamp(72px, 11vw, 150px) 0; }
-.recurso + .recurso { padding-top: 0; }
-.recurso-grade { display: grid; gap: 48px; grid-template-columns: minmax(0, 1fr); align-items: center; }
-.recurso-texto .lead { margin-top: 20px; }
-.recurso-texto .mais { margin-top: 24px; }
-.recurso-midia { display: flex; justify-content: center; gap: 20px; padding-bottom: 48px; }
-.recurso-midia .aparelho { --w: min(280px, 72vw); }
-.recurso-midia .aparelho + .aparelho { display: none; }
-
-@media (min-width: 640px) {
-  .recurso-midia .aparelho { --w: 260px; }
-  .recurso-midia .aparelho + .aparelho { display: block; margin-top: 56px; }
-}
-@media (min-width: 980px) {
-  .recurso-grade { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 64px; }
-  .recurso-grade.invertido .recurso-texto { order: 2; }
-  .recurso-midia .aparelho { --w: 270px; }
-}
-
-.pontos { list-style: none; margin: 32px 0 0; padding: 0; display: grid; gap: 20px; }
-.pontos li { padding-left: 22px; position: relative; }
-.pontos li::before {
-  content: ""; position: absolute; left: 2px; top: 0.62em; width: 7px; height: 7px; border-radius: 50%; background: var(--edge-strong);
-}
-.pontos b { color: var(--ink); font-weight: 600; }
-.pontos .codigo-link {
-  font-size: 14px; margin-top: 6px; display: inline-block; color: var(--ink-muted);
-  text-decoration: underline; text-decoration-color: var(--edge-strong); text-underline-offset: 3px;
-}
-.pontos .codigo-link:hover { color: var(--ink-soft); }
-.lead a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--edge-strong); text-underline-offset: 4px; }
-.lead a:hover { text-decoration-color: var(--ink-soft); }
-
-/* Tres colunas de texto, sem cartao. */
-.colunas { display: grid; gap: 32px; margin-top: 56px; grid-template-columns: minmax(0, 1fr); }
-.colunas h3 { font-size: 21px; letter-spacing: -0.025em; margin-bottom: 8px; }
-.colunas p { font-size: 16px; }
-@media (min-width: 760px) { .colunas { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; } }
-
-/* MARK: Redes (logos) */
-
-.redes-faixa { margin-top: 64px; }
-/* As redes deslizando, em duas fileiras de sentidos opostos. Cada fileira tem a lista duas
-   vezes: andar a largura de uma lista volta ao mesmo quadro, sem emenda. As bordas somem no
-   fundo. Parado com o dedo (ou o mouse) em cima, e parado de vez com movimento reduzido. */
-.redes-faixa-animada {
-  display: grid; gap: 22px; margin-inline: calc(-1 * var(--gutter)); overflow: hidden;
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
-  mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
-}
-.redes-fileira { display: flex; width: max-content; }
-.redes-lista {
-  list-style: none; margin: 0; padding: 0 14px 0 0; display: flex; gap: 14px; flex: none;
-  animation: redes-deslizar 46s linear infinite;
-}
-.redes-fileira.ao-contrario .redes-lista { animation-direction: reverse; animation-duration: 52s; }
-.redes-faixa-animada:hover .redes-lista { animation-play-state: paused; }
-.redes-lista li { display: grid; justify-items: center; gap: 10px; text-align: center; width: 86px; }
-.redes-lista span { font-size: 13px; color: var(--ink-soft); line-height: 1.25; }
-@keyframes redes-deslizar { to { transform: translateX(-100%); } }
-@media (prefers-reduced-motion: reduce) {
-  .redes-faixa-animada { margin-inline: 0; -webkit-mask-image: none; mask-image: none; }
-  .redes-fileira { width: auto; }
-  .redes-lista { animation: none; flex-wrap: wrap; padding: 0; }
-  .redes-lista[aria-hidden="true"] { display: none; }
-}
 .logo {
   width: 48px; height: 48px; border-radius: 50%; overflow: hidden; flex: none;
   display: grid; place-items: center; background: var(--control);
@@ -440,71 +290,390 @@ a.selo-loja:hover { opacity: 0.86; }
 .logo.letra { color: var(--ink-soft); font-weight: 600; font-size: 15px; }
 .logo-base { background: #0052FF; }
 .logo-base::after { content: ""; width: 38%; height: 38%; background: #fff; border-radius: 6%; }
-.redes-rodape { margin-top: 36px; display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: baseline; }
 
-/* MARK: Placa (conferir caractere por caractere, como no app) */
+/* MARK: Revelar ao rolar
+   Com JS e sem "reduzir movimento" (classe movimento), o bloco entra subindo e
+   acendendo quando chega na tela. Sem isso, tudo ja esta la. */
 
-/* Como o cartao "Ver enderecos e contratos" da revisao no app: escuro, com as pontas em
-   destaque. */
-.placa {
-  background: var(--body); color: var(--ink); border-radius: var(--r-card);
-  padding: 20px; display: grid; gap: 16px; margin-top: 36px; max-width: 460px;
+.movimento [data-revelar] {
+  opacity: 0; transform: translate3d(0, 32px, 0);
+  transition: opacity 1s var(--ease), transform 1.1s var(--ease);
 }
-.placa dt { font-size: 13px; color: var(--ink-soft); font-weight: 500; }
-.placa dd { margin: 4px 0 0; font: 15px/1.5 var(--mono); letter-spacing: 0; overflow-wrap: anywhere; color: var(--ink-soft); }
-.placa mark { background: var(--highlight); color: var(--void); border-radius: 3px; padding: 0 1px; }
+.movimento [data-revelar].visivel { opacity: 1; transform: none; }
+.movimento .privacidade-grade > li:nth-child(2), .movimento .mercado-grade > :nth-child(2) { transition-delay: 0.08s; }
+.movimento .privacidade-grade > li:nth-child(3) { transition-delay: 0.16s; }
+.movimento .privacidade-grade > li:nth-child(4) { transition-delay: 0.24s; }
 
-/* MARK: Chaves (centralizada) */
+/* MARK: Abertura
+   Um palco do tamanho da tela. Com movimento, ele fica fixo enquanto a pagina rola 280%
+   da altura: o titulo sobe e some, o iPhone sobe ate o meio, e as moedas 3D (moedas3d.js)
+   voam para dentro dele, cada uma no seu lugar da lista de ativos. Sem movimento ou sem
+   WebGL, fica a imagem parada das mesmas moedas. */
 
-.centro { text-align: center; max-width: 820px; margin: 0 auto; }
-.centro .lead { margin: 20px auto 0; max-width: 34em; }
-.chaves-grade { display: grid; gap: 40px; grid-template-columns: minmax(0, 1fr); margin-top: 56px; justify-items: center; }
-.chaves-grade .cadeia { margin-top: 0; }
-.chaves-grade .mais { margin-top: 28px; }
+.abertura { position: relative; }
+.abertura-palco {
+  position: relative; min-height: 100vh; min-height: 100svh; overflow: hidden; isolation: isolate;
+  display: flex; flex-direction: column; align-items: center; padding-top: clamp(104px, 15vh, 160px);
+}
+.movimento .abertura { height: 290vh; height: 290svh; }
+.movimento .abertura-palco { position: sticky; top: 0; height: 100vh; height: 100svh; min-height: 0; }
+.abertura-texto { position: relative; z-index: 3; text-align: center; display: grid; justify-items: center; will-change: transform, opacity; }
+.abertura-sobre {
+  display: inline-flex; align-items: center; gap: 10px; margin-bottom: 28px;
+  font-size: 15px; font-weight: 600; color: var(--ink-soft); letter-spacing: -0.01em;
+}
+.abertura-sobre .curto { display: none; }
+@media (max-width: 480px) { .abertura-sobre { font-size: 14px; margin-bottom: 22px; } .abertura-sobre .longo { display: none; } .abertura-sobre .curto { display: inline; } }
+.abertura-sobre img { width: 28px; height: 28px; border-radius: 7px; }
+.abertura-texto .lead { max-width: 33em; margin-top: 28px; }
+.abertura-texto .lojas { margin-top: 36px; justify-items: center; }
+.abertura-aparelho { position: relative; z-index: 1; margin-top: clamp(48px, 8vh, 88px); will-change: transform; }
+.abertura-aparelho .aparelho { --w: min(clamp(228px, 21vw, 300px), calc((100svh - 230px) * 0.46)); }
+@media (min-width: 600px) and (max-width: 899px) { .abertura-aparelho .aparelho { --w: min(280px, calc((100svh - 230px) * 0.46)); } }
+.abertura-moedas-paradas { position: absolute; inset: 0; z-index: 0; transition: opacity 0.9s ease; }
+.abertura-moedas-paradas img { width: 100%; height: 100%; object-fit: cover; }
+.abertura-3d { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; opacity: 0; transition: opacity 0.9s ease; }
+.com-3d .abertura-3d { opacity: 1; }
+.com-3d .abertura-moedas-paradas { opacity: 0; }
+.abertura-legenda {
+  position: absolute; z-index: 3; left: var(--gutter); right: var(--gutter); top: 76px;
+  text-align: center; opacity: 0; pointer-events: none; will-change: transform, opacity;
+}
+.abertura-legenda .titulo-secao { font-size: clamp(28px, 7.6vw, 56px); }
+.abertura-legenda .lead { margin-top: 12px; font-size: 16px; display: none; }
+html:not(.movimento) .abertura-legenda { display: none; }
 @media (min-width: 900px) {
-  .chaves-grade { grid-template-columns: auto minmax(0, 480px); justify-content: center; align-items: center; gap: 80px; }
+  .abertura-legenda { left: max(var(--gutter), calc(50% - 620px)); right: auto; top: 50%; width: min(420px, calc(50% - 200px)); text-align: left; transform: translateY(-50%); }
+  .abertura-legenda .lead { display: block; font-size: 18px; }
 }
 
-/* MARK: Bento (o que protege no caminho)
-   Ladrilhos de tamanhos diferentes, cada um com uma coisa de verdade do app: o aparelho
-   gravado, o emblema do Super Security, o teclado, o print em branco, a ordem contando.
-   Celular: um embaixo do outro. A partir de 900 px, tres colunas. */
+/* MARK: Manifesto (as palavras acendem conforme a pagina rola) */
 
-.bento { padding: clamp(72px, 11vw, 150px) 0; }
-.bento-grade { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); margin-top: 48px; }
+.manifesto { padding: clamp(120px, 18vw, 260px) 0; }
+.manifesto-texto {
+  font-size: clamp(30px, 4.6vw, 64px); line-height: 1.1; letter-spacing: -0.035em; font-weight: 660;
+  color: var(--ink); max-width: 19em; text-wrap: pretty;
+}
+.manifesto-texto .palavra { transition: opacity 0.25s linear; }
+.so-leitor { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* MARK: Mercado ao vivo */
+
+.mercado { padding: clamp(72px, 10vw, 140px) 0; }
+.mercado-grade { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); margin-top: 56px; align-items: start; }
+@media (min-width: 1000px) { .mercado-grade { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; } }
+
+.destaque {
+  background: var(--body); border-radius: var(--r-tile); padding: clamp(24px, 3vw, 36px);
+  display: grid; gap: 28px; overflow: hidden;
+}
+@media (min-width: 1000px) { .destaque { position: sticky; top: 92px; } }
+.destaque-moeda { position: relative; width: min(240px, 58vw); aspect-ratio: 1; margin: 8px auto 0; }
+.destaque-logo {
+  position: absolute; inset: 0; border-radius: 50%; overflow: hidden; background: var(--control);
+  box-shadow: inset 0 0 0 10px #2E2F34, inset 0 0 0 12px #44454B;
+  display: grid; place-items: center; transition: opacity 0.6s ease;
+}
+.destaque-logo img { width: 74%; height: 74%; border-radius: 50%; }
+.destaque-3d { position: absolute; left: -20%; top: -20%; width: 140%; height: 140%; max-width: none; pointer-events: none; opacity: 0; transition: opacity 0.6s ease; }
+.com-3d .destaque-3d { opacity: 1; }
+.com-3d .destaque-logo { opacity: 0; }
+.destaque-dados { display: grid; gap: 6px; text-align: center; }
+.destaque-nome { display: flex; justify-content: center; align-items: baseline; gap: 10px; font-size: 17px; }
+.destaque-nome b { color: var(--ink); font-weight: 650; }
+.destaque-preco {
+  color: var(--ink); font-size: clamp(36px, 4.2vw, 54px); line-height: 1.05; font-weight: 700; letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums; min-height: 1.05em;
+}
+.destaque-variacao { display: flex; justify-content: center; align-items: center; gap: 10px; min-height: 30px; }
+.destaque-grafico { display: grid; gap: 8px; }
+.destaque-grafico svg { width: 100%; height: 132px; overflow: visible; }
+.destaque-grafico .traco { fill: none; stroke: var(--up); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.destaque-grafico .area { fill: var(--up); opacity: 0.07; }
+.destaque-grafico.baixa .traco { stroke: var(--down); }
+.destaque-grafico.baixa .area { fill: var(--down); }
+.destaque-grafico .apoio { font-size: 13px; display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+
+.mercado-lista { background: var(--body); border-radius: var(--r-tile); padding: 10px; }
+.mercado-barra { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 10px 14px 14px; }
+.estado-precos { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-soft); min-height: 20px; }
+.estado-precos .ponto { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-muted); flex: none; }
+.estado-precos.ao-vivo .ponto { background: var(--ink); }
+.estado-precos.ao-vivo .ponto::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--ink);
+  animation: pulso 2.4s var(--ease) infinite;
+}
+@keyframes pulso { 0% { transform: scale(0.6); opacity: 0.8; } 100% { transform: scale(1.8); opacity: 0; } }
+.fiat-escolha { display: inline-flex; background: var(--void); border-radius: 999px; padding: 3px; flex: none; }
+.fiat-escolha button {
+  border: 0; background: transparent; color: var(--ink-soft); font: 600 14px var(--font); min-width: 48px; min-height: 34px;
+  border-radius: 999px; cursor: pointer; padding: 0 12px; transition: background 0.15s ease, color 0.15s ease;
+}
+.fiat-escolha button[aria-pressed="true"] { background: var(--control); color: var(--ink); }
+.cotacoes { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.cotacao {
+  width: 100%; display: grid; grid-template-columns: 40px minmax(0, 1fr) 64px minmax(96px, auto); align-items: center; gap: 12px;
+  padding: 10px 12px; min-height: 64px; border: 0; border-radius: 14px; background: transparent; color: inherit;
+  font: inherit; text-align: left; cursor: pointer; transition: background 0.15s ease;
+}
+.cotacao:hover { background: var(--rail); }
+.cotacao[aria-pressed="true"] { background: var(--rail); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.cotacao .logo { width: 40px; height: 40px; }
+.cotacao-nome { display: grid; min-width: 0; }
+.cotacao-nome b { color: var(--ink); font-weight: 650; font-size: 16px; letter-spacing: -0.01em; }
+.cotacao-nome small { color: var(--ink-soft); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.faisca { width: 64px; height: 28px; overflow: visible; }
+.faisca path { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+/* Na lista, a semana em cinza: a cor fica para a seta das 24 h, que e o que a pilula diz. */
+.faisca path { stroke: #5A5A62; }
+.cotacao-valor { display: grid; justify-items: end; gap: 4px; }
+.cotacao-valor b { color: var(--ink); font-weight: 650; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; min-height: 1.3em; transition: opacity 0.3s ease; }
+.cotacao-valor b.mudou { opacity: 0.45; transition: none; }
+@media (min-width: 560px) { .cotacao { grid-template-columns: 40px minmax(0, 1fr) 96px minmax(120px, auto); gap: 16px; } .faisca { width: 96px; } }
+/* A pilula de variacao do app: so a seta tem cor. */
+.variacao {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 24px; padding: 0 9px; border-radius: 999px;
+  background: var(--control); color: var(--ink); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.variacao:empty { background: transparent; }
+.variacao svg { width: 8px; height: 8px; }
+.variacao.alta svg { fill: var(--up); }
+.variacao.baixa svg { fill: var(--down); }
+.variacao.estavel { color: var(--ink-soft); }
+.destaque-variacao .variacao { font-size: 15px; min-height: 30px; padding: 0 12px; }
+.destaque-variacao .variacao svg { width: 10px; height: 10px; }
+.mercado-fonte { padding: 14px 14px 8px; font-size: 13px; }
+
+/* MARK: Troca (a demonstracao, no desenho da tela Trocar do app) */
+
+.troca { padding: clamp(72px, 10vw, 140px) 0; }
+.troca-grade { display: grid; gap: 56px; grid-template-columns: minmax(0, 1fr); align-items: center; }
+@media (min-width: 1000px) { .troca-grade { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 80px; } }
+.troca-texto .lead { margin-top: 24px; }
+.troca-pontos { list-style: none; margin: 40px 0 0; padding: 0; display: grid; gap: 20px; max-width: 36em; }
+.troca-pontos li { font-size: 16px; line-height: 1.55; }
+.troca-pontos b { color: var(--ink); font-weight: 650; }
+
+.painel-troca {
+  width: 100%; max-width: 470px; justify-self: center; position: relative;
+  background: var(--body); border-radius: var(--r-tile); padding: 18px;
+  box-shadow: inset 0 0 0 1px var(--edge), 0 60px 100px -50px rgba(0, 0, 0, 0.9);
+}
+.painel-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.abas { display: inline-flex; background: var(--void); border-radius: 999px; padding: 3px; }
+.abas button {
+  border: 0; background: transparent; color: var(--ink-soft); font: 600 15px var(--font); padding: 0 16px; min-height: 36px;
+  border-radius: 999px; cursor: pointer; transition: background 0.15s ease, color 0.15s ease;
+}
+.abas button[aria-selected="true"] { background: var(--control); color: var(--ink); }
+.selo-demo { font-size: 13px; font-weight: 600; color: var(--ink-soft); background: var(--rail); border-radius: 999px; padding: 6px 12px; white-space: nowrap; }
+.modo { display: grid; gap: 8px; }
+.modo[hidden] { display: none; }
+.linha-rede { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 4px 8px; font-size: 15px; color: var(--ink-soft); }
+.caixa-valor { background: var(--void); border-radius: var(--r-caixa); padding: 14px 16px; display: grid; gap: 6px; min-width: 0; transition: box-shadow 0.15s ease; }
+.caixa-valor:focus-within { box-shadow: inset 0 0 0 1px var(--edge-strong); }
+.caixa-rotulo { font-size: 14px; color: var(--ink-soft); }
+.caixa-linha { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; }
+.valor {
+  flex: 1 1 auto; min-width: 0; width: 100%; border: 0; padding: 0; background: transparent; color: var(--ink);
+  font: 680 clamp(28px, 7vw, 36px)/1.1 var(--font); letter-spacing: -0.035em; font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+input.valor:focus { outline: none; }
+output.valor { display: block; }
+.caixa-fiat { font-size: 14px; color: var(--ink-muted); font-variant-numeric: tabular-nums; min-height: 1.4em; }
+.inverter {
+  width: 42px; height: 42px; margin: -14px auto; position: relative; z-index: 1;
+  display: grid; place-items: center; border-radius: 50%; border: 4px solid var(--body);
+  background: var(--control); color: var(--ink); cursor: pointer; padding: 0;
+  transition: transform 0.45s var(--ease), background 0.15s ease;
+}
+.inverter:hover { background: var(--edge-strong); }
+.inverter svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.inverter.girou { transform: rotate(180deg); }
+.troca-resumo { display: grid; gap: 6px; padding: 12px 6px 4px; font-size: 14px; color: var(--ink-soft); }
+.troca-resumo b { color: var(--ink); font-weight: 600; }
+.troca-resumo [data-cambio] { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.painel-acao { width: 100%; margin-top: 16px; }
+.painel-nota { font-size: 13px; color: var(--ink-muted); margin-top: 14px; padding: 0 6px; line-height: 1.5; }
+html:not(.js) .painel-troca .modo, html:not(.js) .painel-troca .abas, html:not(.js) .painel-troca .painel-acao, html:not(.js) .painel-troca .painel-nota { display: none; }
+
+.ponte-redes { display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr); align-items: center; gap: 4px; }
+.ponte-seta { display: grid; place-items: center; color: var(--ink-muted); }
+.ponte-seta svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ficha-fixa { font: 650 16px var(--font); color: var(--ink); background: var(--control); border-radius: 999px; padding: 9px 14px; flex: none; }
+
+/* O seletor: um botao com a ficha da moeda, e a lista que abre embaixo. */
+.escolha { position: relative; flex: none; }
+.escolha.larga { width: 100%; }
+.ficha {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+  min-height: 42px; padding: 5px 12px 5px 5px; border: 0; border-radius: 999px;
+  background: var(--control); color: var(--ink); font: 650 16px var(--font); letter-spacing: -0.01em; cursor: pointer;
+  transition: background 0.15s ease;
+}
+.escolha.larga .ficha { width: 100%; }
+.ficha:hover, .ficha[aria-expanded="true"] { background: var(--edge-strong); }
+.ficha img { width: 30px; height: 30px; border-radius: 50%; flex: none; background: var(--rail); object-fit: contain; }
+.ficha span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ficha::after {
+  content: ""; width: 7px; height: 7px; flex: none; margin: -3px 2px 0 auto;
+  border-right: 1.7px solid var(--ink-soft); border-bottom: 1.7px solid var(--ink-soft); transform: rotate(45deg);
+}
+.linha-rede .ficha { min-height: 36px; font-size: 15px; padding: 4px 12px 4px 4px; }
+.linha-rede .ficha img { width: 26px; height: 26px; }
+.menu {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 25; width: max-content; min-width: 220px; max-width: min(300px, 80vw);
+  max-height: 300px; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--rail); border-radius: var(--r-caixa); padding: 6px;
+  box-shadow: inset 0 0 0 1px var(--edge-strong), 0 28px 56px -16px rgba(0, 0, 0, 0.85);
+  display: none; transform-origin: top right;
+}
+.escolha.larga .menu { left: 0; right: auto; transform-origin: top left; }
+.ponte-redes .caixa-valor:last-child .escolha.larga .menu { left: auto; right: 0; transform-origin: top right; }
+.menu.aberto { display: block; animation: menu-abre 0.2s var(--ease); }
+@keyframes menu-abre { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: none; } }
+.opcao-menu {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 10px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--ink); font: 550 15px var(--font); text-align: left; cursor: pointer;
+}
+.opcao-menu:hover, .opcao-menu:focus-visible { background: var(--control); outline: none; }
+.opcao-menu img { width: 30px; height: 30px; border-radius: 50%; flex: none; object-fit: contain; }
+.opcao-menu small { display: block; color: var(--ink-soft); font-size: 13px; font-weight: 450; }
+.opcao-menu[aria-selected="true"]::after {
+  content: ""; width: 18px; height: 18px; margin-left: auto; flex: none; border-radius: 50%;
+  background: var(--accent) url("marca-ok.svg") center / 11px no-repeat;
+}
+
+/* MARK: Telas do app (o iPhone fica parado e a tela troca a cada passo) */
+
+.telas { padding: clamp(72px, 10vw, 140px) 0 clamp(48px, 6vw, 96px); }
+.telas-grade { display: grid; grid-template-columns: minmax(0, 1fr); margin-top: 40px; }
+.telas-palco { display: none; }
+.passos-telas { list-style: none; margin: 0; padding: 0; display: grid; gap: 64px; }
+.passo-tela h3 { font-size: clamp(26px, 3vw, 36px); letter-spacing: -0.032em; line-height: 1.1; }
+.passo-tela p { margin-top: 12px; font-size: 18px; max-width: 26em; }
+.passo-midia { margin-top: 32px; display: flex; justify-content: center; padding-bottom: 48px; }
+.palco-telas .tela .camada { position: absolute; inset: 0; opacity: 0; transform: scale(1.03); transition: opacity 0.5s ease, transform 0.7s var(--ease); }
+.palco-telas .tela .camada.ativa { opacity: 1; transform: none; }
+/* Com JS: o iPhone fixo. No celular, em cima, com os passos passando embaixo dele. */
+.js .telas-palco {
+  display: flex; justify-content: center; position: sticky; top: 64px; z-index: 2;
+  padding: 8px 0 28px; background: linear-gradient(to bottom, var(--void) 82%, rgba(11, 11, 12, 0));
+}
+.js .telas-palco .aparelho { --w: min(168px, 40vw); }
+.js .telas-palco .pausar { top: auto; bottom: -2px; left: auto; right: calc(50% - var(--w) / 2 - 48px); transform: none; }
+.js .passo-midia { display: none; }
+.js .passos-telas { gap: 0; }
+/* O passo da tela que esta no iPhone acende; os outros ficam na tinta de apoio, legiveis. */
+.js .passo-tela { min-height: 52vh; padding: 8px 0 48px; }
+.js .passo-tela h3, .js .passo-tela p { color: var(--ink-muted); }
+.js .passo-tela.ativo h3 { color: var(--ink); }
+.js .passo-tela.ativo p { color: var(--ink-soft); }
+.js .passo-tela:last-child { min-height: 40vh; }
+@media (min-width: 700px) {
+  .js .telas-grade { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 48px; }
+  .js .telas-palco { order: 2; top: 0; height: 100vh; height: 100svh; align-items: center; padding: 0; background: none; }
+  .js .telas-palco .aparelho { --w: min(clamp(250px, 22vw, 310px), calc((100svh - 120px) * 0.44)); }
+  .js .telas-palco .pausar { top: calc(100% + 14px); bottom: auto; left: 50%; right: auto; transform: translateX(-50%); }
+  .js .passos-telas { padding: 20vh 0 20vh; }
+  .js .passo-tela { min-height: 72vh; display: flex; flex-direction: column; justify-content: center; padding: 0; }
+  .passo-tela h3 { font-size: clamp(32px, 3.4vw, 48px); }
+  .passo-tela p { font-size: 20px; }
+}
+
+/* MARK: Chaves (a cadeia acende conforme a pagina rola) */
+
+.chaves { padding: clamp(72px, 10vw, 140px) 0; }
+.chaves-grade { display: grid; gap: 56px; grid-template-columns: minmax(0, 1fr); align-items: center; }
+@media (min-width: 900px) { .chaves-grade { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 80px; } }
+.chaves-texto .lead { margin-top: 24px; }
+.chaves-texto .mais { margin-top: 28px; }
+.cadeia { list-style: none; margin: 40px 0 0; padding: 0; display: grid; gap: 0; max-width: 520px; }
+.chaves .cadeia { margin: 0; }
+.cadeia li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 18px; position: relative; padding-bottom: 28px; }
+.cadeia li:last-child { padding-bottom: 0; }
+.cadeia li::before {
+  content: ""; position: absolute; left: 21px; top: 44px; bottom: 0; width: 2px; background: var(--edge);
+}
+.cadeia li:last-child::before { display: none; }
+.cadeia .no {
+  width: 44px; height: 44px; border-radius: 50%; background: var(--rail); box-shadow: inset 0 0 0 1px var(--edge-strong);
+  display: grid; place-items: center; color: var(--ink); position: relative; z-index: 1;
+}
+.cadeia .no svg { width: 19px; height: 19px; }
+.cadeia li:nth-child(3) .no { background: var(--accent-fill); box-shadow: none; color: #fff; }
+.cadeia b { display: block; color: var(--ink); font-weight: 650; font-size: 18px; letter-spacing: -0.018em; padding-top: 9px; }
+.cadeia span { font-size: 15px; color: var(--ink-muted); }
+/* Acendendo: cada degrau aparece quando passa do meio da tela, e o traco ate ele se enche. */
+.cadeia-acende li::after {
+  content: ""; position: absolute; left: 21px; top: 44px; bottom: 0; width: 2px; background: var(--ink-soft);
+  transform-origin: top; transform: scaleY(0); transition: transform 0.6s var(--ease);
+}
+.cadeia-acende li:last-child::after { display: none; }
+/* Apagado, so o icone esmaece; o texto fica na tinta de apoio, legivel. */
+.movimento .cadeia-acende li .no { opacity: 0.3; transform: scale(0.88); transition: opacity 0.5s ease, transform 0.5s var(--ease); }
+.movimento .cadeia-acende li.aceso .no { opacity: 1; transform: none; }
+.movimento .cadeia-acende li b { color: var(--ink-muted); }
+.movimento .cadeia-acende li.aceso b { color: var(--ink); }
+.movimento .cadeia-acende li.aceso::after { transform: scaleY(1); }
+html:not(.movimento) .cadeia-acende li::after { transform: none; }
+
+/* MARK: Bento (o que faz a Escalibur diferente) */
+
+.bento { padding: clamp(72px, 10vw, 140px) 0; }
+.bento-grade { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); margin-top: 56px; }
 .bento-ladrilho {
   background: var(--body); border-radius: var(--r-tile); padding: 28px;
-  display: flex; flex-direction: column; gap: 24px; overflow: hidden; min-width: 0;
+  display: flex; flex-direction: column; gap: 28px; overflow: hidden; min-width: 0;
 }
-.bento-texto h3 { font-size: 22px; letter-spacing: -0.024em; line-height: 1.2; }
-.bento-texto p { font-size: 16px; margin-top: 8px; max-width: 30em; }
-.bento-ladrilho .aparelho { --w: min(250px, 64vw); align-self: center; margin-bottom: 44px; }
-
-@media (min-width: 900px) {
+.bento-texto h3 { font-size: 23px; letter-spacing: -0.028em; line-height: 1.18; }
+.bento-texto p { font-size: 16px; margin-top: 10px; max-width: 30em; }
+.bento-ladrilho .aparelho { --w: min(240px, 62vw); align-self: center; margin-bottom: 44px; }
+@media (min-width: 700px) and (max-width: 999px) {
+  .bento-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bento-cegas, .bento-parecido, .bento-captura { grid-column: 1 / -1; }
+}
+@media (min-width: 1000px) {
   .bento-grade {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-areas:
-      "envelope super super"
-      "envelope teclado taxa"
-      "alertas captura captura"
-      "alertas limite limite";
+      "cegas cegas envelope"
+      "super teclado envelope"
+      "passphrase captura captura"
+      "passphrase parecido parecido";
   }
-  .bento-envelope { grid-area: envelope; }
-  .bento-super { grid-area: super; }
-  .bento-teclado { grid-area: teclado; }
-  .bento-taxa { grid-area: taxa; }
-  .bento-alertas { grid-area: alertas; }
+  .bento-cegas { grid-area: cegas; }
+  .bento-envelope { grid-area: envelope; justify-content: space-between; }
+  .bento-super { grid-area: super; justify-content: space-between; }
+  .bento-teclado { grid-area: teclado; justify-content: space-between; }
+  .bento-passphrase { grid-area: passphrase; justify-content: space-between; }
   .bento-captura { grid-area: captura; }
-  .bento-limite { grid-area: limite; }
-  .bento-envelope, .bento-alertas, .bento-teclado, .bento-taxa { justify-content: space-between; }
-  /* Os largos: o desenho ao lado do texto. */
-  .bento-super, .bento-captura, .bento-limite { flex-direction: row; align-items: center; gap: 32px; }
-  .bento-super .bento-texto, .bento-captura .bento-texto, .bento-limite .bento-texto { flex: 1 1 0; }
-  .bento-ladrilho .aparelho { --w: 240px; }
+  .bento-parecido { grid-area: parecido; }
+  .bento-cegas, .bento-captura, .bento-parecido { flex-direction: row; align-items: center; gap: 36px; }
+  .bento-cegas > *, .bento-captura > *, .bento-parecido > * { flex: 1 1 0; min-width: 0; }
+  .bento-ladrilho .aparelho { --w: 232px; }
 }
 
+/* Nada as cegas: o cartao de revisao do app, com as pontas do endereco em destaque. */
+.revisao-mini { background: var(--void); border-radius: var(--r-caixa); padding: 16px 18px; display: grid; gap: 2px; }
+.revisao-titulo { color: var(--ink); font-weight: 650; font-size: 16px; margin-bottom: 8px; }
+.revisao-linha { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 7px 0; font-size: 14px; }
+.revisao-linha span { color: var(--ink-muted); }
+.revisao-linha b { color: var(--ink); font-weight: 550; overflow-wrap: anywhere; text-align: right; }
+.revisao-linha:first-of-type b { font: 13px/1.5 var(--mono); text-align: left; }
+.revisao-mini mark, .parecido mark { background: var(--highlight); color: var(--void); border-radius: 3px; padding: 0 1px; }
+
+/* Endereco parecido: os dois enderecos, com as mesmas pontas. */
+.parecido { display: grid; gap: 10px; }
+.parecido p { background: var(--void); border-radius: var(--r-caixa); padding: 14px 16px; display: grid; gap: 6px; }
+.parecido span { font-size: 13px; color: var(--ink-muted); font-weight: 550; }
+.parecido b { font: 13px/1.5 var(--mono); color: var(--ink-soft); overflow-wrap: anywhere; font-weight: 400; }
+.parecido .golpe { box-shadow: inset 0 0 0 1px rgba(255, 77, 61, 0.55); }
+.parecido .golpe span { color: var(--down); }
+
 /* Super Security: o PIN e o rosto, juntos, com o cadeado no meio (o emblema do app). */
-.emblema-super { display: flex; align-items: center; justify-content: center; flex: none; }
+.emblema-super { display: flex; align-items: center; justify-content: center; flex: none; padding: 12px 0; }
 .emblema-super .disco {
   width: 76px; height: 76px; border-radius: 50%; background: var(--control); color: var(--ink);
   display: grid; place-items: center; box-shadow: 0 0 0 3px var(--body);
@@ -527,11 +696,8 @@ a.selo-loja:hover { opacity: 0.86; }
 .teclado-nome { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; color: var(--ink-muted); padding-top: 2px; }
 .teclado-nome svg { width: 11px; height: 11px; }
 
-/* Sem taxa: o numero, grande, na mesma familia do texto. */
-.taxa-numero { font-size: clamp(64px, 8vw, 96px); line-height: 0.95; font-weight: 650; letter-spacing: -0.045em; color: var(--ink); }
-
 /* O print em branco: a placa clara do app, na tela e na captura. */
-.captura-par { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; flex: none; width: min(100%, 320px); align-self: center; }
+.captura-par { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; flex: none; width: min(100%, 340px); align-self: center; }
 .captura-placa { background: var(--plate); color: var(--plate-ink); border-radius: 14px; padding: 12px 14px 14px; }
 .captura-placa small { display: block; font-size: 11px; font-weight: 600; color: var(--plate-muted); margin-bottom: 6px; }
 .captura-placa ol { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; color: var(--plate-muted); }
@@ -539,68 +705,68 @@ a.selo-loja:hover { opacity: 0.86; }
 .captura-placa b { color: var(--plate-ink); font-weight: 650; font-size: 15px; letter-spacing: -0.01em; }
 .captura-placa.vazia li::after { content: ""; display: inline-block; width: 0; }
 
-/* Ordem limite: a linha de Ordens abertas e o "Refazer quando vencer". */
-.ordem-mini { display: grid; gap: 10px; flex: none; width: min(100%, 360px); align-self: center; }
-.ordem-linha {
-  display: flex; align-items: center; gap: 12px; background: var(--void); border-radius: 16px; padding: 12px 14px;
-  font-size: 14px; color: var(--ink);
-}
-.ordem-linha div { display: grid; flex: 1 1 auto; min-width: 0; }
-.ordem-linha b { font-weight: 600; font-size: 14px; }
-.ordem-linha small { font-size: 12px; color: var(--ink-muted); }
-.ordem-linha > span:first-child:not(.ordem-logo) { flex: 1 1 auto; }
-/* O ETH com o selo da Base no canto, como a moeda com a rede no app. */
-.ordem-logo { position: relative; width: 30px; height: 30px; border-radius: 50%; flex: none; background: var(--control); }
-.ordem-logo img { width: 100%; height: 100%; border-radius: 50%; }
-.ordem-rede {
-  position: absolute; right: -3px; bottom: -3px; width: 14px; height: 14px; border-radius: 50%;
-  background: #0052FF; box-shadow: 0 0 0 2px var(--void); display: grid; place-items: center;
-}
-.ordem-rede::after { content: ""; width: 5px; height: 5px; background: #fff; border-radius: 1px; }
-.ordem-vence { font-size: 12px; color: var(--ink-soft); text-align: right; flex: none; font-variant-numeric: tabular-nums; }
-.chave-ligada { width: 44px; height: 26px; border-radius: 999px; background: var(--success); position: relative; flex: none; }
-.chave-ligada::after { content: ""; position: absolute; right: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; }
+/* MARK: Redes */
 
-/* MARK: Chaves (diagrama) */
-
-.cadeia { list-style: none; margin: 40px 0 0; padding: 0; display: grid; gap: 0; max-width: 520px; }
-.cadeia li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 16px; position: relative; padding-bottom: 22px; }
-.cadeia li:last-child { padding-bottom: 0; }
-.cadeia li::before {
-  content: ""; position: absolute; left: 19px; top: 40px; bottom: 0; width: 2px; background: var(--edge);
+.redes { padding: clamp(72px, 10vw, 140px) 0; overflow: hidden; }
+.redes-cabeca { max-width: 860px; }
+.redes-cabeca .lead { margin-top: 24px; max-width: 38em; }
+/* As redes deslizando, em duas fileiras de sentidos opostos. Cada fileira tem a lista duas
+   vezes: andar a largura de uma lista volta ao mesmo quadro, sem emenda. As bordas somem no
+   fundo. Parado com o dedo (ou o mouse) em cima, e parado de vez com movimento reduzido. */
+.redes-faixa-animada {
+  display: grid; gap: 22px; margin-top: 56px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
 }
-.cadeia li:last-child::before { display: none; }
-.cadeia .no {
-  width: 40px; height: 40px; border-radius: 50%; background: var(--rail); box-shadow: inset 0 0 0 1px var(--edge-strong);
-  display: grid; place-items: center; color: var(--ink);
+.redes-fileira { display: flex; width: max-content; }
+.redes-lista {
+  list-style: none; margin: 0; padding: 0 16px 0 0; display: flex; gap: 16px; flex: none;
+  animation: redes-deslizar 50s linear infinite;
 }
-.cadeia .no svg { width: 18px; height: 18px; }
-.cadeia li:nth-child(3) .no { background: var(--accent-fill); box-shadow: none; color: #fff; }
-.cadeia b { display: block; color: var(--ink); font-weight: 600; font-size: 17px; letter-spacing: -0.015em; padding-top: 8px; }
-.cadeia span { font-size: 15px; color: var(--ink-muted); }
-
-/* MARK: Galeria de telas */
-
-.galeria { padding: clamp(72px, 11vw, 150px) 0; }
-.galeria-trilho {
-  display: grid; grid-auto-flow: column; grid-auto-columns: min(240px, 66vw); gap: 20px;
-  overflow-x: auto; scroll-snap-type: x mandatory; padding: 48px var(--gutter) 12px;
-  margin-inline: calc(-1 * var(--gutter)); scrollbar-width: none;
+.redes-fileira.ao-contrario .redes-lista { animation-direction: reverse; animation-duration: 56s; }
+.redes-faixa-animada:hover .redes-lista { animation-play-state: paused; }
+.redes-lista li { display: grid; justify-items: center; gap: 10px; text-align: center; width: 92px; }
+.redes-lista .logo { width: 56px; height: 56px; }
+.redes-lista span { font-size: 13px; color: var(--ink-soft); line-height: 1.25; }
+@keyframes redes-deslizar { to { transform: translateX(-100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .redes-faixa-animada { -webkit-mask-image: none; mask-image: none; padding-inline: var(--gutter); }
+  .redes-fileira { width: auto; }
+  .redes-lista { animation: none; flex-wrap: wrap; padding: 0; }
+  .redes-lista[aria-hidden="true"] { display: none; }
 }
-.galeria-trilho::-webkit-scrollbar { display: none; }
-.galeria-trilho figure { margin: 0; scroll-snap-align: center; display: grid; justify-items: center; }
-.galeria-trilho .aparelho { margin-bottom: 44px; }
-.galeria-trilho .aparelho { --w: min(240px, 66vw); }
-@media (min-width: 900px) {
-  .galeria-trilho { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; margin-inline: 0; padding-inline: 0; }
-  .galeria-trilho .aparelho { --w: 260px; }
+.redes-rodape { margin-top: 44px; display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: baseline; }
+
+/* MARK: Placa (conferir caractere por caractere, como no app) */
+
+/* Como o cartao "Ver enderecos e contratos" da revisao no app: escuro, com as pontas em
+   destaque. */
+.placa {
+  background: var(--body); color: var(--ink); border-radius: var(--r-card);
+  padding: 20px; display: grid; gap: 16px; margin-top: 36px; max-width: 460px;
 }
+.placa dt { font-size: 13px; color: var(--ink-soft); font-weight: 500; }
+.placa dd { margin: 4px 0 0; font: 15px/1.5 var(--mono); letter-spacing: 0; overflow-wrap: anywhere; color: var(--ink-soft); }
+.placa mark { background: var(--highlight); color: var(--void); border-radius: 3px; padding: 0 1px; }
 
-/* MARK: Codigo aberto (resumo da auditoria) */
+/* MARK: Privacidade */
 
-.aberto { padding: clamp(72px, 11vw, 150px) 0; }
+.privacidade { padding: clamp(72px, 10vw, 140px) 0; }
+.privacidade-grade { list-style: none; margin: 56px 0 0; padding: 0; display: grid; gap: 40px 32px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 640px) { .privacidade-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .privacidade-grade { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.privacidade-grade li { display: grid; align-content: start; gap: 10px; }
+.privacidade-icone { width: 48px; height: 48px; border-radius: 50%; background: var(--rail); color: var(--ink); display: grid; place-items: center; margin-bottom: 8px; }
+.privacidade-icone svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.privacidade-grade h3 { font-size: 21px; letter-spacing: -0.025em; line-height: 1.2; }
+.privacidade-grade p { font-size: 16px; }
+.privacidade-grade a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+
+/* MARK: Codigo auditavel (resumo da auditoria) */
+
+.aberto { padding: clamp(48px, 7vw, 96px) 0; }
 .painel {
-  background: var(--body); border-radius: var(--r-tile); padding: clamp(28px, 5vw, 64px);
+  background: var(--body); border-radius: var(--r-tile); padding: clamp(28px, 5vw, 72px);
   box-shadow: inset 0 0 0 1px var(--edge);
 }
 .estado-ci {
@@ -608,26 +774,51 @@ a.selo-loja:hover { opacity: 0.86; }
   font-size: 15px; color: var(--ink-soft); background: var(--rail); border-radius: var(--r-card); padding: 9px 16px 9px 14px;
 }
 .estado-ci .ponto { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-muted); flex: none; transform: translateY(-1px); }
-.estado-ci.passou .ponto { background: var(--up); }
+.estado-ci.passou .ponto { background: var(--success); }
 .estado-ci.falhou .ponto { background: var(--down); }
 .estado-ci.rodando .ponto { background: var(--caution); }
 .estado-ci a { color: var(--ink); }
-.numeros { list-style: none; margin: 48px 0 0; padding: 0; display: grid; gap: 32px; grid-template-columns: minmax(0, 1fr); }
-.numeros li { display: grid; gap: 6px; }
+.numeros { list-style: none; margin: 56px 0 0; padding: 0; display: grid; gap: 32px; grid-template-columns: minmax(0, 1fr); }
+.numeros li { display: grid; gap: 8px; align-content: start; }
 .numeros b {
-  font-size: clamp(44px, 6vw, 64px); line-height: 1; letter-spacing: -0.025em; color: var(--ink); font-weight: 600;
+  font-size: clamp(48px, 6.4vw, 80px); line-height: 1; letter-spacing: -0.045em; color: var(--ink); font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .numeros span { font-size: 16px; color: var(--ink-soft); max-width: 22em; }
 @media (min-width: 760px) { .numeros { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); } }
 .painel .botoes { margin-top: 48px; }
-.painel .lead { margin-top: 20px; max-width: 36em; }
+.painel .lead { margin-top: 24px; max-width: 36em; }
 .painel .estado-ci { margin-top: 28px; }
+
+/* MARK: Perguntas */
+
+.perguntas { padding: clamp(72px, 10vw, 140px) 0; }
+.perguntas-grade { display: grid; gap: 40px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 1000px) {
+  .perguntas-grade { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 80px; }
+  .perguntas-cabeca { position: sticky; top: 112px; }
+}
+.perguntas-cabeca .lead { margin-top: 20px; }
+.perguntas-lista { display: grid; gap: 8px; }
+.pergunta { background: var(--body); border-radius: var(--r-caixa); }
+.pergunta summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 20px 22px; color: var(--ink); font-weight: 600; font-size: 18px; letter-spacing: -0.018em; line-height: 1.3;
+  border-radius: var(--r-caixa);
+}
+.pergunta summary::-webkit-details-marker { display: none; }
+.pergunta summary::after {
+  content: ""; width: 9px; height: 9px; flex: none; border-right: 1.8px solid var(--ink-soft); border-bottom: 1.8px solid var(--ink-soft);
+  transform: rotate(45deg) translateY(-3px); transition: transform 0.25s var(--ease);
+}
+.pergunta[open] summary::after { transform: rotate(-135deg) translateY(-2px); }
+.pergunta p { padding: 0 22px 22px; font-size: 16px; max-width: 40em; }
+.pergunta p a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
 
 /* MARK: Novidades (resumo) */
 
-.novidades { padding: clamp(72px, 11vw, 150px) 0; }
-.versao-linha { margin-top: 16px; }
+.novidades { padding: clamp(72px, 10vw, 140px) 0; }
+.versao-linha { margin-top: 20px; }
 .versao-linha b { color: var(--ink); }
 .linha-do-tempo { list-style: none; margin: 40px 0 0; padding: 0; display: grid; gap: 4px; }
 .novidades .mais { margin-top: 24px; }
@@ -641,12 +832,23 @@ a.selo-loja:hover { opacity: 0.86; }
   .linha-do-tempo time { padding-top: 3px; }
 }
 
-/* MARK: Chamada final */
+/* MARK: Chamada final (a moeda da Escalibur, girando) */
 
-.final { padding: clamp(96px, 14vw, 180px) 0 clamp(96px, 12vw, 160px); text-align: center; }
-.final .final-icone { width: 112px; height: 112px; border-radius: 26px; margin: 0 auto 28px; }
-.final .lead { margin: 16px auto 0; max-width: 28em; }
-.final .lojas { justify-items: center; margin-top: 36px; width: 100%; }
+.final { padding: clamp(56px, 8vw, 120px) 0 clamp(96px, 12vw, 160px); overflow: hidden; }
+.final-grade { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); align-items: center; justify-items: center; text-align: center; }
+.final-moeda { position: relative; width: min(340px, 74vw); aspect-ratio: 1; }
+.final-moeda-parada { position: absolute; inset: 0; width: 100%; height: 100%; transition: opacity 0.8s ease; }
+.final-3d { position: absolute; left: -20%; top: -20%; width: 140%; height: 140%; max-width: none; pointer-events: none; opacity: 0; transition: opacity 0.8s ease; }
+.com-3d .final-3d { opacity: 1; }
+.com-3d .final-moeda-parada { opacity: 0; }
+.final-texto .lead { margin: 20px auto 0; max-width: 28em; }
+.final-texto .lojas { justify-items: center; margin-top: 36px; }
+@media (min-width: 900px) {
+  .final-grade { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 72px; text-align: left; justify-items: start; }
+  .final-moeda { width: min(420px, 100%); justify-self: center; }
+  .final-texto .lead { margin-left: 0; }
+  .final-texto .lojas { justify-items: start; }
+}
 
 /* MARK: Paginas internas */
 
@@ -835,7 +1037,7 @@ html:not(.js) .chamado .passo, html:not(.js) .chamado .botao, html:not(.js) .cha
 .checagens { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .checagens li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; font-size: 16px; }
 .checagens li::before {
-  content: ""; width: 16px; height: 16px; margin-top: 4px; background: var(--up);
+  content: ""; width: 16px; height: 16px; margin-top: 4px; background: var(--success);
   -webkit-mask: url("marca-ok.svg") center / 16px no-repeat; mask: url("marca-ok.svg") center / 16px no-repeat;
 }
 .checagens .onde { display: inline-block; font-size: 13px; margin-left: 4px; white-space: nowrap; }
@@ -989,6 +1191,7 @@ html:not(.js) .chamado .passo, html:not(.js) .chamado .botao, html:not(.js) .cha
 .rodape a:hover { color: var(--ink); text-decoration: none; }
 .rodape .marca { margin-bottom: 12px; }
 .rodape-legal { margin-top: 48px; display: grid; gap: 8px; font-size: 13px; max-width: 760px; }
+.rodape-legal a { text-decoration: underline; text-decoration-color: var(--edge-strong); text-underline-offset: 3px; }
 
 /* MARK: Movimento reduzido */
 
@@ -1000,3 +1203,8 @@ html:not(.js) .chamado .passo, html:not(.js) .chamado .botao, html:not(.js) .cha
 .links-bloco { margin-top: 12px; }
 .arquivos-grupos .subtitulo-bloco:first-child { margin-top: 32px; }
 .arquivos-grupos .arquivos { margin-top: 0; }
+
+/* A pagina de seguranca: os cartoes entram em sequencia. */
+.movimento .promessas li:nth-child(3n+2), .movimento .camadas li:nth-child(2n) { transition-delay: 0.08s; }
+.movimento .promessas li:nth-child(3n) { transition-delay: 0.16s; }
+html:not(.js) .fiat-escolha { display: none; }

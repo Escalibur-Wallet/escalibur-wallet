@@ -44,9 +44,12 @@ pasta=$(mktemp -d)
 trap 'rm -rf "$ci" "$pasta"' EXIT
 gh api "repos/Escalibur-Wallet/escalibur-wallet/actions/workflows/verificar.yml/runs?head_sha=$(git rev-parse HEAD)&per_page=1" > "$ci" 2>/dev/null \
     || echo '{}' > "$ci"
-SITE_CI="$ci" SITE_BASE=/ python3 tools/gerar-site.py "$pasta/novo"
+# SITE_PRECOS=1: o retrato dos precos do Mercado ao vivo, tirado agora no CoinGecko, vai em
+# /precos.json. No dominio o Worker responde ao vivo no mesmo caminho e so usa o retrato se o
+# CoinGecko falhar; nos enderecos do GitHub Pages, sem Worker, a pagina mostra o retrato.
+SITE_PRECOS=1 SITE_CI="$ci" SITE_BASE=/ python3 tools/gerar-site.py "$pasta/novo"
 rm -rf build/site-dominio && cp -R "$pasta/novo" build/site-dominio
-SITE_CI="$ci" SITE_BASE=/escalibur-wallet/ python3 tools/gerar-site.py "$pasta/antigo"
+SITE_PRECOS=1 SITE_CI="$ci" SITE_BASE=/escalibur-wallet/ python3 tools/gerar-site.py "$pasta/antigo"
 
 # O site da org: o site gerado na raiz, sem Jekyll.
 find "$NOVO" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +

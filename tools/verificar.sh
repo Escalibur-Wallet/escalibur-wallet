@@ -521,7 +521,8 @@ paginas_site=$(find "$saida_site/site" -name '*.html' 2>/dev/null)
 if [ -z "$paginas_site" ]; then
     aviso "o site nao foi gerado"
 else
-    sem_csp=$(echo "$paginas_site" | xargs grep -L "content=\"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'\"" 2>/dev/null)
+    # A fonte (fontes/) e o /precos.json do Mercado ao vivo tambem so do proprio site.
+    sem_csp=$(echo "$paginas_site" | xargs grep -L "content=\"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'\"" 2>/dev/null)
     de_fora=$(echo "$paginas_site" | xargs grep -noE '(src|poster)="https?://|<link rel="(stylesheet|icon|apple-touch-icon|preload|modulepreload|manifest)"[^>]*href="https?://|<script>|<script [^>]*>[^<]|style="| on[a-z]+="' 2>/dev/null)
     de_fora="$de_fora$(grep -noE 'url\(["'"'"']?(https?:)?//|@import' "$saida_site/site/estilo.css" 2>/dev/null)"
     if [ -n "$sem_csp$de_fora" ]; then

@@ -453,3 +453,112 @@ def estado_ci():
     if not url.startswith(REPO + "/"):
         url = None
     return {"estado": estado, "url": url, "sha": corrida.get("head_sha"), "quando": corrida.get("updated_at")}
+
+
+# MARK: Troca e ponte (a demonstracao da pagina inicial)
+
+PONTE = RAIZ / "Kit/Sources/EscaliburChains/Bridge/BridgeAllowlist.swift"
+MESH = RAIZ / "Kit/Sources/EscaliburChains/Bridge/USDT0Mesh.swift"
+
+# As redes com troca nesta versao (TradeEngines.chains): as EVM menos Avalanche, X Layer e
+# Celo, mais Solana, XRP Ledger e Stellar, como em README.md e docs/redes/motores.md. No XRP
+# Ledger a troca e so XRP e RLUSD, pelo livro da propria rede.
+TROCA_EVM_FORA = {"avalanche", "xlayer", "celo"}
+TROCA_OUTRAS = {"solana", "xrpl", "stellar"}
+TROCA_SO = {"xrpl": {"ripple-usd"}}
+
+
+def redes_com_troca(lista_redes):
+    return [r for r in lista_redes
+            if (r["familia"] == "evm" and r["id"] not in TROCA_EVM_FORA) or r["id"] in TROCA_OUTRAS]
+
+
+def _blocos_da_ponte(texto):
+    """Cada `public static let x = BridgeChain(...)`, com o parentese fechado contado."""
+    saida = {}
+    for achado in re.finditer(r"public static let (\w+) = BridgeChain\(", texto):
+        inicio, nivel, i = achado.end(), 1, achado.end()
+        while nivel and i < len(texto):
+            nivel += {"(": 1, ")": -1}.get(texto[i], 0)
+            i += 1
+        saida[achado.group(1)] = texto[inicio:i - 1]
+    return saida
+
+
+def ponte():
+    """O que a ponte move e entre quais redes, lido de BridgeAllowlist.swift e da regra de
+    `BridgeAsset.available(from:to:)`: USDC pelo CCTP quando as duas redes tem, senao pelo
+    Across; ETH, USDT e WBTC pelo Across; USDT para a Tron pela Legacy Mesh da Tether, de onde
+    ela tem o UsdtOFT. A Tron so recebe."""
+    texto = PONTE.read_text(encoding="utf-8")
+    blocos = _blocos_da_ponte(texto)
+    lista = re.search(r"public static let chains: \[BridgeChain\] = \[([^\]]*)\]", texto)
+    destinos = re.search(r"public static let destinations: \[BridgeChain\] = chains \+ \[([^\]]*)\]", texto)
+    if not blocos or not lista or not destinos:
+        falha("BridgeAllowlist.swift mudou de forma: atualize ponte() em tools/gerador_site/dados.py")
+    nomes = [n.strip() for n in lista.group(1).split(",") if n.strip()]
+    extras = [n.strip() for n in destinos.group(1).split(",") if n.strip()]
+
+    def endereco(bloco, campo):
+        achado = re.search(rf"\b{campo}: (nil|address\(\"([0-9a-fA-F]+)\"\)|\.zero|EVMAddress\()", bloco)
+        if not achado or achado.group(1) == "nil":
+            return None
+        return (achado.group(2) or achado.group(1)).lower()
+
+    redes_ponte = {}
+    for nome in nomes + extras:
+        bloco = blocos.get(nome)
+        if bloco is None:
+            falha(f"rede da ponte sem definicao: {nome}")
+        rede = re.search(r"chain: \.(\w+)", bloco)
+        if not rede:
+            falha(f"rede da ponte sem chain: {nome}")
+        redes_ponte[nome] = {
+            "rede": rede.group(1),
+            "cctp": "cctpDomain:" in bloco or bool(re.search(r"cctp: \.init|cctp: CCTP\(", bloco)),
+            "across": bool(re.search(r"across: \.init", bloco)),
+            "usdt": endereco(bloco, "usdt"),
+            "eth_nativo": bool(re.search(r"nativeETH: true", bloco)),
+            "eth_token": endereco(bloco, "ethToken"),
+            "across_usdc": not re.search(r"acrossUSDC: false", bloco),
+            "wbtc": endereco(bloco, "wbtc"),
+            "tron": nome == "tron",
+        }
+    # A Legacy Mesh: as redes de origem (chainId) e o USDT que o UsdtOFT puxa em cada uma.
+    mesh = {}
+    for chain_id, usdt in re.findall(r"(\d+): Source\(chainID: \d+,.*?usdt: address\(\"([0-9a-fA-F]+)\"\)", MESH.read_text(encoding="utf-8"), re.S):
+        mesh[int(chain_id)] = usdt.lower()
+    if not mesh:
+        falha("USDT0Mesh.swift mudou de forma: atualize ponte() em tools/gerador_site/dados.py")
+    por_id = {r["id"]: r for r in redes()}
+
+    def cadeia(nome):
+        return por_id.get(redes_ponte[nome]["rede"])
+
+    def malha(origem, destino):
+        o, d = redes_ponte[origem], redes_ponte[destino]
+        rede = cadeia(origem)
+        fonte = mesh.get(rede["chain_id"]) if rede else None
+        return d["tron"] and fonte is not None and o["usdt"] == fonte
+
+    rotas = {"usdc": [], "eth": [], "usdt": [], "wbtc": []}
+    for origem in nomes:
+        for destino in nomes + extras:
+            if origem == destino:
+                continue
+            o, d = redes_ponte[origem], redes_ponte[destino]
+            if o["cctp"] and d["cctp"] and not d["tron"]:
+                rotas["usdc"].append((origem, destino, "cctp"))
+            elif o["across"] and d["across"] and o["across_usdc"] and d["across_usdc"]:
+                rotas["usdc"].append((origem, destino, "across"))
+            if (o["eth_nativo"] or o["eth_token"]) and (d["eth_nativo"] or d["eth_token"]) and o["across"] and d["across"]:
+                rotas["eth"].append((origem, destino, "across"))
+            if malha(origem, destino):
+                rotas["usdt"].append((origem, destino, "usdt0"))
+            elif o["usdt"] and d["usdt"] and o["across"] and d["across"]:
+                rotas["usdt"].append((origem, destino, "across"))
+            if o["wbtc"] and d["wbtc"] and o["across"] and d["across"]:
+                rotas["wbtc"].append((origem, destino, "across"))
+    ordem = [redes_ponte[n]["rede"] for n in nomes + extras]
+    return {"redes": ordem, "rotas": {ativo: [(redes_ponte[a]["rede"], redes_ponte[b]["rede"], via) for a, b, via in lista_rotas]
+                                       for ativo, lista_rotas in rotas.items()}}

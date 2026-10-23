@@ -101,8 +101,9 @@ def aparelho(base, cena, rotulo, classe="", video=True, cedo=False):
     texto alternativo. O video fica por cima, invisivel e sem baixar nada (preload none)
     ate o site.js mandar tocar; sem JS, fica a capa."""
     carregamento = "eager" if cedo else "lazy"
+    prioridade = ' fetchpriority="high"' if cedo else ""
     capa = (f'<img class="capa" src="{base}midia/{cena}.webp" alt="{e(rotulo)}" width="720" height="1566" '
-            f'loading="{carregamento}" decoding="async">')
+            f'loading="{carregamento}" decoding="async"{prioridade}>')
     botao = ""
     if video:
         capa += (f'<video muted loop playsinline preload="none" data-auto aria-hidden="true" tabindex="-1">'
@@ -250,7 +251,253 @@ def link_codigo(base, slug, texto=None):
     raise SystemExit(f"gerar-site: arquivo-chave desconhecido: {slug}")
 
 
+# MARK: Pagina inicial: mercado ao vivo, troca e ponte, telas do app
+
+# As moedas do "Mercado ao vivo", na ordem da lista. Toda moeda daqui tem de ser uma rede do
+# app ou um token da lista conferida: o gerador confere e para se nao for.
+VITRINE = ["bitcoin", "ethereum", "tether", "ripple", "binancecoin", "solana", "usd-coin", "tron",
+           "dogecoin", "cardano", "the-open-network", "sui"]
+
+# Na demonstracao da troca, os tokens de cada rede, por esta ordem de preferencia, ate quatro
+# alem da moeda da rede. So os da lista conferida daquela rede.
+TROCA_PREFERIDOS = [["usd-coin"], ["tether"], ["wrapped-bitcoin", "coinbase-wrapped-btc", "binance-bitcoin"], ["weth"],
+                    ["chainlink"], ["jupiter-exchange-solana"], ["arbitrum"], ["optimism"], ["uniswap"], ["euro-coin"],
+                    ["ripple-usd"], ["dai"]]
+
+PONTE_ATIVOS = [("usdc", "USDC", "usd-coin"), ("eth", "ETH", "ethereum"), ("usdt", "USDT", "tether"), ("wbtc", "WBTC", "wrapped-bitcoin")]
+
+
+def ids_de_preco(ctx):
+    """Todas as moedas que a pagina inicial precisa com preco: a vitrine e as da demonstracao."""
+    validos = {r["gecko"] for r in ctx["redes"]} | {t["gecko"] for t in ctx["tokens"]}
+    fora = [g for g in VITRINE if g not in validos]
+    if fora:
+        raise SystemExit(f"gerar-site: moeda da vitrine fora do app: {fora}")
+    ids = list(VITRINE)
+    for rede in dados_da_troca(ctx)["redes"]:
+        for moeda in rede["moedas"]:
+            if moeda["id"] not in ids:
+                ids.append(moeda["id"])
+    for _, _, gecko in PONTE_ATIVOS:
+        if gecko not in ids:
+            ids.append(gecko)
+    return ids
+
+
+def _nome_moeda(ctx, gecko):
+    for r in ctx["redes"]:
+        if r["gecko"] == gecko:
+            return r["simbolo"], r["nome_nativo"] or r["nome"]
+    for t in ctx["tokens"]:
+        if t["gecko"] == gecko:
+            return t["simbolo"], t["nome"]
+    return gecko.upper(), gecko
+
+
+def _logo_moeda(ctx, base, gecko):
+    caminho = ctx["logos"].get(f"logo-{gecko}")
+    return f"{base}{caminho}" if caminho else ""
+
+
+def dados_da_troca(ctx, base=""):
+    """O que a demonstracao da troca e da ponte pode mostrar, tirado do codigo do app: as redes
+    com troca (dados.redes_com_troca), os tokens conferidos de cada uma e as rotas da ponte
+    (dados.ponte)."""
+    por_rede = {}
+    for t in ctx["tokens"]:
+        por_rede.setdefault(t["rede"], []).append(t)
+    redes_troca = []
+    for rede in dados.redes_com_troca(ctx["redes"]):
+        moedas = [{"id": rede["gecko"], "s": rede["simbolo"], "n": rede["nome_nativo"] or rede["nome"],
+                   "l": _logo_moeda(ctx, base, rede["gecko"])}]
+        so = dados.TROCA_SO.get(rede["id"])
+        lista = {t["gecko"]: t for t in por_rede.get(rede["id"], [])}
+        for grupo in TROCA_PREFERIDOS:
+            if len(moedas) >= 5:
+                break
+            # Um token de cada grupo (um BTC embrulhado so), e o WETH so onde a moeda da rede nao e o ETH.
+            gecko = next((g for g in grupo if g in lista and (so is None or g in so) and g != rede["gecko"]
+                          and not (g == "weth" and rede["gecko"] == "ethereum")), None)
+            if gecko:
+                t = lista[gecko]
+                moedas.append({"id": gecko, "s": t["simbolo"], "n": t["nome"], "l": _logo_moeda(ctx, base, gecko)})
+        if len(moedas) > 1:
+            redes_troca.append({"id": rede["id"], "nome": rede["nome"], "familia": rede["familia"],
+                                "l": _logo_rede_src(ctx, base, rede), "moedas": moedas})
+    ponte = dados.ponte()
+    por_id = {r["id"]: r for r in ctx["redes"]}
+    redes_ponte = [{"id": r, "nome": por_id[r]["nome"], "l": _logo_rede_src(ctx, base, por_id[r])} for r in ponte["redes"] if r in por_id]
+    ativos = [{"id": a, "s": s, "g": g, "l": _logo_moeda(ctx, base, g)} for a, s, g in PONTE_ATIVOS]
+    return {"redes": redes_troca, "ponte": {"redes": redes_ponte, "ativos": ativos, "rotas": ponte["rotas"]}}
+
+
+def _logo_rede_src(ctx, base, rede):
+    nome = f"rede-{rede['id']}" if f"rede-{rede['id']}" in ctx["logos"] else f"logo-{rede['gecko']}"
+    caminho = ctx["logos"].get(nome)
+    return f"{base}{caminho}" if caminho else ""
+
+
+def troca_dados_attr(ctx, base):
+    import json
+    return e(json.dumps(dados_da_troca(ctx, base), ensure_ascii=False, separators=(",", ":")))
+
+
+def _significativo(valor, casas):
+    texto = f"{valor:,.{casas}f}"
+    return texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def formatar_preco(valor, moeda="brl"):
+    """Como o site.js formata: R$ ou US$, duas casas acima de 1, quatro acima de 0,01, seis
+    abaixo disso."""
+    if valor is None:
+        return ""
+    casas = 2 if valor >= 1 else (4 if valor >= 0.01 else 6)
+    simbolo = "R$" if moeda == "brl" else "US$"
+    return f"{simbolo} {_significativo(valor, casas)}"
+
+
+def _linha_svg(pontos):
+    if not pontos or len(pontos) < 2:
+        return ""
+    menor, maior = min(pontos), max(pontos)
+    faixa = (maior - menor) or 1
+    passo = 120 / (len(pontos) - 1)
+    caminho = " ".join(f"{'M' if i == 0 else 'L'}{i * passo:.1f} {34 - (p - menor) / faixa * 32:.1f}" for i, p in enumerate(pontos))
+    return caminho
+
+
+ICONE_SETA = {
+    "alta": '<svg viewBox="0 0 8 8" aria-hidden="true"><path d="M4 1.2 7.2 6.4H.8Z"/></svg>',
+    "baixa": '<svg viewBox="0 0 8 8" aria-hidden="true"><path d="M4 6.8.8 1.6h6.4Z"/></svg>',
+}
+
+
+def variacao(valor):
+    """A pilula de variacao do app (ChangePill): so a seta tem cor, lima na alta e vermelho
+    na queda; o numero fica sem sinal. Abaixo de 0,01%, neutra, sem seta."""
+    if valor is None:
+        return '<span class="variacao" data-variacao></span>'
+    estado = "alta" if valor > 0.004 else ("baixa" if valor < -0.004 else "estavel")
+    seta = ICONE_SETA.get(estado, "")
+    rotulo = {"alta": "Subiu", "baixa": "Caiu", "estavel": "Estável"}[estado]
+    numero = _significativo(abs(valor), 2) + "%"
+    return f'<span class="variacao {estado}" data-variacao aria-label="{rotulo} {numero}">{seta}<span>{numero}</span></span>'
+
+
+def lista_de_precos(ctx, base, retrato):
+    """A lista do Mercado ao vivo, ja com o retrato da publicacao. O site.js troca pelos
+    precos do /precos.json quando consegue."""
+    moedas = (retrato or {}).get("moedas", {})
+    itens = []
+    for indice, gecko in enumerate(VITRINE):
+        simbolo, nome = _nome_moeda(ctx, gecko)
+        dado = moedas.get(gecko, {})
+        preco = formatar_preco(dado.get("brl"))
+        caminho = _linha_svg(dado.get("linha"))
+        sobe = (dado.get("var_brl") if dado.get("var_brl") is not None else dado.get("var") or 0) >= 0
+        linha = (f'<svg class="faisca {"alta" if sobe else "baixa"}" viewBox="0 0 120 36" preserveAspectRatio="none" aria-hidden="true">'
+                 f'<path d="{caminho}"/></svg>')
+        selecionada = ' aria-pressed="true"' if indice == 0 else ' aria-pressed="false"'
+        itens.append(
+            f'<li><button class="cotacao" type="button" data-moeda="{e(gecko)}" data-simbolo="{e(simbolo)}" data-nome="{e(nome)}"{selecionada}>'
+            f'{logo(ctx, base, f"logo-{gecko}", "", simbolo)}'
+            f'<span class="cotacao-nome"><b>{e(simbolo)}</b><small>{e(nome)}</small></span>'
+            f'{linha}'
+            f'<span class="cotacao-valor"><b data-preco>{e(preco)}</b>{variacao(dado.get("var_brl", dado.get("var")))}</span>'
+            f'</button></li>')
+    return '<ol class="cotacoes" id="cotacoes">' + "".join(itens) + "</ol>"
+
+
+def hora_do_retrato(retrato):
+    hora = (retrato or {}).get("hora")
+    if not hora or not (retrato or {}).get("moedas"):
+        return "Os preços aparecem quando o servidor responde."
+    d = datetime.fromisoformat(hora.replace("Z", "+00:00"))
+    return f"Preços de {d.day} {MESES[d.month - 1]} {d.year}, {d.hour:02d}:{d.minute:02d} UTC, da publicação do site"
+
+
+def destaque_do_mercado(ctx, base, retrato):
+    """A moeda em destaque do Mercado ao vivo (a primeira da vitrine), ja com o retrato: sem
+    JS, e o que fica; com JS, o site.js troca pela escolhida e pelo preco ao vivo."""
+    gecko = VITRINE[0]
+    simbolo, nome = _nome_moeda(ctx, gecko)
+    dado = ((retrato or {}).get("moedas") or {}).get(gecko, {})
+    caminho = _logo_moeda(ctx, base, gecko)
+    logo_html = f'<img src="{caminho}" alt="" width="160" height="160">' if caminho else ""
+    linha = dado.get("linha") or []
+    traco, area, semana, classe = "", "", None, ""
+    if len(linha) > 1:
+        menor, maior = min(linha), max(linha)
+        faixa = (maior - menor) or 1
+        passo = 600 / (len(linha) - 1)
+        traco = " ".join(f"{'M' if i == 0 else 'L'}{i * passo:.1f} {180 - 10 - (v - menor) / faixa * 160:.1f}" for i, v in enumerate(linha))
+        area = traco + " L600 180 L0 180 Z"
+        semana = (linha[-1] / linha[0] - 1) * 100
+        classe = " baixa" if linha[-1] < linha[0] else ""
+    return f"""<div class="destaque-moeda">
+<span class="destaque-logo" aria-hidden="true">{logo_html}</span>
+<canvas class="destaque-3d" aria-hidden="true"></canvas>
+</div>
+<div class="destaque-dados" aria-live="polite">
+<p class="destaque-nome"><b data-destaque-simbolo>{e(simbolo)}</b><span data-destaque-nome>{e(nome)}</span></p>
+<p class="destaque-preco" data-destaque-preco>{e(formatar_preco(dado.get("brl")))}</p>
+<p class="destaque-variacao">{variacao(dado.get("var_brl", dado.get("var"))).replace("data-variacao", "data-destaque-variacao", 1)}<span class="apoio">em 24 h</span></p>
+</div>
+<div class="destaque-grafico{classe}" aria-hidden="true">
+<svg viewBox="0 0 600 180" preserveAspectRatio="none"><path class="area" d="{area}"/><path class="traco" d="{traco}"/></svg>
+<p class="apoio">Últimos 7 dias{variacao(semana).replace("data-variacao", "data-destaque-semana", 1) if semana is not None else '<span class="variacao" data-destaque-semana></span>'}</p>
+</div>"""
+
+
+# As telas do app na secao que fixa o iPhone: (cena, titulo, texto, rotulo da gravacao).
+TELAS = [
+    ("receber", "Receber", "O QR e o endereço inteiro, com o começo e o fim em destaque para você conferir antes de passar adiante.",
+     "Receber: da Carteira até o QR do bitcoin, e o endereço copiado"),
+    ("envio", "Enviar", "A rede monta a transação, o app confere destino, valor e taxa, e acompanha a confirmação na própria rede.",
+     "Enviando 150 XRP, e a confirmação no XRP Ledger"),
+    ("trocar", "Trocar", "A cotação vem dos protocolos públicos de cada rede, comparados entre si. Você vê o mínimo que recebe antes de assinar.",
+     "Trocar: a rede XRP Ledger, 250 XRP digitados e a cotação chegando"),
+    ("limite", "Ordem limite", "O preço que você escolher, com prazo ou até cancelar. O celular avisa quando ela executa ou está perto de vencer.",
+     "Ordem limite: o preço acima do atual e o prazo da oferta"),
+    ("ponte", "Ponte entre redes", "A taxa e o tempo de cada rota aparecem antes de assinar. O destino é sempre a sua própria conta na outra rede.",
+     "Ponte: 250 USDC da Base para a Arbitrum pelo CCTP, nas rotas rápida e padrão"),
+    ("moeda", "Página da moeda", "O gráfico corre no dedo, em cinco períodos, com o preço e a variação de cada um.",
+     "Página do bitcoin: o dedo correndo o gráfico e os períodos"),
+    ("alertas", "Alertas do próprio celular", "Preço e ordem limite conferidos pelo próprio aparelho, sem servidor de notificação no caminho e sem conta.",
+     "Alertas de preço: ligar e escolher quando avisar"),
+]
+
+
+def telas_do_app(ctx, base):
+    """O iPhone fixo da secao "Por dentro": uma camada por tela, a gravacao real do app em
+    cada uma. O site.js mostra a camada do passo que esta na tela e toca so o video dela;
+    sem JS, fica a primeira capa, e cada passo traz a sua."""
+    camadas, passos = [], []
+    for i, (cena, titulo, texto, rotulo) in enumerate(TELAS):
+        carregamento = "eager" if i == 0 else "lazy"
+        camadas.append(
+            f'<div class="camada{" ativa" if i == 0 else ""}" data-cena="{cena}">'
+            f'<img class="capa" src="{base}midia/{cena}.webp" alt="{e(rotulo)}" width="720" height="1566" loading="{carregamento}" decoding="async">'
+            f'<video muted loop playsinline preload="none" data-auto data-manual aria-hidden="true" tabindex="-1">'
+            f'<source src="{base}midia/{cena}.mp4" type="video/mp4"></video></div>')
+        passos.append(
+            f'<li class="passo-tela{" ativo" if i == 0 else ""}" data-cena="{cena}">'
+            f'<div class="passo-texto"><h3>{e(titulo)}</h3><p>{e(texto)}</p></div>'
+            f'<div class="passo-midia">{aparelho(base, cena, rotulo, "pequeno", video=False)}</div></li>')
+    telefone = (f'<div class="aparelho palco-telas"><div class="tela">{"".join(camadas)}</div>'
+                f'<button class="pausar" type="button" data-estado="pausado" aria-label="Tocar a animação">{ICONE_PAUSA}{ICONE_TOCAR}</button></div>')
+    return telefone, '<ol class="passos-telas">' + "".join(passos) + "</ol>"
+
+
 # MARK: Moldura
+
+
+# A Content Security Policy de toda pagina: so o que vem do proprio site. A fonte e o
+# /precos.json (o Mercado ao vivo) tambem: o navegador de quem visita nao fala com mais
+# ninguem. O tools/verificar.sh confere esta linha em cada pagina gerada.
+CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; "
+       "font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'")
 
 
 def moldura(ctx, base, rota, titulo, descricao, corpo, ativa=None):
@@ -278,7 +525,7 @@ def moldura(ctx, base, rota, titulo, descricao, corpo, ativa=None):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="{CSP}">
 <meta name="referrer" content="no-referrer">
 <meta name="description" content="{e(descricao)}">
 <meta name="color-scheme" content="dark">
@@ -291,12 +538,13 @@ def moldura(ctx, base, rota, titulo, descricao, corpo, ativa=None):
 <meta property="og:description" content="{e(descricao)}">
 <meta property="og:url" content="{canonica}">
 <meta property="og:locale" content="pt_BR">
-{imagem_og}<link rel="stylesheet" href="{base}estilo.css">
+{imagem_og}<link rel="preload" href="{base}fontes/inter.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{base}estilo.css">
 <link rel="icon" href="{base}icone-64.png" sizes="64x64" type="image/png">
 <link rel="apple-touch-icon" href="{base}icone-180.png">
 <script src="{base}site.js" defer></script>
 </head>
-<body>
+<body{' class="inicio"' if rota == "" else ""}>
 <a class="pular" href="#conteudo">Pular para o conteúdo</a>
 <header class="topo">
 <div class="wrap topo-barra">
@@ -396,6 +644,13 @@ def preencher(ctx, base, modelo, origem):
             "prazos_seguranca": lambda: prazos_seguranca(),
             "prazos_linha": lambda: prazos_linha(),
             "repo": lambda: dados.REPO,
+            "precos": lambda: lista_de_precos(ctx, base, ctx.get("retrato")),
+            "precos_hora": lambda: e(hora_do_retrato(ctx.get("retrato"))),
+            "destaque": lambda: destaque_do_mercado(ctx, base, ctx.get("retrato")),
+            "troca_dados": lambda: troca_dados_attr(ctx, base),
+            "telas_aparelho": lambda: telas_do_app(ctx, base)[0],
+            "telas_passos": lambda: telas_do_app(ctx, base)[1],
+            "n_redes_troca": lambda: str(len(dados_da_troca(ctx)["redes"])),
         }
         if nome not in valores:
             raise SystemExit(f"gerar-site: marcador desconhecido {{{{{nome}}}}} em {origem}")

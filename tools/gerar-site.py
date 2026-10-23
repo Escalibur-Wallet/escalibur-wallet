@@ -18,15 +18,27 @@ O que o site mostra sai do repositorio no build, nunca digitado a mao (tools/ger
 
 As telas do app em video vem de site/midia (tools/gravar-site/gravar.sh). So biblioteca
 padrao. Nenhuma fonte, script ou imagem de fora: a Content Security Policy de cada
-pagina so deixa carregar o que vem do proprio site, e o unico script (site/site.js) e
-opcional: sem ele tudo continua legivel.
+pagina so deixa carregar o que vem do proprio site (a fonte Inter de site/fontes, o
+site.js, as moedas 3D do moedas3d.js e o /precos.json do Mercado ao vivo), e os scripts
+sao opcionais: sem eles tudo continua legivel.
+
+Precos: com SITE_PRECOS=1 (o tools/publicar-site.sh liga), o gerador tira no CoinGecko o
+retrato dos precos e grava em /precos.json; no dominio, o Worker (tools/site-cloudflare)
+responde ao vivo no mesmo caminho. Sem a variavel (verificar.sh, CI), o retrato sai sem
+precos e nada e buscado na rede.
 """
 
 import hashlib
 import html
+import json
+import os
 import re
 import shutil
 import sys
+import time
+import urllib.parse
+import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Sem __pycache__ dentro de tools/: o gerador roda no verificar.sh de todo mundo.
@@ -210,7 +222,7 @@ def preparar_logos(saida, redes, tokens):
 
 def preparar_icones(saida):
     original = ICONE.read_bytes()
-    for lado in (64, 256):
+    for lado in (64, 180, 256):
         (saida / f"icone-{lado}.png").write_bytes(reduzido(original, lado) or original)
     # O nome antigo, para quem ja apontava para ele.
     shutil.copyfile(saida / "icone-256.png", saida / "icone.png")
@@ -287,10 +299,10 @@ def contexto(saida=None):
 
 def copiar_estaticos(saida):
     # versoes.json: a lista de versoes assinada (tools/versoes/versoes.swift), que o app confere.
-    for nome in ("estilo.css", "site.js", "marca-ok.svg", "compartilhar.jpg", "versoes.json"):
+    for nome in ("estilo.css", "site.js", "moedas3d.js", "marca-ok.svg", "compartilhar.jpg", "versoes.json"):
         if (SITE / nome).is_file():
             shutil.copyfile(SITE / nome, saida / nome)
-    for pasta in ("midia", "selos"):
+    for pasta in ("midia", "selos", "fontes"):
         if (SITE / pasta).is_dir():
             shutil.copytree(SITE / pasta, saida / pasta)
     (saida / ".nojekyll").write_text("")
@@ -311,6 +323,75 @@ def palavras_bip39(saida):
         f'window.PALAVRAS_BIP39 = "{texto}".split(" ");\n', encoding="utf-8")
 
 
+# MARK: Precos (o retrato da publicacao)
+
+COINGECKO = "https://api.coingecko.com/api/v3"
+CACHE_PRECOS = CACHE / "precos.json"
+
+
+def _buscar_json(url):
+    pedido = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "escaliburwallet.com (site)"})
+    with urllib.request.urlopen(pedido, timeout=15) as resposta:
+        return json.loads(resposta.read().decode("utf-8"))
+
+
+def _redondo(valor, digitos=6):
+    if valor is None:
+        return None
+    return float(f"{valor:.{digitos}g}")
+
+
+def _amostra(pontos, quantos=56):
+    if not pontos:
+        return []
+    if len(pontos) <= quantos:
+        return [_redondo(p) for p in pontos]
+    passo = (len(pontos) - 1) / (quantos - 1)
+    return [_redondo(pontos[round(i * passo)]) for i in range(quantos)]
+
+
+def retrato_de_precos(ids, vitrine):
+    """Os precos da hora da publicacao, para a pagina mostrar quando o /precos.json do Worker
+    nao responde e no endereco antigo, que nao tem Worker. So com SITE_PRECOS=1 (o
+    tools/publicar-site.sh liga): o verificar.sh e o CI geram o site sem rede, e ai o retrato
+    sai sem precos, com os ids que o Worker le."""
+    retrato = {"hora": None, "ao_vivo": False, "fonte": "CoinGecko", "ids": ids, "vitrine": vitrine, "moedas": {}}
+    if os.environ.get("SITE_PRECOS") != "1":
+        return retrato
+    try:
+        if CACHE_PRECOS.is_file() and time.time() - CACHE_PRECOS.stat().st_mtime < 600:
+            guardado = json.loads(CACHE_PRECOS.read_text(encoding="utf-8"))
+            if guardado.get("ids") == ids:
+                return guardado
+        mercado = _buscar_json(f"{COINGECKO}/coins/markets?" + urllib.parse.urlencode(
+            {"vs_currency": "usd", "ids": ",".join(vitrine), "sparkline": "true", "price_change_percentage": "24h"}))
+        simples = _buscar_json(f"{COINGECKO}/simple/price?" + urllib.parse.urlencode(
+            {"ids": ",".join(ids), "vs_currencies": "usd,brl", "include_24hr_change": "true"}))
+    except Exception as erro:  # sem rede, limite da API: o site sai sem retrato
+        print(f"gerar-site: precos fora do ar ({erro}); o retrato sai sem precos", file=sys.stderr)
+        return retrato
+    if not isinstance(mercado, list) or not isinstance(simples, dict):
+        print("gerar-site: resposta inesperada do CoinGecko; o retrato sai sem precos", file=sys.stderr)
+        return retrato
+    linhas = {m["id"]: _amostra((m.get("sparkline_in_7d") or {}).get("price") or []) for m in mercado if isinstance(m, dict)}
+    for gecko in ids:
+        dado = simples.get(gecko) or {}
+        if dado.get("usd") is None:
+            continue
+        retrato["moedas"][gecko] = {
+            "usd": _redondo(dado.get("usd"), 8), "brl": _redondo(dado.get("brl"), 8),
+            "var": _redondo(dado.get("usd_24h_change"), 4), "var_brl": _redondo(dado.get("brl_24h_change"), 4),
+            "linha": linhas.get(gecko, []),
+        }
+    retrato["hora"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        CACHE.mkdir(parents=True, exist_ok=True)
+        CACHE_PRECOS.write_text(json.dumps(retrato), encoding="utf-8")
+    except OSError:
+        pass
+    return retrato
+
+
 def mapa_do_site(saida, rotas):
     urls = "".join(f"<url><loc>{paginas.SITE_URL}{r + '/' if r else ''}</loc></url>" for r in rotas)
     (saida / "sitemap.xml").write_text(
@@ -328,6 +409,9 @@ def main():
     saida = preparar(Path(sys.argv[1]))
     ctx = contexto(saida)
     rotas = []
+    # O retrato dos precos: em /precos.json, o mesmo caminho que o Worker responde ao vivo.
+    ctx["retrato"] = retrato_de_precos(paginas.ids_de_preco(ctx), paginas.VITRINE)
+    (saida / "precos.json").write_text(json.dumps(ctx["retrato"], ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     def modelo(rota, arquivo, titulo, descricao, ativa=None):
         base = base_de(rota)
