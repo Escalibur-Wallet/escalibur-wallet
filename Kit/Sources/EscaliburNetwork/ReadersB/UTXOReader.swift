@@ -40,9 +40,16 @@ public struct UTXOReader: Sendable {
     static let parallelism = 4
 
     public init(chain: Chain, transport: ChainReaderTransport? = nil, providers: [ProviderPool.Provider]? = nil) throws {
-        try self.init(chain: chain, transport: transport, providers: providers, provesInclusion: chain == .bitcoin && providers == nil)
+        guard chain.family == .utxo else { throw ChainReaderError.unsupportedAccount }
+        self.chain = chain
+        self.provesInclusion = chain == .bitcoin && providers == nil
+        self.transport = transport ?? PacedChainTransport(base: HTTPReaderTransport(), intervals: Endpoints.utxoPacing)
+        self.pool = providers.map(ProviderPool.init) ?? Self.sharedPool(for: chain)
     }
 
+    /// Com a prova de inclusao escolhida por quem chama (os testes de SPV). Sem delegar
+    /// para o init de cima: a delegacao num init de struct que lanca soltava o transporte
+    /// duas vezes (crash nos testes, 22/10/2026).
     public init(chain: Chain, transport: ChainReaderTransport?, providers: [ProviderPool.Provider]?, provesInclusion: Bool) throws {
         guard chain.family == .utxo else { throw ChainReaderError.unsupportedAccount }
         self.chain = chain
