@@ -1859,6 +1859,8 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
 @media (max-width: 899px) {
   .janela-aba:nth-child(n+3) { display: none; }
   .janela-linhas { display: none; }
+  /* Sem a barra branca na lateral das linhas 90 e 95 no celular (pedido do dono, 23/10/2026). */
+  .janela-corpo li.trava.conferida { box-shadow: none; }
 }
 
 /* As moedas da pagina Redes giram no clique e no arrasto (pedido do dono, 23/10/2026). */
