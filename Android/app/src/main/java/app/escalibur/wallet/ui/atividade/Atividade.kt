@@ -206,17 +206,22 @@ fun TelaDeAtividade() {
         },
         modifier = Modifier.fillMaxSize().background(Paleta.vazio),
     ) {
+        // Lendo pela primeira vez: no meio da tela inteira, como o ActivityLoading do iOS, e nao no
+        // espaco abaixo do titulo.
+        if (carregandoPrimeiraVez) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                val ligadas = Redes.todas.filter { it.id !in App.estado.redesDesligadas }
+                CarregandoAtividade(ligadas.take(7).map { it.id to it.coingecko }, r?.redes ?: ligadas.size)
+            }
+        }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(bottom = Espaco.xl + LocalEspacoDaBarra.current)) {
             TituloDeAba(t("Atividade"))
             if (r != null && r.falhas.isNotEmpty()) {
                 AvisoDeAtualizacao(nomes(r.falhas), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm)) { atualizar(true) }
             }
             when {
-                // Lendo pela primeira vez: o carregando no espaco livre, abaixo do que ja aparece.
-                carregandoPrimeiraVez -> Box(Modifier.fillMaxWidth().heightIn(min = alturaDaTela * 0.55f), contentAlignment = Alignment.Center) {
-                    val ligadas = Redes.todas.filter { it.id !in App.estado.redesDesligadas }
-                    CarregandoAtividade(ligadas.take(7).map { it.id to it.coingecko }, r?.redes ?: ligadas.size)
-                }
+                // Lendo pela primeira vez: o carregando fica por cima da lista, no meio da tela (abaixo).
+                carregandoPrimeiraVez -> Spacer(Modifier.height(1.dp))
                 r != null && r.itens.isEmpty() -> Column(Modifier.fillMaxWidth().heightIn(min = alturaDaTela * 0.8f).padding(horizontal = Espaco.margem),
                                                          horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     ArteDaAtividadeVazia(230.dp)

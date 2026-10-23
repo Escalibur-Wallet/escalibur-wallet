@@ -1,5 +1,8 @@
 package app.escalibur.wallet.ui.importar
 
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -112,7 +115,7 @@ fun ListaDePalavras(entrada: EntradaDaFrase, aoEscolher: (String) -> Unit, aoTir
                 }
             }
         }
-        LazyColumn(state = estado, contentPadding = PaddingValues(start = Espaco.margem, end = Espaco.margem, bottom = Espaco.xl),
+        LazyColumn(Modifier.weight(1f), state = estado, contentPadding = PaddingValues(start = Espaco.margem, end = Espaco.margem, bottom = Espaco.xl),
                    verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
             items(letras, key = { it }) { letra ->
                 Column(verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
@@ -167,5 +170,8 @@ fun ListaDePalavras(entrada: EntradaDaFrase, aoEscolher: (String) -> Unit, aoTir
                 }
             }
         }
+        // A faixa dos botoes do Android, chapada: a lista rola por cima dela, nao por baixo
+        // dos botoes.
+        Box(Modifier.fillMaxWidth().windowInsetsBottomHeight(WindowInsets.navigationBars).background(Paleta.vazio))
     }
 }

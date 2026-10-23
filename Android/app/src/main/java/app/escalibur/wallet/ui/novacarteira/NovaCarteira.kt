@@ -1,5 +1,12 @@
 package app.escalibur.wallet.ui.novacarteira
 
+import app.escalibur.wallet.ui.comp.PlacaLaqueada
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.key
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
@@ -504,13 +511,29 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
         }
     }
 
+    // O baralho do iOS: cada grupo e um cartao da pilha, o atual na frente e os proximos atras,
+    // um pouco abaixo e menores. Seguir passa o da frente para o fundo (ele volta ao meio e some
+    // atras dos outros) e o seguinte sobe; voltar traz o do fundo de volta.
+    val densidade = LocalDensity.current
+    var anterior by remember { mutableIntStateOf(-1) }
+    val saida = remember { Animatable(0f) }
+    fun trocar(alvo: Int) {
+        escopo.launch {
+            saida.snapTo(arrasto.value)
+            anterior = grupo
+            grupo = alvo
+            arrasto.snapTo(0f)
+            saida.animateTo(0f, spring(dampingRatio = 0.84f, stiffness = 195f))
+        }
+    }
+    /** Os botoes fazem o mesmo que o dedo: a carta da frente sai para o lado, girando um pouco, e
+     * passa para o fundo enquanto a seguinte sobe. Seguir joga para a esquerda; voltar, para a direita. */
     fun mover(delta: Int) {
         val alvo = (grupo + delta).coerceIn(0, grupos - 1)
         if (alvo == grupo) return
         escopo.launch {
-            arrasto.animateTo(if (delta > 0) -600f else 600f, tween(160))
-            grupo = alvo
-            arrasto.snapTo(0f)
+            arrasto.animateTo(with(densidade) { (if (delta > 0) -240 else 240).dp.toPx() }, tween(160, easing = androidx.compose.animation.core.EaseIn))
+            trocar(alvo)
         }
     }
 
@@ -530,43 +553,59 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
                 ChapaDeTodas(palavras, mostradas, escondidas, mostradas[grupoDaPassphrase]?.firstOrNull()) { escondidas = false }
             }
         } else {
+            val altura = 84.dp * porGrupo + 16.dp
+            val limite = with(densidade) { 70.dp.toPx() }
             Box(
-                Modifier.fillMaxWidth().padding(top = Espaco.lg).height(84.dp * porGrupo + 16.dp + 32.dp)
+                Modifier.fillMaxWidth().padding(top = Espaco.lg).height(altura + 32.dp)
                     .pointerInput(grupo) {
                         detectHorizontalDragGestures(
                             onDragEnd = {
-                                escopo.launch {
-                                    when {
-                                        arrasto.value < -70 && grupo < grupos - 1 -> mover(1)
-                                        arrasto.value > 70 && grupo > 0 -> mover(-1)
-                                        else -> arrasto.animateTo(0f, spring(dampingRatio = 0.75f))
-                                    }
+                                when {
+                                    arrasto.value < -limite && grupo < grupos - 1 -> trocar(grupo + 1)
+                                    arrasto.value > limite && grupo > 0 -> trocar(grupo - 1)
+                                    else -> escopo.launch { arrasto.animateTo(0f, spring(dampingRatio = 0.75f, stiffness = 322f)) }
                                 }
                             },
                         ) { _, delta -> escopo.launch { arrasto.snapTo(arrasto.value + delta) } }
                     },
+                contentAlignment = Alignment.TopCenter,
             ) {
-                // O baralho: os proximos atras, um pouco abaixo e menores, num cinza mais claro.
-                for (profundidade in 2 downTo 0) {
-                    val indice = grupo + profundidade
-                    if (indice >= grupos) continue
-                    val tons = listOf(Paleta.viva, Color(0xFFDADADF), Color(0xFFBEBEC4))
-                    Box(
-                        Modifier.fillMaxWidth().height(84.dp * porGrupo + 16.dp)
-                            .graphicsLayer {
-                                val escala = 1 - 0.06f * profundidade
-                                scaleX = escala; scaleY = escala
-                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
-                                translationY = 10.dp.toPx() * profundidade
-                                if (profundidade == 0) { translationX = arrasto.value; rotationZ = arrasto.value / 25f }
+                val tons = listOf(Paleta.viva, Color(0xFFDADADF), Color(0xFFBEBEC4), Color(0xFFA4A4AB))
+                for (indice in 0 until grupos) {
+                    key(indice) {
+                        // Lugar na pilha: 0 na frente, 1 e 2 os proximos, 3 o fundo, onde fica o cartao
+                        // que acabou de passar. Os do meio de uma pilha longa ficam escondidos no fundo.
+                        val profundidade = (indice - grupo + grupos) % grupos
+                        val ultimo = profundidade == grupos - 1 && grupos > 3
+                        val vaga = if (profundidade == 0) 0 else if (ultimo) 3 else minOf(profundidade, 3)
+                        val visivel = profundidade <= 2 || ultimo
+                        val lugar by androidx.compose.animation.core.animateFloatAsState(vaga.toFloat(), spring(dampingRatio = 0.82f, stiffness = 158f), label = "lugar")
+                        val tom by androidx.compose.animation.animateColorAsState(tons[vaga], spring(dampingRatio = 0.82f, stiffness = 158f), label = "tom")
+                        val opacidade by androidx.compose.animation.core.animateFloatAsState(if (visivel) 1f else 0f, label = "visivel")
+                        val x = when {
+                            profundidade == 0 -> arrasto.value
+                            indice == anterior -> saida.value
+                            else -> 0f
+                        }
+                        Box(
+                            Modifier.fillMaxWidth().height(altura).zIndex(-profundidade.toFloat())
+                                .graphicsLayer {
+                                    val escala = 1 - 0.06f * lugar
+                                    scaleX = escala; scaleY = escala
+                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
+                                    translationX = x
+                                    translationY = 10.dp.toPx() * lugar
+                                    rotationZ = x / density / 25f
+                                    alpha = opacidade
+                                }
+                                .shadow(if (profundidade == 0) 10.dp else 0.dp, PlacaLaqueada())
+                                .clip(PlacaLaqueada()).background(tom),
+                        ) {
+                            if (profundidade == 0 && indice == grupoDaPassphrase) {
+                                CartaoDaPassphrase(mostradas[indice]?.firstOrNull() ?: "", escondidas) { escondidas = false }
+                            } else if (profundidade == 0) {
+                                CartaoDePalavras(indice * porGrupo, mostradas[indice] ?: emptyList(), escondidas) { escondidas = false }
                             }
-                            .shadow(if (profundidade == 0) 10.dp else 0.dp, RoundedCornerShape(16.dp))
-                            .clip(RoundedCornerShape(16.dp)).background(tons[profundidade]),
-                    ) {
-                        if (profundidade == 0 && grupo == grupoDaPassphrase) {
-                            CartaoDaPassphrase(mostradas[grupo]?.firstOrNull() ?: "", escondidas) { escondidas = false }
-                        } else if (profundidade == 0) {
-                            CartaoDePalavras(grupo * porGrupo, mostradas[grupo] ?: emptyList(), escondidas) { escondidas = false }
                         }
                     }
                 }
@@ -643,39 +682,95 @@ fun contagemDaPassphrase(passphrase: String): String {
     return if (quantos > 16) contagem + " " + t("A quebra de linha não é espaço.") else contagem
 }
 
-/** A frase inteira numa chapa clara, em duas colunas, em ordem de cima para baixo. */
+/**
+ * A frase inteira numa chapa de aco escovado como as de guardar seed (o allPlate do iOS): as
+ * palavras gravadas em baixo-relevo, duas colunas em ordem de cima para baixo, parafusos nos
+ * cantos. A chapa inclina com o dedo e com o celular, e o reflexo do metal anda junto; nao ha
+ * brilho correndo sozinho. Escondidas, a chapa vira: as palavras na frente, o "Mostrar de novo"
+ * no verso, e mostrar de novo vira a chapa de volta.
+ */
 @Composable
 private fun ChapaDeTodas(palavras: Int, mostradas: Map<Int, List<String>>, escondidas: Boolean, passphrase: String? = null, aoMostrar: () -> Unit) {
     val todas = (0 until palavras / 3).flatMap { mostradas[it] ?: emptyList() }
     val metade = (palavras + 1) / 2
+    val parado = app.escalibur.wallet.ui.comp.movimentoReduzido()
+    val inclinacao = rememberInclinacao(ligada = !parado)
+    val escopo = rememberCoroutineScope()
+    // O dedo, em dp, ate 70 para cada lado; volta com uma mola ao soltar.
+    val dedo = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
+    val roll = dedo.value.x / 10f + inclinacao.roll * 6f
+    val pitch = -dedo.value.y / 12f - inclinacao.pitch * 5f
+    val giro by androidx.compose.animation.core.animateFloatAsState(
+        if (escondidas) 180f else 0f, if (parado) androidx.compose.animation.core.snap() else spring(dampingRatio = 0.82f, stiffness = 80f), label = "giro",
+    )
+    val deFrente = cos(Math.toRadians(giro.toDouble())) > 0
+    val numero = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Black, fontFeatureSettings = "tnum")
+    val palavra = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+
+    // A espessura da chapa: a borda de aco que aparece embaixo e do lado oposto ao giro.
+    @Composable
+    fun Borda(modifier: Modifier) {
+        Box(modifier.offset(x = (-roll * 0.35f).dp, y = (3.5f + pitch.coerceIn(-4f, 10f) * 0.15f).dp)
+                .clip(RoundedCornerShape(16.dp)).background(Brush.verticalGradient(listOf(Aco.bordaClara, Aco.bordaEscura))))
+    }
+
     Box(
-        Modifier.fillMaxWidth().shadow(14.dp, RoundedCornerShape(16.dp)).clip(RoundedCornerShape(16.dp))
-            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFFE6E7EA), Color(0xFFB9BBC2)))).padding(Espaco.lg),
+        Modifier.fillMaxWidth().padding(vertical = Espaco.md)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragEnd = { escopo.launch { dedo.animateTo(Offset.Zero, spring(dampingRatio = 0.6f, stiffness = 158f)) } },
+                    onDragCancel = { escopo.launch { dedo.animateTo(Offset.Zero, spring(dampingRatio = 0.6f, stiffness = 158f)) } },
+                ) { _, arraste ->
+                    val alvo = dedo.value + Offset(arraste.x.toDp().value, arraste.y.toDp().value)
+                    escopo.launch { dedo.snapTo(Offset(alvo.x.coerceIn(-70f, 70f), alvo.y.coerceIn(-70f, 70f))) }
+                }
+            }
+            .graphicsLayer {
+                rotationX = 7f + pitch
+                rotationY = roll
+                cameraDistance = 12f * density
+            },
     ) {
-        if (escondidas) {
-            CartaoDePalavras(0, emptyList(), true, aoMostrar)
-        } else Column {
-            Row(horizontalArrangement = Arrangement.spacedBy(Espaco.md)) {
-                for (coluna in 0..1) {
-                    Column(Modifier.weight(1f)) {
-                        for (indice in coluna * metade until minOf(palavras, (coluna + 1) * metade)) {
-                            Row(Modifier.height(40.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                                Text("%02d".format(indice + 1), fontSize = 13.sp, fontWeight = FontWeight.Black, color = Color(0xFF55575E), modifier = Modifier.width(24.dp))
-                                Text(todas.getOrElse(indice) { "" }, fontFamily = FontFamily.Monospace, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2A2B30), maxLines = 1)
+        // A frente: as palavras.
+        Box(Modifier.fillMaxWidth().graphicsLayer { rotationY = giro; alpha = if (deFrente) 1f else 0f; cameraDistance = 12f * density }) {
+            Borda(Modifier.matchParentSize())
+            Box(Modifier.shadow(18.dp, RoundedCornerShape(16.dp), ambientColor = Color.Black, spotColor = Color.Black.copy(alpha = 0.55f))) {
+                ChapaDeMetal(roll / 12f, pitch / 12f, Modifier.matchParentSize())
+                Column(Modifier.fillMaxWidth().padding(Espaco.lg)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Espaco.md)) {
+                        for (coluna in 0..1) {
+                            Column(Modifier.weight(1f)) {
+                                for (indice in coluna * metade until minOf(palavras, (coluna + 1) * metade)) {
+                                    Row(Modifier.height(40.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                                        TextoGravado("%02d".format(indice + 1), numero, 0.8.dp, Modifier.width(24.dp))
+                                        TextoGravado(todas.getOrElse(indice) { "" }, palavra, 1.dp)
+                                    }
+                                }
                             }
                         }
                     }
+                    if (passphrase != null) {
+                        Box(Modifier.padding(vertical = Espaco.xs).fillMaxWidth().height(1.5.dp).background(Aco.sulco))
+                        Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                            TextoGravado("Pass", numero, 0.8.dp)
+                            TextoGravado(passphrase.replace(" ", "␣"), palavra, 1.dp, linhas = 8)
+                        }
+                        TextoGravado(contagemDaPassphrase(passphrase), TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold), 0.6.dp, linhas = 3)
+                    }
                 }
             }
-            if (passphrase != null) {
-                Column(Modifier.padding(top = Espaco.sm), verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
-                    Box(Modifier.fillMaxWidth().height(1.5.dp).background(Color(0xFF9C9EA5)))
-                    Row(Modifier.padding(top = Espaco.xs), horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                        Text("Pass", fontSize = 13.sp, fontWeight = FontWeight.Black, color = Color(0xFF55575E))
-                        Text(passphrase.replace(" ", "␣"), fontFamily = FontFamily.Monospace, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2A2B30))
-                    }
-                    Text(contagemDaPassphrase(passphrase), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF55575E))
-                }
+        }
+        // O verso: o mesmo aco, com o botao. Mesmo tamanho da frente.
+        Box(Modifier.matchParentSize().graphicsLayer { rotationY = giro - 180f; alpha = if (deFrente) 0f else 1f; cameraDistance = 12f * density }) {
+            Borda(Modifier.matchParentSize())
+            ChapaDeMetal(-roll / 12f, pitch / 12f, Modifier.matchParentSize().shadow(18.dp, RoundedCornerShape(16.dp)))
+            Column(Modifier.matchParentSize().padding(Espaco.lg), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text(t("Escondidas para ninguém ler por cima do seu ombro."), style = estilo(Tipo.nota), color = Aco.tinta.copy(alpha = 0.75f), textAlign = TextAlign.Center)
+                Box(
+                    Modifier.padding(top = Espaco.sm).height(40.dp).clip(RoundedCornerShape(Raio.cartao)).border(1.5.dp, Aco.tinta, RoundedCornerShape(Raio.cartao))
+                        .clickable(enabled = escondidas, onClick = aoMostrar).padding(horizontal = Espaco.md),
+                    contentAlignment = Alignment.Center,
+                ) { Text(t("Mostrar de novo"), style = estilo(Tipo.acao), color = Aco.tinta) }
             }
         }
     }
