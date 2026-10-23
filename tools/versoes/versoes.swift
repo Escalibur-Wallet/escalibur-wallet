@@ -30,10 +30,11 @@ let arquivo = raiz.appendingPathComponent("site/versoes.json")
 /// ReleaseKeys.swift.
 let arquivoApp = raiz.appendingPathComponent("App/EscaliburWallet/Resources/Versoes/versoes.json")
 /// Nomes antigos de uma chave confiada: o mesmo par de chaves, com o nome que os builds de
-/// antes conhecem. A assinatura vale so para o texto, entao a lista do site leva a mesma
-/// assinatura sob os dois nomes; a do app, so sob o nome de hoje. A do Mac do dono mudou de
-/// nome no build 11; os builds 7 a 10 leem a lista do site com o nome antigo.
-let nomesAntigos: [String: String] = ["escalibur-mac-1": "mac-thomaz-1"]
+/// antes conhecem. A assinatura vale so para o texto, entao a lista do site levaria a mesma
+/// assinatura sob os dois nomes; a do app, so sob o nome de hoje. Vazio desde 23/10/2026: o
+/// nome antigo da chave do Mac saiu da lista publica (os builds 7 a 10 do TestFlight deixam
+/// de conferir a lista do site).
+let nomesAntigos: [String: String] = [:]
 let pasta = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".escalibur")
 let app = "app.escalibur.wallet"
 

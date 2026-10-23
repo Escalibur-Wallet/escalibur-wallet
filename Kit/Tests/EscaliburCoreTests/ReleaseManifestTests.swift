@@ -111,10 +111,9 @@ struct ReleaseManifestTests {
                 "o build do project.yml nao esta na lista assinada: assine antes (tools/versoes/versoes.swift autorizar)")
     }
 
-    /// A chave do Mac do dono mudou de nome no build 11. A lista do app (a que vai no bundle)
-    /// confere so com o nome novo e nao leva o antigo; a do site confere tambem para os builds
-    /// 7 a 10, que so conhecem o nome antigo da mesma chave publica.
-    @Test("Lista do app e do site: o nome novo para o app, o antigo ainda vale no site")
+    /// A lista do app (a que vai no bundle) e a do site conferem so com o nome de hoje da chave
+    /// do Mac. O nome antigo saiu das duas em 23/10/2026.
+    @Test("Lista do app e do site: so o nome de hoje da chave")
     func listasComONomeNovo() throws {
         let raiz = URL(fileURLWithPath: caminhoNoAparelho(#filePath)).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
@@ -122,10 +121,12 @@ struct ReleaseManifestTests {
         guard let doApp = try? Data(contentsOf: raiz.appendingPathComponent("App/EscaliburWallet/Resources/Versoes/versoes.json")),
               let doSite = try? Data(contentsOf: raiz.appendingPathComponent("site/versoes.json")) else { return }
         #expect(try ReleaseManifest.verified(doApp, app: Self.app).signedBy == Set(ReleaseKeys.published.keys))
-        #expect(!String(decoding: doApp, as: UTF8.self).contains("mac-thomaz"), "a lista do app leva o nome antigo")
-        let publica = try #require(ReleaseKeys.trusted["escalibur-mac-1"])
-        let antigos = try ReleaseManifest.verified(doSite, app: Self.app, keys: ["mac-thomaz-1": publica], threshold: 1)
-        #expect(antigos.signedBy == ["mac-thomaz-1"])
+        let nomes = { (dados: Data) in
+            Set(((try? JSONSerialization.jsonObject(with: dados) as? [String: Any])?["assinaturas"] as? [[String: Any]] ?? [])
+                .compactMap { $0["chave"] as? String })
+        }
+        #expect(nomes(doApp) == Set(ReleaseKeys.published.keys), "a lista do app leva um nome de chave a mais")
+        #expect(nomes(doSite) == Set(ReleaseKeys.published.keys), "a lista do site leva um nome de chave a mais")
         #expect(try ReleaseManifest.verified(doSite, app: Self.app).signedBy == ["escalibur-mac-1"])
     }
 }
