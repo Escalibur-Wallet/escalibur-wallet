@@ -61,7 +61,11 @@ public struct UTXOReader: Sendable {
     public static func providers(for chain: Chain) -> [ProviderPool.Provider] {
         switch chain.id {
         case Chain.dogecoin.id: return Endpoints.dogecoin
-        case Chain.litecoin.id: return Endpoints.litecoinBlockbook + (Endpoints.esplora["litecoin"] ?? []) + Endpoints.litecoinExtra
+        // Litecoin: litecoinspace e Bitcore repartem os enderecos; a Blockcypher separa a Atomic, que
+        // le a Dogecoin na frente.
+        case Chain.litecoin.id:
+            return (Endpoints.esplora["litecoin"] ?? []) + Endpoints.litecoinBitcore + [Endpoints.litecoinExtra[0]]
+                + Endpoints.litecoinBlockbook + Endpoints.litecoinExtra.dropFirst()
         default: return Endpoints.esplora[chain.id] ?? []
         }
     }
@@ -170,38 +174,72 @@ public struct UTXOReader: Sendable {
         return total
     }
 
-    /// O saldo confirmado do aviso de recebimento, com o menor rastro: cada endereco vai sempre
-    /// ao mesmo provedor (sorteado por `salt`, um por instalacao), e um segundo provedor so entra
-    /// quando a soma passou de `previous`, e so para os enderecos com saldo. Um provedor que
-    /// inventa recebimento continua barrado: o que subiu vale o menor dos dois (pentest de
-    /// 14/10/2026, M1). Sem `previous` (a leitura que marca o saldo de partida), um so.
+    /// O saldo confirmado do aviso de recebimento, com o menor rastro e sem aviso falso.
+    ///
+    /// - Cada endereco vai sempre ao mesmo provedor da lista fixa (nao da dos que estao no ar),
+    ///   escolhido pelo HMAC do sal desta instalacao. Sem contingencia: com o provedor dele fora do
+    ///   ar ou em pausa, a conta nao e lida nesta rodada (erro), e o saldo visto fica.
+    /// - Quando a soma muda em relacao a `previous`, um provedor de outro dono, fixo tambem, le cada
+    ///   endereco. Na subida vale o menor de cada endereco; na queda, o maior. Se a conferencia nao
+    ///   confirma o sentido, volta `previous`: o saldo visto nao muda e nada avisa. Assim um
+    ///   provedor sozinho nao inventa recebimento, nem baixa o saldo visto para depois "devolver"
+    ///   (pentest de 14/10/2026, M1; revisao de 23/10/2026).
+    /// - Sem `previous` (a leitura que marca o saldo de partida), um so: ela nunca avisa.
     public func receiptBalance(addresses: [String], salt: UInt64, previous: UInt64?) async throws -> UInt64 {
-        let providers = await pool.available()
-        guard providers.count >= 2 else { throw ChainReaderError.notEnoughSources(needed: 2, got: providers.count) }
+        let providers = pool.providers
+        guard Set(providers.map(\.operatorName)).count >= 2 else {
+            throw ChainReaderError.notEnoughSources(needed: 2, got: Set(providers.map(\.operatorName)).count)
+        }
+        let live = Set(await pool.available().map(\.baseURL))
         let first = try await ReaderConcurrency.map(addresses, limit: Self.parallelism) { address in
-            try await self.confirmedReadings(address, providers: providers, start: Self.stableIndex(address, salt: salt, count: providers.count), count: 1)[0]
+            try await self.confirmedReading(address, provider: Self.fixedProvider(address, salt: salt, providers: providers), live: live)
         }
         let total = try Self.sum(first)
-        guard let previous, total > previous else { return total }
-        let entries = Array(zip(addresses, first))
-        let confirmed = try await ReaderConcurrency.map(entries, limit: Self.parallelism) { address, reading -> UInt64 in
-            guard reading > 0 else { return 0 }
-            let start = Self.stableIndex(address, salt: salt, count: providers.count)
-            let readings = try await self.confirmedReadings(address, providers: providers, start: start + 1, count: 1, skip: providers[start])
-            return min(reading, readings[0])
+        guard let previous, total != previous else { return total }
+        let second = try await ReaderConcurrency.map(addresses, limit: Self.parallelism) { address in
+            try await self.confirmedReading(address, provider: Self.witnessProvider(address, salt: salt, providers: providers), live: live)
         }
-        return try Self.sum(confirmed)
+        let rising = total > previous
+        let checked = try Self.sum(zip(first, second).map { rising ? min($0, $1) : max($0, $1) })
+        return (rising ? checked > previous : checked < previous) ? checked : previous
     }
 
-    /// O provedor fixo de um endereco nesta instalacao: FNV-1a do sal e do endereco.
+    /// O provedor fixo de um endereco nesta instalacao, na lista inteira.
+    static func fixedProvider(_ address: String, salt: UInt64, providers: [ProviderPool.Provider]) -> ProviderPool.Provider {
+        providers[stableIndex(address, salt: salt, count: providers.count)]
+    }
+
+    /// O segundo, de outro dono, fixo tambem.
+    static func witnessProvider(_ address: String, salt: UInt64, providers: [ProviderPool.Provider]) -> ProviderPool.Provider {
+        let owner = fixedProvider(address, salt: salt, providers: providers).operatorName
+        let others = providers.filter { $0.operatorName != owner }
+        return others[stableIndex("2|" + address, salt: salt, count: others.count)]
+    }
+
+    /// HMAC-SHA256 do endereco com o sal como chave, os 8 primeiros bytes, modulo `count`.
     static func stableIndex(_ address: String, salt: UInt64, count: Int) -> Int {
-        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
-        let bytes = withUnsafeBytes(of: salt.littleEndian, Array.init) + Array(address.utf8)
-        for byte in bytes {
-            hash ^= UInt64(byte)
-            hash = hash &* 0x0000_0100_0000_01b3
+        let mac = Hash.hmacSHA256(key: withUnsafeBytes(of: salt.littleEndian, Array.init), data: Array(address.utf8))
+        let value = mac.prefix(8).reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
+        return Int(value % UInt64(max(count, 1)))
+    }
+
+    /// O que ja entrou num bloco neste endereco, so deste provedor: fora do ar ou em pausa, erro.
+    private func confirmedReading(_ address: String, provider: ProviderPool.Provider, live: Set<URL>) async throws -> UInt64 {
+        guard live.contains(provider.baseURL) else { throw ChainReaderError.notEnoughSources(needed: 1, got: 0) }
+        do {
+            let claims = try await client(provider).unspent(address)
+            var sum: UInt64 = 0
+            for claim in claims where claim.height != nil {
+                let (next, overflow) = sum.addingReportingOverflow(claim.claimedValue)
+                guard !overflow else { throw ChainReaderError.malformedResponse(field: "value") }
+                sum = next
+            }
+            await pool.reportSuccess(provider)
+            return sum
+        } catch {
+            await report(provider, error)
+            throw error
         }
-        return Int(hash % UInt64(max(count, 1)))
     }
 
     private static func sum(_ values: [UInt64]) throws -> UInt64 {
@@ -212,38 +250,6 @@ public struct UTXOReader: Sendable {
             total = next
         }
         return total
-    }
-
-    /// `count` leituras do que ja entrou num bloco, em provedores diferentes a partir de
-    /// `start`, pulando `skip`; um que falha da a vez ao seguinte.
-    private func confirmedReadings(
-        _ address: String, providers: [ProviderPool.Provider], start: Int, count: Int, skip: ProviderPool.Provider? = nil
-    ) async throws -> [UInt64] {
-        var readings: [UInt64] = []
-        var lastError: Error = ChainReaderError.notEnoughSources(needed: count, got: 0)
-        for step in 0..<providers.count where readings.count < count {
-            let provider = providers[(start + step) % providers.count]
-            if let skip, provider.baseURL == skip.baseURL { continue }
-            do {
-                let claims = try await client(provider).unspent(address)
-                var sum: UInt64 = 0
-                for claim in claims where claim.height != nil {
-                    let (next, overflow) = sum.addingReportingOverflow(claim.claimedValue)
-                    guard !overflow else { throw ChainReaderError.malformedResponse(field: "value") }
-                    sum = next
-                }
-                readings.append(sum)
-                await pool.reportSuccess(provider)
-            } catch {
-                await report(provider, error)
-                lastError = error
-            }
-        }
-        guard readings.count == count else {
-            if readings.isEmpty { throw lastError }
-            throw ChainReaderError.notEnoughSources(needed: count, got: readings.count)
-        }
-        return readings
     }
 
     /// Dois provedores diferentes, a partir de `start` (espalha a carga entre enderecos);
@@ -434,13 +440,23 @@ public struct UTXOReader: Sendable {
     /// chega e nao fecha e sempre recusa. No Bitcoin, com tres provedores de prova, nao ha
     /// esse recuo.
     func provenOrUnavailable(_ txid: UTXOTxID, tip: UInt32) async -> Bool {
+        switch await proofOutcome(txid, tip: tip) {
+        case .proven: return true
+        case .unavailable: return chain == .litecoin
+        case .refused: return false
+        }
+    }
+
+    enum ProofOutcome { case proven, unavailable, refused }
+
+    func proofOutcome(_ txid: UTXOTxID, tip: UInt32) async -> ProofOutcome {
         do {
             try await proveInclusion(txid, tip: tip)
-            return true
+            return .proven
         } catch BitcoinSPV.Failure.unavailable {
-            return chain == .litecoin
+            return .unavailable
         } catch {
-            return false
+            return .refused
         }
     }
 
@@ -461,7 +477,9 @@ public struct UTXOReader: Sendable {
         guard let (proof, source) = found else { throw BitcoinSPV.Failure.unavailable }
         let branch = try proof.merkle.map { try BitcoinSPV.internalHash(hex: $0) }
         let height = proof.blockHeight
-        guard height <= tip + Self.tipTolerance else { throw BitcoinSPV.Failure.brokenChain }
+        // Nada acima do topo: a testemunha honesta nao conhece a altura e responderia erro, e um
+        // cabecalho falso no piso passaria sozinho (revisao de 23/10/2026).
+        guard height <= tip else { throw BitcoinSPV.Failure.brokenChain }
         let last = min(height + BitcoinSPV.depth - 1, max(tip, height))
 
         var headers: [BitcoinSPV.Header] = []
@@ -481,11 +499,13 @@ public struct UTXOReader: Sendable {
               try BitcoinSPV.merkleRoot(txid: txid, branch: branch, position: proof.pos) == block.merkleRoot
         else { throw BitcoinSPV.Failure.notInBlock }
 
-        // Um segundo dono, quando responde, tem de ver o mesmo bloco nesta altura (Esplora ou
-        // Blockbook: na Litecoin o outro dono e o Blockbook).
+        // Um segundo dono tem de ver o mesmo bloco nesta altura (Esplora ou Blockbook: na Litecoin
+        // o outro dono e o Blockbook). Sem nenhum respondendo, nao ha prova (`unavailable`), nunca
+        // sucesso: um cabecalho falso no piso nao passa sozinho (revisao de 23/10/2026).
         let witnesses = await pool.available().filter {
             switch UTXOBackend.of($0) { case .esplora, .blockbook: return true; default: return false }
         }
+        var witnessed = false
         for provider in witnesses where provider.operatorName != source.operatorName {
             let other: [UInt8]
             do {
@@ -495,8 +515,10 @@ public struct UTXOReader: Sendable {
                 continue
             }
             guard other == block.hash else { throw BitcoinSPV.Failure.providersDisagree }
+            witnessed = true
             break
         }
+        guard witnessed else { throw BitcoinSPV.Failure.unavailable }
         for (offset, header) in headers.enumerated() { await BitcoinHeaderCache.shared.store(header, chain, at: height + UInt32(offset)) }
     }
 
@@ -599,7 +621,9 @@ public struct UTXOReader: Sendable {
     /// Blockcypher e Blockchair cotam 2 e 5; juntar as quatro faria a regra dos 3x
     /// recusar sempre.
     public func feeLevels() async throws -> UTXOFeeLevels {
-        let providers = await pool.available()
+        // A taxa nao leva endereco: as fontes completas primeiro, fora da ordem que separa as
+        // familias na leitura dos enderecos.
+        let providers = Self.completeFirst(await pool.available())
         let quorum = Self.feeQuorum(for: chain)
         var quotes: [UTXOFeeQuote] = []
         var next = 0
@@ -619,6 +643,13 @@ public struct UTXOReader: Sendable {
         }
         guard quotes.count >= 2 else { throw ChainReaderError.notEnoughSources(needed: 2, got: quotes.count) }
         return try Self.combine(quotes, rules: UTXORules.for(chain))
+    }
+
+    /// Esplora, Blockbook e Bitcore antes da Blockcypher e da Blockchair, que cortam por IP e
+    /// respondem incompleto. A ordem da lista separa as familias de redes so na leitura dos
+    /// enderecos; status e taxa nao levam endereco.
+    static func completeFirst(_ providers: [ProviderPool.Provider]) -> [ProviderPool.Provider] {
+        providers.filter { UTXOBackend.of($0).sharesAddressLoad } + providers.filter { !UTXOBackend.of($0).sharesAddressLoad }
     }
 
     /// Quantas fontes de taxa a leitura junta. Bitcoin e Litecoin, tres (a mediana);
@@ -691,15 +722,25 @@ public struct UTXOReader: Sendable {
         return UTXOBroadcastReceipt(txid: signed.id, acceptedBy: accepted, rejectedBy: refused)
     }
 
-    /// Onde a transacao esta, na opiniao de dois provedores quando ha dois
+    /// Onde a transacao esta, na opiniao de dois provedores de donos diferentes quando ha dois
     /// (`ChainTransactionStatus.combine`): confirmada so se os dois confirmam.
+    ///
+    /// "Confirmado" pede mais (revisao de 23/10/2026): recebimento confirmado por provedor
+    /// mentiroso e golpe comum em negociacao P2P. Onde ha prova de bloco (Bitcoin, Litecoin), so
+    /// com a prova, e sem o topo da cadeia conhecido fica pendente. Sem prova possivel agora na
+    /// Litecoin, ou numa rede sem prova (Dogecoin), so com a resposta de dois donos.
     public func status(txid: String) async throws -> ChainTransactionStatus {
         guard let id = UTXOTxID(hex: txid.lowercased()) else { throw ChainReaderError.signedTransactionInconsistent }
         let tip = try? await tipHeight()
         var answers: [ChainTransactionStatus] = []
-        for provider in await pool.available() where answers.count < 2 {
+        var owners = Set<String>()
+        // Primeiro os que tem a transacao inteira (Esplora, Blockbook, Bitcore): a Blockcypher e a
+        // Blockchair cortam por IP e respondem incompleto, e a resposta de dois donos tem de vir dos
+        // que acompanham a cadeia.
+        for provider in Self.completeFirst(await pool.available()) where answers.count < 2 && !owners.contains(provider.operatorName) {
             do {
                 answers.append(try await client(provider).status(id, tip: tip))
+                owners.insert(provider.operatorName)
                 await pool.reportSuccess(provider)
             } catch {
                 await report(provider, error)
@@ -707,12 +748,14 @@ public struct UTXOReader: Sendable {
         }
         guard let first = answers.first else { throw HTTPClient.Failure.offline }
         let combined = answers.count == 2 ? try ChainTransactionStatus.combine(first, answers[1]) : first
-        // "Confirmado" so com a prova de que esta num bloco minerado: recebimento confirmado
-        // por provedor mentiroso e golpe comum em negociacao P2P.
-        if provesInclusion, case .confirmed = combined, let tip {
-            guard await provenOrUnavailable(id, tip: tip) else { return .pending }
+        guard case .confirmed = combined else { return combined }
+        guard provesInclusion else { return answers.count == 2 ? combined : .pending }
+        guard let tip else { return .pending }
+        switch await proofOutcome(id, tip: tip) {
+        case .proven: return combined
+        case .unavailable: return chain == .litecoin && answers.count == 2 ? combined : .pending
+        case .refused: return .pending
         }
-        return combined
     }
 
     // MARK: Historico

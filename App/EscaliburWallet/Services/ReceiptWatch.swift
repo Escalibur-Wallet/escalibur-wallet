@@ -126,6 +126,8 @@ actor ReceiptWatchCenter {
     /// Com o app aberto, uma checagem a cada 2 minutos no maximo.
     static let foregroundInterval: TimeInterval = 2 * 60
     static let maxPerCheck = 4
+    /// O intervalo minimo da conferencia com o app fechado.
+    static let backgroundInterval: TimeInterval = 60 * 60
 
     private var current: ReceiptWatchFile?
     private var checking = false
@@ -172,6 +174,8 @@ actor ReceiptWatchCenter {
     /// As contas de agora, do app destravado. Conta que saiu leva junto o saldo visto.
     func sync(accounts all: [ReceiptWatchFile.Account]) {
         let accounts = file().admitted(all)
+        // Sal que nao saiu (sorteio falhou ao ligar): sorteia de novo agora.
+        if file().enabled, file().salt == nil, let salt = try? SecureRandom.uint64() { update { $0.salt = salt } }
         guard file().enabled, file().accounts != accounts else { return }
         let keep = Set(accounts.map { "\($0.chainID)|\($0.key)" })
         update { file in
@@ -190,8 +194,11 @@ actor ReceiptWatchCenter {
         update { $0.showDetails = on }
     }
 
-    func backgroundRun() async {
+    func backgroundRun(now: Date = .now) async {
         guard file().enabled else { return }
+        // No maximo uma vez por hora com o app fechado: a cada rodada os provedores recebem os
+        // enderecos do IP do momento (auditoria de privacidade, 22/10/2026).
+        if let last = file().lastCheck, now.timeIntervalSince(last) < Self.backgroundInterval { return }
         await check(force: true)
     }
 
@@ -245,7 +252,9 @@ actor ReceiptWatchCenter {
         var events: [ReceiptEvent] = []
         for (account, balance) in balances {
             let prefix = "\(account.chainID)|\(account.key)|"
-            let present = Set(balance.holdings.map { "\(prefix)\($0.asset.id)" })
+            // Ativo que nao foi lido nesta rodada nao conta como enviado: zerado aqui, a volta
+            // dele avisava o saldo inteiro como recebido (revisao de 23/10/2026).
+            let present = Set(balance.holdings.map { "\(prefix)\($0.asset.id)" } + (balance.unread ?? []).map { "\(prefix)\($0)" })
             for key in seen.keys where key.hasPrefix(prefix) && !present.contains(key) { seen[key]?.amount = 0 }
             for holding in balance.holdings {
                 let key = "\(prefix)\(holding.asset.id)"

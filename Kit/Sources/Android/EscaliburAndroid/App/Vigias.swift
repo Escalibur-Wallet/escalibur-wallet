@@ -326,7 +326,9 @@ enum AvisoDeRecebimento {
         let desligadas = metadata.settings.disabledChainIDs
         var saida: [ReceiptWatchFile.Account] = []
         var vistas = Set<String>()
-        for carteira in metadata.wallets where !carteira.hasPassphrase && (carteira.hasBackup || carteira.isWatchOnly) {
+        // As de so observar por ultimo: com o mesmo endereco numa carteira normal, vale a normal.
+        let carteiras = metadata.wallets.filter { !$0.isWatchOnly } + metadata.wallets.filter(\.isWatchOnly)
+        for carteira in carteiras where !carteira.hasPassphrase && (carteira.hasBackup || carteira.isWatchOnly) {
             for conta in carteira.accounts {
                 guard let rede = Chain.all.first(where: { $0.id == conta.chainID }), !desligadas.contains(rede.id) else { continue }
                 // A conta da Tron com outra chave no controle nao recebe por caminho nenhum.
@@ -378,7 +380,9 @@ enum AvisoDeRecebimento {
 
     /// As contas de agora, do app destravado. Conta que saiu leva junto o saldo visto.
     static func acompanhar(contas todas: [ReceiptWatchFile.Account]) {
-        let atual = arquivo()
+        var atual = arquivo()
+        // Sal que nao saiu (sorteio falhou ao ligar): sorteia de novo agora.
+        if atual.enabled, atual.salt == nil, let sal = try? SecureRandom.uint64() { atual = mudar { $0.salt = sal } }
         let contas = atual.admitted(todas)
         guard atual.enabled, atual.accounts != contas else { return }
         let manter = Set(contas.map { "\($0.chainID)|\($0.key)" })
@@ -457,7 +461,9 @@ enum AvisoDeRecebimento {
         var eventos: [ReceiptEvent] = []
         for (conta, saldo) in saldos {
             let prefixo = "\(conta.chainID)|\(conta.key)|"
-            let presentes = Set(saldo.holdings.map { "\(prefixo)\($0.asset.id)" })
+            // Ativo que nao foi lido nesta rodada nao conta como enviado: zerado aqui, a volta dele
+            // avisava o saldo inteiro como recebido.
+            let presentes = Set(saldo.holdings.map { "\(prefixo)\($0.asset.id)" } + (saldo.unread ?? []).map { "\(prefixo)\($0)" })
             for chave in visto.keys where chave.hasPrefix(prefixo) && !presentes.contains(chave) { visto[chave]?.amount = 0 }
             for posicao in saldo.holdings {
                 let chave = "\(prefixo)\(posicao.asset.id)"

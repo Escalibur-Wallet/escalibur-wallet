@@ -183,8 +183,10 @@ public actor TradeAggregator {
     }
 
     static func cacheKey(_ intent: TradeIntent, _ providers: Set<TradeProvider>?) -> String {
+        // Sem o dono: a cotacao vai com um endereco sorteado a cada rodada, e o cache e so da
+        // tela; o plano pede de novo, com o dono (`requote`).
         [intent.chain.id, "\(intent.sell)", "\(intent.buy)", intent.amountIn.decimalString, "\(intent.slippageBps)",
-         intent.owner.checksummed, providers.map { $0.map(\.rawValue).sorted().joined(separator: ",") } ?? "*"].joined(separator: "|")
+         providers.map { $0.map(\.rawValue).sorted().joined(separator: ",") } ?? "*"].joined(separator: "|")
     }
 
     typealias Outcome = (TradeProvider, Result<ValidatedTradeQuote, TradeProviderError>)

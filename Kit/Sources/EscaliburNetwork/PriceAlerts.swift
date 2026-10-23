@@ -178,7 +178,9 @@ public enum PriceAlertRules {
     /// Quantas vezes a variacao cabe no limite, com o sinal da direcao.
     static func band(_ change: Double, limit: Double) -> Int {
         guard change.isFinite, limit > 0 else { return 0 }
-        let count = Int(floor(abs(change) / limit))
+        // Variacao de 10^21% (token relancado) estourava o Int e derrubava o app.
+        let ratio = abs(change) / limit
+        let count = ratio < 1_000_000 ? Int(floor(ratio)) : 1_000_000
         return change < 0 ? -count : count
     }
 }

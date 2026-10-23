@@ -18,14 +18,18 @@ enum ReceiptAccounts {
     static func all(_ session: AppSession) -> [ReceiptWatchFile.Account] {
         let disabled = session.metadata.settings.disabledChainIDs
         var out: [ReceiptWatchFile.Account] = []
-        var seen = Set<String>()
-        for wallet in session.metadata.wallets where !wallet.hasPassphrase && (wallet.hasBackup || wallet.isWatchOnly) {
+        var seen: [String: Int] = [:]
+        // As de so observar por ultimo: com o mesmo endereco numa carteira normal, vale a normal
+        // (senao ela ficava sem aviso enquanto a de so observar estivesse de fora).
+        let wallets = session.metadata.wallets.filter { !$0.isWatchOnly } + session.metadata.wallets.filter(\.isWatchOnly)
+        for wallet in wallets where !wallet.hasPassphrase && (wallet.hasBackup || wallet.isWatchOnly) {
             for account in wallet.accounts {
                 guard let chain = Chain.all.first(where: { $0.id == account.chainID }), !disabled.contains(chain.id) else { continue }
                 // A conta da Tron com outra chave no controle nao recebe por caminho nenhum.
                 if chain.family == .tron, wallet.tronForeignControl == true { continue }
                 let addresses = Self.addresses(for: account, chain: chain, usage: wallet.utxoUsage[chain.id])
-                guard seen.insert("\(chain.id)|\(account.address)").inserted else { continue }
+                guard seen["\(chain.id)|\(account.address)"] == nil else { continue }
+                seen["\(chain.id)|\(account.address)"] = out.count
                 out.append(.init(chainID: chain.id, addresses: addresses, owner: owner(chain, account.address), watchOnly: wallet.isWatchOnly))
             }
         }

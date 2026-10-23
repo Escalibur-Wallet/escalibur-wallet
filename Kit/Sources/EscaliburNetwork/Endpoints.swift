@@ -3,6 +3,11 @@ import Foundation
 
 /// Todos os provedores de leitura e transmissao, por rede, na ordem de preferencia.
 ///
+/// Uma empresa so vai na frente em uma familia de redes (auditoria de privacidade,
+/// 22/10/2026): o endereco da Ethereum e o da Solana nao se ligam na cadeia, mas ligavam no
+/// registro de quem recebia os dois do mesmo celular no mesmo segundo. As redes EVM contam
+/// como uma familia (o endereco e o mesmo em todas). `EndpointsTests` confere.
+///
 /// A lista e compilada e travada em `hosts.lock` pelo verificar.sh: nenhum host novo
 /// entra no app sem aparecer no diff. Provedores confirmados ao vivo em 2026-09-25
 /// (docs/blockchain.md §2). Quando o relay proprio existir, ele entra na frente de
@@ -119,22 +124,31 @@ public enum Endpoints {
     /// purpose"); a SoChain (API v2 desligada, v3 com chave); o gateway da Tatum (5
     /// requisicoes por minuto sem chave); a Bitaps (timeout de 12 s no endereco); o
     /// cryptoID (Cloudflare e chave).
+    ///
+    /// Nenhuma empresa le na frente as duas redes (auditoria de privacidade, 22/10/2026): na
+    /// Litecoin os enderecos se repartem entre o litecoinspace e a Bitcore, e a Atomic fica
+    /// depois da Blockcypher; na Dogecoin a Atomic le sozinha na frente (a Bitcore da Dogecoin
+    /// tem historico e status incompletos, visto ao vivo em 23/10/2026), e a Bitcore fica
+    /// depois da Blockcypher.
     public static let litecoinExtra: [ProviderPool.Provider] = [
-        .init(name: "bitcore", baseURL: url("https://api.bitcore.io/api/LTC/mainnet")),
         .init(name: "blockcypher", baseURL: url("https://api.blockcypher.com/v1/ltc/main")),
         .init(name: "blockchair", baseURL: url("https://api.blockchair.com/litecoin")),
     ]
 
-    /// O Blockbook vai na frente do litecoinspace: os dois repartem os enderecos de cada
-    /// leitura, e o litecoinspace ficou fora do ar (timeout de 15 s) em 04/10/2026.
+    public static let litecoinBitcore: [ProviderPool.Provider] = [
+        .init(name: "bitcore", baseURL: url("https://api.bitcore.io/api/LTC/mainnet")),
+    ]
+
+    /// O Blockbook da Atomic vem depois da Blockcypher na Litecoin (a Atomic le a Dogecoin na
+    /// frente). Ele continua sendo a testemunha da prova de bloco da Litecoin.
     public static let litecoinBlockbook: [ProviderPool.Provider] = [
         .init(name: "atomic", baseURL: url("https://litecoin.atomicwallet.io/api/v2")),
     ]
 
     public static let dogecoin: [ProviderPool.Provider] = [
         .init(name: "atomic", baseURL: url("https://dogecoin.atomicwallet.io/api/v2")),
-        .init(name: "bitcore", baseURL: url("https://api.bitcore.io/api/DOGE/mainnet")),
         .init(name: "blockcypher", baseURL: url("https://api.blockcypher.com/v1/doge/main")),
+        .init(name: "bitcore", baseURL: url("https://api.bitcore.io/api/DOGE/mainnet")),
         .init(name: "blockchair", baseURL: url("https://api.blockchair.com/dogecoin")),
     ]
 
@@ -149,10 +163,11 @@ public enum Endpoints {
         "dogecoin.atomicwallet.io": 0.1,
     ]
 
+    /// O RPC da propria Solana na frente: a PublicNode vai na frente das redes EVM.
     public static let solana: [ProviderPool.Provider] = [
-        .init(name: "publicnode", baseURL: url("https://solana-rpc.publicnode.com")),
         .init(name: "solana", baseURL: url("https://api.mainnet.solana.com")),
         .init(name: "tatum", baseURL: url("https://solana-mainnet.gateway.tatum.io")),
+        .init(name: "publicnode", baseURL: url("https://solana-rpc.publicnode.com")),
     ]
 
     /// Historico da Solana (`getSignaturesForAddress` e `getTransaction`): so quem
@@ -282,15 +297,16 @@ public enum Endpoints {
     /// conferidos em 28/09/2026: a PublicNode (Allnodes, no podado em 100 milhoes de
     /// versoes), a Sentio (no de arquivo, versao mais antiga 0) e a Aptos Labs (podado em
     /// 150 milhoes). Nos tres, `chain_id` 1, views numa versao fixa do ledger, simulacao e
-    /// transmissao em BCS. A Aptos Labs vai por ultimo: sem chave ela limita a 40.000
+    /// transmissao em BCS. A Sentio vai na frente (a PublicNode ja vai na frente das redes
+    /// EVM). A Aptos Labs vai por ultimo: sem chave ela limita a 40.000
     /// unidades de computo a cada 5 minutos por IP, e o historico usa o indexador dela.
     /// Fora: o 1RPC (a origem nao e publicada, e o erro de versao podada aponta o arquivo
     /// da Aptos Labs, entao nao conta como operador independente dela), Ankr, dRPC,
     /// NodeReal, Nodit, BlockPI e GetBlock (pedem chave ou plano pago), Blast (encerrado) e
     /// OnFinality (recusa por limite na segunda requisicao).
     public static let aptos: [ProviderPool.Provider] = [
-        .init(name: "publicnode", baseURL: url("https://aptos-rest.publicnode.com/v1")),
         .init(name: "sentio", baseURL: url("https://rpc.sentio.xyz/aptos/v1")),
+        .init(name: "publicnode", baseURL: url("https://aptos-rest.publicnode.com/v1")),
         .init(name: "aptoslabs", baseURL: url("https://api.mainnet.aptoslabs.com/v1")),
     ]
 

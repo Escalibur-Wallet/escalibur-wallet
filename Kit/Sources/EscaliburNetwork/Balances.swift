@@ -81,13 +81,18 @@ public struct ChainBalance: Sendable, Codable, Hashable {
     /// (a reserva da conta e de cada objeto dela). Esta no saldo, mas nao pode sair: nao e
     /// "disponivel". `nil` onde a rede nao prende nada (e no cache antigo).
     public let reservedNative: BigUInt?
+    /// Ativos (`Asset.id`) cuja leitura falhou nesta rodada: nao estao em `holdings`, mas nao
+    /// se sabe se zeraram. O aviso de recebimento nao os conta como enviados (senao a volta
+    /// deles avisava o saldo inteiro como recebido). `nil` no cache antigo e onde tudo foi lido.
+    public let unread: [String]?
 
     public init(
         chainID: String, holdings: [Holding], accountExists: Bool, unknownTokenCount: Int, fetchedAt: Date,
-        unlisted: [UnlistedHolding]? = nil, reservedNative: BigUInt? = nil
+        unlisted: [UnlistedHolding]? = nil, reservedNative: BigUInt? = nil, unread: [String]? = nil
     ) {
         self.chainID = chainID
         self.reservedNative = reservedNative
+        self.unread = unread
         self.holdings = holdings
         self.accountExists = accountExists
         self.unknownTokenCount = unlisted?.count ?? unknownTokenCount
@@ -230,11 +235,14 @@ public actor BalanceService {
         let amounts = await Self.tokenBalances(
             chain: chain, owner: owner, tokens: entries.map(\.contract) + indexed.map(\.contract), pool: pool, transport: transport
         )
+        var unread: [String] = []
         for (entry, amount) in zip(entries, amounts.prefix(entries.count)) {
             if let amount, !amount.isZero { holdings.append(Holding(asset: entry.asset, amount: amount)) }
+            if amount == nil { unread.append(entry.asset.id) }
         }
         guard tokenIndex[chain.id] != nil || (listScanEnabled && TokenListScan.url(chain) != nil) else {
-            return ChainBalance(chainID: chain.id, holdings: holdings, accountExists: true, unknownTokenCount: 0, fetchedAt: .now)
+            return ChainBalance(chainID: chain.id, holdings: holdings, accountExists: true, unknownTokenCount: 0, fetchedAt: .now,
+                                unread: unread.isEmpty ? nil : unread)
         }
         let held: [(token: IndexedToken, amount: BigUInt)] = zip(indexed, amounts.dropFirst(entries.count)).compactMap { token, amount in
             guard let amount, !amount.isZero else { return nil }
@@ -253,7 +261,7 @@ public actor BalanceService {
         }
         return ChainBalance(
             chainID: chain.id, holdings: holdings, accountExists: true, unknownTokenCount: 0, fetchedAt: .now,
-            unlisted: UnlistedHolding.sorted(unlisted)
+            unlisted: UnlistedHolding.sorted(unlisted), unread: unread.isEmpty ? nil : unread
         )
     }
 

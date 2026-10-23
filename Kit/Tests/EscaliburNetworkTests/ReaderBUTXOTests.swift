@@ -160,6 +160,64 @@ struct ReaderBUTXOTests {
         }
     }
 
+    @Test("Aviso de recebimento: provedor fixo sem contingencia, e outro dono confere toda mudanca (revisao de 23/10/2026)")
+    func receiptBalanceChecksBothWays() async throws {
+        let address = T.abandonReceive0
+        let providers = T.esploraProviders
+        func host(_ provider: ProviderPool.Provider) -> String { provider.baseURL.host ?? "" }
+        // Um sal em que o fixo e o primeiro da lista, e o segundo dono e o segundo.
+        let salt = try #require((UInt64(0)..<500).first { salt in
+            UTXOReader.fixedProvider(address, salt: salt, providers: providers) == providers[0]
+                && UTXOReader.witnessProvider(address, salt: salt, providers: providers) == providers[1]
+        })
+        func reader(_ values: [String: Int?]) throws -> UTXOReader {
+            let transport = ReaderBFakeTransport()
+            for provider in providers {
+                let key = "\(host(provider))/api/address/\(address)/utxo"
+                if let value = values[host(provider)] ?? nil {
+                    transport.on(key, data: Self.esploraUTXO([(UInt64(value), true)]))
+                } else {
+                    transport.on(key, status: 500)
+                }
+            }
+            return try UTXOReader(chain: .bitcoin, transport: transport, providers: providers)
+        }
+        let (a, b, c) = (host(providers[0]), host(providers[1]), host(providers[2]))
+
+        // O caso da revisao: o fixo (A) cai, B mente 1 BTC, C diz a verdade. Nada e lido nesta
+        // rodada: nunca o valor de B.
+        await #expect(throws: (any Error).self) {
+            _ = try await reader([a: nil, b: 100_000_000, c: 0]).receiptBalance(addresses: [address], salt: salt, previous: 0)
+        }
+        // Subida confirmada pelo outro dono: vale o menor.
+        #expect(try await reader([a: 60_000, b: 50_000, c: 0]).receiptBalance(addresses: [address], salt: salt, previous: 0) == 50_000)
+        // O fixo inventa e o outro dono nao confirma: o saldo visto fica.
+        #expect(try await reader([a: 100_000_000, b: 0, c: 0]).receiptBalance(addresses: [address], salt: salt, previous: 0) == 0)
+        // O fixo diz 0 com 1 BTC na verdade: a queda nao e aceita, e nao ha aviso falso depois.
+        #expect(try await reader([a: 0, b: 100_000_000, c: 0]).receiptBalance(addresses: [address], salt: salt, previous: 100_000_000) == 100_000_000)
+        // Queda de verdade, nos dois donos: vale o maior.
+        #expect(try await reader([a: 30_000, b: 40_000, c: 0]).receiptBalance(addresses: [address], salt: salt, previous: 100_000) == 40_000)
+        // Sem mudanca, um so; sem saldo visto (a primeira leitura), um so.
+        #expect(try await reader([a: 70_000, b: nil, c: nil]).receiptBalance(addresses: [address], salt: salt, previous: 70_000) == 70_000)
+        #expect(try await reader([a: 70_000, b: nil, c: nil]).receiptBalance(addresses: [address], salt: salt, previous: nil) == 70_000)
+        // Mudou e o outro dono esta fora do ar: nada e lido nesta rodada.
+        await #expect(throws: (any Error).self) {
+            _ = try await reader([a: 90_000, b: nil, c: 90_000]).receiptBalance(addresses: [address], salt: salt, previous: 70_000)
+        }
+    }
+
+    @Test("O provedor fixo do aviso depende do sal e nao da lista dos que estao no ar")
+    func receiptFixedProvider() {
+        let providers = T.esploraProviders
+        let picks = Set((UInt64(0)..<64).map { UTXOReader.fixedProvider(T.abandonReceive0, salt: $0, providers: providers) })
+        #expect(picks.count == providers.count)
+        for salt in UInt64(0)..<64 {
+            let fixed = UTXOReader.fixedProvider(T.abandonReceive0, salt: salt, providers: providers)
+            #expect(UTXOReader.fixedProvider(T.abandonReceive0, salt: salt, providers: providers) == fixed)
+            #expect(UTXOReader.witnessProvider(T.abandonReceive0, salt: salt, providers: providers).operatorName != fixed.operatorName)
+        }
+    }
+
     @Test("O que nao confere e descartado, com o motivo")
     func coinsRejected() async throws {
         let address = try T.derived(publicKeyHex: T.fundedPublicKey)

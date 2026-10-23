@@ -131,7 +131,10 @@ object Vigia {
             agenda.cancel(TRABALHO)
             return
         }
-        if (agenda.getPendingJob(TRABALHO) != null) return
+        // A agenda da versao anterior (20 minutos) fica persistida: troca pela de agora.
+        val pendente = agenda.getPendingJob(TRABALHO)
+        if (pendente != null && pendente.intervalMillis == INTERVALO) return
+        if (pendente != null) agenda.cancel(TRABALHO)
         val trabalho = JobInfo.Builder(TRABALHO, ComponentName(contexto, ConferenciaDoFundo::class.java))
             .setPeriodic(INTERVALO, FLEXIBILIDADE)
             // Sem exigir rede (pediria mais uma permissao): o aviso de 24 horas da ordem nem precisa

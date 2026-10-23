@@ -107,7 +107,8 @@ extension EVMTradeEngine {
 
         var parts: TradeQuote.Parts?
         if let deviation, deviation > Self.partsTriggerBps {
-            parts = await partsOption(intent: intent, tokens: tokens, guaranteed: guaranteed, market: market)
+            // A amostra da troca em partes tambem vai com o endereco sorteado da rodada.
+            parts = await partsOption(intent: intent, quoteOwner: context.quoteIntent.owner, tokens: tokens, guaranteed: guaranteed, market: market)
         }
         return EVMCoWCandidate(quote: quote, guaranteed: guaranteed, cost: market.costs.nativeToBuy.apply(wei),
                                needsApproval: needsApproval, deviationBps: deviation, parts: parts)
@@ -115,13 +116,13 @@ extension EVMTradeEngine {
 
     /// O preco de 25% do valor, aplicado ao valor inteiro: o minimo da troca em partes,
     /// quando rende pelo menos 0,2% mais que `single`.
-    func partsOption(intent: TradeIntent, tokens: (sell: EVMAddress, buy: EVMAddress), guaranteed single: BigUInt,
+    func partsOption(intent: TradeIntent, quoteOwner: EVMAddress, tokens: (sell: EVMAddress, buy: EVMAddress), guaranteed single: BigUInt,
                      market: EVMTradeMarket) async -> TradeQuote.Parts? {
         let share = BigUInt(Self.partsSampleShareBps)
         let sample = intent.amountIn * share / EVMTradeEngine.basisPoints
         guard !sample.isZero,
               let quote = try? await services.cow.quote(sellToken: tokens.sell, buyToken: tokens.buy, sellAmount: sample,
-                                                       owner: intent.owner, chain: chain, appData: .limitOrder)
+                                                       owner: quoteOwner, chain: chain, appData: .limitOrder)
         else { return nil }
         let expected = quote.buyAmount * intent.amountIn / sample
         guard let deviation = market.reference.deviationBps(expected: expected), abs(deviation) <= Self.cowAnchorBps else { return nil }
