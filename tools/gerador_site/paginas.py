@@ -549,32 +549,30 @@ ICONES_TELAS = {
 
 
 def telas_do_app(ctx, base):
-    """"Por dentro do app", refeita na quarta rodada: centralizada, sem placa. Um carrossel de
-    iPhones com as gravacoes reais: o da vez no meio, grande, tocando; os vizinhos dos lados,
-    menores, inclinados e apagados. As abas em cima escolhem, a legenda e a barra embaixo
-    acompanham o video, e no fim do video entra o seguinte. Sem JS, os iPhones ficam numa
-    fileira que desliza, cada um com a sua legenda."""
-    abas, itens = [], []
+    """"Por dentro do app" (quinta rodada, pedido do dono): um iPhone so, no meio, parado na
+    tela enquanto a pessoa rola, trocando a gravacao a cada passo (receber, enviar, trocar,
+    ordem limite, ponte, pagina da moeda, Safe Keyboard). As abas em cima levam ao passo, a
+    legenda embaixo acompanha. Sem fundo atras do iPhone. Com movimento reduzido, as abas
+    trocam a tela sem rolagem; sem JS, fica a primeira."""
+    abas, telas, legendas = [], [], []
     for i, (cena, titulo, texto, rotulo) in enumerate(TELAS):
-        selecionada = "true" if i == 0 else "false"
+        primeira = i == 0
         abas.append(
             f'<button type="button" class="aba-tela" role="tab" id="aba-{cena}" data-cena="{cena}" aria-controls="tela-{cena}" '
-            f'aria-selected="{selecionada}" tabindex="{0 if i == 0 else -1}">'
+            f'aria-selected="{"true" if primeira else "false"}" tabindex="{0 if primeira else -1}">'
             f'<span class="aba-icone" aria-hidden="true"><svg viewBox="0 0 24 24">{ICONES_TELAS.get(cena, "")}</svg></span>'
             f'<span class="aba-nome">{e(titulo)}</span></button>')
-        carregamento = "eager" if i == 0 else "lazy"
-        itens.append(
-            f'<figure class="carrossel-item{" ativo" if i == 0 else ""}" data-cena="{cena}" id="tela-{cena}" role="tabpanel" aria-labelledby="aba-{cena}">'
-            f'<div class="aparelho"><div class="tela">'
-            f'<img class="capa" src="{base}midia/{cena}.webp" alt="{e(rotulo)}" width="720" height="1566" loading="{carregamento}" decoding="async">'
-            f'<video muted playsinline preload="none" data-manual aria-hidden="true" tabindex="-1"><source src="{base}midia/{cena}.mp4" type="video/mp4"></video>'
-            f'</div></div><figcaption class="carrossel-texto"><b>{e(titulo)}</b><span>{e(texto)}</span></figcaption></figure>')
-    abas_html = f'<div class="carrossel-abas" role="tablist" aria-label="Telas do app">{"".join(abas)}</div>'
-    palco = (f'<div class="carrossel-palco">{"".join(itens)}</div>'
-             f'<div class="carrossel-rodape"><p class="carrossel-legenda" aria-hidden="true">{e(TELAS[0][2])}</p>'
-             f'<span class="carrossel-progresso" aria-hidden="true"><i></i></span>'
-             f'<button class="pausar carrossel-pausar" type="button" data-estado="pausado" aria-label="Tocar a animação">{ICONE_PAUSA}{ICONE_TOCAR}</button></div>')
-    return abas_html, palco
+        telas.append(
+            f'<div class="passeio-tela{" ativa" if primeira else ""}" id="tela-{cena}" role="tabpanel" aria-labelledby="aba-{cena}">'
+            f'<img class="capa" src="{base}midia/{cena}.webp" alt="{e(rotulo)}" width="720" height="1566" loading="{"eager" if primeira else "lazy"}" decoding="async">'
+            f'<video muted loop playsinline preload="none" data-manual aria-hidden="true" tabindex="-1"><source src="{base}midia/{cena}.mp4" type="video/mp4"></video></div>')
+        legendas.append(f'<p class="passeio-legenda"{"" if primeira else " hidden"}><b>{e(titulo)}</b>{e(texto)}</p>')
+    return (f'<div class="passeio" data-passeio>'
+            f'<div class="passeio-abas" role="tablist" aria-label="Telas do app">{"".join(abas)}</div>'
+            f'<div class="aparelho passeio-aparelho"><div class="tela">{"".join(telas)}</div></div>'
+            f'<div class="passeio-legendas">{"".join(legendas)}</div>'
+            f'<button class="pausar passeio-pausar" type="button" data-estado="pausado" aria-label="Tocar a animação">{ICONE_PAUSA}{ICONE_TOCAR}</button>'
+            f'</div>')
 
 
 # MARK: Moldura
@@ -735,8 +733,7 @@ def preencher(ctx, base, modelo, origem):
             "precos_hora": lambda: e(hora_do_retrato(ctx.get("retrato"))),
             "destaque": lambda: destaque_do_mercado(ctx, base, ctx.get("retrato")),
             "troca_dados": lambda: troca_dados_attr(ctx, base),
-            "telas_aparelho": lambda: telas_do_app(ctx, base)[0],
-            "telas_passos": lambda: telas_do_app(ctx, base)[1],
+            "telas_passeio": lambda: telas_do_app(ctx, base),
             "n_redes_troca": lambda: str(len(dados_da_troca(ctx)["redes"])),
             "verificacoes_feed": lambda: feed_de_verificacoes(ctx, base),
             "redes_favo": lambda: favo_de_redes(ctx, base),

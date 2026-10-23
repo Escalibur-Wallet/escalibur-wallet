@@ -1398,12 +1398,20 @@ img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
 .redes-cabeca .mais { margin-top: 28px; }
 @media (min-width: 1000px) { .redes-grade { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 56px; } }
 
-/* MARK: Por dentro do app: o carrossel (quarta rodada, refeito). Centralizado, sem placa:
-   o iPhone da vez no meio e os vizinhos dos lados, menores e inclinados. */
-.telas { padding: clamp(45px, 6.2vw, 87px) 0; overflow: hidden; }
+/* MARK: Por dentro do app (quinta rodada): um iPhone so, no meio, parado na tela enquanto a
+   pessoa rola; a gravacao troca a cada passo. Sem fundo atras do iPhone. */
+.telas { padding: clamp(45px, 6.2vw, 87px) 0; overflow: clip; }
 .secao-cabeca.centro .lead { margin-inline: auto; }
-.carrossel { margin-top: 36px; display: grid; justify-items: center; gap: 22px; }
-.carrossel-abas { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 900px; }
+.telas-trilho { position: relative; }
+.telas-palco { padding-top: 32px; }
+.movimento .telas-trilho { height: 800vh; height: 800svh; }
+.movimento .telas-palco { position: sticky; top: 0; height: 100vh; height: 100svh; display: grid; align-content: center; padding: 64px 0 12px; }
+.passeio {
+  --w-tela: clamp(190px, calc((100vh - 290px) / 2.2), 300px);
+  --w-tela: clamp(190px, calc((100svh - 290px) / 2.2), 300px);
+  display: grid; justify-items: center; gap: 16px;
+}
+.passeio-abas { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 1100px; }
 .aba-tela {
   display: inline-flex; align-items: center; gap: 8px; border: 0; cursor: pointer; font: inherit; color: var(--ink-soft);
   background: var(--body); border-radius: 999px; padding: 6px 14px 6px 6px; min-height: 42px; transition: background 0.2s ease, color 0.2s ease;
@@ -1414,36 +1422,22 @@ img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
 .aba-tela[aria-selected="true"] .aba-icone { background: var(--void); color: var(--ink); }
 .aba-icone svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .aba-nome { font-size: 15px; font-weight: 600; white-space: nowrap; }
-/* Sem JS: os iPhones numa fileira que desliza, com a legenda de cada um. */
-.carrossel-palco { display: flex; gap: 24px; overflow-x: auto; scroll-snap-type: x mandatory; width: 100%; padding: 4px 0 8px; }
-.carrossel-item { margin: 0; flex: none; scroll-snap-align: center; display: grid; justify-items: center; gap: 14px; }
-.carrossel-item .aparelho { --w: min(240px, 64vw); }
-.carrossel-texto { display: grid; gap: 4px; text-align: center; max-width: 280px; font-size: 15px; }
-.carrossel-texto b { color: var(--ink); font-size: 17px; }
-.carrossel-rodape { display: none; }
-.js .carrossel-abas .aba-nome { display: inline; }
-/* Com JS: o palco com os iPhones um sobre o outro, e o rodape com a legenda e a barra. */
-.carrossel.ativo-js .carrossel-palco { position: relative; display: block; overflow: visible; height: calc(var(--w-tela) * 2.17 + 20px); --w-tela: min(270px, 62vw); }
-.carrossel.ativo-js .carrossel-item {
-  position: absolute; left: 50%; top: 0; width: var(--w-tela); margin-left: calc(var(--w-tela) / -2); cursor: pointer;
-  transition: transform 0.7s var(--ease), opacity 0.5s ease; will-change: transform, opacity;
-}
-.carrossel.ativo-js .carrossel-item.ativo { cursor: default; }
-.carrossel.ativo-js .carrossel-item .aparelho { --w: var(--w-tela); }
-.carrossel.ativo-js .carrossel-texto { display: none; }
-.carrossel.ativo-js .carrossel-rodape { display: grid; justify-items: center; gap: 12px; width: min(520px, 100%); }
-.carrossel-legenda { text-align: center; font-size: 17px; color: var(--ink-soft); min-height: 3em; }
-.carrossel-progresso { width: 160px; height: 2px; border-radius: 2px; background: var(--edge); overflow: hidden; }
-.carrossel-progresso i { display: block; height: 100%; background: var(--ink); transform: scaleX(0); transform-origin: left; }
-.carrossel-rodape .pausar { position: static; transform: none; }
-@media (min-width: 900px) { .carrossel.ativo-js .carrossel-palco { --w-tela: clamp(270px, 21vw, 310px); } }
+.passeio-aparelho { --w: var(--w-tela); }
+.passeio-tela { position: absolute; inset: 0; opacity: 0; transform: scale(1.04); transition: opacity 0.45s ease, transform 0.7s var(--ease); }
+.passeio-tela.ativa { opacity: 1; transform: none; }
+.passeio-legendas { text-align: center; max-width: 520px; min-height: 4.6em; }
+.passeio-legenda { margin: 0; font-size: 16px; color: var(--ink-soft); }
+.passeio-legenda b { display: block; color: var(--ink); font-size: 18px; margin-bottom: 2px; }
+.passeio .passeio-pausar { position: static; transform: none; margin-top: -6px; }
 @media (max-width: 699px) {
-  .carrossel.ativo-js .carrossel-abas { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; width: calc(100% + 2 * var(--gutter)); margin-inline: calc(-1 * var(--gutter)); padding: 0 var(--gutter); }
-  .carrossel.ativo-js .carrossel-abas::-webkit-scrollbar { display: none; }
+  .passeio { --w-tela: clamp(170px, calc((100vh - 300px) / 2.2), 260px); --w-tela: clamp(170px, calc((100svh - 300px) / 2.2), 260px); gap: 12px; }
+  .js .passeio-abas { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; width: calc(100% + 2 * var(--gutter)); margin-inline: calc(-1 * var(--gutter)); padding: 0 var(--gutter); }
+  .js .passeio-abas::-webkit-scrollbar { display: none; }
   .aba-tela { flex: none; }
-  .carrossel-legenda { font-size: 16px; }
+  .passeio-legenda { font-size: 15px; }
+  .passeio-legenda b { font-size: 17px; }
 }
-@media (prefers-reduced-motion: reduce) { .carrossel.ativo-js .carrossel-item { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .passeio-tela { transition: none; transform: none; } }
 
 /* MARK: Super Security (quarta rodada): o emblema do app (HardenedEmblem). O PIN e o rosto,
    dois discos que se encontram e travam com o cadeado no meio; depois se afastam. O mesmo
@@ -1577,7 +1571,6 @@ html:not(.movimento) .abertura-bits { display: none; }
 .onda-11 .favo-disco, .onda-11 .favo-disco::after { animation-delay: -3.3s; }
 .onda-12 .favo-disco, .onda-12 .favo-disco::after { animation-delay: -3.6s; }
 .onda-13 .favo-disco, .onda-13 .favo-disco::after { animation-delay: -3.9s; }
-.carrossel-abas { max-width: 1100px; }
 /* Rodape: os selos das lojas, no mesmo estado da abertura. */
 .rodape .lojas { margin-top: 18px; }
 .rodape .selo-loja img { height: 40px; }

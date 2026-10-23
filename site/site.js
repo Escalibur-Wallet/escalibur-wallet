@@ -384,112 +384,99 @@
     }
   }
 
-  // MARK: Por dentro do app: o carrossel de iPhones. O da vez no meio toca a gravacao; os
-  // vizinhos ficam dos lados, menores e inclinados (so transform e opacity). No fim do video
-  // entra o seguinte; as abas, as setas e um toque no vizinho escolhem.
-  var carrossel = document.querySelector(".carrossel");
-  if (carrossel) {
-    carrossel.classList.add("ativo-js");
-    var abasTelas = Array.prototype.slice.call(carrossel.querySelectorAll(".aba-tela"));
-    var itensTelas = Array.prototype.slice.call(carrossel.querySelectorAll(".carrossel-item"));
-    var botaoCarrossel = carrossel.querySelector(".carrossel-pausar");
-    var legendaCarrossel = carrossel.querySelector(".carrossel-legenda");
-    var barraCarrossel = carrossel.querySelector(".carrossel-progresso i");
-    var atual = 0, naTela = false, pausadoPeloDono = calmo.matches, desde = 0;
-    var videoDo = function (n) { return itensTelas[n].querySelector("video"); };
-    itensTelas.forEach(function (it) { prepararVideo(it.querySelector("video")); });
-    var dispor = function () {
-      var largo = window.innerWidth >= 900;
-      var passo = largo ? 0.62 : 0.74;
-      itensTelas.forEach(function (it, n) {
-        var d = n - atual, a = Math.abs(d);
-        var largura = it.offsetWidth || 1;
-        var x = d * largura * passo + (d === 0 ? 0 : Math.sign(d) * largura * 0.06 * (a - 1));
-        var escala = d === 0 ? 1 : Math.max(0.6, 0.8 - (a - 1) * 0.1);
-        var giro = d === 0 ? 0 : -Math.sign(d) * 18;
-        it.style.transform = "translate3d(" + x.toFixed(1) + "px,0,0) perspective(1200px) rotateY(" + giro + "deg) scale(" + escala.toFixed(3) + ")";
-        it.style.opacity = a === 0 ? "1" : a === 1 ? "0.45" : a === 2 ? (largo ? "0.18" : "0") : "0";
-        it.style.zIndex = String(10 - a);
-        it.classList.toggle("ativo", d === 0);
-        it.setAttribute("aria-hidden", String(d !== 0));
-      });
-    };
-    var tocarAtual = function () {
-      itensTelas.forEach(function (it, n) {
-        var v = videoDo(n);
-        if (n === atual && naTela && !pausadoPeloDono) { if (v.paused) tocar(v, botaoCarrossel); }
+  // MARK: Por dentro do app (quinta rodada): um iPhone so, parado no meio enquanto a pessoa
+  // rola; a gravacao troca a cada passo. A mesma regra das Chaves: cada passo ocupa uma tela
+  // de rolagem e so troca depois de passar 35% do trecho seguinte, um de cada vez, depois
+  // que a tela anterior apareceu. So a rolagem longa e rapida vai direto.
+  var passeio = document.querySelector("[data-passeio]");
+  if (passeio) {
+    var abasP = Array.prototype.slice.call(passeio.querySelectorAll(".aba-tela"));
+    var telasP = Array.prototype.slice.call(passeio.querySelectorAll(".passeio-tela"));
+    var legendasP = Array.prototype.slice.call(passeio.querySelectorAll(".passeio-legenda"));
+    var botaoP = passeio.querySelector(".passeio-pausar");
+    var trilhoP = document.querySelector(".telas-trilho");
+    var nP = telasP.length;
+    var atualP = -1, prontaP = 0, travaP = 0, naTelaP = false, pausadoP = calmo.matches;
+    var yP = null, tP = 0, velocidadeP = 0, gestoP = null;
+    var videoP = function (n) { return telasP[n].querySelector("video"); };
+    telasP.forEach(function (tela) { prepararVideo(tela.querySelector("video")); });
+    var tocarP = function () {
+      telasP.forEach(function (tela, n) {
+        var v = videoP(n);
+        if (n === atualP && naTelaP && !pausadoP) { if (v.paused) tocar(v, botaoP); }
         else if (!v.paused) v.pause();
       });
-      if (pausadoPeloDono || !naTela) mostrar(botaoCarrossel, "pausado");
+      if (pausadoP || !naTelaP) mostrar(botaoP, "pausado");
+    };
+    var mostrarP = function (n, t, foco) {
+      if (n === atualP) return;
+      var antes = atualP;
+      atualP = n;
+      telasP.forEach(function (tela, k) { tela.classList.toggle("ativa", k === n); });
+      legendasP.forEach(function (l, k) { l.hidden = k !== n; });
+      abasP.forEach(function (a, k) { a.setAttribute("aria-selected", String(k === n)); a.tabIndex = k === n ? 0 : -1; });
+      if (foco) abasP[n].focus();
+      var fileira = abasP[n].parentNode;
+      if (fileira.scrollWidth > fileira.clientWidth + 2) {
+        fileira.scrollTo({ left: abasP[n].offsetLeft - (fileira.clientWidth - abasP[n].offsetWidth) / 2, behavior: movimento ? "smooth" : "auto" });
+      }
+      if (antes >= 0) { var velho = videoP(antes); velho.pause(); velho.classList.remove("visivel"); }
+      try { videoP(n).currentTime = 0; } catch (erro) { /* ainda sem dados */ }
+      tocarP();
+      // O passo seguinte so entra depois que esta tela apareceu (a troca leva 0,45 s).
+      prontaP = t + 0.8;
       pedir();
     };
-    var escolher = function (n, foco) {
-      n = (n + itensTelas.length) % itensTelas.length;
-      if (n !== atual) {
-        var antigo = videoDo(atual);
-        antigo.pause();
-        antigo.classList.remove("visivel");
-      }
-      atual = n;
-      desde = performance.now();
-      barraCarrossel.style.transform = "scaleX(0)";
-      abasTelas.forEach(function (a, k) {
-        a.setAttribute("aria-selected", String(k === n));
-        a.tabIndex = k === n ? 0 : -1;
-      });
-      try { videoDo(n).currentTime = 0; } catch (erro) { /* ainda sem dados */ }
-      legendaCarrossel.textContent = itensTelas[n].querySelector(".carrossel-texto span").textContent;
-      if (foco) abasTelas[n].focus();
-      var fileira = abasTelas[n].parentNode;
-      if (fileira.scrollWidth > fileira.clientWidth + 2) {
-        fileira.scrollTo({ left: abasTelas[n].offsetLeft - (fileira.clientWidth - abasTelas[n].offsetWidth) / 2, behavior: movimento ? "smooth" : "auto" });
-      }
-      dispor();
-      tocarAtual();
+    var progressoP = function () {
+      var r = trilhoP.getBoundingClientRect();
+      return limitar(-r.top / Math.max(1, r.height - window.innerHeight), 0, 0.9999);
     };
-    abasTelas.forEach(function (aba, n) {
-      aba.addEventListener("click", function () { escolher(n, false); });
+    mostrarP(movimento ? Math.floor(progressoP() * nP) : 0, performance.now() / 1000);
+    abasP.forEach(function (aba, n) {
+      aba.addEventListener("click", function () {
+        var t = performance.now() / 1000;
+        if (movimento) {
+          var r = trilhoP.getBoundingClientRect();
+          var alcance = r.height - window.innerHeight;
+          travaP = t + 1.4;
+          window.scrollTo({ top: window.pageYOffset + r.top + alcance * (n + 0.5) / nP, behavior: "smooth" });
+        }
+        mostrarP(n, t, false);
+      });
       aba.addEventListener("keydown", function (e) {
         var anda = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
-        if (anda) { e.preventDefault(); escolher(n + anda, true); }
+        if (anda) { e.preventDefault(); abasP[(n + anda + nP) % nP].click(); abasP[(n + anda + nP) % nP].focus(); }
       });
     });
-    itensTelas.forEach(function (it, n) {
-      it.addEventListener("click", function () { if (n !== atual) escolher(n, false); });
-      // Um video curto (a pagina da moeda) passa de novo antes do seguinte: cada tela fica
-      // pelo menos 6 segundos no meio.
-      videoDo(n).addEventListener("ended", function () {
-        if (n !== atual || pausadoPeloDono) return;
-        var v = videoDo(n);
-        if (performance.now() - desde < 6000) { try { v.currentTime = 0; } catch (erro) { /* sem dados */ } tocar(v, botaoCarrossel); return; }
-        escolher(n + 1, false);
-      });
-    });
-    // Deslizar o dedo no palco troca de tela.
-    var toque = null;
-    var palcoCarrossel = carrossel.querySelector(".carrossel-palco");
-    palcoCarrossel.addEventListener("touchstart", function (e) { toque = e.touches[0].clientX; }, { passive: true });
-    palcoCarrossel.addEventListener("touchend", function (e) {
-      if (toque === null) return;
-      var dx = e.changedTouches[0].clientX - toque;
-      toque = null;
-      if (Math.abs(dx) > 40) escolher(atual + (dx < 0 ? 1 : -1), false);
-    }, { passive: true });
-    if (botaoCarrossel) {
-      mostrar(botaoCarrossel, "pausado");
-      botaoCarrossel.addEventListener("click", function () { pausadoPeloDono = !pausadoPeloDono; tocarAtual(); });
+    if (botaoP) {
+      mostrar(botaoP, "pausado");
+      botaoP.addEventListener("click", function () { pausadoP = !pausadoP; tocarP(); });
     }
     if (observa) {
-      new IntersectionObserver(function (e) { naTela = e[0].isIntersecting; tocarAtual(); }, { threshold: 0.4 }).observe(palcoCarrossel);
+      new IntersectionObserver(function (e) { naTelaP = e[0].isIntersecting; tocarP(); if (naTelaP) pedir(); }, { threshold: 0.4 }).observe(passeio);
     }
-    window.EscaliburRelogio.aoMedir(dispor);
-    dispor();
-    window.EscaliburRelogio.registrar(function () {
-      var v = videoDo(atual);
-      if (!naTela || v.paused || !v.duration) return false;
-      barraCarrossel.style.transform = "scaleX(" + Math.min(1, v.currentTime / v.duration).toFixed(4) + ")";
-      return true;
-    });
+    if (movimento) {
+      window.EscaliburRelogio.registrar(function (e) {
+        if (!naTelaP) { yP = null; return false; }
+        var t = e.t, yAgora = window.pageYOffset;
+        if (yP !== null && t > tP) {
+          var instante = Math.abs(yAgora - yP) / window.innerHeight / (t - tP);
+          velocidadeP += (Math.min(instante, 20) - velocidadeP) * Math.min(1, (t - tP) * 6);
+        }
+        yP = yAgora; tP = t;
+        if (t <= travaP) return true;
+        var seg = progressoP() * nP, alvo = atualP;
+        if (velocidadeP > 2 && gestoP === null) gestoP = seg;
+        else if (velocidadeP < 0.5) gestoP = null;
+        if (seg >= atualP + 1.35) alvo = Math.min(nP - 1, Math.floor(seg - 0.35));
+        else if (seg < atualP - 0.35) alvo = Math.max(0, Math.floor(seg + 0.35));
+        if (alvo !== atualP) {
+          if (gestoP !== null && Math.abs(seg - gestoP) >= 2) mostrarP(alvo, t);
+          else if (t >= prontaP) mostrarP(atualP + (alvo > atualP ? 1 : -1), t);
+        }
+        return true;
+      });
+    }
   }
 
   // MARK: Numeros, como o app: pt-BR, R$ ou US$.
