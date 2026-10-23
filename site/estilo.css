@@ -1827,7 +1827,9 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
 @media (max-width: 599px) {
   .podio { gap: 0; padding-inline: 0; height: 80vw; }
   .podio .aparelho.podio-lado { display: none; }
-  .podio-foto { width: 92vw; margin: -24vw 17.7vw 0 0; }
+  .podio-foto { width: 92vw; margin: -24vw 9vw 0 0; }
+  /* A moeda do fim menor e mais para cima no celular (pedido do dono, 23/10/2026). */
+  .final-texto .final-moeda { width: min(168px, 42vw); margin-top: -24px; margin-bottom: 4px; }
 }
 
 /* MARK: A moeda do Mercado gira na mao (pedido do dono, 23/10/2026): arrastar para os lados
