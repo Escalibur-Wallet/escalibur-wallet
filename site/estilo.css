@@ -1688,3 +1688,6 @@ html:not(.movimento) .abertura-bits { display: none; }
   .porta-marca { grid-row: 1 / span 2; }
   .porta-titulo { margin-top: 6px; }
 }
+
+/* A versao em pixels no topo da pagina Novidades. */
+.pixels-versao { display: block; width: min(360px, 70vw); height: auto; aspect-ratio: 17 / 7; margin: 0 auto 36px; }

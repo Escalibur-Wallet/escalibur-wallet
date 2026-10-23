@@ -1441,6 +1441,64 @@
     });
   });
 
+  // MARK: A versao em pixels (pagina Novidades): os digitos numa fonte de 5 por 7, com os pixels
+  // saindo de um espalhado e se juntando, como o cadeado do mergulho. Parada com movimento reduzido.
+  cada(".pixels-versao", function (canvas) {
+    var FONTE = {
+      "0": ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+      "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+      "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+      "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+      "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+      "5": ["11111", "10000", "11110", "00001", "00001", "10001", "01110"],
+      "6": ["00110", "01000", "10000", "11110", "10001", "10001", "01110"],
+      "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+      "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+      "9": ["01110", "10001", "10001", "01111", "00001", "00010", "01100"],
+      ".": ["0", "0", "0", "0", "0", "0", "1"],
+    };
+    var texto = canvas.getAttribute("data-texto") || "";
+    var alvos = [], col = 0;
+    texto.split("").forEach(function (ch) {
+      var g = FONTE[ch];
+      if (!g) return;
+      for (var y = 0; y < 7; y++) for (var x = 0; x < g[y].length; x++) if (g[y][x] === "1") alvos.push({ x: col + x, y: y });
+      col += g[0].length + 1;
+    });
+    var colunas = Math.max(1, col - 1), linhas = 7;
+    var pixels = alvos.map(function (a, k) {
+      var ang = (k * 2.399) % (Math.PI * 2), raio = 6 + (k * 7.3) % 9;
+      return { x: a.x, y: a.y, dx: Math.cos(ang) * raio, dy: Math.sin(ang) * raio * 0.6, atraso: (k % 9) * 0.05, tom: 0.62 + ((k * 37) % 30) / 100 };
+    });
+    var ctx2 = canvas.getContext("2d");
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var desenhar = function (t) {
+      var w = canvas.clientWidth, h = w * linhas / colunas;
+      if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+      var lado = canvas.width / colunas;
+      ctx2.clearRect(0, 0, canvas.width, canvas.height);
+      pixels.forEach(function (p) {
+        var k = Math.min(1, Math.max(0, (t - p.atraso) / 1.1));
+        var s = 1 - Math.pow(1 - k, 3);
+        var x = (p.x + p.dx * (1 - s)) * lado, y = (p.y + p.dy * (1 - s)) * lado;
+        var tom = Math.round(255 * (p.tom + (1 - p.tom) * s));
+        ctx2.fillStyle = "rgba(" + tom + "," + tom + "," + tom + "," + (0.25 + 0.75 * s).toFixed(3) + ")";
+        var gap = lado * 0.12;
+        ctx2.fillRect(x + gap, y + gap, lado - 2 * gap, lado - 2 * gap);
+      });
+    };
+    if (!movimento) { desenhar(9); return; }
+    var inicio = null;
+    var passo = function (agora) {
+      if (inicio === null) inicio = agora;
+      var t = (agora - inicio) / 1000;
+      desenhar(t);
+      if (t < 1.8) requestAnimationFrame(passo);
+    };
+    requestAnimationFrame(passo);
+    window.addEventListener("resize", function () { desenhar(9); });
+  });
+
   // MARK: Hashes de commit em pixels (inicio, Novidades e Auditoria): cada digito
   // hexadecimal vira um tom de cinza. Linha a linha (um hash numa grade) ou coluna a coluna
   // (a parede da pagina Novidades: um commit por coluna, os 8 primeiros digitos). Decifram da

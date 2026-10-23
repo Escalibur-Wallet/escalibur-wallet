@@ -1199,13 +1199,14 @@ def pagina_novidades(ctx, base):
     situacao = "Disponível na App Store." if ctx["app_store_url"] else "Em preparação para a App Store e o Google Play."
     vazio = "<p>O histórico não estava disponível neste build.</p>" if not entregas else ""
     hashes = ",".join(c["sha"] for c in ctx["commits"] if re.fullmatch(r"[0-9a-f]{40}", c["sha"] or ""))
-    parede = (f'<canvas class="pixels-hash parede" data-hashes="{e(hashes)}" data-colunas="{hashes.count(",") + 1}" data-linhas="8" '
-              f'data-ordem="coluna" aria-hidden="true"></canvas>') if hashes else ""
+    # A versao de agora em pixels que se juntam (pedido do dono, 23/10/2026: melhorar a animacao
+    # da primeira secao; antes, uma parede com os hashes dos commits).
+    parede = f'<canvas class="pixels-versao" data-texto="{e(v["marketing"])}" aria-hidden="true"></canvas>' 
     corpo = f"""<header class="cabeca-pagina cabeca-centro"><div class="wrap">
 {parede}
 <p class="sobretitulo">Novidades</p>
 <h1 class="titulo-pagina">O que mudou.</h1>
-<p class="lead">Versão <strong>{e(v["marketing"])}</strong> (build {e(v["build"])}). {situacao} Cada entrega é um commit público no GitHub, e cada coluna de pixels acima é o hash de um deles.</p>
+<p class="lead">Versão <strong>{e(v["marketing"])}</strong> (build {e(v["build"])}). {situacao} Cada entrega é um commit público no GitHub.</p>
 <p class="apoio">Gerada a cada publicação, do histórico da main. As entregas aparecem em inglês, a língua dos commits.</p>
 </div></header>
 <section class="bloco"><div class="wrap estreito">{vazio}{"".join(entregas)}</div></section>"""
