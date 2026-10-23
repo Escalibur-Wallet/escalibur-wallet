@@ -202,6 +202,8 @@ def preparar_logos(saida, redes, tokens):
     for token in tokens:
         nomes.add(f"logo-{token['gecko']}")
     nomes.update(f"logo-{gecko}" for gecko, _ in paginas.MOEDAS_ABERTURA)
+    # A vitrine "Todas as moedas" mostra o catalogo inteiro do app.
+    nomes.update(p.name.removesuffix(".imageset") for p in dados.LOGOS.glob("logo-*.imageset"))
     pasta = saida / "logos"
     pasta.mkdir()
     mapa = {}

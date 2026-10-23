@@ -91,9 +91,6 @@ def blob(ctx, caminho, linha=None):
 
 # MARK: Componentes
 
-ICONE_PAUSA = '<svg class="pausa" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="2" width="3" height="10" rx="1" fill="currentColor"/><rect x="8.5" y="2" width="3" height="10" rx="1" fill="currentColor"/></svg>'
-ICONE_TOCAR = '<svg class="tocar" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2.4v9.2c0 .5.5.8.9.5l7-4.6c.4-.3.4-.8 0-1.1l-7-4.6c-.4-.2-.9 0-.9.6Z" fill="currentColor"/></svg>'
-
 
 def aparelho(base, cena, rotulo, classe="", video=True, cedo=False):
     """Um iPhone desenhado em CSS com a gravacao real do app dentro.
@@ -105,14 +102,13 @@ def aparelho(base, cena, rotulo, classe="", video=True, cedo=False):
     prioridade = ' fetchpriority="high"' if cedo else ""
     capa = (f'<img class="capa" src="{base}midia/{cena}.webp" alt="{e(rotulo)}" width="720" height="1566" '
             f'loading="{carregamento}" decoding="async"{prioridade}>')
-    botao = ""
+    # Sem botao de pausar (pedido do dono, 23/10/2026): o video toca so na tela e para ao sair;
+    # com "reduzir movimento", fica a capa parada.
     if video:
         capa += (f'<video muted loop playsinline preload="none" data-auto aria-hidden="true" tabindex="-1">'
                  f'<source src="{base}midia/{cena}.mp4" type="video/mp4"></video>')
-        botao = (f'<button class="pausar" type="button" data-estado="pausado" aria-label="Tocar a animação">'
-                 f'{ICONE_PAUSA}{ICONE_TOCAR}</button>')
     classes = "aparelho" + (f" {classe}" if classe else "")
-    return f'<div class="{classes}"><div class="tela">{capa}</div>{botao}</div>'
+    return f'<div class="{classes}"><div class="tela">{capa}</div></div>'
 
 
 def botoes_baixar(ctx, base):
@@ -150,7 +146,9 @@ def logo_rede(ctx, base, rede):
     if rede["id"] == "base":
         return '<span class="logo logo-base" aria-hidden="true"></span>'
     nome = f"rede-{rede['id']}" if f"rede-{rede['id']}" in ctx["logos"] else f"logo-{rede['gecko']}"
-    classe = "clara" if rede["id"] in ("xrpl", "stellar") else ""
+    # O disco claro e so para o logo escuro e vazado; o selo de rede do app ja vem num disco
+    # preto, e o claro vazava em volta dele (pedido do dono, 23/10/2026).
+    classe = "clara" if rede["id"] in ("xrpl", "stellar") and not nome.startswith("rede-") else ""
     return logo(ctx, base, nome, classe, rede["nome"])
 
 
@@ -275,6 +273,32 @@ def moedas_abertura(ctx, base):
         if caminho:
             itens.append(f'<span class="moeda {profundidade}"><img src="{base}{caminho}" alt="" width="64" height="64" decoding="async"></span>')
     return '<div class="abertura-moedas" aria-hidden="true">' + "".join(itens) + "</div>"
+
+
+def vitrine_moedas(ctx, base, faixas=4):
+    """Todas as moedas (pedido do dono, 23/10/2026): cada logo do catalogo do app, em faixas que
+    andam devagar, as pares no sentido contrario. As mais conhecidas abrem a vitrine; o resto
+    vem numa ordem fixa, embaralhada pelo hash do nome, para nao ficar em ordem alfabetica. Cada
+    faixa repete a lista uma vez (fora do leitor de tela) para o laco nao ter emenda."""
+    soltas, escuras = ctx["conjuntos_logo"]
+    nomes = [n for n in ctx["logos"] if n.startswith("logo-")]
+    primeiras = [f"logo-{g}" for g, _ in MOEDAS_ABERTURA if f"logo-{g}" in ctx["logos"]]
+    resto = sorted((n for n in nomes if n not in primeiras), key=lambda n: hashlib.sha256(n.encode()).hexdigest())
+    ordem = primeiras + resto
+
+    def item(nome):
+        gecko = nome.removeprefix("logo-")
+        classe = "solta" if gecko in soltas else ("clara" if gecko in escuras else "")
+        return f"<li>{logo(ctx, base, nome, classe)}</li>"
+
+    linhas = []
+    for i in range(faixas):
+        lista = "".join(item(n) for n in ordem[i::faixas])
+        linhas.append(f'<div class="moedas-faixa"><div class="moedas-trilho">'
+                      f'<ul class="moedas-lista">{lista}</ul><ul class="moedas-lista" aria-hidden="true">{lista}</ul>'
+                      f"</div></div>")
+    return (f'<div class="moedas-vitrine" role="img" aria-label="Os logos de {len(ordem)} moedas, passando devagar">'
+            + "".join(linhas) + "</div>")
 
 
 def resumo_novidades(ctx, base, quantos=4):
@@ -497,13 +521,14 @@ def destaque_do_mercado(ctx, base, retrato):
     caminho = _logo_moeda(ctx, base, gecko)
     logo_html = f'<img src="{caminho}" alt="" width="160" height="160">' if caminho else ""
     linha = dado.get("linha") or []
-    traco, area, semana, classe = "", "", None, ""
+    traco, semana, classe = "", None, ""
     if len(linha) > 1:
+        # O mesmo quadro do grafico do app (PriceChart): 26 px livres em cima e embaixo para a
+        # maxima e a minima. Sem JS, fica esta linha; com JS, o site.js redesenha no tamanho real.
         menor, maior = min(linha), max(linha)
         faixa = (maior - menor) or 1
-        passo = 600 / (len(linha) - 1)
-        traco = " ".join(f"{'M' if i == 0 else 'L'}{i * passo:.1f} {180 - 10 - (v - menor) / faixa * 160:.1f}" for i, v in enumerate(linha))
-        area = traco + " L600 180 L0 180 Z"
+        passo = 588 / (len(linha) - 1)
+        traco = " ".join(f"{'M' if i == 0 else 'L'}{6 + i * passo:.1f} {200 - 26 - (v - menor) / faixa * 148:.1f}" for i, v in enumerate(linha))
         semana = (linha[-1] / linha[0] - 1) * 100
         classe = " baixa" if linha[-1] < linha[0] else ""
     return f"""<div class="destaque-moeda">
@@ -515,8 +540,11 @@ def destaque_do_mercado(ctx, base, retrato):
 <p class="destaque-preco" data-destaque-preco>{e(formatar_preco(dado.get("usd")))}</p>
 <p class="destaque-variacao">{variacao(dado.get("var")).replace("data-variacao", "data-destaque-variacao", 1)}<span class="apoio">em 24 h</span></p>
 </div>
-<div class="destaque-grafico{classe}" aria-hidden="true">
-<svg viewBox="0 0 600 180" preserveAspectRatio="none"><path class="area" d="{area}"/><path class="traco" d="{traco}"/></svg>
+<div class="destaque-grafico{classe}">
+<div class="grafico-area" aria-hidden="true">
+<svg viewBox="0 0 600 200" preserveAspectRatio="none"><defs><filter id="grafico-brilho" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="7"/></filter><clipPath id="grafico-antes"><rect class="antes" x="0" y="0" width="100%" height="100%"/></clipPath></defs><path class="passado" d=""/><g clip-path="url(#grafico-antes)"><path class="brilho" d="" filter="url(#grafico-brilho)"/><path class="traco" d="{traco}"/></g><line class="regua" x1="0" y1="0" x2="0" y2="0"/><circle class="ponto-fundo" r="6" cx="-20" cy="-20"/><circle class="ponto" r="4.5" cx="-20" cy="-20"/></svg>
+<span class="grafico-rotulo maxima"></span><span class="grafico-rotulo minima"></span><span class="grafico-rotulo escolhido"></span>
+</div>
 <p class="apoio">Últimos 7 dias{variacao(semana).replace("data-variacao", "data-destaque-semana", 1) if semana is not None else '<span class="variacao" data-destaque-semana></span>'}</p>
 </div>"""
 
@@ -593,70 +621,64 @@ NOTAS = {
 
 
 def telas_do_app(ctx, base):
-    """"Por dentro do app" (redesenho do dono, 23/10/2026): um iPhone grande no meio, parado
-    enquanto a pessoa rola, com anotacoes em volta, cada uma com uma linha fina ate o ponto da
-    tela de que ela fala. A cada passo a gravacao troca, e as anotacoes mudam de lugar e de texto.
-    Embaixo, os pontos do progresso (que tambem levam ao passo). No celular, as anotacoes viram
-    uma lista embaixo do iPhone. Com movimento reduzido, os pontos trocam a tela sem rolagem; sem
-    JS, fica a primeira."""
-    abas, telas, legendas = [], [], []
+    """"Por dentro do app" (refeito pelo dono, 23/10/2026): um bloco para cada tela, um embaixo do
+    outro, com o iPhone de um lado e o texto do outro, alternando. A gravacao toca quando o
+    bloco aparece (os videos data-auto do site.js). Sem linhas e sem iPhone preso na rolagem."""
+    blocos = []
     n = len(TELAS)
     for i, (cena, titulo, texto, rotulo) in enumerate(TELAS):
-        primeira = i == 0
-        abas.append(
-            f'<button type="button" class="aba-tela" role="tab" id="aba-{cena}" data-cena="{cena}" aria-controls="tela-{cena}" '
-            f'aria-selected="{"true" if primeira else "false"}" tabindex="{0 if primeira else -1}">'
-            f'<span class="aba-nome">{e(titulo)}</span></button>')
-        telas.append(
-            f'<div class="passeio-tela{" ativa" if primeira else ""}" id="tela-{cena}" role="tabpanel" aria-labelledby="aba-{cena}">'
-            f'<img class="capa" src="{base}midia/{cena}.webp" alt="{e(rotulo)}" width="720" height="1566" loading="{"eager" if primeira else "lazy"}" decoding="async">'
-            f'<video muted loop playsinline preload="none" data-manual aria-hidden="true" tabindex="-1"><source src="{base}midia/{cena}.mp4" type="video/mp4"></video></div>')
-        notas = "".join(
-            f'<li class="nota nota-{lado}" data-x="{x}" data-y="{y}"><b>{e(t)}</b><span>{e(d)}</span></li>'
-            for lado, x, y, t, d in NOTAS.get(cena, []))
-        legendas.append(
-            f'<div class="passeio-legenda{" ativa" if primeira else ""}"{"" if primeira else " hidden"}>'
-            f'<p class="notas-titulo"><span class="passo">{i + 1} de {n}</span>{e(titulo)}</p>'
-            f'<ul class="notas">{notas}</ul></div>')
-    return (f'<div class="passeio anotado" data-passeio>'
-            f'<div class="passeio-centro">'
-            f'<div class="aparelho passeio-aparelho"><div class="tela">{"".join(telas)}</div></div>'
-            f'<div class="passeio-legendas">{"".join(legendas)}</div>'
-            f'</div>'
-            f'<div class="passeio-pe">'
-            f'<div class="passeio-abas" role="tablist" aria-label="Telas do app">{"".join(abas)}</div>'
-            f'<button class="pausar passeio-pausar" type="button" data-estado="pausado" aria-label="Tocar a animação">{ICONE_PAUSA}{ICONE_TOCAR}</button>'
-            f'</div>'
-            f'</div>')
+        notas = "".join(f'<li><b>{e(t)}</b><span>{e(d)}</span></li>' for _, _, _, t, d in NOTAS.get(cena, []))
+        lado = " recurso-inverso" if i % 2 else ""
+        blocos.append(
+            f'<article class="recurso{lado}" data-revelar>'
+            f'{aparelho(base, cena, rotulo, "recurso-aparelho")}'
+            f'<div class="recurso-texto"><p class="recurso-passo">{i + 1} de {n}</p>'
+            f'<h3 class="recurso-titulo">{e(titulo)}</h3><p class="recurso-lead">{e(texto)}</p>'
+            f'<ul class="recurso-notas">{notas}</ul></div></article>')
+    return f'<div class="recursos">{"".join(blocos)}</div>'
+
+
+# As abas da janela de codigo: arquivos reais do app, cada uma leva ao arquivo no GitHub.
+ABAS_DO_CODIGO = ["Kit/Sources/EscaliburKeys/Signer.swift", "Kit/Sources/EscaliburKeys/WalletVault.swift",
+                  "Kit/Sources/EscaliburKeys/Enclave.swift", "Kit/Sources/EscaliburNetwork/HTTPClient.swift"]
 
 
 def trecho_do_assinador(ctx, base):
-    """"Seguranca que da para conferir" (redesenho do dono, 23/10/2026): um trecho real do
-    assinador do app, lido do repositorio a cada publicacao, numa janela de codigo. Uma faixa de
-    luz confere o trecho de cima para baixo, e as duas travas ganham um visto: a chave tem de ser
-    a esperada, e a assinatura e conferida antes de sair. O link leva as mesmas linhas no GitHub."""
-    caminho = "Kit/Sources/EscaliburKeys/Signer.swift"
+    """"Codigo auditavel" (refeito pelo dono, 23/10/2026): um trecho real do assinador do app,
+    lido do repositorio a cada publicacao, numa janela de editor com abas de outros arquivos
+    reais (o codigo do app inteiro e publico, nao so este trecho). Uma faixa de luz confere o
+    trecho de cima para baixo e acende as duas linhas que travam a assinatura. Linha longa
+    quebra com recuo, sem cortar nem rolar. O link leva as mesmas linhas no GitHub."""
+    caminho = ABAS_DO_CODIGO[0]
     fonte = (dados.RAIZ / caminho).read_text(encoding="utf-8")
     linhas = fonte.split("\n")
     inicio = next(i for i, l in enumerate(linhas) if "static func sign(_ request: SigningRequest" in l)
     trecho = linhas[inicio:inicio + 11]
-    # Sem o recuo comum: o trecho cabe na janela sem rolar.
+    # Sem o recuo comum: o trecho cabe na janela.
     recuo = min(len(l) - len(l.lstrip(" ")) for l in trecho if l.strip())
     trecho = [l[recuo:] for l in trecho]
     html_linhas = codigo.destacar(caminho, "\n".join(trecho))
-    # As travas: (texto que identifica a linha, o que ela garante).
-    travas = [("Hash.constantTimeEqual(publicKey, request.expectedPublicKey)", "A chave é a esperada"),
-              ("Secp256k1.verifyDER(signature: der", "A assinatura é conferida antes de sair")]
+    # As linhas que travam a assinatura: a chave tem de ser a esperada, e a assinatura e conferida.
+    travas = ["Hash.constantTimeEqual(publicKey, request.expectedPublicKey)", "Secp256k1.verifyDER(signature: der"]
     itens = []
     for k, (cru, feito) in enumerate(zip(trecho, html_linhas)):
-        trava = next((t for marca, t in travas if marca in cru), None)
-        classe = ' class="trava"' if trava else ""
-        selo = f'<span class="trava-selo">{e(trava)}</span>' if trava else ""
-        itens.append(f'<li{classe}><span class="n">{inicio + 1 + k}</span><code>{feito or " "}</code>{selo}</li>')
+        classe = ' class="trava"' if any(t in cru for t in travas) else ""
+        itens.append(f'<li{classe}><span class="n">{inicio + 1 + k}</span><code>{feito or " "}</code></li>')
     fim = inicio + len(trecho)
+    abas = []
+    for n, arquivo in enumerate(ABAS_DO_CODIGO):
+        if not (dados.RAIZ / arquivo).is_file():
+            continue
+        nome = e(arquivo.split("/")[-1])
+        if n == 0:
+            abas.append(f'<a class="janela-aba ativa" href="{blob(ctx, caminho)}#L{inicio + 1}-L{fim}" aria-current="true">{nome}</a>')
+        else:
+            abas.append(f'<a class="janela-aba" href="{blob(ctx, arquivo)}">{nome}</a>')
+    pasta = " / ".join(e(parte) for parte in caminho.split("/")[:-1])
     return (f'<figure class="janela-codigo" data-conferir>'
-            f'<figcaption class="janela-barra"><span class="janela-pontos" aria-hidden="true"><i></i><i></i><i></i></span>'
-            f'<a href="{blob(ctx, caminho)}#L{inicio + 1}-L{fim}">{e(caminho.split("/")[-1])}</a>'
+            f'<div class="janela-barra"><span class="janela-pontos" aria-hidden="true"><i></i><i></i><i></i></span>'
+            f'<nav class="janela-abas" aria-label="Arquivos do app no GitHub">{"".join(abas)}</nav></div>'
+            f'<figcaption class="janela-caminho"><span>{pasta} / <b>{e(caminho.split("/")[-1])}</b></span>'
             f'<span class="janela-linhas">linhas {inicio + 1} a {fim}</span></figcaption>'
             f'<ol class="janela-corpo">{"".join(itens)}</ol>'
             f'<span class="janela-luz" aria-hidden="true"></span>'
@@ -811,6 +833,7 @@ def preencher(ctx, base, modelo, origem):
             "n_travados": lambda: str(ctx["n_travados"]),
             "redes_logos": lambda: grade_de_redes(ctx, base),
             "moedas_abertura": lambda: moedas_abertura(ctx, base),
+            "moedas_vitrine": lambda: vitrine_moedas(ctx, base),
             "redes_com_tag": lambda: redes_com_tag(ctx),
             "estado_ci": lambda: estado_ci(ctx, base),
             "novidades_resumo": lambda: resumo_novidades(ctx, base),
@@ -991,7 +1014,10 @@ git checkout {e(ref[:12])}</code><span>O mesmo commit desta página.</span></li>
     if sha and re.fullmatch(r"[0-9a-f]{40}", sha):
         hash_cabeca = (f'<figure class="hash-cabeca"><canvas class="pixels-hash grande" data-hashes="{e(sha)}" data-colunas="8" data-linhas="5" aria-hidden="true"></canvas>'
                        f'<figcaption>Commit publicado <code>{e(sha[:12])}</code>, em pixels: cada tom é um dígito do hash.</figcaption></figure>')
-    corpo = f"""<header class="cabeca-pagina cabeca-centro"><div class="wrap">
+    # As moedas 3D da pagina Redes tambem aqui (pedido do dono, 23/10/2026), nas bordas.
+    corpo = f"""<header class="cabeca-pagina cabeca-centro cabeca-moedas cabeca-auditoria">
+<canvas class="redes-3d" data-auditoria aria-hidden="true"></canvas>
+<div class="wrap">
 {hash_cabeca}
 <p class="sobretitulo">Auditoria</p>
 <h1 class="titulo-pagina">Confira você mesmo.</h1>
@@ -1202,10 +1228,6 @@ def pagina_redes(ctx, base):
         )
 
     corpo = f"""<header class="cabeca-pagina cabeca-centro cabeca-moedas">
-<picture class="cabeca-moedas-paradas" aria-hidden="true">
-<source media="(max-width: 699px)" srcset="{base}midia/moedas-estreito.webp" width="780" height="1560">
-<img src="{base}midia/moedas-largo.webp" alt="" width="1600" height="1000" decoding="async" draggable="false">
-</picture>
 <canvas class="redes-3d" aria-hidden="true"></canvas>
 <div class="wrap">
 <p class="sobretitulo">Redes e moedas</p>

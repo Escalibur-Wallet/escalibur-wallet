@@ -707,23 +707,94 @@
     }
     var grafico = destaque.querySelector(".destaque-grafico");
     var d = precos && precos.moedas && precos.moedas[escolhida];
-    var traco = grafico.querySelector(".traco"), area = grafico.querySelector(".area");
+    desenharGrafico(grafico, d && d.linha);
     if (d && d.linha && d.linha.length > 1) {
-      var caminho = caminhoLinha(d.linha, 600, 180, 10);
-      traco.setAttribute("d", caminho);
-      area.setAttribute("d", caminho + " L600 180 L0 180 Z");
-      grafico.classList.toggle("baixa", d.linha[d.linha.length - 1] < d.linha[0]);
       pintarVariacao(destaque.querySelector("[data-destaque-semana]"), (d.linha[d.linha.length - 1] / d.linha[0] - 1) * 100);
       // A semana vem da hora em que foi lida: se ja passou de 3 horas, a legenda diz ate quando.
       var rotuloSemana = grafico.querySelector(".apoio").firstChild;
       var horaLinha = precos && precos.linha_hora ? new Date(precos.linha_hora) : null;
       rotuloSemana.nodeValue = horaLinha && Date.now() - horaLinha > 3 * 3600 * 1000 ? "Semana até " + diaCurto(precos.linha_hora) : "Últimos 7 dias";
     } else {
-      traco.setAttribute("d", "");
-      area.setAttribute("d", "");
       pintarVariacao(destaque.querySelector("[data-destaque-semana]"), null);
     }
   }
+
+  // O grafico do Mercado no desenho do app (PriceChart.swift): traco de 3 px com o brilho
+  // desfocado por baixo, sem area; a maxima em cima do pico e a minima embaixo do vale; com o
+  // dedo (ou o mouse) no grafico, a regua e o ponto, e o que vem depois fica cinza.
+  var FOLGA_GRAFICO = 26, LADO_GRAFICO = 6;
+  function desenharGrafico(grafico, linha) {
+    if (!grafico) return;
+    var caixa = grafico.querySelector(".grafico-area"), svg = caixa.querySelector("svg");
+    var W = Math.max(1, caixa.clientWidth || 600), H = Math.max(1, caixa.clientHeight || 200);
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    var traco = svg.querySelector(".traco"), brilho = svg.querySelector(".brilho"), passado = svg.querySelector(".passado");
+    var maxima = caixa.querySelector(".maxima"), minima = caixa.querySelector(".minima");
+    soltarGrafico(grafico);
+    if (!linha || linha.length < 2) {
+      [traco, brilho, passado].forEach(function (p) { p.setAttribute("d", ""); });
+      maxima.textContent = minima.textContent = "";
+      grafico.dados = null;
+      return;
+    }
+    var menor = Infinity, maior = -Infinity, iMenor = 0, iMaior = 0;
+    linha.forEach(function (p, i) {
+      if (p < menor) { menor = p; iMenor = i; }
+      if (p > maior) { maior = p; iMaior = i; }
+    });
+    var faixa = (maior - menor) || Math.abs(maior) * 0.01 || 1;
+    var pts = linha.map(function (p, i) {
+      return [LADO_GRAFICO + (W - LADO_GRAFICO * 2) * i / (linha.length - 1), H - FOLGA_GRAFICO - (p - menor) / faixa * (H - FOLGA_GRAFICO * 2)];
+    });
+    var caminho = pts.map(function (q, i) { return (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1); }).join(" ");
+    [traco, brilho, passado].forEach(function (p) { p.setAttribute("d", caminho); });
+    var primeiro = linha[0], ultimo = linha[linha.length - 1];
+    grafico.classList.toggle("baixa", ultimo < primeiro);
+    grafico.classList.toggle("plano", ultimo === primeiro);
+    var rotulo = function (el, valor, q, cima) {
+      el.textContent = dinheiro(valor, fiat);
+      el.style.setProperty("left", Math.min(Math.max(q[0], 48), W - 48) + "px");
+      el.style.setProperty("top", (cima ? q[1] - 16 : q[1] + 16) + "px");
+    };
+    rotulo(maxima, maior, pts[iMaior], true);
+    rotulo(minima, menor, pts[iMenor], false);
+    grafico.dados = { pts: pts, linha: linha, W: W, H: H };
+  }
+  function escolherNoGrafico(grafico, x) {
+    var d = grafico.dados;
+    if (!d) return;
+    var n = d.pts.length, k = Math.round((x - LADO_GRAFICO) / Math.max(1, d.W - LADO_GRAFICO * 2) * (n - 1));
+    k = Math.min(Math.max(k, 0), n - 1);
+    var q = d.pts[k], svg = grafico.querySelector("svg");
+    grafico.classList.add("escolhendo");
+    svg.querySelector(".antes").setAttribute("width", q[0].toFixed(1));
+    var regua = svg.querySelector(".regua");
+    regua.setAttribute("x1", q[0]); regua.setAttribute("x2", q[0]);
+    regua.setAttribute("y1", FOLGA_GRAFICO); regua.setAttribute("y2", d.H - FOLGA_GRAFICO);
+    ["ponto-fundo", "ponto"].forEach(function (c) {
+      var p = svg.querySelector("." + c);
+      p.setAttribute("cx", q[0]); p.setAttribute("cy", q[1]);
+    });
+    var rotulo = grafico.querySelector(".escolhido");
+    rotulo.textContent = dinheiro(d.linha[k], fiat);
+    rotulo.style.setProperty("left", Math.min(Math.max(q[0], 48), d.W - 48) + "px");
+    rotulo.style.setProperty("top", (FOLGA_GRAFICO - 14) + "px");
+  }
+  function soltarGrafico(grafico) {
+    grafico.classList.remove("escolhendo");
+    var antes = grafico.querySelector(".antes");
+    if (antes) antes.setAttribute("width", "100%");
+  }
+  cada(".destaque-grafico", function (grafico) {
+    var caixa = grafico.querySelector(".grafico-area");
+    var mover = function (e) { escolherNoGrafico(grafico, e.clientX - caixa.getBoundingClientRect().left); };
+    caixa.addEventListener("pointerdown", mover);
+    caixa.addEventListener("pointermove", function (e) { if (e.pointerType === "mouse" || e.buttons) mover(e); });
+    caixa.addEventListener("pointerleave", function () { soltarGrafico(grafico); });
+    caixa.addEventListener("pointerup", function (e) { if (e.pointerType !== "mouse") soltarGrafico(grafico); });
+    caixa.addEventListener("pointercancel", function () { soltarGrafico(grafico); });
+    window.EscaliburRelogio.aoMedir(function () { if (grafico.dados) desenharGrafico(grafico, grafico.dados.linha); });
+  });
   function aplicarPrecos(dados) {
     if (!dados || typeof dados !== "object" || !dados.moedas) return;
     // Uma resposta sem preco nenhum nao apaga o que ja estava na tela.
@@ -1208,6 +1279,7 @@
     var visivel = false;
     if (observa) new IntersectionObserver(function (e) { visivel = e[0].isIntersecting; if (visivel) pedir(); }, { rootMargin: "80px" }).observe(canvas);
     window.EscaliburRelogio.aoMedir(function () { px.medir(); });
+    if ("ResizeObserver" in window) new ResizeObserver(function () { px.medir(); pedir(); }).observe(canvas);
     window.EscaliburRelogio.registrar(function (estado) {
       if (!visivel || document.hidden) return false;
       return quadro(px, estado.t, estado) !== false;
@@ -1330,6 +1402,9 @@
     var visivel = false;
     if (observa) new IntersectionObserver(function (e) { visivel = e[0].isIntersecting; if (visivel) pedir(); }, { rootMargin: "80px" }).observe(canvas);
     window.EscaliburRelogio.aoMedir(function () { pt.medir(); });
+    // Medido antes de o CSS assentar (vindo de outra pagina, no celular), o canvas guardava o
+    // tamanho padrao de 300 x 150 e o cadeado saia espremido: mede de novo quando a caixa muda.
+    if ("ResizeObserver" in window) new ResizeObserver(function () { pt.medir(); pedir(); }).observe(canvas);
     window.EscaliburRelogio.registrar(function (estado) {
       if (!visivel || document.hidden) return false;
       return quadro(pt, estado.t) !== false;
@@ -1345,10 +1420,16 @@
     deTexto(["###.###.###", "###.###.###", "###.###.###", "...........", "###.###.###", "###.###.###", "###.###.###"], GC, GC, 5, 8, 2),
     // Argon2id: um bloco de memoria, cheio, que trabalha.
     (function () { var m = new Float32Array(GC * GC); for (var y = 6; y <= 25; y++) for (var x = 6; x <= 25; x++) m[y * GC + x] = 0.8; return m; })(),
-    // O chip.
+    // O chip (redesenhado pelo dono, 23/10/2026): quatro pinos de cada lado, o corpo apagado
+    // com a borda acesa, a marca do pino 1 no canto e o miolo de silicio aceso no meio.
     deTexto([
-      "...#..#..#...", "#############", "#...........#", "##..#####..##", "#...#...#...#",
-      "##..#.#.#..##", "#...#...#...#", "##..#####..##", "#...........#", "#############", "...#..#..#..."], GC, GC, 3, 5, 2),
+      "......##..##..##..##......", "......##..##..##..##......", "......##..##..##..##......", "....##################....",
+      "...#++++++++++++++++++#...", "...#+##+++++++++++++++#...", "####+##+++++++++++++++####", "####+++............+++####",
+      "...#+++.##########.+++#...", "...#+++.##########.+++#...", "####+++.##########.+++####", "####+++.##########.+++####",
+      "...#+++.##########.+++#...", "...#+++.##########.+++#...", "####+++.##########.+++####", "####+++.##########.+++####",
+      "...#+++.##########.+++#...", "...#+++.##########.+++#...", "####+++............+++####", "####++++++++++++++++++####",
+      "...#++++++++++++++++++#...", "...#++++++++++++++++++#...", "....##################....", "......##..##..##..##......",
+      "......##..##..##..##......", "......##..##..##..##......"], GC, GC, 3, 3, 1),
     CADEADO_FECHADO,
     // A assinatura: o visto.
     deTexto([
@@ -1651,11 +1732,15 @@
     if (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4) return false;
     return !!window.WebGLRenderingContext;
   }
+  // A imagem parada das moedas da abertura so aparece sem 3D ("sem-3d"): com 3D, as moedas
+  // entram uma vez, ja no lugar, sem a parada antes (pedido do dono, 23/10/2026: elas
+  // apareciam, sumiam e voltavam).
   if (pode3D() && document.querySelector(".abertura-3d, .destaque-3d, .final-3d, .redes-3d")) {
     var carregar3D = function () {
       var s = document.createElement("script");
       s.src = base + "moedas3d.js";
       s.async = true;
+      s.onerror = function () { raiz.classList.add("sem-3d"); };
       document.head.appendChild(s);
     };
     var depois = function () {
@@ -1663,6 +1748,8 @@
       else window.setTimeout(carregar3D, 200);
     };
     if (document.readyState === "complete") depois(); else window.addEventListener("load", depois);
+  } else {
+    raiz.classList.add("sem-3d");
   }
   calmo.addEventListener && calmo.addEventListener("change", function () { if (calmo.matches) document.dispatchEvent(new CustomEvent("escalibur:calmo")); });
 

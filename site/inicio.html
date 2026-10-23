@@ -21,9 +21,9 @@
 </div>
 </section>
 
-<section class="manifesto" id="manifesto" aria-label="Sem servidor">
+<section class="manifesto" id="manifesto" aria-label="Sem conta e sem servidor">
 <div class="wrap">
-<p class="manifesto-texto" data-palavras>Sem servidor, não há o que hackear do nosso lado. Suas chaves ficam só no seu celular.</p>
+<p class="manifesto-texto" data-palavras>Sem conta e sem servidor da Escalibur. Não há servidor nosso para invadir, nem base de chaves para vazar.</p>
 </div>
 </section>
 
@@ -54,7 +54,7 @@
 <div class="wrap troca-grade">
 <div class="troca-texto" data-revelar>
 <p class="sobretitulo">Troca e ponte</p>
-<h2 class="titulo-secao" id="t-trocar">Troque sem sair da carteira.</h2>
+<h2 class="titulo-secao" id="t-trocar">Swap com taxa 0%.</h2>
 <p class="lead">A troca vai direto aos protocolos públicos de cada rede, e o app compara as cotações entre eles. <strong>A Escalibur não cobra taxa.</strong> Você paga a taxa da rede e o spread do protocolo, mostrados antes de assinar.</p>
 <ul class="troca-pontos">
 <li><b>Imediata.</b> CoW, Uniswap, PancakeSwap, ShibaSwap, KyberSwap, Velora, LI.FI, De¹ e Jupiter, e os livros de ofertas do XRP Ledger e da Stellar. Troca grande pode sair dividida entre provedores.</li>
@@ -121,23 +121,19 @@
 <div class="wrap">
 <div class="secao-cabeca centro" data-revelar>
 <p class="sobretitulo">Por dentro do app</p>
-<h2 class="titulo-secao" id="t-telas">Tudo o que uma carteira precisa.</h2>
+<h2 class="titulo-secao" id="t-telas">Simples de usar.<br>Difícil de enganar.</h2>
 <p class="lead">Gravações reais do app, sem montagem.</p>
 </div>
 </div>
-<div class="telas-trilho">
-<div class="telas-palco">
 <div class="wrap">
 {{telas_passeio}}
-</div>
-</div>
 </div>
 </section>
 
 <section class="chaves" id="chaves" aria-labelledby="t-chaves">
 <div class="wrap chaves-cabeca" data-revelar>
 <p class="sobretitulo">Chaves</p>
-<h2 class="titulo-secao" id="t-chaves">Sua chave nunca sai do seu celular.</h2>
+<h2 class="titulo-secao" id="t-chaves">Sua chave nunca sai do celular.</h2>
 <p class="lead">Ela nasce no aparelho, fica cifrada, presa ao chip de segurança e ao seu PIN, e fora do backup na nuvem. Não existe cópia em servidor, porque não existe servidor.</p>
 </div>
 <div class="chaves-trilho">
@@ -273,19 +269,30 @@
 <ul class="privacidade-grade">
 <li data-revelar><canvas class="pixels-icone" data-icone="conta" aria-hidden="true"></canvas><h3>Sem conta</h3><p>Nem e-mail, nem telefone, nem cadastro. A carteira é a frase, e a frase é só sua.</p></li>
 <li data-revelar><canvas class="pixels-icone" data-icone="olho" aria-hidden="true"></canvas><h3>Nenhum rastreador</h3><p>Nenhum SDK de análise, anúncio ou rastreamento no app. O verificador confere isso no código a cada mudança.</p></li>
-<li data-revelar><canvas class="pixels-icone" data-icone="servidores" aria-hidden="true"></canvas><h3>Só endereços conhecidos</h3><p>O app fala apenas com uma lista fechada de servidores, travada no código e conferida a cada mudança. Qualquer endereço fora dela é recusado. A <a href="{{base}}privacidade/">Política de privacidade</a> diz o que cada um vê.</p></li>
+<li data-revelar><canvas class="pixels-icone" data-icone="servidores" aria-hidden="true"></canvas><h3>Só endereços conhecidos</h3><p>O app fala apenas com uma lista fechada de servidores, travada no código e conferida a cada mudança. Qualquer endereço fora dela é recusado. A Política de privacidade diz o que cada um vê.</p></li>
 <li data-revelar><canvas class="pixels-icone" data-icone="site" aria-hidden="true"></canvas><h3>Este site também</h3><p>Sem cookie, sem análise de uso e nada carregado de outro site. Até os preços chegam pelo próprio endereço do site.</p></li>
 </ul>
 </div>
+</section>
+
+<section class="moedas" id="moedas" aria-labelledby="t-moedas">
+<div class="wrap">
+<div class="secao-cabeca centro" data-revelar>
+<p class="sobretitulo">Moedas</p>
+<h2 class="titulo-secao" id="t-moedas">Todas as moedas num app só.</h2>
+<p class="lead">Guarde, envie e troque {{n_tokens}} tokens conferidos um a um em {{n_redes}} redes, e adicione outros pelo endereço do contrato. No Mercado, o preço das 100 maiores.</p>
+</div>
+</div>
+{{moedas_vitrine}}
 </section>
 
 <section class="aberto conferir-secao" id="codigo" aria-labelledby="t-codigo">
 <div class="wrap conferir-grade">
 {{trecho_assinador}}
 <div class="conferir-texto" data-revelar>
-<p class="sobretitulo">Código auditável</p>
-<h2 class="titulo-secao" id="t-codigo">Segurança que dá para conferir.</h2>
-<p class="lead">Este é o código que assina as suas transações, do jeito que está no app. Ele só assina com a chave esperada e confere a própria assinatura antes de entregar. Qualquer pessoa pode ler, linha por linha.</p>
+<p class="sobretitulo">Código aberto</p>
+<h2 class="titulo-secao" id="t-codigo">Código auditável.</h2>
+<p class="lead">Todo o código do app é público: o cofre que guarda a sua chave, a assinatura de cada transação e cada conexão com as redes. Qualquer pessoa pode ler, linha por linha, e conferir que o app faz só o que diz.</p>
 <ul class="conferir-pontos">
 <li><svg class="visto" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>Código aberto, sem SDK de análise, anúncio ou rastreamento.</li>
 <li><svg class="visto" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>As bibliotecas de criptografia ficam no repositório, conferidas por SHA-256.</li>
@@ -324,7 +331,7 @@
 <div class="wrap novidades-grade">
 <div>
 <p class="sobretitulo">Novidades</p>
-<h2 class="titulo-secao" id="t-novidades">O que mudou por último.</h2>
+<h2 class="titulo-secao" id="t-novidades">Últimas atualizações.</h2>
 <p class="lead versao-linha">Versão <b>{{versao}}</b> (build {{build}}). {{situacao_loja}} Cada entrega é um commit público no GitHub.</p>
 <a class="mais" href="{{base}}novidades/">Todas as novidades</a>
 </div>
@@ -343,8 +350,8 @@
 {{botoes_baixar}}
 </div>
 <div class="podio" aria-label="Telas do app, em inglês">
-{{capa foto-moeda | A página do bitcoin no app, em inglês, com o gráfico subindo | podio-lado}}
-{{capa foto-carteira | A Carteira no app, em inglês: o saldo total e a lista de ativos | podio-meio}}
+{{capa foto-carteira | A Carteira no app, em inglês: o saldo total e a lista de ativos | podio-lado}}
+<figure class="podio-foto"><img src="{{base}}midia/foto-mao-bitcoin.webp" alt="Uma mão segurando o celular na página do bitcoin no app, em inglês: o preço e o gráfico das últimas 24 horas" width="940" height="1672" loading="lazy" decoding="async" draggable="false"></figure>
 {{capa foto-trocar | A troca no app, em inglês: 250 XRP por RLUSD no XRP Ledger, com a cotação | podio-lado}}
 </div>
 </section>

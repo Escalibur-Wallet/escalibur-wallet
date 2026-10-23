@@ -268,24 +268,6 @@ a.selo-loja:hover { opacity: 0.86; }
 .tela video { opacity: 0; transition: opacity 0.3s ease; }
 .tela video.visivel { opacity: 1; }
 
-/* O controle de pausa: embaixo do aparelho, fora da tela do app. So com JS (sem JS o
-   video nao toca e a capa fica). */
-.pausar {
-  display: none;
-  position: absolute; left: 50%; top: calc(100% + 14px); z-index: 2; transform: translateX(-50%);
-  width: 34px; height: 34px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
-  background: var(--rail); color: var(--ink-soft);
-  box-shadow: inset 0 0 0 1px var(--edge);
-  align-items: center; justify-content: center;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.pausar:hover { background: var(--control); color: var(--ink); }
-.js .pausar { display: inline-flex; }
-.pausar svg { width: 12px; height: 12px; }
-.pausar .tocar { display: none; }
-.pausar[data-estado="pausado"] .tocar { display: block; }
-.pausar[data-estado="pausado"] .pausa { display: none; }
-
 /* MARK: Logos */
 
 .logo {
@@ -338,9 +320,10 @@ a.selo-loja:hover { opacity: 0.86; }
 .abertura-aparelho { position: relative; z-index: 1; margin-top: clamp(48px, 8vh, 88px); will-change: transform; }
 .abertura-aparelho .aparelho { --w: min(clamp(228px, 21vw, 300px), calc((100svh - 230px) * 0.46)); }
 @media (min-width: 600px) and (max-width: 899px) { .abertura-aparelho .aparelho { --w: min(280px, calc((100svh - 230px) * 0.46)); } }
-.abertura-moedas-paradas { position: absolute; inset: 0; z-index: 0; transition: opacity 0.9s ease; }
+.abertura-moedas-paradas { position: absolute; inset: 0; z-index: 0; opacity: 0; }
+.sem-3d .abertura-moedas-paradas { opacity: 1; }
 .abertura-moedas-paradas img { width: 100%; height: 100%; object-fit: cover; }
-.abertura-3d { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; opacity: 0; transition: opacity 0.9s ease; }
+.abertura-3d { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; opacity: 0; transition: opacity 0.7s ease; }
 .com-3d .abertura-3d { opacity: 1; }
 .com-3d .abertura-moedas-paradas { opacity: 0; }
 .abertura-legenda {
@@ -394,12 +377,28 @@ html:not(.movimento) .abertura-legenda { display: none; }
   font-variant-numeric: tabular-nums; min-height: 1.05em;
 }
 .destaque-variacao { display: flex; justify-content: center; align-items: center; gap: 10px; min-height: 30px; }
-.destaque-grafico { display: grid; gap: 8px; }
-.destaque-grafico svg { width: 100%; height: 132px; overflow: visible; }
-.destaque-grafico .traco { fill: none; stroke: var(--up); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
-.destaque-grafico .area { fill: var(--up); opacity: 0.07; }
-.destaque-grafico.baixa .traco { stroke: var(--down); }
-.destaque-grafico.baixa .area { fill: var(--down); }
+.destaque-grafico { display: grid; gap: 8px; --cor-grafico: var(--up); }
+.destaque-grafico.baixa { --cor-grafico: var(--down); }
+.destaque-grafico.plano { --cor-grafico: var(--ink-soft); }
+.grafico-area { position: relative; height: 200px; touch-action: pan-y; cursor: crosshair; -webkit-user-select: none; user-select: none; }
+.grafico-area svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.destaque-grafico .traco { fill: none; stroke: var(--cor-grafico); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.destaque-grafico .brilho { fill: none; stroke: var(--cor-grafico); stroke-opacity: 0.34; stroke-width: 10; stroke-linejoin: round; stroke-linecap: round; }
+.destaque-grafico .passado { fill: none; stroke: var(--edge-strong); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; opacity: 0; }
+.destaque-grafico .regua { stroke: var(--ink-muted); stroke-width: 1; opacity: 0; }
+.destaque-grafico .ponto-fundo { fill: var(--void); opacity: 0; }
+.destaque-grafico .ponto { fill: var(--cor-grafico); opacity: 0; }
+.destaque-grafico.escolhendo .passado, .destaque-grafico.escolhendo .regua,
+.destaque-grafico.escolhendo .ponto-fundo, .destaque-grafico.escolhendo .ponto { opacity: 1; }
+.grafico-rotulo {
+  position: absolute; transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none;
+  font-size: 12px; font-weight: 500; color: var(--ink-soft); font-variant-numeric: tabular-nums;
+}
+.grafico-rotulo:empty { display: none; }
+.grafico-rotulo.escolhido { color: var(--ink); font-weight: 600; opacity: 0; }
+.destaque-grafico.escolhendo .grafico-rotulo.escolhido { opacity: 1; }
+.destaque-grafico.escolhendo .maxima, .destaque-grafico.escolhendo .minima { opacity: 0; }
+@media (max-width: 599px) { .grafico-area { height: 180px; } }
 .destaque-grafico .apoio { font-size: 13px; display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 
 .mercado-lista { background: var(--body); border-radius: var(--r-tile); padding: 10px; }
@@ -1151,7 +1150,7 @@ html:not(.js) .chamado .passo, html:not(.js) .chamado .botao, html:not(.js) .cha
 
 /* MARK: Rodape */
 
-.rodape { background: #111113; padding: 56px 0 64px; font-size: 14px; color: var(--ink-muted); }
+.rodape { background: #050506; padding: 56px 0 64px; font-size: 14px; color: var(--ink-muted); }
 .rodape-colunas { display: grid; gap: 32px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (min-width: 760px) { .rodape-colunas { grid-template-columns: 2fr repeat(3, minmax(0, 1fr)); } }
 .rodape-marca { grid-column: 1 / -1; }
@@ -1732,17 +1731,15 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
   position: relative; margin: 0; border-radius: 18px; background: #0E0E10; overflow: hidden;
   box-shadow: inset 0 0 0 1px var(--edge-strong), 0 30px 80px rgba(0, 0, 0, 0.45);
 }
-.janela-barra { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--edge); font-size: 13px; color: var(--ink-muted); }
+.janela-barra { display: flex; align-items: flex-end; gap: 16px; padding: 10px 14px 0; background: #121215; font-size: 13px; color: var(--ink-muted); }
 .janela-pontos { display: inline-flex; gap: 6px; }
 .janela-pontos i { width: 10px; height: 10px; border-radius: 50%; background: var(--edge-strong); }
-.janela-barra a { color: var(--ink); font-weight: 600; text-decoration: none; }
-.janela-barra a:hover { text-decoration: underline; }
-.janela-linhas { margin-left: auto; }
+.janela-linhas { margin-left: auto; flex: none; }
 .janela-corpo {
-  list-style: none; margin: 0; padding: 14px 0; overflow-x: auto; color: #C9C9D0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.8;
+  list-style: none; margin: 0; padding: 16px 0 18px; color: #C9C9D0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.75;
 }
-.janela-corpo li { display: flex; align-items: center; padding-right: 16px; white-space: pre; transition: background 0.4s ease; }
+.janela-corpo li { display: flex; align-items: flex-start; padding-right: 18px; transition: background 0.4s ease; }
 .janela-corpo .n { flex: none; width: 44px; padding-right: 14px; text-align: right; color: #4A4A52; user-select: none; -webkit-user-select: none; transition: color 0.4s ease; }
 .janela-corpo code { font: inherit; color: inherit; }
 .janela-corpo .k { color: var(--ink); font-weight: 600; }
@@ -1752,14 +1749,6 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
 .janela-corpo li.conferida { background: rgba(255, 255, 255, 0.06); }
 .janela-corpo li.conferida .n { color: var(--ink); }
 .janela-corpo li { position: relative; }
-.trava-selo {
-  position: absolute; right: 12px; top: 50%; padding: 3px 10px 3px 8px; border-radius: 999px; white-space: nowrap;
-  background: #1C1C20; box-shadow: inset 0 0 0 1px var(--edge-strong);
-  opacity: 0; transform: translate(8px, -50%); transition: opacity 0.35s ease, transform 0.45s var(--ease);
-}
-.trava-selo::before { content: ""; display: inline-block; vertical-align: middle; margin-right: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
-.trava-selo { font-size: 12px; font-weight: 600; color: var(--ink); font-family: "Inter", system-ui, sans-serif; }
-.janela-corpo li.conferida .trava-selo { opacity: 1; transform: translate(0, -50%); }
 .janela-luz {
   position: absolute; left: 0; right: 0; top: 0; height: 70px; pointer-events: none; opacity: 0;
   background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.08) 50%, transparent);
@@ -1774,5 +1763,111 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
   .conferir-grade { grid-template-columns: minmax(0, 1fr); }
   .conferir-texto { order: -1; }
   .janela-corpo { font-size: 11px; }
-  .trava-selo { display: none; }
 }
+
+/* MARK: "Tudo o que uma carteira precisa", um bloco por tela (refeito pelo dono, 23/10/2026): o
+   iPhone de um lado e o texto do outro, alternando, sem linhas e sem palco preso. */
+.recursos { display: grid; gap: clamp(72px, 10vw, 140px); margin-top: clamp(48px, 6vw, 80px); }
+.recurso { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: clamp(32px, 6vw, 96px); max-width: 1040px; margin-inline: auto; width: 100%; }
+.recurso .recurso-aparelho { --w: clamp(220px, 24vw, 300px); justify-self: end; }
+.recurso-inverso .recurso-aparelho { order: 2; justify-self: start; }
+.recurso-inverso .recurso-texto { order: 1; justify-self: end; }
+.recurso-texto { max-width: 30em; }
+.recurso-passo { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--ink-muted); }
+.recurso-titulo { margin: 0; font-size: clamp(30px, 3.4vw, 46px); line-height: 1.08; letter-spacing: -0.03em; font-weight: 800; color: var(--ink); }
+.recurso-lead { margin: 16px 0 0; font-size: 18px; line-height: 1.55; color: var(--ink-soft); }
+.recurso-notas { list-style: none; padding: 0; margin: 26px 0 0; display: grid; gap: 16px; }
+.recurso-notas b { display: block; font-size: 16px; font-weight: 700; color: var(--ink); }
+.recurso-notas span { display: block; margin-top: 3px; font-size: 15px; line-height: 1.5; color: var(--ink-soft); }
+@media (max-width: 799px) {
+  .recurso { grid-template-columns: minmax(0, 1fr); text-align: center; gap: 28px; }
+  .recurso .recurso-aparelho, .recurso-inverso .recurso-aparelho { order: 0; justify-self: center; --w: min(64vw, 260px); }
+  .recurso-texto, .recurso-inverso .recurso-texto { order: 1; justify-self: center; }
+}
+
+/* MARK: Todas as moedas (pedido do dono, 23/10/2026): o catalogo inteiro de logos do app em
+   faixas que andam devagar, as pares no sentido contrario, sumindo nas bordas. */
+.moedas { padding: clamp(45px, 6.2vw, 87px) 0; overflow: hidden; }
+.moedas .lead { margin-inline: auto; max-width: 36em; }
+.moedas-vitrine {
+  display: grid; gap: clamp(14px, 1.6vw, 20px); margin-top: clamp(40px, 5vw, 64px);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.moedas-faixa { overflow: hidden; }
+.moedas-trilho { display: flex; width: max-content; animation: moedas-andar 220s linear infinite; will-change: transform; }
+.moedas-faixa:nth-child(2) .moedas-trilho { animation-duration: 260s; animation-direction: reverse; }
+.moedas-faixa:nth-child(3) .moedas-trilho { animation-duration: 200s; }
+.moedas-faixa:nth-child(4) .moedas-trilho { animation-duration: 240s; animation-direction: reverse; }
+.moedas-lista { display: flex; gap: clamp(14px, 1.6vw, 20px); padding: 0 clamp(14px, 1.6vw, 20px) 0 0; margin: 0; list-style: none; }
+.moedas-lista .logo { width: clamp(44px, 4.2vw, 60px); height: clamp(44px, 4.2vw, 60px); }
+@keyframes moedas-andar { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .moedas-trilho { animation: none; } }
+
+/* MARK: O podio do fim com a foto do bitcoin no meio (pedido do dono, 23/10/2026): a foto e a
+   principal, mais alta que as telas dos lados. O fundo dela e preto puro: com "lighten" sobre o
+   fundo da pagina, ele vira o proprio fundo, sem caixa em volta. O celular da foto fica a
+   direita do centro dela, e a margem esquerda maior o traz para o eixo da pagina. */
+.podio {
+  --w: clamp(150px, 21vw, 270px); height: calc(var(--w) * 1.75); margin-top: clamp(28px, 4vw, 48px);
+  background: var(--void);
+  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent);
+  mask-image: linear-gradient(180deg, #000 72%, transparent);
+}
+.podio .aparelho, .podio .aparelho.podio-lado { --w: inherit; }
+.podio .aparelho.podio-lado { margin-top: calc(var(--w) * 0.42); }
+.podio-foto {
+  position: relative; z-index: 2; flex: none; mix-blend-mode: lighten;
+  /* A mao nao chega na tela da esquerda (pedido do dono, 23/10/2026: o polegar passava por
+     baixo do saldo dela). A margem direita maior mantem o celular da foto no eixo. */
+  margin: calc(var(--w) * -0.56) calc(var(--w) * 0.19) 0 calc(var(--w) * -0.2);
+  width: calc(var(--w) * 2.05);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 86%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 86%, transparent);
+}
+.podio-foto img { display: block; width: 100%; height: auto; }
+/* No celular, so a foto, grande: as telas dos lados ficariam espremidas embaixo da mao. */
+@media (max-width: 599px) {
+  .podio { gap: 0; padding-inline: 0; height: 80vw; }
+  .podio .aparelho.podio-lado { display: none; }
+  .podio-foto { width: 92vw; margin: -24vw 17.7vw 0 0; }
+}
+
+/* MARK: A moeda do Mercado gira na mao (pedido do dono, 23/10/2026): arrastar para os lados
+   gira, com inercia, e ela volta de frente sozinha. A rolagem vertical continua no celular. */
+.destaque-moeda.giravel { cursor: grab; touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+.destaque-moeda.giravel.girando { cursor: grabbing; }
+
+/* MARK: Codigo auditavel, a janela de editor (refeita pelo dono, 23/10/2026): abas com arquivos
+   reais do app, o caminho do arquivo e o trecho sem selos por cima. A linha longa quebra com
+   recuo pendurado, no lugar de ser cortada. */
+.janela-pontos { padding-bottom: 13px; }
+.janela-abas { display: flex; gap: 2px; min-width: 0; overflow: hidden; }
+.janela-aba {
+  flex: none; padding: 9px 14px 10px; border-radius: 10px 10px 0 0; font-size: 13px; font-weight: 500;
+  color: var(--ink-muted); text-decoration: none; transition: color 0.2s ease, background 0.2s ease;
+}
+.janela-aba:hover { color: var(--ink); background: rgba(255, 255, 255, 0.04); }
+.janela-aba.ativa { background: #0E0E10; color: var(--ink); font-weight: 600; }
+.janela-caminho {
+  display: flex; align-items: center; gap: 16px; padding: 12px 18px 0; font-size: 12.5px; color: var(--ink-muted);
+}
+.janela-caminho span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.janela-caminho b { color: var(--ink-soft); font-weight: 600; }
+.janela-corpo .n { padding-top: 0; }
+.janela-corpo code { display: block; flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; padding-left: 4ch; text-indent: -4ch; }
+.janela-corpo li.trava { box-shadow: inset 2px 0 0 transparent; transition: background 0.4s ease, box-shadow 0.4s ease; }
+.janela-corpo li.trava.conferida { box-shadow: inset 2px 0 0 var(--ink); }
+.janela-pe { background: #121215; }
+@media (max-width: 899px) {
+  .janela-aba:nth-child(n+3) { display: none; }
+  .janela-linhas { display: none; }
+}
+
+/* As moedas da pagina Redes giram no clique e no arrasto (pedido do dono, 23/10/2026). */
+.cabeca-moedas { touch-action: pan-y; }
+.cabeca-moedas.sobre-moeda { cursor: grab; }
+.cabeca-moedas.girando { cursor: grabbing; -webkit-user-select: none; user-select: none; }
+.cabeca-moedas.cabeca-auditoria { padding: clamp(72px, 10vw, 128px) 0 clamp(48px, 6vw, 72px); }
+/* No celular nao ha borda livre na cabeca da Auditoria: o hash e os numeros ocupam a largura toda. */
+@media (max-width: 699px) { .cabeca-auditoria .redes-3d { display: none; } }
