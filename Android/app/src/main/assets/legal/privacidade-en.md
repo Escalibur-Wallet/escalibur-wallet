@@ -15,23 +15,25 @@ Escalibur Wallet is offered by X TECH A.I FUND HOLDING E PARTICIPACOES LTDA, CNP
 
 ## What Escalibur receives
 
-Nothing. The app has no usage analytics, crash reports, ads or tracking, and does not talk to any Escalibur server. The code is published for audit, and an automatic check rejects any library of that kind.
+Nothing through the app, with one exception: the lookup log that Alchemy keeps in Escalibur's account, described below. The app has no usage analytics, crash reports, ads or tracking, and does not talk to any Escalibur server. The code is published for audit, and an automatic check rejects any library of that kind.
 
 ## Who the app talks to
 
 To show balances, prices and history, and to send and swap, the app talks directly to public services for each network, run by different companies. Each one sees your phone’s IP address and the addresses, amounts and transactions the app looks up or sends, and can tell that those addresses belong to the same person. A VPN hides the IP. Turning off a network you don’t use in Settings stops its lookups.
 
-With price alerts on (they come on with Bitcoin, Ethereum, XRP and Solana if you allow notifications), the phone checks from time to time, even with the app closed, the price of the coins you picked on CoinGecko and CoinPaprika. Both see the IP and the list of those coins, nothing more.
+With price alerts on (they come on with Bitcoin, Ethereum, XRP and Solana if you allow notifications, and turn off in Settings, Price alerts), the phone checks from time to time, even with the app closed, the price of the coins you picked on CoinGecko and CoinPaprika. Both see the IP and the list of those coins, nothing more.
 
-With the incoming alert on (it comes on at first launch if you allow notifications, and you turn it off in Settings, Incoming alert), the phone checks from time to time, even with the app closed, the balance of your accounts on the same services for each network the app already uses. For that, the accounts’ public addresses and the last balance seen for each coin stay in a separate file on the phone, readable after the first unlock, outside the wallet’s encrypted data. Wallets with a passphrase are left out. No key goes in it, and turning the alert off deletes the file.
+Incoming alerts start off. If you turn them on, in Settings, Incoming alerts, the phone checks about once an hour, also with the app closed, the balance of your accounts on the same services of each network the app already uses, from whatever IP the phone is on. On networks like Bitcoin, only the next receiving address and the last two used ones are checked, each address always with the same service, and a second service checks only when the balance goes up. For that, the public addresses of those accounts and the last balance seen for each coin stay in a separate file on the phone, readable after the first unlock, outside the wallet's encrypted data. Passphrase wallets are left out, and so are watch-only wallets unless you include them. No key goes into it, and turning the alert off deletes the file.
 
 With a limit order open, the phone asks CoW from time to time, even with the app closed, whether it was filled, so it can alert you. For that, the identifier of each open order (which carries the account address and the deadline, the same data CoW publishes) stays in a separate file, readable after the first unlock. The order leaves the file when it ends. To alert you when an order you asked to renew expires, the file keeps only a digest of the identifier and the time.
 
-For the Receive search to find any coin, the text you type goes to CoinGecko (or CoinPaprika, when CoinGecko doesn’t respond), and when you tap a coin the app asks which networks it exists on. Both see the IP and what was searched, with no address or balance. Text with three or more words from the wallet word lists never leaves the phone.
+The Receive search only looks in the list of coins already on the phone: what you type never leaves the device.
 
-The list below is complete: the app cannot talk to any other address, and the code checks this in every version.
+Viewing a transaction or an address on the network's explorer opens the phone's browser, outside the app, with the address or the hash in the page: the explorer's site sees it, and the browser history keeps it.
 
-- **Coin prices, charts and logos:** `api.coingecko.com`, `api.coinpaprika.com`, `assets.coingecko.com`, `coin-images.coingecko.com`, `api.kraken.com`, `www.okx.com`
+Inside the app, the list below is complete: the app cannot talk to any other address, and the code checks this in every version.
+
+- **Coin prices, charts and logos:** `api.coingecko.com`, `api.coinpaprika.com`, `assets.coingecko.com`, `coin-images.coingecko.com`, `api.kraken.com`, `www.okx.com`. For the price of a token outside the list that the wallet holds, CoinGecko receives that token's contract.
 - **Charts for tokens CoinGecko does not list:** `api.geckoterminal.com`. It receives only the token contract and the network, never your address. The price from there draws the chart and does not count in the total balance.
 - **Token list for X Layer and Sonic, and for BNB Chain when Alchemy does not respond:** `tokens.coingecko.com`. The same list for everyone, downloaded so the app can find tokens on these networks; the balance of each one is read from the network's own services.
 - **Logos of unlisted tokens:** `raw.githubusercontent.com`, only Trust Wallet's public logo repository. GitHub sees the IP and the contract of each token whose logo the app fetches.
@@ -49,7 +51,7 @@ The list below is complete: the app cannot talk to any other address, and the co
 - **Polkadot:** `polkadot-asset-hub-rpc.polkadot.io`, `rpc-asset-hub-polkadot.luckyfriday.io`, `asset-hub-polkadot-rpc.n.dwellir.com`, `statemint.api.onfinality.io`, `polkadot-asset-hub-public-sidecar.parity-chains.parity.io`, `subquery-history-polkadot-ah-prod.novasama-tech.org`
 - **NEAR:** `api.fastnear.com`, `free.rpc.fastnear.com`, `near.drpc.org`, `rpc.shitzuapes.xyz`, `rpc.intea.rs`, `tx.main.fastnear.com`
 - **Aptos:** `aptos-rest.publicnode.com`, `rpc.sentio.xyz`, `api.mainnet.aptoslabs.com`
-- **Swaps and limit orders:** `aggregator-api.kyberswap.com`, `api.cow.fi`, `api.jup.ag`, `api.velora.xyz`, `li.quest`, `open-api.de1.exchange`
+- **Swaps and limit orders:** `aggregator-api.kyberswap.com`, `api.cow.fi`, `api.jup.ag`, `api.velora.xyz`, `li.quest`, `open-api.de1.exchange`. On networks like Ethereum, while you get quotes, each round goes with a randomly drawn address, never yours; your address only goes to the chosen service when you tap Review, to build the swap. CoW also receives your address to check for an open order, at most every 5 minutes.
 - **Bridge between networks:** `iris-api.circle.com` (Circle) and `app.across.to` (Across). The quote goes without your address: only networks, coin and amount. To follow a bridge, the app sends the hash of the deposit transaction, which is public on the network.
 
 Each of these services has its own privacy policy. Opening the audit page, in Settings, opens the phone’s browser, outside the app.
@@ -58,17 +60,17 @@ Each of these services has its own privacy policy. Opening the audit page, in Se
 
 - **Biometrics:** Android decides. The app only receives "confirmed" or "not confirmed", never your fingerprint or face.
 - **Camera:** only to read an address QR code, on the device, and only when you tap Scan QR. No image is kept.
-- **Notifications:** all local, created on the phone itself, and only with your permission: the app has no push token and no server sends it anything. They go out for: price alerts, with the coin and the price, or just "Price alert", as you choose; the incoming alert, with just "Coins arrived in your wallet", or with the amount and coin that arrived, if you choose; a bridge arriving, with no amount; and limit orders, 24 hours before they expire, when they fill and when they expire, with no coin or amount. Never the wallet balance. On the lock screen, Android shows only the kind of alert unless you let the content show in the phone’s settings.
+- **Notifications:** all local, created on the phone itself, and only with your permission: the app has no push token and no server sends it anything. They go out for: price alerts, with the coin and the price, or just "Price alert", as you choose; the incoming alert (if you turn it on), with just "Coins arrived in your wallet", or with the amount and coin that arrived, if you choose; a bridge arriving, with no amount; and limit orders, 24 hours before they expire, when they fill and when they expire, with no coin or amount. Never the wallet balance. On the lock screen, the incoming alert never shows the amount: with the phone locked it only says "Coins arrived in your wallet", and the one posted while unlocked does not appear on the lock screen. Other alerts show on the lock screen as Android is set, and Android's default is to show the content.
 - **Run at startup:** only to put the alert checks back on Android’s schedule after the phone restarts.
 - **Internet and hiding windows over the app:** the network for the services above; hiding other apps’ windows blocks the overlay scam.
 
 ## Clipboard
 
-A copied address is marked as sensitive (Android doesn’t show a preview) and is cleared on its own after 2 minutes. The app never copies the wallet words.
+A copied address is marked as sensitive (Android doesn’t show a preview) and is cleared on its own after 2 minutes, if it is still what the app copied. With the app in the background Android does not let it check: it is cleared when you return to the app. The app never copies the wallet words.
 
 ## Your rights
 
-Through the app, Escalibur receives and keeps no data of yours. The exception is the request log Alchemy keeps in Escalibur’s account, described above, which disappears on its own within 10 days. Beyond that, there is nothing to look up, correct or delete on our side. Uninstalling the app deletes its files and its Keystore keys on this phone. To delete a wallet right away, use Settings, the wallet, Remove from this phone.
+Through the app, Escalibur receives and keeps no data of yours. The exception is the lookup log that Alchemy keeps in Escalibur's account, described above: Escalibur can only see it for up to 10 days. Alchemy itself keeps the IP of the lookups for up to 90 days, and other data about them under its own policy. Beyond that, there is nothing to look up, correct or delete on our side. Uninstalling the app deletes its files and its Keystore keys on this phone. To delete a wallet right away, use Settings, the wallet, Remove from this phone.
 
 ## Contact
 

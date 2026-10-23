@@ -8,28 +8,31 @@ A Escalibur Wallet é oferecida por X TECH A.I FUND HOLDING E PARTICIPACOES LTDA
 
 - **As chaves das carteiras.** Ficam no chaveiro do iOS, presas a este aparelho, cifradas por chaves do Secure Enclave e pelo seu PIN. Não entram no backup do iCloud e não passam para outro iPhone.
 - **Nomes das carteiras, endereços, contatos e ajustes.** Ficam num arquivo cifrado no app, fora do backup.
-- **Alertas de preço, se você ligar.** As moedas que você marcou, as regras e o último preço visto ficam num arquivo à parte, fora do backup. Ele abre depois do primeiro desbloqueio do iPhone, e não só com a tela aberta como o resto: é o que deixa o alerta chegar com a tela bloqueada. Nele não entra saldo, endereço nem carteira.
+- **Alertas de preço.** As moedas que você marcou, as regras e o último preço visto ficam num arquivo à parte, fora do backup. Ele abre depois do primeiro desbloqueio do iPhone, e não só com a tela aberta como o resto: é o que deixa o alerta chegar com a tela bloqueada. Nele não entra saldo, endereço nem carteira.
+- **O widget.** A última moeda que você viu ou recebeu e o preço dela ficam num arquivo à parte, legível depois do primeiro desbloqueio, para o widget mostrar com o iPhone bloqueado. Nele não entra saldo, endereço nem carteira.
 - **Nada sai do aparelho por conta do app.** A senha da carteira (as palavras) só sai quando você mesmo lacra um envelope Escalibur, cifrado com uma senha só dele.
 
 ## O que a Escalibur recebe
 
-Nada. O app não tem análise de uso, relatório de falhas, anúncios nem rastreamento, e não fala com nenhum servidor da Escalibur. O código é publicado para auditoria, e uma verificação automática recusa qualquer biblioteca desse tipo.
+Nada pelo app, com uma exceção: o registro de consultas que a Alchemy guarda na conta da Escalibur, descrito abaixo. O app não tem análise de uso, relatório de falhas, anúncios nem rastreamento, e não fala com nenhum servidor da Escalibur. O código é publicado para auditoria, e uma verificação automática recusa qualquer biblioteca desse tipo.
 
 ## Com quem o app fala
 
 Para mostrar saldos, preços e histórico, e para enviar e trocar, o app fala direto com serviços públicos de cada rede, de empresas diferentes. Cada um vê o IP do seu iPhone e os endereços, valores e transações que o app consulta ou envia, e pode perceber que esses endereços são da mesma pessoa. Uma VPN esconde o IP. Desligar em Ajustes uma rede que você não usa para as consultas dela.
 
-Com os alertas de preço ligados, o iPhone consulta de tempos em tempos, também com o app fechado, o preço das moedas marcadas no CoinGecko e no CoinPaprika. Os dois veem o IP e a lista dessas moedas, nada mais.
+Com os alertas de preço ligados (vêm ligados com Bitcoin, Ethereum, XRP e Solana, se você permitir as notificações, e desligam em Ajustes, Alertas de preço), o iPhone consulta de tempos em tempos, também com o app fechado, o preço das moedas marcadas no CoinGecko e no CoinPaprika. Os dois veem o IP e a lista dessas moedas, nada mais. Para o widget, o iPhone também pede de tempos em tempos ao CoinGecko, com o app fechado, o preço da última moeda que você viu ou recebeu.
 
-Com o aviso de recebimento ligado (o app oferece na primeira abertura, numa folha que explica este arquivo, e desliga em Ajustes, Aviso de recebimento), o iPhone confere de tempos em tempos, também com o app fechado, o saldo das suas contas nos mesmos serviços de cada rede que o app já usa. Para isso, os endereços públicos das contas e o último saldo visto de cada moeda ficam num arquivo à parte no iPhone, legível depois do primeiro desbloqueio, fora dos dados cifrados da carteira. Carteiras com passphrase ficam de fora. Nenhuma chave entra nele, e desligar o aviso apaga o arquivo.
+O aviso de recebimento começa desligado. Se você ligar, em Ajustes, Aviso de recebimento, o iPhone confere de tempos em tempos, também com o app fechado, o saldo das suas contas nos mesmos serviços de cada rede que o app já usa, do IP em que o iPhone estiver. Nas redes como o Bitcoin vão só o próximo endereço de recebimento e os dois últimos usados, cada endereço sempre ao mesmo serviço, e um segundo serviço só confere quando o saldo sobe. Para isso, os endereços públicos dessas contas e o último saldo visto de cada moeda ficam num arquivo à parte no iPhone, legível depois do primeiro desbloqueio, fora dos dados cifrados da carteira. Carteiras com passphrase ficam de fora, e as de só observar também, a não ser que você ligue. Nenhuma chave entra nele, e desligar o aviso apaga o arquivo.
 
 Com uma ordem limite aberta, o iPhone pergunta à CoW de tempos em tempos, também com o app fechado, se ela foi executada, para avisar. Para isso, o identificador de cada ordem aberta (que traz o endereço da conta e o prazo, os mesmos dados que a CoW publica) fica num arquivo à parte, legível depois do primeiro desbloqueio. A ordem sai do arquivo quando termina.
 
 Para a busca de Receber achar qualquer moeda, o texto que você digita vai ao CoinGecko (ou ao CoinPaprika, quando o CoinGecko não responde), e, quando você toca numa moeda, o app pergunta em que redes ela existe. Os dois veem o IP e o que foi buscado, sem endereço nem saldo. Um texto com três palavras ou mais das listas de palavras de carteira não sai do iPhone.
 
-A lista abaixo é completa: o app não consegue falar com nenhum outro endereço, e o código confere isso a cada versão.
+Ver uma transação ou um endereço no explorador da rede abre o navegador do iPhone, fora do app, com o endereço ou o hash na página: o site do explorador vê isso, e o histórico do navegador guarda.
 
-- **Preços, gráficos e logos das moedas:** `api.coingecko.com`, `api.coinpaprika.com`, `assets.coingecko.com`, `coin-images.coingecko.com`, `api.kraken.com`, `www.okx.com`
+Dentro do app, a lista abaixo é completa: o app não consegue falar com nenhum outro endereço, e o código confere isso a cada versão.
+
+- **Preços, gráficos e logos das moedas:** `api.coingecko.com`, `api.coinpaprika.com`, `assets.coingecko.com`, `coin-images.coingecko.com`, `api.kraken.com`, `www.okx.com`. Para o preço de um token fora da lista que a carteira tem, o CoinGecko recebe o contrato desse token.
 - **Gráfico de tokens que o CoinGecko não lista:** `api.geckoterminal.com`. Recebe só o contrato do token e a rede, nunca o seu endereço. O preço de lá desenha o gráfico e não entra no saldo total.
 - **Lista de tokens da X Layer e da Sonic, e da BNB Chain quando a Alchemy não responde:** `tokens.coingecko.com`. A mesma lista para todo mundo, baixada para o app achar os tokens dessas redes; o saldo de cada um é lido nos serviços da própria rede.
 - **Logos de tokens fora da lista:** `raw.githubusercontent.com`, só o repositório público de logos da Trust Wallet. O GitHub vê o IP e o contrato de cada token cuja logo o app busca.
@@ -47,7 +50,7 @@ A lista abaixo é completa: o app não consegue falar com nenhum outro endereço
 - **Polkadot:** `polkadot-asset-hub-rpc.polkadot.io`, `rpc-asset-hub-polkadot.luckyfriday.io`, `asset-hub-polkadot-rpc.n.dwellir.com`, `statemint.api.onfinality.io`, `polkadot-asset-hub-public-sidecar.parity-chains.parity.io`, `subquery-history-polkadot-ah-prod.novasama-tech.org`
 - **NEAR:** `api.fastnear.com`, `free.rpc.fastnear.com`, `near.drpc.org`, `rpc.shitzuapes.xyz`, `rpc.intea.rs`, `tx.main.fastnear.com`
 - **Aptos:** `aptos-rest.publicnode.com`, `rpc.sentio.xyz`, `api.mainnet.aptoslabs.com`
-- **Trocas e ordens limite:** `aggregator-api.kyberswap.com`, `api.cow.fi`, `api.jup.ag`, `api.velora.xyz`, `li.quest`, `open-api.de1.exchange`
+- **Trocas e ordens limite:** `aggregator-api.kyberswap.com`, `api.cow.fi`, `api.jup.ag`, `api.velora.xyz`, `li.quest`, `open-api.de1.exchange`. Nas redes como a Ethereum, enquanto você cota, a cotação vai com um endereço sorteado a cada rodada, nunca o seu; o seu endereço só vai ao serviço escolhido quando você toca em Revisar, para montar a troca. A CoW recebe o seu endereço também para conferir se há uma ordem aberta, no máximo a cada 5 minutos.
 - **Ponte entre redes:** `iris-api.circle.com` (Circle) e `app.across.to` (Across). A cotação vai sem o seu endereço: só redes, moeda e valor. Para acompanhar uma ponte, o app manda o hash da transação de depósito, que é público na rede.
 - **Conferir as atualizações do app:** `itunes.apple.com` (a App Store diz qual é a versão mais nova do app; vai só o identificador do app e o país da loja) e `escalibur-wallet.github.io` (o site da Escalibur, de onde vem a lista de versões assinada pela Escalibur). Nenhum dos dois recebe endereço, saldo ou carteira.
 
@@ -57,7 +60,7 @@ Cada um desses serviços tem a própria política de privacidade.
 
 - **Face ID:** quem decide é o iOS. O app recebe só "confirmou" ou "não confirmou", nunca o seu rosto.
 - **Câmera:** só para ler QR code de endereço, no aparelho. Nenhuma imagem é guardada.
-- **Notificações:** todas locais, criadas no próprio iPhone, e só com a sua permissão: o app não tem token de push e nenhum servidor manda nada para ele. Saem para: alertas de preço (vêm ligados com BTC, ETH e XRP), com a moeda e o preço, ou só "Alerta de preço", como você escolher; aviso de recebimento (oferecido na primeira abertura), só com "Entrou moeda na carteira", ou com o valor e a moeda que entraram, se você escolher; chegada de uma ponte, sem valor; e ordens limite, 24 horas antes de vencer, quando executa e quando o prazo acaba, sem moeda nem valor. Nunca o saldo da carteira.
+- **Notificações:** todas locais, criadas no próprio iPhone, e só com a sua permissão: o app não tem token de push e nenhum servidor manda nada para ele. Saem para: alertas de preço (vêm ligados com BTC, ETH, XRP e SOL), com a moeda e o preço, ou só "Alerta de preço", como você escolher; aviso de recebimento (se você ligar), só com "Entrou moeda na carteira", ou com o valor e a moeda que entraram, se você escolher; chegada de uma ponte, sem valor; e ordens limite, 24 horas antes de vencer, quando executa e quando o prazo acaba, sem moeda nem valor. Nunca o saldo da carteira.
 - **Microfone e reconhecimento de fala:** só se você ligar a confirmação por voz. O reconhecimento roda no aparelho, sem servidor da Apple; o áudio não é gravado e o que foi dito não é guardado, só uma impressão cifrada da frase.
 
 ## Área de transferência
@@ -66,7 +69,7 @@ Endereço copiado fica só neste aparelho e expira sozinho em 2 minutos. As pala
 
 ## Seus direitos
 
-Pelo app, a Escalibur não recebe nem guarda dado nenhum seu. A exceção é o registro de consultas que a Alchemy guarda na conta da Escalibur, descrito acima, que some sozinho em até 10 dias. Fora isso, não há o que consultar, corrigir ou apagar do nosso lado. Apagar o app apaga os arquivos dele neste iPhone. As chaves cifradas que o iOS guarda no chaveiro ficam no aparelho depois da remoção e são apagadas na primeira abertura, se o app for instalado de novo. Para apagar uma carteira na hora, use Ajustes, a carteira, Remover deste iPhone.
+Pelo app, a Escalibur não recebe nem guarda dado nenhum seu. A exceção é o registro de consultas que a Alchemy guarda na conta da Escalibur, descrito acima: a Escalibur só consegue vê-lo por até 10 dias. A própria Alchemy guarda o IP das consultas por até 90 dias, e outros dados delas pela política dela. Fora isso, não há o que consultar, corrigir ou apagar do nosso lado. Apagar o app apaga os arquivos dele neste iPhone. As chaves cifradas que o iOS guarda no chaveiro ficam no aparelho depois da remoção e são apagadas na primeira abertura, se o app for instalado de novo. Para apagar uma carteira na hora, use Ajustes, a carteira, Remover deste iPhone.
 
 ## Contato
 

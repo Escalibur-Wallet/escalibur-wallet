@@ -10,28 +10,31 @@ Escalibur Wallet is offered by X TECH A.I FUND HOLDING E PARTICIPACOES LTDA, CNP
 
 - **The wallet keys.** They stay in the iOS keychain, tied to this device, encrypted by Secure Enclave keys and by your PIN. They are not included in the iCloud backup and do not move to another iPhone.
 - **Wallet names, addresses, contacts and settings.** They stay in an encrypted file in the app, outside the backup.
-- **Price alerts, if you turn them on.** The coins you marked, the rules and the last price seen stay in a separate file, outside the backup. It opens after the first unlock of the iPhone, and not only while the screen is unlocked like the rest: that is what lets the alert arrive with the screen locked. It holds no balance, address or wallet.
+- **Price alerts.** The coins you marked, the rules and the last price seen stay in a separate file, outside the backup. It opens after the first unlock of the iPhone, and not only while the screen is unlocked like the rest: that is what lets the alert arrive with the screen locked. It holds no balance, address or wallet.
+- **The widget.** The last coin you viewed or received and its price stay in a separate file, readable after the first unlock, so the widget can show it with the iPhone locked. It holds no balance, address or wallet.
 - **Nothing leaves the device because of the app.** The recovery phrase (the words) only leaves when you yourself seal an Escalibur envelope, encrypted with a password of its own.
 
 ## What Escalibur receives
 
-Nothing. The app has no usage analytics, crash reporting, ads or tracking, and talks to no Escalibur server. The code is published for audit, and an automatic check rejects any library of that kind.
+Nothing through the app, with one exception: the lookup log that Alchemy keeps in Escalibur's account, described below. The app has no usage analytics, crash reporting, ads or tracking, and talks to no Escalibur server. The code is published for audit, and an automatic check rejects any library of that kind.
 
 ## Who the app talks to
 
 To show balances, prices and history, and to send and swap, the app talks directly to public services of each network, run by different companies. Each one sees your iPhone's IP and the addresses, amounts and transactions the app looks up or sends, and may notice that those addresses belong to the same person. A VPN hides the IP. Turning off a network you don't use in Settings stops its lookups.
 
-With price alerts on, the iPhone checks from time to time, also with the app closed, the price of the marked coins on CoinGecko and CoinPaprika. Both see the IP and the list of those coins, nothing else.
+With price alerts on (they come on with Bitcoin, Ethereum, XRP and Solana if you allow notifications, and turn off in Settings, Price alerts), the iPhone checks from time to time, also with the app closed, the price of the marked coins on CoinGecko and CoinPaprika. Both see the IP and the list of those coins, nothing else. For the widget, the iPhone also asks CoinGecko from time to time, with the app closed, for the price of the last coin you viewed or received.
 
-With incoming alerts on (the app offers them on first launch, on a sheet that explains this file, and you can turn them off in Settings, Incoming alerts), the iPhone checks from time to time, also with the app closed, the balance of your accounts on the same services of each network the app already uses. For that, the public addresses of the accounts and the last balance seen for each coin stay in a separate file on the iPhone, readable after the first unlock, outside the wallet's encrypted data. Passphrase wallets are left out. No key goes into it, and turning the alert off deletes the file.
+Incoming alerts start off. If you turn them on, in Settings, Incoming alerts, the iPhone checks from time to time, also with the app closed, the balance of your accounts on the same services of each network the app already uses, from whatever IP the iPhone is on. On networks like Bitcoin, only the next receiving address and the last two used ones are checked, each address always with the same service, and a second service checks only when the balance goes up. For that, the public addresses of those accounts and the last balance seen for each coin stay in a separate file on the iPhone, readable after the first unlock, outside the wallet's encrypted data. Passphrase wallets are left out, and so are watch-only wallets unless you include them. No key goes into it, and turning the alert off deletes the file.
 
 With a limit order open, the iPhone asks CoW from time to time, also with the app closed, whether it was filled, to let you know. For that, the identifier of each open order (which carries the account address and the deadline, the same data CoW publishes) stays in a separate file, readable after the first unlock. The order leaves the file when it ends.
 
 So the Receive search can find any coin, the text you type goes to CoinGecko (or to CoinPaprika, when CoinGecko does not answer), and when you tap a coin, the app asks which networks it exists on. Both see the IP and what was searched, with no address or balance. Text with three or more words from the wallet word lists never leaves the iPhone.
 
-The list below is complete: the app cannot talk to any other address, and the code checks this in every version.
+Viewing a transaction or an address on the network's explorer opens the iPhone's browser, outside the app, with the address or the hash in the page: the explorer's site sees it, and the browser history keeps it.
 
-- **Coin prices, charts and logos:** `api.coingecko.com`, `api.coinpaprika.com`, `assets.coingecko.com`, `coin-images.coingecko.com`, `api.kraken.com`, `www.okx.com`
+Inside the app, the list below is complete: the app cannot talk to any other address, and the code checks this in every version.
+
+- **Coin prices, charts and logos:** `api.coingecko.com`, `api.coinpaprika.com`, `assets.coingecko.com`, `coin-images.coingecko.com`, `api.kraken.com`, `www.okx.com`. For the price of a token outside the list that the wallet holds, CoinGecko receives that token's contract.
 - **Charts for tokens CoinGecko does not list:** `api.geckoterminal.com`. It receives only the token contract and the network, never your address. The price from there draws the chart and does not count in the total balance.
 - **Token list for X Layer and Sonic, and for BNB Chain when Alchemy does not respond:** `tokens.coingecko.com`. The same list for everyone, downloaded so the app can find tokens on these networks; the balance of each one is read from the network's own services.
 - **Logos of unlisted tokens:** `raw.githubusercontent.com`, only Trust Wallet's public logo repository. GitHub sees the IP and the contract of each token whose logo the app fetches.
@@ -49,7 +52,7 @@ The list below is complete: the app cannot talk to any other address, and the co
 - **Polkadot:** `polkadot-asset-hub-rpc.polkadot.io`, `rpc-asset-hub-polkadot.luckyfriday.io`, `asset-hub-polkadot-rpc.n.dwellir.com`, `statemint.api.onfinality.io`, `polkadot-asset-hub-public-sidecar.parity-chains.parity.io`, `subquery-history-polkadot-ah-prod.novasama-tech.org`
 - **NEAR:** `api.fastnear.com`, `free.rpc.fastnear.com`, `near.drpc.org`, `rpc.shitzuapes.xyz`, `rpc.intea.rs`, `tx.main.fastnear.com`
 - **Aptos:** `aptos-rest.publicnode.com`, `rpc.sentio.xyz`, `api.mainnet.aptoslabs.com`
-- **Swaps and limit orders:** `aggregator-api.kyberswap.com`, `api.cow.fi`, `api.jup.ag`, `api.velora.xyz`, `li.quest`, `open-api.de1.exchange`
+- **Swaps and limit orders:** `aggregator-api.kyberswap.com`, `api.cow.fi`, `api.jup.ag`, `api.velora.xyz`, `li.quest`, `open-api.de1.exchange`. On networks like Ethereum, while you get quotes, each round goes with a randomly drawn address, never yours; your address only goes to the chosen service when you tap Review, to build the swap. CoW also receives your address to check for an open order, at most every 5 minutes.
 - **Bridge between networks:** `iris-api.circle.com` (Circle) and `app.across.to` (Across). The quote goes without your address: only networks, coin and amount. To follow a bridge, the app sends the hash of the deposit transaction, which is public on the network.
 - **Checking app updates:** `itunes.apple.com` (the App Store says which version of the app is the newest; only the app identifier and the store country go) and `escalibur-wallet.github.io` (Escalibur's site, where the version list signed by Escalibur comes from). Neither receives an address, a balance or a wallet.
 
@@ -59,7 +62,7 @@ Each of these services has its own privacy policy.
 
 - **Face ID:** iOS decides. The app only receives "confirmed" or "not confirmed", never your face.
 - **Camera:** only to read an address QR code, on the device. No image is saved.
-- **Notifications:** all local, created on the iPhone itself, and only with your permission: the app has no push token and no server sends it anything. They go out for: price alerts (on by default for BTC, ETH and XRP), with the coin and the price, or only "Price alert", as you choose; incoming alerts (offered on first launch), only with "Coins arrived in your wallet", or with the amount and coin received, if you choose; a bridge arriving, without the amount; and limit orders, 24 hours before they expire, when they fill and when the deadline ends, without coin or amount. Never the wallet balance.
+- **Notifications:** all local, created on the iPhone itself, and only with your permission: the app has no push token and no server sends it anything. They go out for: price alerts (on by default for BTC, ETH, XRP and SOL), with the coin and the price, or only "Price alert", as you choose; incoming alerts (if you turn them on), only with "Coins arrived in your wallet", or with the amount and coin received, if you choose; a bridge arriving, without the amount; and limit orders, 24 hours before they expire, when they fill and when the deadline ends, without coin or amount. Never the wallet balance.
 - **Microphone and speech recognition:** only if you turn on voice confirmation. Recognition runs on the device, with no Apple server; the audio is not recorded and what was said is not stored, only an encrypted fingerprint of the phrase.
 
 ## Clipboard
@@ -68,7 +71,7 @@ A copied address stays only on this device and expires by itself after 2 minutes
 
 ## Your rights
 
-Through the app, Escalibur receives and keeps no data of yours. The exception is the lookup log that Alchemy keeps in Escalibur's account, described above, which it deletes on its own within 10 days. Other than that, there is nothing on our side to access, correct or delete. Deleting the app deletes its files on this iPhone. The encrypted keys that iOS keeps in the keychain stay on the device after removal and are deleted on the first launch if the app is installed again. To delete a wallet right away, use Settings, the wallet, Remove from this iPhone.
+Through the app, Escalibur receives and keeps no data of yours. The exception is the lookup log that Alchemy keeps in Escalibur's account, described above: Escalibur can only see it for up to 10 days. Alchemy itself keeps the IP of the lookups for up to 90 days, and other data about them under its own policy. Other than that, there is nothing on our side to access, correct or delete. Deleting the app deletes its files on this iPhone. The encrypted keys that iOS keeps in the keychain stay on the device after removal and are deleted on the first launch if the app is installed again. To delete a wallet right away, use Settings, the wallet, Remove from this iPhone.
 
 ## Contact
 

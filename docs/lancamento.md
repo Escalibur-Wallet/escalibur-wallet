@@ -116,9 +116,13 @@ do dono com o advogado.
   senha da carteira num envelope cifrado com senha própria. O código é publicado para auditoria.
   - Sem preço, sem promessa de ganho e sem nome de outra carteira (2.3.7 e 2.3.10).
 
-**Privacidade do app:** "Não, não coletamos dados deste app". Rastreamento: não. O app não
-tem servidor nem SDK de terceiros, e o manifesto não declara coleta. O e-mail de suporte
-chega fora do app e não entra no rótulo.
+**Privacidade do app:** "Sim, coletamos dados deste app", só "Informações financeiras > Outras
+informações financeiras" (endereços públicos e transações), para funcionalidade do app, não
+vinculado à identidade e sem rastreamento. Motivo (auditoria de privacidade, 22/10/2026): pela
+definição da Apple, guardar além do atendimento em tempo real é coleta, e o painel da Alchemy
+mostra à Escalibur, por 10 dias, o endereço e a resposta de cada consulta feita com a chave do
+app. O app não tem servidor nem SDK de terceiros. O e-mail de suporte chega fora do app e não
+entra no rótulo. O rótulo muda só na App Store Connect, pelo dono.
 
 **Criptografia:** `ITSAppUsesNonExemptEncryption = false`, já no Info.plist. A cifra é só a
 do iOS (CryptoKit e Security); o código próprio é hash, assinatura e Argon2. Sem
@@ -141,7 +145,9 @@ e-mail.
 >
 > There is no account, no login and no server of ours. Keys are generated and kept only on
 > this device (Secure Enclave and Keychain, ThisDeviceOnly). We never receive the recovery
-> phrase, the PIN, addresses or transactions. No analytics, ads or tracking. Source code:
+> phrase or the PIN. Balances and history are read from public network services; for four
+> networks, one of them (Alchemy) keeps a 10-day log of those lookups in our account, which is
+> the only wallet data we can see. No analytics, ads or tracking. Source code:
 > https://github.com/Escalibur-Wallet/escalibur-wallet
 >
 > Before testing:
@@ -243,8 +249,9 @@ O site também precisa sair com a página `/privacidade/android/` (a URL da pol�
   finalidade (os serviços de rede agem como provedores do app). Criptografado em trânsito:
   sim. A Escalibur não guarda, mas o provedor Alchemy guarda o registro das consultas feitas
   com a chave da Escalibur por até 10 dias, por isso não marcar "processado de forma efêmera".
-- Exclusão: não há conta. Desinstalar apaga tudo do aparelho; o registro da Alchemy some
-  sozinho em até 10 dias.
+- Exclusão: não há conta. Desinstalar apaga tudo do aparelho. O registro da Alchemy fica
+  visível à Escalibur por até 10 dias; a própria Alchemy guarda o IP das consultas por até 90
+  dias (por isso "apagado automaticamente em até 90 dias").
 - Nenhum outro tipo: sem nome, e-mail, contatos, local, mensagens, fotos, identificadores do
   aparelho, histórico de uso ou relatório de falha. O e-mail do suporte sai pelo app de
   e-mail do próprio usuário e não é coletado pelo app.
