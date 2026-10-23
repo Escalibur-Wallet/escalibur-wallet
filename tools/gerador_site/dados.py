@@ -258,12 +258,43 @@ RAIZ_DO_HISTORICO = "Escalibur Wallet 1.0.0: o código publicado"
 
 def commits(limite=40):
     """O historico da main pela primeira linha de pais (cada mescla conta como uma entrega),
-    e depois as entregas de antes do recomeco do historico."""
-    lista = [c for c in _commits_do_git(limite) if c["assunto"] != RAIZ_DO_HISTORICO]
+    e depois as entregas de antes do recomeco do historico. Em ingles (pedido do dono,
+    23/10/2026): cada entrega passa pela tabela de traducao (novidades-en.json, pelo hash
+    curto); a que nao esta na tabela e parece escrita em portugues fica de fora, com aviso."""
+    lista = [c for c in _commits_do_git(limite + 10) if c["assunto"] != RAIZ_DO_HISTORICO]
     if NOVIDADES_ANTERIORES.is_file():
         anteriores = json.loads(NOVIDADES_ANTERIORES.read_text(encoding="utf-8"))
         lista += [dict(c, corpo=[tuple(b) for b in c["corpo"]], anterior=True) for c in anteriores]
-    return lista[:limite]
+    saida = []
+    for c in lista:
+        if len(saida) >= limite:
+            break
+        # Os commits do proprio site saem da lista depois (gerar-site.py, novidades_do_app).
+        traduzida = c if re.match(r"^Site\b", c["assunto"]) else em_ingles(c)
+        if traduzida:
+            saida.append(traduzida)
+    return saida
+
+
+NOVIDADES_EN = RAIZ / "tools" / "gerador_site" / "novidades-en.json"
+_TRADUCOES = None
+# Palavras que so aparecem em texto em portugues (os commits sao escritos sem acento).
+_PORTUGUES = re.compile(r"\b(nao|para|com|uma|sem|quando|pelo|pela|dos|das|nos|nas|agora|tambem|ate|entre|mais|so|ja|tela|carteira|redes)\b")
+
+
+def em_ingles(c):
+    global _TRADUCOES
+    if _TRADUCOES is None:
+        _TRADUCOES = json.loads(NOVIDADES_EN.read_text(encoding="utf-8")) if NOVIDADES_EN.is_file() else {}
+    traducao = _TRADUCOES.get((c.get("sha") or "")[:7])
+    if traducao:
+        return dict(c, assunto=traducao["assunto"], corpo=[tuple(b) for b in traducao["corpo"]], en=True)
+    texto = " ".join([c["assunto"]] + [b[1] for b in c["corpo"]]).lower()
+    if len(_PORTUGUES.findall(texto)) >= 2:
+        print(f"gerar-site: a novidade {c.get('sha', '')[:7]} esta em portugues e sem traducao em novidades-en.json; fica de fora",
+              file=sys.stderr)
+        return None
+    return dict(c, en=True)
 
 
 def _commits_do_git(limite):

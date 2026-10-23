@@ -167,13 +167,16 @@
 
   // O que e igual em toda face (o aro, as contas, o guilhoche) sai uma vez so, para a
   // pagina: por pixel, sem raiz nem seno na hora de cada moeda.
-  var BASE = null;
-  function baseDaFace() {
+  var BASE = null, baseParcial = null;
+  // Em fatias de linhas (`ate`): sem tarefa longa no celular. Sem argumento, termina tudo.
+  function baseDaFace(ate) {
     if (BASE) return BASE;
     var l = LADO, n = l * l, c = l / 2, raio = l * RAIO_UV;
-    var aroA = new Float32Array(n), contaA = new Float32Array(n), guiA = new Float32Array(n), alturaA = new Float32Array(n);
+    if (!baseParcial) baseParcial = { linha: 0, aro: new Float32Array(n), conta: new Float32Array(n), gui: new Float32Array(n), altura: new Float32Array(n) };
+    var aroA = baseParcial.aro, contaA = baseParcial.conta, guiA = baseParcial.gui, alturaA = baseParcial.altura;
     var contas = 90, raioContas = 0.79, tamConta = 0.0115;
-    for (var y = 0; y < l; y++) {
+    var y0 = baseParcial.linha, y1 = ate === undefined ? l : Math.min(l, y0 + ate);
+    for (var y = y0; y < y1; y++) {
       for (var x = 0; x < l; x++) {
         var dx = (x + 0.5 - c) / raio, dy = (y + 0.5 - c) / raio;
         var r = Math.sqrt(dx * dx + dy * dy), a = Math.atan2(dy, dx), i = y * l + x;
@@ -191,6 +194,8 @@
         guiA[i] = Math.sin(r * 210 + 3.2 * Math.sin(a * 14)) * 0.5 + 0.5;
       }
     }
+    baseParcial.linha = y1;
+    if (y1 < l) return null;
     BASE = { aro: aroA, conta: contaA, gui: guiA, altura: alturaA };
     return BASE;
   }
@@ -213,8 +218,7 @@
   function passo(j) {
     var l = LADO;
     if (j.etapa === 0) {
-      baseDaFace();
-      j.etapa = 1;
+      if (baseDaFace(48)) j.etapa = 1;
     } else if (j.etapa === 1) {
       j.def = MOEDAS[j.id] || MOEDAS.bitcoin;
       j.nitida = mascara(j.def);

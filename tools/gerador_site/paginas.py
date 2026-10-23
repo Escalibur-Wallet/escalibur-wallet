@@ -181,6 +181,46 @@ def estado_ci(ctx, base, curto=False):
     return f'<p class="estado-ci {e(classe)}"><span class="ponto" aria-hidden="true"></span>{" · ".join(partes)}</p>'
 
 
+def estado_ci_curto(ctx):
+    """A linha do commit publicado em uma linha so, em toda largura: o hash, a data curta e,
+    quando o build sabe, o resultado do CI. No build local, sem o CI."""
+    commit = ctx["commit"]
+    sha = commit["sha"]
+    if not sha:
+        return ""
+    ci = ctx["ci"]
+    estados = {"passou": "CI passou", "falhou": "CI falhou", "rodando": "CI rodando", "cancelado": "CI cancelado"}
+    classe = ci["estado"] if ci else "sem"
+    parte_ci = ""
+    if ci and ci["estado"] in estados:
+        rotulo = estados[ci["estado"]]
+        parte_ci = f' · <a href="{e(ci["url"])}">{rotulo}</a>' if ci.get("url") else f" · {rotulo}"
+    return (f'<p class="estado-ci curto {e(classe)}"><span class="ponto" aria-hidden="true"></span>'
+            f'<span><span class="ci-rotulo">Commit </span><a href="{dados.REPO}/commit/{sha}">{sha[:7]}</a> · {data_curta(commit["data"])}{parte_ci}</span></p>')
+
+
+def esfera_de_redes(ctx, base):
+    """As redes numa esfera que gira (pedido do dono, 23/10/2026, no lugar da orbita): cada
+    logo num ponto da espiral de Fibonacci, sempre de frente. O site.js gira com o tempo, o
+    mouse e a rolagem; sem JS ou com movimento reduzido, a esfera fica parada no angulo de
+    saida (o CSS ja poe cada logo no lugar)."""
+    import math
+    redes = ctx["redes"]
+    n = len(redes)
+    itens = []
+    for i, r in enumerate(redes):
+        y = 1 - (i + 0.5) / n * 2
+        raio = math.sqrt(max(0.0, 1 - y * y))
+        fi = i * math.pi * (3 - math.sqrt(5))
+        x, z = math.cos(fi) * raio, math.sin(fi) * raio
+        # A projecao parada: o CSS usa --x, --y e --z (de -1 a 1).
+        itens.append(f'<li data-x="{x:.4f}" data-y="{y:.4f}" data-z="{z:.4f}" title="{e(r["nome"])}">'
+                     f'{logo_rede(ctx, base, r)}<span class="esfera-nome">{e(r["nome"])}</span></li>')
+    nomes = ", ".join(r["nome"] for r in redes)
+    return (f'<div class="esfera" role="img" aria-label="As {n} redes da carteira: {e(nomes)}">'
+            f'<ul class="esfera-lista" aria-hidden="true">{"".join(itens)}</ul></div>')
+
+
 def redes_com_tag(ctx):
     nomes = {"tag de destino": "tag de destino", "memo": "memo", "comentário": "comentário"}
     partes = []
@@ -238,33 +278,14 @@ def resumo_novidades(ctx, base, quantos=4):
     digitos hexadecimais viram 40 tons de cinza, que decifram quando a lista aparece)."""
     itens = []
     for c in ctx["commits"][:quantos]:
-        hash_px = f'<canvas class="hash-pixels" data-hash="{e(c["sha"])}" width="320" height="16" aria-hidden="true"></canvas>' if re.fullmatch(r"[0-9a-f]{40}", c["sha"] or "") else ""
+        hash_px = (f'<canvas class="pixels-hash pequeno" data-hashes="{e(c["sha"])}" data-colunas="20" data-linhas="2" aria-hidden="true"></canvas>'
+                   if re.fullmatch(r"[0-9a-f]{40}", c["sha"] or "") else "")
         itens.append(
             f'<li><time datetime="{data_iso(c["data"])}">{data_curta(c["data"])}</time>'
-            f'<div class="entrega-resumo"><p class="assunto"><a href="{base}novidades/#c-{c["sha"][:7]}">{acento(c["assunto"])}</a></p>'
+            f'<div class="entrega-resumo"><p class="assunto" lang="en"><a href="{base}novidades/#c-{c["sha"][:7]}">{texto_novidade(c, c["assunto"])}</a></p>'
             f'{hash_px}<code class="hash-texto">{e(c["sha"][:12])}</code></div></li>'
         )
     return '<ol class="linha-do-tempo">' + "".join(itens) + "</ol>"
-
-
-def orbita_de_redes(ctx, base):
-    """As redes em orbita da Escalibur (pedido do dono, 23/10/2026, no lugar da faixa que
-    deslizava): tres aneis inclinados que giram em sentidos opostos, cada logo sempre de pe.
-    So transform. Com "reduzir movimento", os aneis param. Os nomes ficam para o leitor de tela."""
-    redes = ctx["redes"]
-    cortes = [6, 15]
-    aneis = [redes[:cortes[0]], redes[cortes[0]:cortes[1]], redes[cortes[1]:]]
-    partes = []
-    for k, anel in enumerate(aneis):
-        itens = "".join(
-            f'<li><span class="orbita-gira"><span class="orbita-logo">{logo_rede(ctx, base, r)}</span></span></li>'
-            for r in anel)
-        partes.append(f'<ul class="anel anel-{k + 1} n{len(anel)}" aria-hidden="true">{itens}</ul>')
-    nomes = ", ".join(r["nome"] for r in redes)
-    return (f'<div class="orbita" role="img" aria-label="As {len(redes)} redes da carteira: {e(nomes)}">'
-            f'<div class="orbita-plano">{"".join(partes)}</div>'
-            f'<div class="orbita-centro" aria-hidden="true"><img src="{base}icone-256.png" alt="" width="96" height="96" draggable="false"></div>'
-            f'</div>')
 
 
 # As verificacoes que o painel "Codigo auditavel" mostra passando, uma de cada grupo, na ordem.
@@ -534,8 +555,11 @@ def telas_do_app(ctx, base):
             f'<li class="passo-tela{" ativo" if i == 0 else ""}" data-cena="{cena}">'
             f'<div class="passo-texto"><h3>{e(titulo)}</h3><p>{e(texto)}</p></div>'
             f'<div class="passo-midia">{aparelho(base, cena, rotulo, "pequeno", video=False)}</div></li>')
+    atalhos = "".join(f'<button type="button" data-cena="{cena}" aria-current="{"true" if i == 0 else "false"}">{e(titulo)}</button>'
+                      for i, (cena, titulo, _, _) in enumerate(TELAS))
     telefone = (f'<div class="aparelho palco-telas"><div class="tela">{"".join(camadas)}</div>'
-                f'<button class="pausar" type="button" data-estado="pausado" aria-label="Tocar a animação">{ICONE_PAUSA}{ICONE_TOCAR}</button></div>')
+                f'<button class="pausar" type="button" data-estado="pausado" aria-label="Tocar a animação">{ICONE_PAUSA}{ICONE_TOCAR}</button></div>'
+                f'<nav class="telas-atalhos" aria-label="Ir para a tela">{atalhos}</nav>')
     return telefone, '<ol class="passos-telas">' + "".join(passos) + "</ol>"
 
 
@@ -701,7 +725,8 @@ def preencher(ctx, base, modelo, origem):
             "telas_passos": lambda: telas_do_app(ctx, base)[1],
             "n_redes_troca": lambda: str(len(dados_da_troca(ctx)["redes"])),
             "verificacoes_feed": lambda: feed_de_verificacoes(ctx, base),
-            "redes_orbita": lambda: orbita_de_redes(ctx, base),
+            "redes_esfera": lambda: esfera_de_redes(ctx, base),
+            "estado_ci_curto": lambda: estado_ci_curto(ctx),
         }
         if nome not in valores:
             raise SystemExit(f"gerar-site: marcador desconhecido {{{{{nome}}}}} em {origem}")
@@ -855,45 +880,55 @@ git checkout {e(ref[:12])}</code><span>O mesmo commit desta página.</span></li>
         for a in ctx["auditorias"]
     )
 
-    corpo = f"""<header class="cabeca-pagina"><div class="wrap">
+    hash_cabeca = ""
+    if sha and re.fullmatch(r"[0-9a-f]{40}", sha):
+        hash_cabeca = (f'<figure class="hash-cabeca"><canvas class="pixels-hash grande" data-hashes="{e(sha)}" data-colunas="8" data-linhas="5" aria-hidden="true"></canvas>'
+                       f'<figcaption>Commit publicado <code>{e(sha[:12])}</code>, em pixels: cada tom é um dígito do hash.</figcaption></figure>')
+    corpo = f"""<header class="cabeca-pagina cabeca-centro"><div class="wrap">
+{hash_cabeca}
 <p class="sobretitulo">Auditoria</p>
 <h1 class="titulo-pagina">Confira você mesmo.</h1>
 <p class="lead">Tudo nesta página saiu do repositório no build que a publicou: as verificações que rodam a cada mudança, os servidores que o app pode chamar, o que vem de fora conferido arquivo por arquivo e os arquivos que guardam as chaves. Nada é buscado depois.</p>
+<ul class="seg-resumo" aria-label="Em resumo" data-revelar>
+<li><b>{ctx["n_verificacoes"]}</b><span>verificações a cada mudança</span></li>
+<li><b>{len(ctx["hosts"])}</b><span>servidores que o app pode chamar</span></li>
+<li><b>{numero(ctx["n_testes"])}</b><span>testes do núcleo</span></li>
+</ul>
 </div></header>
 
-<section class="bloco" aria-labelledby="t-build"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-build"><div class="wrap">
 <h2 id="t-build">Este build</h2>
 {publicado}
 <h3 class="sobretitulo subtitulo-bloco">Conferir na sua máquina</h3>
 {passos}
 </div></section>
 
-<section class="bloco" aria-labelledby="t-verificacoes"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-verificacoes"><div class="wrap">
 <h2 id="t-verificacoes">{ctx["n_verificacoes"]} verificações</h2>
 <p class="lead intro">O <code>tools/verificar.sh</code> confere no código o que o app promete em texto. Cada linha abaixo é uma afirmação que o script prova a cada mudança, no CI, e para o merge se falhar. Cada uma leva à linha onde mora.</p>
 <div class="mosaico">{"".join(grupos)}</div>
 </div></section>
 
-<section class="bloco" aria-labelledby="t-hosts"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-hosts"><div class="wrap">
 <h2 id="t-hosts">{len(ctx["hosts"])} servidores, e nenhum outro</h2>
 <p class="lead intro">O app só fala com os endereços do <code>hosts.lock</code>. O cliente HTTP recusa qualquer outro em tempo de execução, e cada um está na Política de privacidade, com o que vê. Agrupados como a Política descreve.</p>
 <p class="apoio links-bloco">{link_codigo(base, "hosts-permitidos", "Ler a lista compilada no app")} · <a href="{blob(ctx, "hosts.lock")}">hosts.lock no GitHub</a></p>
 <div class="mosaico">{"".join(hosts)}</div>
 </div></section>
 
-<section class="bloco" aria-labelledby="t-travas"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-travas"><div class="wrap">
 <h2 id="t-travas">O que vem de fora, conferido arquivo por arquivo</h2>
 <p class="lead intro">Nenhum pacote é baixado na hora de montar o app, e nenhum binário vem pronto. As bibliotecas de criptografia e as listas de palavras estão no repositório, compiladas do fonte, e o verificador confere a impressão digital (SHA-256) de cada arquivo.</p>
 <div class="verificacoes">{"".join(travas)}</div>
 </div></section>
 
-<section class="bloco" aria-labelledby="t-codigo"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-codigo"><div class="wrap">
 <h2 id="t-codigo">O código que importa</h2>
 <p class="lead intro">Os arquivos que assinam, conferem o que se assina, guardam as chaves e falam com a rede, linha a linha, no commit publicado. Cada linha leva à mesma linha no GitHub.</p>
 <div class="arquivos-grupos">{arquivos_html}</div>
 </div></section>
 
-<section class="bloco" aria-labelledby="t-auditorias"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-auditorias"><div class="wrap">
 <h2 id="t-auditorias">Auditorias de segurança</h2>
 <p class="lead intro">Os relatórios das revisões de segurança, com os achados e o que foi feito de cada um.</p>
 <ul class="auditorias">{auditorias}</ul>
@@ -1096,12 +1131,18 @@ def acentos_fora(texto):
 # MARK: Novidades
 
 
-def corpo_do_commit(blocos):
+def texto_novidade(c, texto):
+    """Em ingles, como esta; o portugues antigo ganhava acento aqui."""
+    return e(texto) if c.get("en") else acento(texto)
+
+
+def corpo_do_commit(blocos, c=None):
+    c = c or {}
     partes, lista = [], []
 
     def fecha():
         if lista:
-            partes.append("<ul>" + "".join(f"<li>{acento(i)}</li>" for i in lista) + "</ul>")
+            partes.append("<ul>" + "".join(f"<li>{texto_novidade(c, i)}</li>" for i in lista) + "</ul>")
             lista.clear()
 
     for tipo, texto in blocos:
@@ -1110,33 +1151,41 @@ def corpo_do_commit(blocos):
             continue
         fecha()
         if tipo == "titulo":
-            partes.append(f"<h3>{acento(texto)}</h3>")
+            partes.append(f"<h3>{texto_novidade(c, texto)}</h3>")
         else:
-            partes.append(f"<p>{acento(texto)}</p>")
+            partes.append(f"<p>{texto_novidade(c, texto)}</p>")
     fecha()
     return "".join(partes)
 
 
 def pagina_novidades(ctx, base):
+    """As entregas, em ingles (dados.em_ingles). Abrindo pelo link de uma novidade
+    (#c-xxxxxxx), o site.js ja abre aquela."""
     v = ctx["versao"]
     entregas = []
     for c in ctx["commits"]:
-        corpo = corpo_do_commit(c["corpo"])
-        detalhe = f'<details><summary>O que mudou</summary><div class="entrega-corpo">{corpo}</div></details>' if corpo else ""
+        corpo = corpo_do_commit(c["corpo"], c)
+        detalhe = f'<details class="entrega-detalhe"><summary>O que mudou</summary><div class="entrega-corpo" lang="en">{corpo}</div></details>' if corpo else ""
+        hash_px = (f'<canvas class="pixels-hash pequeno" data-hashes="{e(c["sha"])}" data-colunas="20" data-linhas="2" aria-hidden="true"></canvas>'
+                   if re.fullmatch(r"[0-9a-f]{40}", c["sha"] or "") else "")
+        rodape = "" if c.get("anterior") else f'<p class="commit"><a href="{dados.REPO}/commit/{c["sha"]}">Commit {c["sha"][:7]} no GitHub</a></p>'
         entregas.append(
-            f'<article class="entrega" id="c-{c["sha"][:7]}"><time datetime="{data_iso(c["data"])}">{data_longa(c["data"])}</time>'
-            f'<h2>{acento(c["assunto"])}</h2>{detalhe}'
-            + ('</article>' if c.get("anterior") else f'<p class="commit"><a href="{dados.REPO}/commit/{c["sha"]}">Commit {c["sha"][:7]} no GitHub</a></p></article>')
+            f'<article class="entrega" id="c-{c["sha"][:7]}" data-revelar><time datetime="{data_iso(c["data"])}">{data_longa(c["data"])}</time>'
+            f'<h2 lang="en">{texto_novidade(c, c["assunto"])}</h2>{hash_px}{detalhe}{rodape}</article>'
         )
-    situacao = "Disponível na App Store." if ctx["app_store_url"] else "Em preparação para a App Store."
+    situacao = "Disponível na App Store." if ctx["app_store_url"] else "Em preparação para a App Store e o Google Play."
     vazio = "<p>O histórico não estava disponível neste build.</p>" if not entregas else ""
-    corpo = f"""<header class="cabeca-pagina"><div class="wrap estreito">
+    hashes = ",".join(c["sha"] for c in ctx["commits"] if re.fullmatch(r"[0-9a-f]{40}", c["sha"] or ""))
+    parede = (f'<canvas class="pixels-hash parede" data-hashes="{e(hashes)}" data-colunas="{hashes.count(",") + 1}" data-linhas="8" '
+              f'data-ordem="coluna" aria-hidden="true"></canvas>') if hashes else ""
+    corpo = f"""<header class="cabeca-pagina cabeca-centro"><div class="wrap">
+{parede}
 <p class="sobretitulo">Novidades</p>
 <h1 class="titulo-pagina">O que mudou.</h1>
-<p class="lead">Versão <strong>{e(v["marketing"])}</strong> (build {e(v["build"])}). {situacao}</p>
-<p class="apoio">Esta página é gerada a cada publicação, do histórico da main no GitHub: cada item é uma entrega, com o que mudou e o commit. Os textos do repositório são escritos sem acento; aqui o acento volta onde não há dúvida.</p>
+<p class="lead">Versão <strong>{e(v["marketing"])}</strong> (build {e(v["build"])}). {situacao} Cada entrega é um commit público no GitHub, e cada coluna de pixels acima é o hash de um deles.</p>
+<p class="apoio">Gerada a cada publicação, do histórico da main. As entregas aparecem em inglês, a língua dos commits.</p>
 </div></header>
-<section class="bloco"><div class="wrap estreito">{vazio}{"".join(entregas)}</div></section>"""
+<section class="bloco"><div class="wrap estreito novidades-lista">{vazio}{"".join(entregas)}</div></section>"""
     return moldura(ctx, base, "novidades", "Novidades", "As últimas atualizações da Escalibur Wallet, geradas do histórico de commits.", corpo, "novidades")
 
 

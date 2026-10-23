@@ -23,7 +23,7 @@
 
 <section class="manifesto" id="manifesto" aria-label="Sem conta e sem servidor">
 <div class="wrap">
-<p class="manifesto-texto" data-palavras>Não existe conta. Não existe servidor da Escalibur. A carteira nasce no seu celular, fica cifrada no seu celular e assina no seu celular. Do nosso lado, ninguém consegue ver, mover ou recuperar o que é seu.</p>
+<p class="manifesto-texto" data-palavras>Sem conta. Sem servidor da Escalibur. Suas chaves nascem, ficam e assinam no seu celular, e só nele. Do nosso lado, ninguém vê, move ou recupera o que é seu.</p>
 </div>
 </section>
 
@@ -137,14 +137,16 @@
 <div class="chaves-palco">
 <div class="wrap chaves-grade">
 <ol class="chaves-passos" aria-label="Do PIN até a assinatura">
-<li data-passo="0" class="ativo"><b>Seu PIN</b><span>Seis dígitos que não ficam gravados em lugar nenhum, nem como verificador.</span></li>
-<li data-passo="1"><b>Argon2id com 256 MiB</b><span>Cada tentativa custa memória e tempo, de propósito: adivinhar fica caro.</span></li>
-<li data-passo="2"><b>Chip de segurança</b><span>O Secure Enclave, no iPhone: a chave do PIN só abre dentro dele, uma tentativa de cada vez.</span></li>
-<li data-passo="3"><b>Chave raiz</b><span>Destranca só a chave da carteira que vai assinar, e mais nenhuma.</span></li>
-<li data-passo="4"><b>Assinatura</b><span>A chave da carteira assina, confere a assinatura e é apagada da memória.</span></li>
+<li><button type="button" class="chaves-passo ativo" data-passo="0" aria-pressed="true"><b>Seu PIN</b><span>Seis dígitos que não ficam gravados em lugar nenhum, nem como verificador.</span></button></li>
+<li><button type="button" class="chaves-passo" data-passo="1" aria-pressed="false"><b>Argon2id com 256 MiB</b><span>Cada tentativa custa memória e tempo, de propósito: adivinhar fica caro.</span></button></li>
+<li><button type="button" class="chaves-passo" data-passo="2" aria-pressed="false"><b>Chip de segurança</b><span>O Secure Enclave, no iPhone: a chave do PIN só abre dentro dele, uma tentativa de cada vez.</span></button></li>
+<li><button type="button" class="chaves-passo" data-passo="3" aria-pressed="false"><b>Cofre aberto só para você</b><span>A chave raiz destranca só a chave da carteira que vai assinar, e mais nenhuma.</span></button></li>
+<li><button type="button" class="chaves-passo" data-passo="4" aria-pressed="false"><b>Assinatura</b><span>A chave da carteira assina, confere a assinatura e é apagada da memória.</span></button></li>
 </ol>
 <div class="chaves-pixels">
 <canvas class="pixels-chave" aria-hidden="true"></canvas>
+<p class="chaves-detalhe" aria-hidden="true"></p>
+<p class="chaves-legenda"><span data-chaves-n>1</span> de 5</p>
 <a class="mais" href="{{base}}seguranca/">Como a Escalibur protege, e onde a proteção para</a>
 </div>
 </div>
@@ -183,10 +185,10 @@
 </article>
 
 <article class="bento-ladrilho bento-super" aria-labelledby="t-super" data-revelar>
-<div class="emblema-super" aria-hidden="true">
-<span class="disco"><svg viewBox="0 0 24 24"><g fill="currentColor"><circle cx="6" cy="6" r="1.9"/><circle cx="12" cy="6" r="1.9"/><circle cx="18" cy="6" r="1.9"/><circle cx="6" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="18" cy="12" r="1.9"/><circle cx="6" cy="18" r="1.9"/><circle cx="12" cy="18" r="1.9"/><circle cx="18" cy="18" r="1.9"/></g></svg></span>
-<span class="cadeado"><svg viewBox="0 0 16 16"><path d="M5 7V5.2a3 3 0 0 1 6 0V7" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3.2" y="7" width="9.6" height="7" rx="1.8" fill="currentColor"/></svg></span>
-<span class="disco"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3.5 8V5.5a2 2 0 0 1 2-2H8M16 3.5h2.5a2 2 0 0 1 2 2V8M20.5 16v2.5a2 2 0 0 1-2 2H16M8 20.5H5.5a2 2 0 0 1-2-2V16M9 9.5v1.2M15 9.5v1.2M12 9.5v3.6h-1M9.3 15.6c1.6 1.3 3.8 1.3 5.4 0"/></svg></span>
+<div class="emblema-super anima" aria-hidden="true">
+<span class="disco pin"><span class="pin-pontos"><i></i><i></i><i></i><i></i><i></i><i></i></span></span>
+<span class="cadeado"><span class="cadeado-luz"></span><svg viewBox="0 0 16 16"><path class="haste" d="M5 7V5.2a3 3 0 0 1 6 0V7" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3.2" y="7" width="9.6" height="7" rx="1.8" fill="currentColor"/></svg></span>
+<span class="disco rosto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3.5 8V5.5a2 2 0 0 1 2-2H8M16 3.5h2.5a2 2 0 0 1 2 2V8M20.5 16v2.5a2 2 0 0 1-2 2H16M8 20.5H5.5a2 2 0 0 1-2-2V16M9 9.5v1.2M15 9.5v1.2M12 9.5v3.6h-1M9.3 15.6c1.6 1.3 3.8 1.3 5.4 0"/></svg><span class="varredura"></span></span>
 </div>
 <div class="bento-texto">
 <h3 id="t-super">Super Security</h3>
@@ -219,8 +221,8 @@
 
 <article class="bento-ladrilho bento-passphrase" aria-labelledby="t-passphrase" id="passphrase" data-revelar>
 <div class="bento-texto">
-<h3 id="t-passphrase">Uma carteira escondida nas mesmas palavras</h3>
-<p>A passphrase é uma senha extra que abre outra carteira, separada da de sempre. Quem achar só as palavras vê a carteira de sempre. Ninguém recupera a passphrase, nem a Escalibur.</p>
+<h3 id="t-passphrase">Uma carteira secreta</h3>
+<p>Nas mesmas palavras, com uma senha extra só sua: a passphrase. Ela abre outra carteira, separada da de sempre, e quem achar só as palavras vê a de sempre. Ninguém recupera a passphrase, nem a Escalibur.</p>
 </div>
 {{aparelho passphrase | Como funciona a passphrase, no app em inglês: a porta escondida, os endereços próprios e a chave esquecida, em pixels}}
 </article>
@@ -251,7 +253,7 @@
 <p class="lead">Bitcoin, Ethereum, Solana, XRP Ledger, Stellar, TON, Tron e mais {{n_redes_resto}}. Todos os endereços saem das mesmas palavras, e quando a rede pede, o app pede junto: {{redes_com_tag}}.</p>
 <a class="mais" href="{{base}}redes/">Ver as redes e os {{n_tokens}} tokens conferidos</a>
 </div>
-{{redes_orbita}}
+{{redes_esfera}}
 </div>
 </section>
 
@@ -276,9 +278,9 @@
 <div class="aberto-grade">
 <div>
 <p class="sobretitulo">Código auditável</p>
-<h2 class="titulo-secao" id="t-codigo">Não confie. Confira.</h2>
-<p class="lead">Todo o código que guarda chaves, assina e fala com as redes é público. A cada mudança, o CI roda as {{n_verificacoes}} verificações do <code>tools/verificar.sh</code> e os {{n_testes}} testes do núcleo, com os vetores oficiais de cada rede. Se uma falha, a mudança não entra.</p>
-{{estado_ci}}
+<h2 class="titulo-secao" id="t-codigo">Segurança que dá para conferir.</h2>
+<p class="lead">O código que guarda as chaves, assina e fala com as redes é público. A cada mudança, o CI roda as {{n_verificacoes}} verificações do <code>tools/verificar.sh</code> e os {{n_testes}} testes do núcleo, com os vetores oficiais de cada rede. Se uma verificação falha, a mudança não entra no app.</p>
+{{estado_ci_curto}}
 </div>
 <div class="feed" aria-label="Uma rodada do verificador">
 <p class="feed-titulo"><span class="feed-ponto" aria-hidden="true"></span>tools/verificar.sh</p>
@@ -303,7 +305,7 @@
 <div class="wrap perguntas-grade">
 <div class="perguntas-cabeca" data-revelar>
 <p class="sobretitulo">Perguntas</p>
-<h2 class="titulo-secao" id="t-perguntas">Perguntas diretas, respostas diretas.</h2>
+<h2 class="titulo-secao" id="t-perguntas">Perguntas frequentes.</h2>
 <p class="lead">Não achou a sua? <a href="{{base}}suporte/">Fale com o suporte</a>.</p>
 </div>
 <div class="perguntas-lista" data-revelar>

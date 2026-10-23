@@ -354,9 +354,18 @@ final class Cenas: XCTestCase {
         pausa(1.2)
         tocar(app.buttons["ajustes-teclado"].firstMatch, 20)
         esperar(app.staticTexts["Safe Keyboard"].firstMatch, 20)
+        // O interruptor ligado no video (pedido do dono, 23/10/2026): liga antes de gravar.
+        let chave = app.switches["teclado-proprio"].firstMatch
+        if chave.waitForExistence(timeout: 10), (chave.value as? String) == "0" {
+            chave.switches.firstMatch.exists ? chave.switches.firstMatch.tap() : chave.tap()
+            pausa(1.5)
+        }
         pausa(3)
         marcar("inicio")
-        pausa(10)
+        pausa(3.2)
+        // A capa no meio de uma palavra digitada.
+        marcar("capa")
+        pausa(6.8)
         marcar("fim")
     }
 
