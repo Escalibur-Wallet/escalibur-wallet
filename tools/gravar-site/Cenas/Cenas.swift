@@ -228,22 +228,32 @@ final class Cenas: XCTestCase {
         marcar("fim")
     }
 
-    /// Pagina da moeda: o dedo correndo o grafico e os periodos.
+    /// Pagina da moeda: o dedo correndo o grafico, so no periodo em que o grafico sobe (pedido
+    /// do dono, 23/10/2026: so grafico verde). `GRAVACAO_PERIODO` escolhe o periodo ("7 dias"
+    /// por padrao; o nome em portugues, a cena traduz).
     func testMoeda() throws {
         let app = abrir("moeda")
         aceitarAvisos()
-        esperar(app.buttons[t("7 dias", "7 days")], 60)
-        pausa(6)
+        let periodos = ["24h": "24h", "7 dias": "7 days", "30 dias": "30 days", "1 ano": "1 year"]
+        let escolhido = ProcessInfo.processInfo.environment["GRAVACAO_PERIODO"] ?? "7 dias"
+        let botao = app.buttons[t(escolhido, periodos[escolhido] ?? escolhido)]
+        esperar(botao, 60)
+        pausa(5)
+        botao.tap()
+        pausa(3)
         marcar("inicio")
-        pausa(1.4)
+        pausa(1.2)
         let janela = app.windows.firstMatch
         let inicio = janela.coordinate(withNormalizedOffset: CGVector(dx: 0.14, dy: 0.36))
         let fim = janela.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.36))
         inicio.press(forDuration: 0.5, thenDragTo: fim, withVelocity: 110, thenHoldForDuration: 0.6)
-        pausa(1.2)
-        tocar(app.buttons[t("7 dias", "7 days")]); pausa(2.2)
-        tocar(app.buttons[t("30 dias", "30 days")]); pausa(2.2)
-        tocar(app.buttons["24h"]); pausa(2.0)
+        pausa(1.4)
+        marcar("capa")
+        pausa(1.6)
+        let volta = janela.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.36))
+        let meio = janela.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.36))
+        volta.press(forDuration: 0.4, thenDragTo: meio, withVelocity: 140, thenHoldForDuration: 0.5)
+        pausa(2.0)
         marcar("fim")
     }
 

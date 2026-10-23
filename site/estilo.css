@@ -553,43 +553,6 @@ html:not(.js) .painel-troca .modo, html:not(.js) .painel-troca .abas, html:not(.
   background: var(--accent) url("marca-ok.svg") center / 11px no-repeat;
 }
 
-/* MARK: Telas do app (o iPhone fica parado e a tela troca a cada passo) */
-
-.telas { padding: clamp(45px, 6.2vw, 87px) 0 clamp(30px, 3.72vw, 60px); }
-.telas-grade { display: grid; grid-template-columns: minmax(0, 1fr); margin-top: 40px; }
-.telas-palco { display: none; }
-.passos-telas { list-style: none; margin: 0; padding: 0; display: grid; gap: 64px; }
-.passo-tela h3 { font-size: clamp(26px, 3vw, 36px); letter-spacing: -0.032em; line-height: 1.1; }
-.passo-tela p { margin-top: 12px; font-size: 18px; max-width: 26em; }
-.passo-midia { margin-top: 32px; display: flex; justify-content: center; padding-bottom: 48px; }
-.palco-telas .tela .camada { position: absolute; inset: 0; opacity: 0; transform: scale(1.03); transition: opacity 0.5s ease, transform 0.7s var(--ease); }
-.palco-telas .tela .camada.ativa { opacity: 1; transform: none; }
-/* Com JS: o iPhone fixo. No celular, em cima, com os passos passando embaixo dele. */
-.js .telas-palco {
-  display: flex; justify-content: center; position: sticky; top: 64px; z-index: 2;
-  padding: 8px 0 28px; background: linear-gradient(to bottom, var(--void) 82%, rgba(11, 11, 12, 0));
-}
-.js .telas-palco .aparelho { --w: min(168px, 40vw); }
-.js .telas-palco .pausar { top: auto; bottom: -2px; left: auto; right: calc(50% - var(--w) / 2 - 48px); transform: none; }
-.js .passo-midia { display: none; }
-.js .passos-telas { gap: 0; }
-/* O passo da tela que esta no iPhone acende; os outros ficam na tinta de apoio, legiveis. */
-.js .passo-tela { min-height: 52vh; padding: 8px 0 48px; }
-.js .passo-tela h3, .js .passo-tela p { color: var(--ink-muted); }
-.js .passo-tela.ativo h3 { color: var(--ink); }
-.js .passo-tela.ativo p { color: var(--ink-soft); }
-.js .passo-tela:last-child { min-height: 40vh; }
-@media (min-width: 700px) {
-  .js .telas-grade { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 48px; }
-  .js .telas-palco { order: 2; top: 0; height: 100vh; height: 100svh; align-items: center; padding: 0; background: none; }
-  .js .telas-palco .aparelho { --w: min(clamp(250px, 22vw, 310px), calc((100svh - 120px) * 0.44)); }
-  .js .telas-palco .pausar { top: calc(100% + 14px); bottom: auto; left: 50%; right: auto; transform: translateX(-50%); }
-  .js .passos-telas { padding: 20vh 0 20vh; }
-  .js .passo-tela { min-height: 72vh; display: flex; flex-direction: column; justify-content: center; padding: 0; }
-  .passo-tela h3 { font-size: clamp(32px, 3.4vw, 48px); }
-  .passo-tela p { font-size: 20px; }
-}
-
 /* MARK: Chaves (a cadeia acende conforme a pagina rola) */
 
 .chaves { padding: clamp(45px, 6.2vw, 87px) 0; }
@@ -1230,7 +1193,6 @@ img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
 
 /* A imersao no fim da abertura: o iPhone cresce ate a tela e a pagina entra nele. */
 .movimento .abertura { height: 330vh; height: 330svh; }
-.abertura-imersao { position: absolute; inset: 0; z-index: 4; background: var(--void); opacity: 0; pointer-events: none; }
 
 /* Manifesto: cada palavra comeca cifrada, em glifos, e decifra conforme a pagina rola. */
 /* A palavra fica em linha, como texto: a selecao corre normal. O desenho por cima nao se
@@ -1419,47 +1381,6 @@ img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
 }
 .chaves-detalhe { display: none; font-size: 15px; color: var(--ink-soft); min-height: 3em; }
 
-/* Super Security, animado: o PIN entra, o rosto e conferido e o cadeado fecha. Em laco. */
-.emblema-super.anima .disco { position: relative; overflow: hidden; }
-.pin-pontos { display: grid; grid-template-columns: repeat(3, 8px); gap: 6px; }
-.pin-pontos i { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); opacity: 0.22; }
-.emblema-super .cadeado { position: relative; overflow: hidden; }
-.emblema-super .cadeado svg { position: relative; z-index: 1; }
-.cadeado-luz { position: absolute; inset: 0; border-radius: 50%; background: var(--ink); opacity: 0; }
-.emblema-super .varredura { position: absolute; left: 14%; right: 14%; top: 50%; height: 2px; margin-top: -1px; border-radius: 2px; background: var(--ink); opacity: 0; }
-.movimento .pin-pontos i { animation: pin-ponto 4.4s infinite; }
-.movimento .pin-pontos i:nth-child(2) { animation-delay: 0.18s; } .movimento .pin-pontos i:nth-child(3) { animation-delay: 0.36s; }
-.movimento .pin-pontos i:nth-child(4) { animation-delay: 0.54s; } .movimento .pin-pontos i:nth-child(5) { animation-delay: 0.72s; }
-.movimento .pin-pontos i:nth-child(6) { animation-delay: 0.9s; }
-.movimento .emblema-super .varredura { animation: varrer-rosto 4.4s infinite; }
-.movimento .emblema-super .haste { animation: haste 4.4s infinite; }
-.movimento .cadeado-luz { animation: cadeado-luz 4.4s infinite; }
-.movimento .emblema-super .cadeado svg { animation: cadeado-cor 4.4s infinite; }
-@keyframes pin-ponto { 0% { opacity: 0.22; transform: scale(0.7); } 5% { opacity: 1; transform: scale(1.15); } 9% { transform: none; } 78% { opacity: 1; } 86%, 100% { opacity: 0.22; } }
-@keyframes varrer-rosto { 0%, 30% { opacity: 0; transform: translateY(-26px); } 34% { opacity: 1; } 52% { opacity: 1; transform: translateY(26px); } 56%, 100% { opacity: 0; transform: translateY(26px); } }
-@keyframes haste { 0%, 58% { transform: translateY(-2.2px); } 62%, 84% { transform: none; } 90%, 100% { transform: translateY(-2.2px); } }
-@keyframes cadeado-luz { 0%, 58% { opacity: 0; } 63%, 84% { opacity: 1; } 90%, 100% { opacity: 0; } }
-@keyframes cadeado-cor { 0%, 58% { color: var(--ink); } 63%, 84% { color: var(--void); } 90%, 100% { color: var(--ink); } }
-.emblema-super .haste { transform-box: fill-box; }
-
-/* Redes numa esfera. Sem JS: os logos em grade, com o nome. */
-.esfera { position: relative; width: 100%; max-width: 560px; margin-inline: auto; }
-.esfera-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
-.esfera-lista li { display: grid; justify-items: center; gap: 6px; width: 80px; }
-.esfera-nome { font-size: 12px; color: var(--ink-soft); text-align: center; }
-.esfera.ativa { aspect-ratio: 1; touch-action: pan-y; cursor: grab; user-select: none; -webkit-user-select: none; }
-.esfera.ativa:active { cursor: grabbing; }
-.esfera.ativa .esfera-lista { position: absolute; left: 50%; top: 50%; width: 0; height: 0; display: block; }
-.esfera.ativa .esfera-lista li { position: absolute; left: -26px; top: -26px; width: 52px; display: block; will-change: transform, opacity; }
-.esfera.ativa .esfera-lista .logo { width: 52px; height: 52px; box-shadow: 0 0 0 3px var(--void), 0 14px 28px -10px rgba(0, 0, 0, 0.9); }
-.esfera.ativa .esfera-nome { position: absolute; left: 50%; top: 58px; transform: translateX(-50%); white-space: nowrap; opacity: 0; transition: opacity 0.2s ease; pointer-events: none; }
-.esfera.ativa li:hover .esfera-nome { opacity: 1; }
-.esfera-globo { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-@media (max-width: 599px) {
-  .esfera.ativa .esfera-lista li { left: -20px; top: -20px; width: 40px; }
-  .esfera.ativa .esfera-lista .logo { width: 40px; height: 40px; }
-}
-
 /* Novidades e Auditoria: o hash em pixels, e a entrega aberta pelo link em destaque. */
 .pixels-hash { display: block; }
 .pixels-hash.pequeno { width: min(100%, 300px); aspect-ratio: 10 / 1; height: auto; margin-top: 10px; }
@@ -1468,45 +1389,183 @@ img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
 .hash-cabeca { margin: 0 0 32px; display: grid; justify-items: center; gap: 12px; }
 .hash-cabeca figcaption { font-size: 14px; color: var(--ink-muted); }
 .hash-cabeca code { font-size: 13px; color: var(--ink-soft); }
-.novidades-lista .entrega { border-radius: var(--r-tile); padding: 24px 24px 22px; margin-bottom: 12px; background: var(--body); }
-.novidades-lista .entrega + .entrega { padding-top: 24px; }
-.novidades-lista .entrega.destacada { box-shadow: inset 0 0 0 1px var(--edge-strong); }
+
 .entrega-detalhe summary { color: var(--ink); }
 
-/* Telas do app: o iPhone numa placa, os passos com o numero e o nome, e a fileira de
-   atalhos que leva a cada tela. */
-.telas-palco { position: relative; }
-.js .telas-palco::before { content: ""; position: absolute; z-index: -1; border-radius: 40px; background: var(--body); }
-@media (min-width: 700px) {
-  .js .telas-palco::before { left: 4%; right: 4%; top: 9vh; bottom: 9vh; }
-}
-.telas-atalhos { display: none; }
-.js .telas-atalhos {
-  display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 18px; position: relative; z-index: 2;
-}
-.telas-atalhos button {
-  border: 0; cursor: pointer; font: 600 13px var(--font); color: var(--ink-soft); background: var(--rail);
-  border-radius: 999px; padding: 8px 12px; min-height: 34px; transition: background 0.2s ease, color 0.2s ease;
-}
-.telas-atalhos button:hover { color: var(--ink); }
-.telas-atalhos button[aria-current="true"] { background: var(--ink); color: var(--void); }
-.passo-tela h3 { display: flex; align-items: baseline; gap: 14px; }
-.passo-num { font-size: 0.5em; font-weight: 650; color: var(--ink-muted); letter-spacing: 0; min-width: 1.6em; }
-.js .passo-tela.ativo .passo-num { color: var(--ink); }
-@media (min-width: 700px) {
-  .js .telas-palco { flex-direction: column; justify-content: center; }
-}
-@media (max-width: 699px) {
-  .js .telas-palco { flex-direction: column; align-items: center; padding-bottom: 22px; background: linear-gradient(to bottom, var(--void) calc(100% - 18px), rgba(11, 11, 12, 0)); }
-  .js .telas-atalhos { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; margin: 12px calc(-1 * var(--gutter)) 0; padding: 0 var(--gutter); width: calc(100% + 2 * var(--gutter)); }
-  .js .telas-atalhos::-webkit-scrollbar { display: none; }
-  .telas-atalhos button { flex: none; }
-  .js .telas-palco::before { display: none; }
-}
-.novidades-lista { max-width: 760px; margin-inline: auto; }
-.novidades-lista > * { max-width: none; }
-.entrega h2 { margin-top: 6px; }
 /* Redes: o texto e a esfera lado a lado no largo. */
 .redes-grade { display: grid; gap: 32px; grid-template-columns: minmax(0, 1fr); align-items: center; }
 .redes-cabeca .mais { margin-top: 28px; }
 @media (min-width: 1000px) { .redes-grade { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 56px; } }
+
+/* MARK: Por dentro do app: o carrossel (quarta rodada, refeito). Centralizado, sem placa:
+   o iPhone da vez no meio e os vizinhos dos lados, menores e inclinados. */
+.telas { padding: clamp(45px, 6.2vw, 87px) 0; overflow: hidden; }
+.secao-cabeca.centro .lead { margin-inline: auto; }
+.carrossel { margin-top: 36px; display: grid; justify-items: center; gap: 22px; }
+.carrossel-abas { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 900px; }
+.aba-tela {
+  display: inline-flex; align-items: center; gap: 8px; border: 0; cursor: pointer; font: inherit; color: var(--ink-soft);
+  background: var(--body); border-radius: 999px; padding: 6px 14px 6px 6px; min-height: 42px; transition: background 0.2s ease, color 0.2s ease;
+}
+.aba-tela:hover { color: var(--ink); }
+.aba-tela[aria-selected="true"] { background: var(--ink); color: var(--void); }
+.aba-icone { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--rail); color: var(--ink); }
+.aba-tela[aria-selected="true"] .aba-icone { background: var(--void); color: var(--ink); }
+.aba-icone svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.aba-nome { font-size: 15px; font-weight: 600; white-space: nowrap; }
+/* Sem JS: os iPhones numa fileira que desliza, com a legenda de cada um. */
+.carrossel-palco { display: flex; gap: 24px; overflow-x: auto; scroll-snap-type: x mandatory; width: 100%; padding: 4px 0 8px; }
+.carrossel-item { margin: 0; flex: none; scroll-snap-align: center; display: grid; justify-items: center; gap: 14px; }
+.carrossel-item .aparelho { --w: min(240px, 64vw); }
+.carrossel-texto { display: grid; gap: 4px; text-align: center; max-width: 280px; font-size: 15px; }
+.carrossel-texto b { color: var(--ink); font-size: 17px; }
+.carrossel-rodape { display: none; }
+.js .carrossel-abas .aba-nome { display: inline; }
+/* Com JS: o palco com os iPhones um sobre o outro, e o rodape com a legenda e a barra. */
+.carrossel.ativo-js .carrossel-palco { position: relative; display: block; overflow: visible; height: calc(var(--w-tela) * 2.17 + 20px); --w-tela: min(270px, 62vw); }
+.carrossel.ativo-js .carrossel-item {
+  position: absolute; left: 50%; top: 0; width: var(--w-tela); margin-left: calc(var(--w-tela) / -2); cursor: pointer;
+  transition: transform 0.7s var(--ease), opacity 0.5s ease; will-change: transform, opacity;
+}
+.carrossel.ativo-js .carrossel-item.ativo { cursor: default; }
+.carrossel.ativo-js .carrossel-item .aparelho { --w: var(--w-tela); }
+.carrossel.ativo-js .carrossel-texto { display: none; }
+.carrossel.ativo-js .carrossel-rodape { display: grid; justify-items: center; gap: 12px; width: min(520px, 100%); }
+.carrossel-legenda { text-align: center; font-size: 17px; color: var(--ink-soft); min-height: 3em; }
+.carrossel-progresso { width: 160px; height: 2px; border-radius: 2px; background: var(--edge); overflow: hidden; }
+.carrossel-progresso i { display: block; height: 100%; background: var(--ink); transform: scaleX(0); transform-origin: left; }
+.carrossel-rodape .pausar { position: static; transform: none; }
+@media (min-width: 900px) { .carrossel.ativo-js .carrossel-palco { --w-tela: clamp(270px, 21vw, 310px); } }
+@media (max-width: 699px) {
+  .carrossel.ativo-js .carrossel-abas { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; width: calc(100% + 2 * var(--gutter)); margin-inline: calc(-1 * var(--gutter)); padding: 0 var(--gutter); }
+  .carrossel.ativo-js .carrossel-abas::-webkit-scrollbar { display: none; }
+  .aba-tela { flex: none; }
+  .carrossel-legenda { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .carrossel.ativo-js .carrossel-item { transition: none; } }
+
+/* MARK: Super Security (quarta rodada): o emblema do app (HardenedEmblem). O PIN e o rosto,
+   dois discos que se encontram e travam com o cadeado no meio; depois se afastam. O mesmo
+   compasso: 0,9 s afastados, juntam com mola, 2,2 s juntos, afastam em 0,6 s. */
+.emblema-reforcado { position: relative; width: 200px; height: 100px; margin: 8px auto 0; flex: none; }
+.disco-reforcado {
+  position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; border-radius: 50%;
+  background: var(--control); color: var(--ink); display: grid; place-items: center; box-shadow: 0 0 0 3px var(--body);
+}
+.disco-reforcado svg { width: 26px; height: 26px; }
+.disco-reforcado.pin { transform: translateX(-30px); }
+.disco-reforcado.rosto { transform: translateX(30px); }
+.cadeado-reforcado {
+  position: absolute; left: 50%; top: 50%; width: 32px; height: 32px; margin: -16px 0 0 -16px; border-radius: 50%; z-index: 1;
+  background: var(--edge-strong); color: var(--ink); display: grid; place-items: center; box-shadow: 0 0 0 3px var(--body);
+}
+.cadeado-reforcado svg { width: 14px; height: 14px; }
+.movimento .disco-reforcado.pin { animation: reforcado-pin 3.1s infinite; }
+.movimento .disco-reforcado.rosto { animation: reforcado-rosto 3.1s infinite; }
+.movimento .cadeado-reforcado { animation: reforcado-cadeado 3.1s infinite; }
+@keyframes reforcado-pin {
+  0% { transform: translateX(-30px); animation-timing-function: ease-in-out; }
+  19.4%, 29% { transform: translateX(-50px); animation-timing-function: cubic-bezier(0.3, 1.45, 0.5, 1); }
+  46.8%, 100% { transform: translateX(-30px); }
+}
+@keyframes reforcado-rosto {
+  0% { transform: translateX(30px); animation-timing-function: ease-in-out; }
+  19.4%, 29% { transform: translateX(50px); animation-timing-function: cubic-bezier(0.3, 1.45, 0.5, 1); }
+  46.8%, 100% { transform: translateX(30px); }
+}
+@keyframes reforcado-cadeado {
+  0% { transform: scale(1); opacity: 1; animation-timing-function: ease-in-out; }
+  19.4%, 29% { transform: scale(0.5); opacity: 0; animation-timing-function: cubic-bezier(0.3, 1.45, 0.5, 1); }
+  46.8%, 100% { transform: scale(1); opacity: 1; }
+}
+
+/* MARK: Troca (quarta rodada): o visto da escolha e branco e sem disco, como no menu de redes
+   do app (NetworkMenu); a Ponte no desenho da tela do app (BridgeForm). */
+.opcao-menu[aria-selected="true"]::after {
+  width: 16px; height: 16px; border-radius: 0; background: var(--ink);
+  -webkit-mask: url("marca-ok.svg") center / 16px no-repeat; mask: url("marca-ok.svg") center / 16px no-repeat;
+}
+.ponte-redes { display: grid; grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr); align-items: end; gap: 8px; padding: 0 2px 8px; }
+.ponte-rede { display: grid; gap: 6px; min-width: 0; }
+.ponte-rede .caixa-rotulo { font-size: 13px; }
+.escolha.larga.direita .menu { left: auto; right: 0; transform-origin: top right; }
+.inverter-redes {
+  width: 36px; height: 36px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; display: grid; place-items: center;
+  background: var(--rail); color: var(--ink); margin-bottom: 3px;
+}
+.inverter-redes:disabled { color: #434349; cursor: default; }
+.inverter-redes svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.caixa-topo { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 22px; }
+.caixa-saldo { font-size: 13px; color: var(--ink-soft); white-space: nowrap; }
+.fracoes { display: inline-flex; gap: 6px; }
+.fracoes button {
+  border: 0; cursor: pointer; font: 600 12.5px var(--font); color: var(--ink-soft); background: var(--rail);
+  border-radius: 999px; padding: 5px 10px; min-height: 28px;
+}
+.fracoes button:hover { color: var(--ink); }
+.segmentado { display: grid; grid-template-columns: 1fr 1fr; background: var(--void); border-radius: 999px; padding: 3px; margin-top: 4px; }
+.segmentado[hidden] { display: none; }
+.segmentado button {
+  border: 0; background: transparent; color: var(--ink-soft); font: 600 15px var(--font); min-height: 38px; border-radius: 999px; cursor: pointer;
+}
+.segmentado button[aria-checked="true"] { background: var(--control); color: var(--ink); }
+.ponte-detalhes { list-style: none; margin: 8px 0 0; padding: 0 4px; display: grid; gap: 6px; font-size: 14px; color: var(--ink-soft); line-height: 1.45; }
+@media (max-width: 420px) { .fracoes button { padding: 5px 8px; } }
+
+/* MARK: Imersao (quarta rodada): os bits por cima da tela do app, e o manifesto subindo por
+   cima do fim da abertura, sem vao preto entre os dois. */
+.abertura-bits { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; pointer-events: none; }
+html:not(.movimento) .abertura-bits { display: none; }
+.movimento .manifesto { position: relative; z-index: 5; margin-top: -13vh; margin-top: -13svh; }
+@media (max-width: 899px) { .movimento .manifesto { margin-top: -6vh; margin-top: -6svh; } }
+
+/* MARK: Uma frase, as redes (quarta rodada): as 12 palavras cifradas e, embaixo, as redes,
+   cada uma com o desenho do endereco em pixels. Nada de orbita nem esfera. */
+.redes-grade { grid-template-columns: minmax(0, 1fr) !important; gap: 40px; }
+.redes-cabeca { max-width: 860px; }
+.frase-redes { display: grid; gap: 18px; }
+.frase-cartao { background: var(--body); border-radius: var(--r-tile); padding: clamp(18px, 2.4vw, 28px); }
+.frase-titulo { font-size: 15px; font-weight: 600; color: var(--ink-soft); margin-bottom: 14px; }
+.frase-palavras { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (min-width: 700px) { .frase-palavras { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.frase-palavras li { display: flex; align-items: baseline; gap: 8px; background: var(--void); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.frase-n { font-size: 12px; color: var(--ink-muted); min-width: 1.4em; }
+.frase-glifos { font: 600 15px/1.2 var(--mono); color: var(--ink); letter-spacing: 0.04em; overflow: hidden; white-space: nowrap; }
+.frase-seta { display: flex; justify-content: center; height: 30px; }
+.frase-seta span { width: 6px; height: 6px; margin-top: 2px; background: var(--ink-soft); border-radius: 1.5px; box-shadow: 0 10px 0 var(--ink-soft), 0 20px 0 var(--ink-soft); }
+.movimento .frase-seta span { animation: seta-pixels 1.2s infinite steps(1); }
+@keyframes seta-pixels {
+  0% { box-shadow: 0 10px 0 #4A4A52, 0 20px 0 #4A4A52; background: var(--ink); }
+  33% { box-shadow: 0 10px 0 var(--ink), 0 20px 0 #4A4A52; background: #4A4A52; }
+  66% { box-shadow: 0 10px 0 #4A4A52, 0 20px 0 var(--ink); background: #4A4A52; }
+}
+.redes-fichas { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 600px) { .redes-fichas { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 900px) { .redes-fichas { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1200px) { .redes-fichas { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+/* A nota fecha a ultima fileira em toda largura: 26 redes + a nota, sem ficha sozinha. */
+.ficha-nota { grid-column: span 2; display: flex; align-items: center; padding: 12px 14px; color: var(--ink-muted); font-size: 13px; line-height: 1.45; border: 1px solid var(--edge); border-radius: var(--r-caixa); }
+@media (min-width: 600px) { .ficha-nota { grid-column: span 1; } }
+@media (min-width: 900px) { .ficha-nota { grid-column: span 2; } }
+@media (min-width: 1200px) { .ficha-nota { grid-column: span 4; } }
+.carrossel-abas { max-width: 1100px; }
+.rede-ficha {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 10px; row-gap: 8px; align-items: center;
+  background: var(--body); border-radius: var(--r-caixa); padding: 12px 14px;
+}
+.rede-ficha .logo { width: 34px; height: 34px; }
+.rede-nome { color: var(--ink); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ficha-hash { grid-column: 1 / -1; width: 100%; aspect-ratio: 10 / 1; height: auto; }
+.movimento .rede-ficha { opacity: 0.25; transform: scale(0.97); transition: opacity 0.5s ease, transform 0.5s var(--ease); }
+.movimento .rede-ficha.acesa { opacity: 1; transform: none; }
+/* Rodape: os selos das lojas, no mesmo estado da abertura. */
+.rodape .lojas { margin-top: 18px; }
+.rodape .selo-loja img { height: 40px; }
+.rodape .lojas-nota { font-size: 13px; }
+@media (max-width: 699px) { .frase-palavras { gap: 6px; } .frase-palavras li { padding: 9px 9px; gap: 6px; } .frase-glifos { font-size: 13px; letter-spacing: 0; } }
+
+/* Espaco entre uma lista ou um mosaico e o paragrafo de apoio logo embaixo (pagina Redes:
+   "Tem um envelope Escalibur?", e os outros iguais). */
+.bloco .wrap > ul + .apoio, .bloco .wrap > ol + .apoio, .bloco .wrap > .mosaico + .apoio,
+.bloco .wrap > .apoio + .apoio, .bloco .wrap > .verificacoes + .apoio, .bloco .wrap > div + .apoio { margin-top: 20px; }
+.entrega.destacada h2 { text-decoration: underline; text-decoration-color: var(--edge-strong); text-underline-offset: 6px; }

@@ -15,7 +15,7 @@
 {{capa carteira | A Carteira da Escalibur, no app em inglês: o saldo total e os ativos USDT, XRP, NEAR, SOL, SUI e AVAX, cada um com o seu logo | cedo}}
 </div>
 <div class="abertura-legenda">
-<p class="titulo-secao" data-cifra>Todas as suas moedas. Uma carteira só.</p>
+<p class="titulo-secao">Todas as suas moedas. Uma carteira só.</p>
 <p class="lead">Uma frase de 12 palavras abre as {{n_redes}} redes, pelos caminhos padrão de cada uma.</p>
 </div>
 </div>
@@ -23,16 +23,16 @@
 
 <section class="manifesto" id="manifesto" aria-label="Sem conta e sem servidor">
 <div class="wrap">
-<p class="manifesto-texto" data-palavras>Sem conta. Sem servidor da Escalibur. Suas chaves nascem, ficam e assinam no seu celular, e só nele. Do nosso lado, ninguém vê, move ou recupera o que é seu.</p>
+<p class="manifesto-texto" data-palavras>Sem conta e sem servidor da Escalibur, por escolha: não há servidor nosso para invadir, nem base de chaves para vazar. Suas chaves nascem, ficam e assinam no seu celular. Do nosso lado, ninguém vê, move ou recupera o que é seu.</p>
 </div>
 </section>
 
 <section class="mercado" id="mercado" aria-labelledby="t-mercado">
 <div class="wrap">
 <div class="secao-cabeca" data-revelar>
-<p class="sobretitulo">Mercado ao vivo</p>
-<h2 class="titulo-secao" id="t-mercado">O preço de agora.</h2>
-<p class="lead">Cotação ao vivo, em dólar, das principais moedas que a carteira guarda, com a variação das últimas 24 horas. Escolha uma para ver a semana dela.</p>
+<p class="sobretitulo">Mercado</p>
+<h2 class="titulo-secao" id="t-mercado">Cotação ao vivo.</h2>
+<p class="lead">As principais moedas que a carteira guarda, em dólar, com a variação das últimas 24 horas. Escolha uma para ver a semana dela.</p>
 </div>
 <div class="mercado-grade">
 <div class="destaque" data-revelar>
@@ -90,21 +90,25 @@
 </div>
 </div>
 <div class="modo" id="modo-ponte" role="tabpanel" aria-labelledby="aba-ponte" hidden>
-<div class="linha-rede"><span id="rotulo-ativo">Moeda</span><div class="escolha" data-escolha="ativo" data-rotulo="rotulo-ativo"></div></div>
 <div class="ponte-redes">
-<div class="caixa-valor"><span class="caixa-rotulo" id="rotulo-origem">Sai da</span><div class="escolha larga" data-escolha="origem" data-rotulo="rotulo-origem"></div></div>
-<span class="ponte-seta" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M4 10h12M11.5 5.5 16 10l-4.5 4.5"/></svg></span>
-<div class="caixa-valor"><span class="caixa-rotulo" id="rotulo-destino">Chega na</span><div class="escolha larga" data-escolha="destino" data-rotulo="rotulo-destino"></div></div>
+<div class="ponte-rede"><span class="caixa-rotulo" id="rotulo-origem">De</span><div class="escolha larga" data-escolha="origem" data-rotulo="rotulo-origem"></div></div>
+<button class="inverter-redes" type="button" aria-label="Inverter as redes"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 7h13M13 3.5 16.5 7 13 10.5M16.5 13h-13M7 9.5 3.5 13 7 16.5"/></svg></button>
+<div class="ponte-rede"><span class="caixa-rotulo" id="rotulo-destino">Para</span><div class="escolha larga direita" data-escolha="destino" data-rotulo="rotulo-destino"></div></div>
 </div>
 <div class="caixa-valor">
-<label class="caixa-rotulo" for="ponte-valor">Valor</label>
-<div class="caixa-linha"><input class="valor" id="ponte-valor" inputmode="decimal" autocomplete="off" spellcheck="false" value="250"><span class="ficha-fixa" data-ponte-simbolo>USDC</span></div>
-<p class="caixa-fiat" data-fiat-ponte></p>
+<div class="caixa-topo"><label class="caixa-rotulo" for="ponte-valor">Você envia</label><span class="caixa-saldo" data-ponte-saldo></span></div>
+<div class="caixa-linha"><input class="valor" id="ponte-valor" inputmode="decimal" autocomplete="off" spellcheck="false" value="250"><div class="escolha" data-escolha="ativo" data-rotulo-texto="Moeda da ponte"></div></div>
+<div class="caixa-topo"><p class="caixa-fiat" data-fiat-ponte></p><span class="fracoes"><button type="button" data-fracao="0.25">25%</button><button type="button" data-fracao="0.5">50%</button><button type="button" data-fracao="1">Máx</button></span></div>
 </div>
-<div class="troca-resumo">
-<p data-rota></p>
-<p>Chega na sua própria conta na outra rede. A taxa e o tempo de cada rota aparecem no app antes de assinar.</p>
+<div class="caixa-valor recebe">
+<span class="caixa-rotulo" id="rotulo-chega" data-ponte-chega>Chega na Arbitrum</span>
+<div class="caixa-linha"><output class="valor" id="ponte-resultado" aria-labelledby="rotulo-chega"></output><span class="ficha-fixa" data-ponte-simbolo>USDC</span></div>
+<p class="caixa-fiat">menos a taxa da ponte, que o app mostra antes de assinar</p>
 </div>
+<div class="segmentado" role="radiogroup" aria-label="Rota do CCTP" data-ponte-rotas>
+<button type="button" role="radio" aria-checked="true" data-rota-cctp="rapida">Rápida</button><button type="button" role="radio" aria-checked="false" data-rota-cctp="padrao">Padrão</button>
+</div>
+<ul class="ponte-detalhes" data-ponte-detalhes></ul>
 </div>
 <a class="botao botao-principal painel-acao" href="#baixar">Trocar no app</a>
 <p class="painel-nota">Demonstração com o preço de mercado, sem falar com nenhum provedor. No app, a cotação vem dos protocolos de verdade, e você confere tudo antes de assinar.</p>
@@ -115,13 +119,13 @@
 
 <section class="telas" id="por-dentro" aria-labelledby="t-telas">
 <div class="wrap">
-<div class="secao-cabeca" data-revelar>
+<div class="secao-cabeca centro" data-revelar>
 <p class="sobretitulo">Por dentro do app</p>
 <h2 class="titulo-secao" id="t-telas">Tudo o que uma carteira precisa.</h2>
 <p class="lead">Gravações reais do app, sem montagem.</p>
 </div>
-<div class="telas-grade">
-<div class="telas-palco">{{telas_aparelho}}</div>
+<div class="carrossel" data-revelar>
+{{telas_aparelho}}
 {{telas_passos}}
 </div>
 </div>
@@ -185,10 +189,10 @@
 </article>
 
 <article class="bento-ladrilho bento-super" aria-labelledby="t-super" data-revelar>
-<div class="emblema-super anima" aria-hidden="true">
-<span class="disco pin"><span class="pin-pontos"><i></i><i></i><i></i><i></i><i></i><i></i></span></span>
-<span class="cadeado"><span class="cadeado-luz"></span><svg viewBox="0 0 16 16"><path class="haste" d="M5 7V5.2a3 3 0 0 1 6 0V7" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3.2" y="7" width="9.6" height="7" rx="1.8" fill="currentColor"/></svg></span>
-<span class="disco rosto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3.5 8V5.5a2 2 0 0 1 2-2H8M16 3.5h2.5a2 2 0 0 1 2 2V8M20.5 16v2.5a2 2 0 0 1-2 2H16M8 20.5H5.5a2 2 0 0 1-2-2V16M9 9.5v1.2M15 9.5v1.2M12 9.5v3.6h-1M9.3 15.6c1.6 1.3 3.8 1.3 5.4 0"/></svg><span class="varredura"></span></span>
+<div class="emblema-reforcado" aria-hidden="true">
+<span class="disco-reforcado pin"><svg viewBox="0 0 24 24"><g fill="currentColor"><circle cx="6" cy="6" r="1.9"/><circle cx="12" cy="6" r="1.9"/><circle cx="18" cy="6" r="1.9"/><circle cx="6" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="18" cy="12" r="1.9"/><circle cx="6" cy="18" r="1.9"/><circle cx="12" cy="18" r="1.9"/><circle cx="18" cy="18" r="1.9"/></g></svg></span>
+<span class="disco-reforcado rosto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3.5 8V5.5a2 2 0 0 1 2-2H8M16 3.5h2.5a2 2 0 0 1 2 2V8M20.5 16v2.5a2 2 0 0 1-2 2H16M8 20.5H5.5a2 2 0 0 1-2-2V16M9 9.5v1.2M15 9.5v1.2M12 9.5v3.6h-1M9.3 15.6c1.6 1.3 3.8 1.3 5.4 0"/></svg></span>
+<span class="cadeado-reforcado"><svg viewBox="0 0 16 16"><path d="M5 7V5.2a3 3 0 0 1 6 0V7" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3.2" y="7" width="9.6" height="7" rx="1.8" fill="currentColor"/></svg></span>
 </div>
 <div class="bento-texto">
 <h3 id="t-super">Super Security</h3>
@@ -204,7 +208,7 @@
 </div>
 <div class="bento-texto">
 <h3 id="t-teclado">Safe Keyboard</h3>
-<p>Desenhado pelo próprio app. O teclado do sistema não vê as letras, e nada é aprendido nem previsto.</p>
+<p>Desenhado pelo próprio app. O teclado do seu celular não vê as letras, e nada é aprendido nem previsto.</p>
 </div>
 </article>
 
@@ -253,7 +257,7 @@
 <p class="lead">Bitcoin, Ethereum, Solana, XRP Ledger, Stellar, TON, Tron e mais {{n_redes_resto}}. Todos os endereços saem das mesmas palavras, e quando a rede pede, o app pede junto: {{redes_com_tag}}.</p>
 <a class="mais" href="{{base}}redes/">Ver as redes e os {{n_tokens}} tokens conferidos</a>
 </div>
-{{redes_esfera}}
+{{redes_frase}}
 </div>
 </section>
 
@@ -266,8 +270,8 @@
 <ul class="privacidade-grade">
 <li data-revelar><canvas class="pixels-icone" data-icone="conta" aria-hidden="true"></canvas><h3>Sem conta</h3><p>Nem e-mail, nem telefone, nem cadastro. A carteira é a frase, e a frase é só sua.</p></li>
 <li data-revelar><canvas class="pixels-icone" data-icone="olho" aria-hidden="true"></canvas><h3>Nenhum rastreador</h3><p>Nenhum SDK de análise, anúncio ou rastreamento no app. O verificador confere isso no código a cada mudança.</p></li>
-<li data-revelar><canvas class="pixels-icone" data-icone="servidores" aria-hidden="true"></canvas><h3>{{n_hosts}} servidores, e nenhum outro</h3><p>O app só fala com os endereços da lista, e a <a href="{{base}}privacidade/">Política de privacidade</a> diz o que cada um vê.</p></li>
-<li data-revelar><canvas class="pixels-icone" data-icone="site" aria-hidden="true"></canvas><h3>Este site também</h3><p>Sem cookie, sem análise de uso e nada carregado de outro site. Até os preços passam pelo nosso servidor.</p></li>
+<li data-revelar><canvas class="pixels-icone" data-icone="servidores" aria-hidden="true"></canvas><h3>Só endereços conhecidos</h3><p>O app fala apenas com uma lista fechada de servidores, travada no código e conferida a cada mudança. Qualquer endereço fora dela é recusado. A <a href="{{base}}privacidade/">Política de privacidade</a> diz o que cada um vê.</p></li>
+<li data-revelar><canvas class="pixels-icone" data-icone="site" aria-hidden="true"></canvas><h3>Este site também</h3><p>Sem cookie, sem análise de uso e nada carregado de outro site. Até os preços chegam pelo próprio endereço do site.</p></li>
 </ul>
 </div>
 </section>
@@ -326,7 +330,7 @@
 <div>
 <p class="sobretitulo">Novidades</p>
 <h2 class="titulo-secao" id="t-novidades">O que mudou por último.</h2>
-<p class="lead versao-linha">Versão <b>{{versao}}</b> (build {{build}}). {{situacao_loja}} Cada entrega é um commit público no GitHub, e o hash dele aparece aqui em pixels.</p>
+<p class="lead versao-linha">Versão <b>{{versao}}</b> (build {{build}}). {{situacao_loja}} Cada entrega é um commit público no GitHub.</p>
 <a class="mais" href="{{base}}novidades/">Todas as novidades</a>
 </div>
 {{novidades_resumo}}

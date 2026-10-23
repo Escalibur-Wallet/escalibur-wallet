@@ -199,26 +199,27 @@ def estado_ci_curto(ctx):
             f'<span><span class="ci-rotulo">Commit </span><a href="{dados.REPO}/commit/{sha}">{sha[:7]}</a> · {data_curta(commit["data"])}{parte_ci}</span></p>')
 
 
-def esfera_de_redes(ctx, base):
-    """As redes numa esfera que gira (pedido do dono, 23/10/2026, no lugar da orbita): cada
-    logo num ponto da espiral de Fibonacci, sempre de frente. O site.js gira com o tempo, o
-    mouse e a rolagem; sem JS ou com movimento reduzido, a esfera fica parada no angulo de
-    saida (o CSS ja poe cada logo no lugar)."""
-    import math
+def frase_e_redes(ctx, base):
+    """"Uma frase, 26 redes" (quarta rodada): no alto, as 12 palavras da frase como o app as
+    mostra enquanto se digita, em glifos que cifram; embaixo, as redes, cada uma com o seu
+    endereco proprio desenhado em pixels (um desenho tirado do nome da rede, nao o endereco de
+    ninguem). O site.js acende as redes em onda, e os pixels de cada endereco decifram.
+    Sem JS ou com movimento reduzido, tudo aparece parado."""
     redes = ctx["redes"]
-    n = len(redes)
+    palavras = "".join(f'<li><span class="frase-n">{i + 1}</span><span class="frase-glifos" data-glifos="{4 + (i * 5) % 4}">{"•" * (4 + (i * 5) % 4)}</span></li>'
+                       for i in range(12))
     itens = []
-    for i, r in enumerate(redes):
-        y = 1 - (i + 0.5) / n * 2
-        raio = math.sqrt(max(0.0, 1 - y * y))
-        fi = i * math.pi * (3 - math.sqrt(5))
-        x, z = math.cos(fi) * raio, math.sin(fi) * raio
-        # A projecao parada: o CSS usa --x, --y e --z (de -1 a 1).
-        itens.append(f'<li data-x="{x:.4f}" data-y="{y:.4f}" data-z="{z:.4f}" title="{e(r["nome"])}">'
-                     f'{logo_rede(ctx, base, r)}<span class="esfera-nome">{e(r["nome"])}</span></li>')
-    nomes = ", ".join(r["nome"] for r in redes)
-    return (f'<div class="esfera" role="img" aria-label="As {n} redes da carteira: {e(nomes)}">'
-            f'<ul class="esfera-lista" aria-hidden="true">{"".join(itens)}</ul></div>')
+    for k, r in enumerate(redes):
+        desenho = hashlib.sha256(("escalibur/site/" + r["id"]).encode()).hexdigest()[:40]
+        itens.append(f'<li class="rede-ficha">{logo_rede(ctx, base, r)}<span class="rede-nome">{e(r["nome"])}</span>'
+                     f'<canvas class="pixels-hash ficha-hash" data-hashes="{desenho}" data-colunas="20" data-linhas="2" data-atraso="{0.25 + k * 0.045:.2f}" aria-hidden="true"></canvas></li>')
+    return (f'<div class="frase-redes">'
+            f'<div class="frase-cartao"><p class="frase-titulo">Uma frase de 12 palavras</p>'
+            f'<ol class="frase-palavras" aria-label="As 12 palavras, cifradas na tela como no app">{palavras}</ol></div>'
+            f'<div class="frase-seta" aria-hidden="true"><span></span></div>'
+            f'<ul class="redes-fichas" aria-label="As {len(redes)} redes que a frase abre">{"".join(itens)}'
+            f'<li class="ficha-nota">Cada endereço sai da mesma frase, pelo caminho padrão da rede. '
+            f'Os desenhos em pixels aqui são ilustrativos, não são endereços de ninguém.</li></ul></div>')
 
 
 def redes_com_tag(ctx):
@@ -278,12 +279,9 @@ def resumo_novidades(ctx, base, quantos=4):
     digitos hexadecimais viram 40 tons de cinza, que decifram quando a lista aparece)."""
     itens = []
     for c in ctx["commits"][:quantos]:
-        hash_px = (f'<canvas class="pixels-hash pequeno" data-hashes="{e(c["sha"])}" data-colunas="20" data-linhas="2" aria-hidden="true"></canvas>'
-                   if re.fullmatch(r"[0-9a-f]{40}", c["sha"] or "") else "")
         itens.append(
             f'<li><time datetime="{data_iso(c["data"])}">{data_curta(c["data"])}</time>'
-            f'<div class="entrega-resumo"><p class="assunto" lang="en"><a href="{base}novidades/#c-{c["sha"][:7]}">{texto_novidade(c, c["assunto"])}</a></p>'
-            f'{hash_px}<code class="hash-texto">{e(c["sha"][:12])}</code></div></li>'
+            f'<p class="assunto" lang="en"><a href="{base}novidades/#c-{c["sha"][:7]}">{texto_novidade(c, c["assunto"])}</a></p></li>'
         )
     return '<ol class="linha-do-tempo">' + "".join(itens) + "</ol>"
 
@@ -532,35 +530,51 @@ TELAS = [
      "Ordem limite, no app em inglês: o preço acima do atual e o prazo da oferta"),
     ("ponte", "Ponte entre redes", "USDC da Base para a Arbitrum: a taxa e o tempo de cada rota aparecem antes de assinar, e o destino é sempre a sua própria conta.",
      "Ponte, no app em inglês: USDC da Base para a Arbitrum pelo CCTP, nas rotas rápida e padrão"),
-    ("moeda", "Página da moeda", "O gráfico corre no dedo, em cinco períodos, com o preço e a variação de cada um.",
-     "Página do bitcoin, no app em inglês: o dedo correndo o gráfico e os períodos"),
-    ("teclado", "Safe Keyboard", "As palavras da carteira num teclado desenhado pelo próprio app. O teclado do sistema não vê as letras, e nada é previsto nem aprendido.",
+    ("moeda", "Página da moeda", "O gráfico em cinco períodos, de 24 horas a todo o histórico, com o preço, a variação e os números do mercado.",
+     "Página do bitcoin, no app em inglês: o gráfico de 7 dias, em alta"),
+    ("teclado", "Safe Keyboard", "As palavras da carteira num teclado desenhado pelo próprio app. O teclado do seu celular não vê as letras, e nada é previsto nem aprendido.",
      "Safe Keyboard, no app em inglês: o teclado do app digitando sozinho"),
 ]
 
 
+ICONES_TELAS = {
+    "receber": '<path d="M12 4v12M7 11l5 5 5-5M5 20h14"/>',
+    "envio": '<path d="M12 20V8M7 13l5-5 5 5M5 4h14"/>',
+    "trocar": '<path d="M5 8h13M14.5 4.5 18 8l-3.5 3.5M19 16H6M9.5 12.5 6 16l3.5 3.5"/>',
+    "limite": '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
+    "ponte": '<path d="M3 16c3-5 6-7 9-7s6 2 9 7M7 12.2V17M12 9v8M17 12.2V17"/>',
+    "moeda": '<path d="M4 17l5-5 3.5 3.5L20 8M15 8h5v5"/>',
+    "teclado": '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M10.5 10h.01M14 10h.01M17.5 10h.01M8 14h8"/>',
+}
+
+
 def telas_do_app(ctx, base):
-    """O iPhone fixo da secao "Por dentro": uma camada por tela, a gravacao real do app em
-    cada uma. O site.js mostra a camada do passo que esta na tela e toca so o video dela;
-    sem JS, fica a primeira capa, e cada passo traz a sua."""
-    camadas, passos = [], []
+    """"Por dentro do app", refeita na quarta rodada: centralizada, sem placa. Um carrossel de
+    iPhones com as gravacoes reais: o da vez no meio, grande, tocando; os vizinhos dos lados,
+    menores, inclinados e apagados. As abas em cima escolhem, a legenda e a barra embaixo
+    acompanham o video, e no fim do video entra o seguinte. Sem JS, os iPhones ficam numa
+    fileira que desliza, cada um com a sua legenda."""
+    abas, itens = [], []
     for i, (cena, titulo, texto, rotulo) in enumerate(TELAS):
+        selecionada = "true" if i == 0 else "false"
+        abas.append(
+            f'<button type="button" class="aba-tela" role="tab" id="aba-{cena}" data-cena="{cena}" aria-controls="tela-{cena}" '
+            f'aria-selected="{selecionada}" tabindex="{0 if i == 0 else -1}">'
+            f'<span class="aba-icone" aria-hidden="true"><svg viewBox="0 0 24 24">{ICONES_TELAS.get(cena, "")}</svg></span>'
+            f'<span class="aba-nome">{e(titulo)}</span></button>')
         carregamento = "eager" if i == 0 else "lazy"
-        camadas.append(
-            f'<div class="camada{" ativa" if i == 0 else ""}" data-cena="{cena}">'
+        itens.append(
+            f'<figure class="carrossel-item{" ativo" if i == 0 else ""}" data-cena="{cena}" id="tela-{cena}" role="tabpanel" aria-labelledby="aba-{cena}">'
+            f'<div class="aparelho"><div class="tela">'
             f'<img class="capa" src="{base}midia/{cena}.webp" alt="{e(rotulo)}" width="720" height="1566" loading="{carregamento}" decoding="async">'
-            f'<video muted loop playsinline preload="none" data-auto data-manual aria-hidden="true" tabindex="-1">'
-            f'<source src="{base}midia/{cena}.mp4" type="video/mp4"></video></div>')
-        passos.append(
-            f'<li class="passo-tela{" ativo" if i == 0 else ""}" data-cena="{cena}">'
-            f'<div class="passo-texto"><h3>{e(titulo)}</h3><p>{e(texto)}</p></div>'
-            f'<div class="passo-midia">{aparelho(base, cena, rotulo, "pequeno", video=False)}</div></li>')
-    atalhos = "".join(f'<button type="button" data-cena="{cena}" aria-current="{"true" if i == 0 else "false"}">{e(titulo)}</button>'
-                      for i, (cena, titulo, _, _) in enumerate(TELAS))
-    telefone = (f'<div class="aparelho palco-telas"><div class="tela">{"".join(camadas)}</div>'
-                f'<button class="pausar" type="button" data-estado="pausado" aria-label="Tocar a animação">{ICONE_PAUSA}{ICONE_TOCAR}</button></div>'
-                f'<nav class="telas-atalhos" aria-label="Ir para a tela">{atalhos}</nav>')
-    return telefone, '<ol class="passos-telas">' + "".join(passos) + "</ol>"
+            f'<video muted playsinline preload="none" data-manual aria-hidden="true" tabindex="-1"><source src="{base}midia/{cena}.mp4" type="video/mp4"></video>'
+            f'</div></div><figcaption class="carrossel-texto"><b>{e(titulo)}</b><span>{e(texto)}</span></figcaption></figure>')
+    abas_html = f'<div class="carrossel-abas" role="tablist" aria-label="Telas do app">{"".join(abas)}</div>'
+    palco = (f'<div class="carrossel-palco">{"".join(itens)}</div>'
+             f'<div class="carrossel-rodape"><p class="carrossel-legenda" aria-hidden="true">{e(TELAS[0][2])}</p>'
+             f'<span class="carrossel-progresso" aria-hidden="true"><i></i></span>'
+             f'<button class="pausar carrossel-pausar" type="button" data-estado="pausado" aria-label="Tocar a animação">{ICONE_PAUSA}{ICONE_TOCAR}</button></div>')
+    return abas_html, palco
 
 
 # MARK: Moldura
@@ -651,6 +665,7 @@ def rodape(ctx, base):
 <div class="rodape-marca">
 <a class="marca" href="{base}"><img src="{base}icone-64.png" alt="" width="28" height="28">Escalibur Wallet</a>
 <p>Carteira cripto sem custódia.<br>Versão {e(v["marketing"])} (build {e(v["build"])}).</p>
+{botoes_baixar(ctx, base)}
 </div>
 <div>
 <h2>Produto</h2>
@@ -705,7 +720,6 @@ def preencher(ctx, base, modelo, origem):
             "n_redes_resto": lambda: str(len(ctx["redes"]) - 7),
             "n_tokens": lambda: str(len(ctx["tokens"])),
             "n_verificacoes": lambda: str(ctx["n_verificacoes"]),
-            "n_hosts": lambda: str(len(ctx["hosts"])),
             "n_testes": lambda: numero(ctx["n_testes"]),
             "n_travados": lambda: str(ctx["n_travados"]),
             "redes_logos": lambda: grade_de_redes(ctx, base),
@@ -725,7 +739,7 @@ def preencher(ctx, base, modelo, origem):
             "telas_passos": lambda: telas_do_app(ctx, base)[1],
             "n_redes_troca": lambda: str(len(dados_da_troca(ctx)["redes"])),
             "verificacoes_feed": lambda: feed_de_verificacoes(ctx, base),
-            "redes_esfera": lambda: esfera_de_redes(ctx, base),
+            "redes_frase": lambda: frase_e_redes(ctx, base),
             "estado_ci_curto": lambda: estado_ci_curto(ctx),
         }
         if nome not in valores:
@@ -837,7 +851,7 @@ git checkout {e(ref[:12])}</code><span>O mesmo commit desta página.</span></li>
     hosts = []
     for rotulo, lista in ctx["grupos_hosts"]:
         chips = "".join(f"<li>{e(h)}</li>" for h in lista)
-        hosts.append(f'<section class="cartao"><h3>{e(rotulo)}<span class="conta">{len(lista)}</span></h3>'
+        hosts.append(f'<section class="cartao"><h3>{e(rotulo)}</h3>'
                      f'<ul class="hosts">{chips}</ul></section>')
 
     travas = []
@@ -891,7 +905,7 @@ git checkout {e(ref[:12])}</code><span>O mesmo commit desta página.</span></li>
 <p class="lead">Tudo nesta página saiu do repositório no build que a publicou: as verificações que rodam a cada mudança, os servidores que o app pode chamar, o que vem de fora conferido arquivo por arquivo e os arquivos que guardam as chaves. Nada é buscado depois.</p>
 <ul class="seg-resumo" aria-label="Em resumo" data-revelar>
 <li><b>{ctx["n_verificacoes"]}</b><span>verificações a cada mudança</span></li>
-<li><b>{len(ctx["hosts"])}</b><span>servidores que o app pode chamar</span></li>
+<li><b>0</b><span>dependências baixadas da internet para montar o app</span></li>
 <li><b>{numero(ctx["n_testes"])}</b><span>testes do núcleo</span></li>
 </ul>
 </div></header>
@@ -910,7 +924,7 @@ git checkout {e(ref[:12])}</code><span>O mesmo commit desta página.</span></li>
 </div></section>
 
 <section class="bloco titulos-centro" aria-labelledby="t-hosts"><div class="wrap">
-<h2 id="t-hosts">{len(ctx["hosts"])} servidores, e nenhum outro</h2>
+<h2 id="t-hosts">Uma lista fechada de servidores, e nenhum outro</h2>
 <p class="lead intro">O app só fala com os endereços do <code>hosts.lock</code>. O cliente HTTP recusa qualquer outro em tempo de execução, e cada um está na Política de privacidade, com o que vê. Agrupados como a Política descreve.</p>
 <p class="apoio links-bloco">{link_codigo(base, "hosts-permitidos", "Ler a lista compilada no app")} · <a href="{blob(ctx, "hosts.lock")}">hosts.lock no GitHub</a></p>
 <div class="mosaico">{"".join(hosts)}</div>
@@ -1166,12 +1180,10 @@ def pagina_novidades(ctx, base):
     for c in ctx["commits"]:
         corpo = corpo_do_commit(c["corpo"], c)
         detalhe = f'<details class="entrega-detalhe"><summary>O que mudou</summary><div class="entrega-corpo" lang="en">{corpo}</div></details>' if corpo else ""
-        hash_px = (f'<canvas class="pixels-hash pequeno" data-hashes="{e(c["sha"])}" data-colunas="20" data-linhas="2" aria-hidden="true"></canvas>'
-                   if re.fullmatch(r"[0-9a-f]{40}", c["sha"] or "") else "")
         rodape = "" if c.get("anterior") else f'<p class="commit"><a href="{dados.REPO}/commit/{c["sha"]}">Commit {c["sha"][:7]} no GitHub</a></p>'
         entregas.append(
-            f'<article class="entrega" id="c-{c["sha"][:7]}" data-revelar><time datetime="{data_iso(c["data"])}">{data_longa(c["data"])}</time>'
-            f'<h2 lang="en">{texto_novidade(c, c["assunto"])}</h2>{hash_px}{detalhe}{rodape}</article>'
+            f'<article class="entrega" id="c-{c["sha"][:7]}"><time datetime="{data_iso(c["data"])}">{data_longa(c["data"])}</time>'
+            f'<h2 lang="en">{texto_novidade(c, c["assunto"])}</h2>{detalhe}{rodape}</article>'
         )
     situacao = "Disponível na App Store." if ctx["app_store_url"] else "Em preparação para a App Store e o Google Play."
     vazio = "<p>O histórico não estava disponível neste build.</p>" if not entregas else ""
@@ -1185,7 +1197,7 @@ def pagina_novidades(ctx, base):
 <p class="lead">Versão <strong>{e(v["marketing"])}</strong> (build {e(v["build"])}). {situacao} Cada entrega é um commit público no GitHub, e cada coluna de pixels acima é o hash de um deles.</p>
 <p class="apoio">Gerada a cada publicação, do histórico da main. As entregas aparecem em inglês, a língua dos commits.</p>
 </div></header>
-<section class="bloco"><div class="wrap estreito novidades-lista">{vazio}{"".join(entregas)}</div></section>"""
+<section class="bloco"><div class="wrap estreito">{vazio}{"".join(entregas)}</div></section>"""
     return moldura(ctx, base, "novidades", "Novidades", "As últimas atualizações da Escalibur Wallet, geradas do histórico de commits.", corpo, "novidades")
 
 

@@ -452,7 +452,9 @@ def verificacoes():
 
 
 def _limpa_mensagem(mensagem, n_hosts):
-    mensagem = mensagem.replace("$(wc -l < hosts.lock | tr -d ' ')", str(n_hosts))
+    # Sem o numero de servidores no site (pedido do dono, 23/10/2026): "os hosts", sem contar.
+    mensagem = mensagem.replace("$(wc -l < hosts.lock | tr -d ' ') hosts", "os hosts")
+    mensagem = mensagem.replace("$(wc -l < hosts.lock | tr -d ' ')", "")
     mensagem = re.sub(r"\s*\((?:[^()]|\([^)]*\))*\$[^)]*\)\)?", "", mensagem)
     mensagem = re.sub(r"\$\([^)]*\)|\$\{?\w+\}?", "", mensagem)
     mensagem = re.sub(r"\(\s*\)", "", mensagem)

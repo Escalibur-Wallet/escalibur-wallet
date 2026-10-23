@@ -17,6 +17,12 @@
   var script = document.currentScript;
   var base = script && script.src ? script.src.replace(/site\.js(\?.*)?$/, "") : "";
 
+  function ruidoBits(a, b, c) {
+    var h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 1274126177)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1103515245);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967295;
+  }
   function limitar(v, a, b) { return v < a ? a : v > b ? b : v; }
   function suave(a, b, x) { var t = limitar((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
   function cada(seletor, fn, dentro) { Array.prototype.forEach.call((dentro || document).querySelectorAll(seletor), fn); }
@@ -127,11 +133,97 @@
     var aparelhoAbertura = abertura.querySelector(".abertura-aparelho");
     var telaAbertura = aparelhoAbertura.querySelector(".tela");
     var legenda = abertura.querySelector(".abertura-legenda");
-    var tituloLegenda = legenda.querySelector("[data-cifra]");
-    var imersao = document.createElement("div");
-    imersao.className = "abertura-imersao";
-    palco.appendChild(imersao);
-    var medida = null, ultimo = -1, legendaDecifrada = false;
+    // A imersao: a tela do app vira bits (os tons da propria gravacao, em 0 e 1 e nos glifos
+    // do app) enquanto a camera entra nela; os bits se desfazem no fundo da pagina e o texto
+    // seguinte ja vem subindo por cima, sem tela preta.
+    var bits = document.createElement("canvas");
+    bits.className = "abertura-bits";
+    bits.setAttribute("aria-hidden", "true");
+    palco.appendChild(bits);
+    var gBits = bits.getContext("2d");
+    var dprBits = Math.min(window.devicePixelRatio || 1, 2);
+    var COLS_BITS = 28, LINHAS_BITS = 61;
+    var luzBits = null;
+    (function () {
+      var capa = telaAbertura.querySelector("img.capa");
+      if (!capa) return;
+      var ler = function () {
+        try {
+          var c = document.createElement("canvas");
+          c.width = COLS_BITS; c.height = LINHAS_BITS;
+          var g = c.getContext("2d");
+          g.drawImage(capa, 0, 0, COLS_BITS, LINHAS_BITS);
+          var d = g.getImageData(0, 0, COLS_BITS, LINHAS_BITS).data;
+          luzBits = new Float32Array(COLS_BITS * LINHAS_BITS);
+          for (var k = 0; k < luzBits.length; k++) luzBits[k] = (0.3 * d[k * 4] + 0.59 * d[k * 4 + 1] + 0.11 * d[k * 4 + 2]) / 255;
+        } catch (erro) { luzBits = null; }
+      };
+      if (capa.complete && capa.naturalWidth) ler(); else capa.addEventListener("load", ler);
+    })();
+    var medirBits = function () {
+      var r = palco.getBoundingClientRect();
+      bits.width = Math.round(r.width * dprBits); bits.height = Math.round(r.height * dprBits);
+    };
+    medirBits();
+    window.EscaliburRelogio.aoMedir(medirBits);
+    // A travessia em 3D: a tela do app vira bits (os tons da propria gravacao) e a camera
+    // atravessa; atras dela vem um tunel de planos de bits, do fundo para a frente, que passam
+    // pela camera e somem. So depois disso o texto seguinte sobe.
+    var grade = function (x0, y0, w, h, cols, linhas, luz, tom0, tique, semente) {
+      var cw = w / cols, ch = h / linhas;
+      var tamanho = Math.max(5, Math.min(cw, ch * 1.6) * 0.8);
+      if (tamanho > 260) return;
+      gBits.font = "600 " + tamanho.toFixed(1) + "px Inter, system-ui, sans-serif";
+      var c0 = Math.max(0, Math.floor(-x0 / cw)), c1 = Math.min(cols, Math.ceil((bits.width - x0) / cw));
+      var l0 = Math.max(0, Math.floor(-y0 / ch)), l1 = Math.min(linhas, Math.ceil((bits.height - y0) / ch));
+      var niveis = [[], [], [], [], [], []];
+      for (var l = l0; l < l1; l++) for (var c = c0; c < c1; c++) {
+        var base = luz ? 0.3 + luz[l * cols + c] * 0.7 : 0.25 + ruidoBits(c, l, semente) * 0.75;
+        var tom = base * (0.6 + 0.4 * ruidoBits(c, l, tique + semente)) * tom0;
+        var n = Math.min(5, Math.floor(tom * 6));
+        if (n >= 1) niveis[n].push(l * cols + c);
+      }
+      for (var n2 = 1; n2 < 6; n2++) {
+        var lista = niveis[n2];
+        if (!lista.length) continue;
+        var v = Math.round(70 + n2 * 37);
+        gBits.fillStyle = "rgb(" + v + "," + v + "," + (v + 2) + ")";
+        for (var q = 0; q < lista.length; q++) {
+          var kk = lista[q], cc = kk % cols, ll = (kk / cols) | 0;
+          var g = ruidoBits(cc, ll, tique + 7 + semente) > 0.82 ? GLIFOS[Math.floor(ruidoBits(cc, ll, tique + 3) * 16)] : (ruidoBits(cc, ll, tique + 11 + semente) > 0.5 ? "1" : "0");
+          gBits.fillText(g, x0 + (cc + 0.5) * cw, y0 + (ll + 0.5) * ch);
+        }
+      }
+    };
+    var desenharBits = function (p, t) {
+      var entra = suave(0.8, 0.87, p), voo = suave(0.86, 0.99, p), fim = 1 - suave(0.965, 1, p);
+      gBits.clearRect(0, 0, bits.width, bits.height);
+      if (entra <= 0) return;
+      var rp = palco.getBoundingClientRect(), rt = telaAbertura.getBoundingClientRect();
+      var x0 = (rt.left - rp.left) * dprBits, y0 = (rt.top - rp.top) * dprBits, w = rt.width * dprBits, h = rt.height * dprBits;
+      var tique = Math.floor(t * 10);
+      gBits.textAlign = "center";
+      gBits.textBaseline = "middle";
+      // O fundo da pagina cobre a tela do app: quando os bits passam, fica a pagina.
+      gBits.globalAlpha = entra;
+      gBits.fillStyle = "#0B0B0C";
+      gBits.fillRect(Math.max(0, x0), Math.max(0, y0), Math.min(bits.width, x0 + w) - Math.max(0, x0), Math.min(bits.height, y0 + h) - Math.max(0, y0));
+      gBits.globalAlpha = 1;
+      // O tunel: planos de bits do fundo para a frente, em perspectiva, centrados na tela.
+      var cx = bits.width / 2, cy = bits.height / 2, lado = Math.min(bits.width, bits.height);
+      for (var k = 6; k >= 1; k--) {
+        var d = 1 + k * 0.75 - voo * 4.6;
+        if (d <= 0.12) continue;
+        var alfa = suave(0.12, 0.45, d) * (1 - suave(2.4, 3.6, d)) * voo * fim;
+        if (alfa <= 0.01) continue;
+        var pw = lado * 0.62 / d, ph = pw * 1.9;
+        grade(cx - pw / 2, cy - ph / 2, pw, ph, 14, 27, null, alfa, tique, k * 101);
+      }
+      // A propria tela, virada bits, passando pela camera.
+      var tela = entra * (1 - suave(0.88, 0.95, p));
+      if (tela > 0.01) grade(x0, y0, w, h, COLS_BITS, LINHAS_BITS, luzBits, tela, tique, 0);
+    };
+    var medida = null, ultimo = -1;
     var medirAbertura = function () {
       aparelhoAbertura.style.transform = "";
       var rp = palco.getBoundingClientRect(), ra = aparelhoAbertura.getBoundingClientRect();
@@ -139,8 +231,8 @@
       var alturaPalco = rp.height;
       var destino = largo ? (alturaPalco - ra.height) / 2 : Math.max(alturaPalco - ra.height - 28, (alturaPalco - ra.height) / 2 + 40);
       var sobe = destino - (ra.top - rp.top);
-      // A imersao: do lugar de chegada, o centro da tela do app vai ao centro do palco e cresce
-      // ate a tela cobrir o palco inteiro.
+      // Do lugar de chegada, o centro da tela do app vai ao centro do palco e cresce ate a
+      // tela cobrir o palco inteiro (a camera entra nela).
       var centroChegada = ra.top - rp.top + sobe + ra.height / 2;
       medida = {
         inicio: abertura.getBoundingClientRect().top + window.pageYOffset,
@@ -161,7 +253,9 @@
     };
     window.EscaliburRelogio.registrar(function (e) {
       var p = limitar((e.y - medida.inicio) / medida.alcance, 0, 1);
-      if (p === ultimo) return false;
+      // Na imersao, os bits trocam sozinhos: o quadro segue mesmo sem rolagem.
+      var naImersao = p > 0.78 && p < 1;
+      if (p === ultimo && !naImersao) return false;
       ultimo = p;
       window.EscaliburAbertura.p = p;
       var a = suave(0, 0.26, p);
@@ -169,18 +263,18 @@
       texto.style.opacity = (1 - a).toFixed(3);
       texto.style.visibility = a >= 1 ? "hidden" : "";
       var b = suave(0.05, 0.42, p);
-      var z = suave(0.82, 0.99, p);
+      var z = suave(0.74, 0.92, p);
       var escala = (0.92 + 0.08 * b) * (1 + (medida.cresce - 1) * z * z);
-      aparelhoAbertura.style.transform = "translate3d(0," + (medida.sobe * b + medida.centraliza * suave(0.78, 0.9, p)).toFixed(1) + "px,0) scale(" + escala.toFixed(4) + ")";
-      imersao.style.opacity = suave(0.93, 1, p).toFixed(3);
-      var c = suave(0.62, 0.72, p) * (1 - suave(0.8, 0.86, p));
+      // A camera chega inclinada e endireita ao entrar: o iPhone deita um pouco e volta.
+      var inclina = 16 * Math.sin(Math.PI * suave(0.7, 0.9, p));
+      aparelhoAbertura.style.transform = "translate3d(0," + (medida.sobe * b + medida.centraliza * suave(0.72, 0.86, p)).toFixed(1) + "px,0) perspective(1100px) rotateX(" + inclina.toFixed(2) + "deg) scale(" + escala.toFixed(4) + ")";
+      desenharBits(p, e.t);
+      var c = suave(0.56, 0.64, p) * (1 - suave(0.7, 0.76, p));
       legenda.style.opacity = c.toFixed(3);
       legenda.classList.toggle("visivel", c > 0.5);
-      if (c > 0.35 && !legendaDecifrada) { legendaDecifrada = true; decifrar(tituloLegenda, 0.9); }
-      if (c < 0.02 && p < 0.6) legendaDecifrada = false;
       var largo = e.vw >= 900;
       legenda.style.transform = (largo ? "translate3d(0,calc(-50% + " : "translate3d(0,") + ((1 - c) * 24).toFixed(1) + "px" + (largo ? ")" : "") + ",0)";
-      return false;
+      return naImersao;
     });
   }
 
@@ -239,82 +333,111 @@
     }
   }
 
-  // MARK: Por dentro do app: o iPhone fica fixo e a tela troca a cada passo.
-  var palcoTelas = document.querySelector(".palco-telas");
-  if (palcoTelas && observa) {
-    var camadas = Array.prototype.slice.call(palcoTelas.querySelectorAll(".camada"));
-    var passos = Array.prototype.slice.call(document.querySelectorAll(".passo-tela"));
-    var botaoTelas = palcoTelas.querySelector(".pausar");
-    var pausadoPeloDono = calmo.matches;
-    var ativa = null;
-    var noPalco = false;
-    var videoDe = function (camada) { return camada.querySelector("video"); };
-    camadas.forEach(function (camada) { prepararVideo(videoDe(camada)); });
-    var atualizarVideo = function () {
-      camadas.forEach(function (camada) {
-        var v = videoDe(camada);
-        if (camada === ativa && noPalco && !pausadoPeloDono) { if (v.paused) tocar(v, botaoTelas); }
+  // MARK: Por dentro do app: o carrossel de iPhones. O da vez no meio toca a gravacao; os
+  // vizinhos ficam dos lados, menores e inclinados (so transform e opacity). No fim do video
+  // entra o seguinte; as abas, as setas e um toque no vizinho escolhem.
+  var carrossel = document.querySelector(".carrossel");
+  if (carrossel) {
+    carrossel.classList.add("ativo-js");
+    var abasTelas = Array.prototype.slice.call(carrossel.querySelectorAll(".aba-tela"));
+    var itensTelas = Array.prototype.slice.call(carrossel.querySelectorAll(".carrossel-item"));
+    var botaoCarrossel = carrossel.querySelector(".carrossel-pausar");
+    var legendaCarrossel = carrossel.querySelector(".carrossel-legenda");
+    var barraCarrossel = carrossel.querySelector(".carrossel-progresso i");
+    var atual = 0, naTela = false, pausadoPeloDono = calmo.matches, desde = 0;
+    var videoDo = function (n) { return itensTelas[n].querySelector("video"); };
+    itensTelas.forEach(function (it) { prepararVideo(it.querySelector("video")); });
+    var dispor = function () {
+      var largo = window.innerWidth >= 900;
+      var passo = largo ? 0.62 : 0.74;
+      itensTelas.forEach(function (it, n) {
+        var d = n - atual, a = Math.abs(d);
+        var largura = it.offsetWidth || 1;
+        var x = d * largura * passo + (d === 0 ? 0 : Math.sign(d) * largura * 0.06 * (a - 1));
+        var escala = d === 0 ? 1 : Math.max(0.6, 0.8 - (a - 1) * 0.1);
+        var giro = d === 0 ? 0 : -Math.sign(d) * 18;
+        it.style.transform = "translate3d(" + x.toFixed(1) + "px,0,0) perspective(1200px) rotateY(" + giro + "deg) scale(" + escala.toFixed(3) + ")";
+        it.style.opacity = a === 0 ? "1" : a === 1 ? "0.45" : a === 2 ? (largo ? "0.18" : "0") : "0";
+        it.style.zIndex = String(10 - a);
+        it.classList.toggle("ativo", d === 0);
+        it.setAttribute("aria-hidden", String(d !== 0));
+      });
+    };
+    var tocarAtual = function () {
+      itensTelas.forEach(function (it, n) {
+        var v = videoDo(n);
+        if (n === atual && naTela && !pausadoPeloDono) { if (v.paused) tocar(v, botaoCarrossel); }
         else if (!v.paused) v.pause();
       });
-      if (pausadoPeloDono || !noPalco) mostrar(botaoTelas, "pausado");
+      if (pausadoPeloDono || !naTela) mostrar(botaoCarrossel, "pausado");
+      pedir();
     };
-    var ativar = function (cena) {
-      var nova = null;
-      camadas.forEach(function (camada) {
-        var sim = camada.getAttribute("data-cena") === cena;
-        camada.classList.toggle("ativa", sim);
-        if (sim) nova = camada;
-      });
-      passos.forEach(function (passo) { passo.classList.toggle("ativo", passo.getAttribute("data-cena") === cena); });
-      cada(".telas-atalhos button", function (b) { b.setAttribute("aria-current", String(b.getAttribute("data-cena") === cena)); });
-      if (nova !== ativa) {
-        if (ativa) { var antigo = videoDe(ativa); antigo.pause(); antigo.classList.remove("visivel"); }
-        ativa = nova;
-        if (ativa) { var v = videoDe(ativa); try { v.currentTime = 0; } catch (erro) { /* ainda sem dados */ } }
+    var escolher = function (n, foco) {
+      n = (n + itensTelas.length) % itensTelas.length;
+      if (n !== atual) {
+        var antigo = videoDo(atual);
+        antigo.pause();
+        antigo.classList.remove("visivel");
       }
-      atualizarVideo();
+      atual = n;
+      desde = performance.now();
+      barraCarrossel.style.transform = "scaleX(0)";
+      abasTelas.forEach(function (a, k) {
+        a.setAttribute("aria-selected", String(k === n));
+        a.tabIndex = k === n ? 0 : -1;
+      });
+      try { videoDo(n).currentTime = 0; } catch (erro) { /* ainda sem dados */ }
+      legendaCarrossel.textContent = itensTelas[n].querySelector(".carrossel-texto span").textContent;
+      if (foco) abasTelas[n].focus();
+      var fileira = abasTelas[n].parentNode;
+      if (fileira.scrollWidth > fileira.clientWidth + 2) {
+        fileira.scrollTo({ left: abasTelas[n].offsetLeft - (fileira.clientWidth - abasTelas[n].offsetWidth) / 2, behavior: movimento ? "smooth" : "auto" });
+      }
+      dispor();
+      tocarAtual();
     };
-    // O passo acende quando o texto dele passa pelo meio da tela (no celular, pela faixa
-    // embaixo do iPhone).
-    // O passo da vez e o que tem o texto mais perto da linha de leitura (o meio da tela; no
-    // celular, a faixa embaixo do iPhone). Conferido a cada quadro de rolagem, sem pular passo.
-    var textosPassos = passos.map(function (passo) { return passo.querySelector(".passo-texto") || passo; });
-    var secaoTelas = document.getElementById("por-dentro");
-    var ultimaCena = null;
-    window.EscaliburRelogio.registrar(function (e) {
-      var rs = secaoTelas.getBoundingClientRect();
-      if (rs.bottom < 0 || rs.top > e.vh) return false;
-      var linha = e.vh * (e.vw >= 700 ? 0.5 : 0.66), melhor = null, dist = Infinity;
-      textosPassos.forEach(function (el, i) {
-        var r = el.getBoundingClientRect(), d = Math.abs(r.top + r.height / 2 - linha);
-        if (d < dist) { dist = d; melhor = passos[i]; }
+    abasTelas.forEach(function (aba, n) {
+      aba.addEventListener("click", function () { escolher(n, false); });
+      aba.addEventListener("keydown", function (e) {
+        var anda = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+        if (anda) { e.preventDefault(); escolher(n + anda, true); }
       });
-      var cena = melhor && melhor.getAttribute("data-cena");
-      if (cena && cena !== ultimaCena) { ultimaCena = cena; ativar(cena); }
-      return false;
     });
-    new IntersectionObserver(function (entradas) {
-      noPalco = entradas[0].isIntersecting;
-      atualizarVideo();
-    }, { threshold: 0.4 }).observe(palcoTelas);
-    if (botaoTelas) {
-      mostrar(botaoTelas, "pausado");
-      botaoTelas.addEventListener("click", function () {
-        pausadoPeloDono = !pausadoPeloDono;
-        atualizarVideo();
+    itensTelas.forEach(function (it, n) {
+      it.addEventListener("click", function () { if (n !== atual) escolher(n, false); });
+      // Um video curto (a pagina da moeda) passa de novo antes do seguinte: cada tela fica
+      // pelo menos 6 segundos no meio.
+      videoDo(n).addEventListener("ended", function () {
+        if (n !== atual || pausadoPeloDono) return;
+        var v = videoDo(n);
+        if (performance.now() - desde < 6000) { try { v.currentTime = 0; } catch (erro) { /* sem dados */ } tocar(v, botaoCarrossel); return; }
+        escolher(n + 1, false);
       });
+    });
+    // Deslizar o dedo no palco troca de tela.
+    var toque = null;
+    var palcoCarrossel = carrossel.querySelector(".carrossel-palco");
+    palcoCarrossel.addEventListener("touchstart", function (e) { toque = e.touches[0].clientX; }, { passive: true });
+    palcoCarrossel.addEventListener("touchend", function (e) {
+      if (toque === null) return;
+      var dx = e.changedTouches[0].clientX - toque;
+      toque = null;
+      if (Math.abs(dx) > 40) escolher(atual + (dx < 0 ? 1 : -1), false);
+    }, { passive: true });
+    if (botaoCarrossel) {
+      mostrar(botaoCarrossel, "pausado");
+      botaoCarrossel.addEventListener("click", function () { pausadoPeloDono = !pausadoPeloDono; tocarAtual(); });
     }
-    ativa = camadas[0] || null;
-    // Os atalhos levam ao passo de cada tela.
-    cada(".telas-atalhos button", function (b) {
-      b.addEventListener("click", function () {
-        var passo = document.querySelector('.passo-tela[data-cena="' + b.getAttribute("data-cena") + '"] .passo-texto');
-        if (!passo) return;
-        var r = passo.getBoundingClientRect();
-        var meio = window.innerWidth >= 700 ? 0.5 : 0.66;
-        window.scrollTo({ top: window.pageYOffset + r.top + r.height / 2 - window.innerHeight * meio, behavior: movimento ? "smooth" : "auto" });
-        ativar(b.getAttribute("data-cena"));
-      });
+    if (observa) {
+      new IntersectionObserver(function (e) { naTela = e[0].isIntersecting; tocarAtual(); }, { threshold: 0.4 }).observe(palcoCarrossel);
+    }
+    window.EscaliburRelogio.aoMedir(dispor);
+    dispor();
+    window.EscaliburRelogio.registrar(function () {
+      var v = videoDo(atual);
+      if (!naTela || v.paused || !v.duration) return false;
+      barraCarrossel.style.transform = "scaleX(" + Math.min(1, v.currentTime / v.duration).toFixed(4) + ")";
+      return true;
     });
   }
 
@@ -697,6 +820,9 @@
 
     function rotasDe(ativo) { return (cfg.ponte.rotas[ativo] || []); }
     function redePonte(id) { return cfg.ponte.redes.filter(function (r) { return r.id === id; })[0]; }
+    // O saldo de exemplo da demonstracao, como o do video do app (1.250 USDC na Base).
+    var SALDO_DEMO = { usdc: 1250, usdt: 1250, eth: 0.5, wbtc: 0.02 };
+    var rotaCCTP = "rapida";
     function contaPonte() {
       var rotas = rotasDe(ponte.ativo);
       var origens = [];
@@ -710,11 +836,32 @@
       seletores.origem.definir(origens.map(opcaoRede), ponte.origem);
       seletores.destino.definir(destinos.map(opcaoRede), ponte.destino);
       var rota = rotas.filter(function (r) { return r[0] === ponte.origem && r[1] === ponte.destino; })[0];
+      var via = rota ? rota[2] : "";
+      var nomeDestino = (redePonte(ponte.destino) || {}).nome || ponte.destino;
       var valor = lerValor(campoPonte.value);
-      q("[data-ponte-simbolo]").textContent = ativo.s;
       var preco = valorEm(ativo.g, fiat);
+      q("[data-ponte-simbolo]").textContent = ativo.s;
+      q("[data-ponte-saldo]").textContent = "Saldo " + quantidade(SALDO_DEMO[ponte.ativo]) + " " + ativo.s;
       q("[data-fiat-ponte]").textContent = valor && preco ? "≈ " + dinheiro(valor * preco, fiat) : "";
-      q("[data-rota]").textContent = (rota ? ROTAS[rota[2]] : "") + (valor ? " Chega cerca de " + quantidade(valor) + " " + ativo.s + ", menos a taxa da rota." : "");
+      q("[data-ponte-chega]").textContent = "Chega na " + nomeDestino;
+      q("#ponte-resultado").textContent = valor ? "≈ " + quantidade(valor) : "0";
+      // Rapida e Padrao so no USDC pelo CCTP, como no app.
+      var rotas2 = q("[data-ponte-rotas]");
+      rotas2.hidden = via !== "cctp";
+      cada("[data-rota-cctp]", function (b) { b.setAttribute("aria-checked", String(b.getAttribute("data-rota-cctp") === rotaCCTP)); }, rotas2);
+      // As linhas do app (BridgeForm), com os mesmos textos.
+      var linhas = [];
+      if (via === "usdt0") linhas.push("Pela USDT0 da própria Tether: o contrato dela entrega o mesmo valor em USDT na Tron (TRC-20)");
+      else if (via === "cctp") linhas.push("Pelo CCTP da Circle: queima aqui e a própria Circle cunha o mesmo USDC na " + nomeDestino);
+      else if (via === "across") linhas.push("Pelo Across: um relayer entrega na " + nomeDestino + " em segundos");
+      linhas.push("Tempo: " + (via === "cctp" ? (rotaCCTP === "rapida" ? "menos de 1 minuto" : "uns 20 minutos (sem taxa do protocolo)") : via === "across" ? "segundos" : "uns minutos"));
+      linhas.push(ponte.destino === "tron" ? "Vai para a sua própria conta na Tron, desta mesma carteira" : "Vai para a sua própria conta na " + nomeDestino + ", o mesmo endereço");
+      linhas.push("Sem taxa da Escalibur");
+      var lista = q("[data-ponte-detalhes]");
+      lista.textContent = "";
+      linhas.forEach(function (l) { var li = document.createElement("li"); li.textContent = l; lista.appendChild(li); });
+      var inverterRedes = q(".inverter-redes");
+      inverterRedes.disabled = !rotas.some(function (r) { return r[0] === ponte.destino && r[1] === ponte.origem; });
     }
 
     seletores.rede.aoEscolher = function (id) {
@@ -736,6 +883,22 @@
     seletores.destino.aoEscolher = function (id) { ponte.destino = id; contaPonte(); };
     campo.addEventListener("input", contaTroca);
     campoPonte.addEventListener("input", contaPonte);
+    cada("[data-fracao]", function (b) {
+      b.addEventListener("click", function () {
+        var v = SALDO_DEMO[ponte.ativo] * Number(b.getAttribute("data-fracao"));
+        campoPonte.value = formato("q-campo", { maximumFractionDigits: 6, useGrouping: false }).format(v);
+        contaPonte();
+      });
+    }, painel);
+    cada("[data-rota-cctp]", function (b) {
+      b.addEventListener("click", function () { rotaCCTP = b.getAttribute("data-rota-cctp"); contaPonte(); });
+    }, painel);
+    q(".inverter-redes").addEventListener("click", function () {
+      var o = ponte.origem;
+      ponte.origem = ponte.destino;
+      ponte.destino = o;
+      contaPonte();
+    });
     var inverter = q(".inverter");
     inverter.addEventListener("click", function () {
       var de = estado.de;
@@ -754,7 +917,7 @@
         document.getElementById(a.getAttribute("aria-controls")).hidden = !sim;
       });
       if (foco) aba.focus();
-      painel.querySelector(".painel-acao").textContent = aba.id === "aba-ponte" ? "Mandar pela ponte no app" : "Trocar no app";
+      painel.querySelector(".painel-acao").textContent = aba.id === "aba-ponte" ? "Revisar ponte no app" : "Trocar no app";
     };
     abas.forEach(function (aba, i) {
       aba.addEventListener("click", function () { escolherAba(aba, false); });
@@ -1078,7 +1241,7 @@
   if (trilhoChaves && telaChaves) {
     var botoesChaves = Array.prototype.slice.call(document.querySelectorAll(".chaves-passo"));
     var numeroChaves = document.querySelector("[data-chaves-n]");
-    var etapa = -1, travaAte = 0, abreEm = 0;
+    var etapa = -1, travaAte = 0, prontaEm = 0;
     var pxChaves;
     var mostrarEtapa = function (n, t) {
       if (n === etapa) return;
@@ -1093,8 +1256,10 @@
         var li = botoesChaves[n].parentNode;
         fileira.scrollTo({ left: li.offsetLeft - (fileira.clientWidth - li.offsetWidth) / 2, behavior: movimento ? "smooth" : "auto" });
       }
-      pxChaves.formar(DESENHOS_CHAVE[n], movimento ? t : t - 10, { duracao: n === 1 ? 0.7 : 0.9 });
-      abreEm = n === 3 ? t + 1.3 : 0;
+      // Rapido, sem perder o voo (pedido do dono, 23/10/2026: a montagem demorava).
+      pxChaves.formar(DESENHOS_CHAVE[n], movimento ? t : t - 10, { duracao: 0.5, espalha: 0.16 });
+      // O passo seguinte so entra quando este termina de montar (0,5 s de voo e 0,16 s de espera).
+      prontaEm = t + 0.7;
       pedir();
     };
     var progressoDe = function () {
@@ -1103,9 +1268,15 @@
     };
     pxChaves = cenaParticulas(telaChaves, GC, GC, function (pt, t) {
       if (etapa < 0) mostrarEtapa(movimento ? Math.floor(progressoDe() * 5) : 0, t);
-      if (movimento && t > travaAte) mostrarEtapa(Math.floor(progressoDe() * 5), t);
-      // No cofre, o cadeado abre: a chave raiz destranca so a carteira que vai assinar.
-      if (abreEm && t >= abreEm) { abreEm = 0; pt.formar(CADEADO_ABERTO, movimento ? t : t - 10, { duracao: 0.5, espalha: 0.15 }); }
+      if (movimento && t > travaAte) {
+        // Um passo de cada vez, depois que o desenho anterior montou. Rolagem rapida (dois
+        // passos ou mais de diferenca) vai direto, para nao atrasar quem passa depressa.
+        var alvo = Math.floor(progressoDe() * 5);
+        if (alvo !== etapa) {
+          if (Math.abs(alvo - etapa) >= 2) mostrarEtapa(alvo, t);
+          else if (t >= prontaEm) mostrarEtapa(alvo, t);
+        }
+      }
       pt.desenhar(t, {
         calmo: !movimento,
         extra: function (p, q, bit, tique) {
@@ -1153,84 +1324,41 @@
     });
   }
 
-  // MARK: Redes numa esfera: os logos nos pontos de uma espiral de Fibonacci, sempre de
-  // frente, sobre um globo de pixels que gira junto. Gira sozinha devagar, segue o mouse e o
-  // arrasto, e a rolagem inclina. So transform e opacity nos logos; o globo e um canvas 2D.
-  var esfera = document.querySelector(".esfera");
-  if (esfera) {
-    esfera.classList.add("ativa");
-    var itensEsfera = Array.prototype.slice.call(esfera.querySelectorAll(".esfera-lista li")).map(function (li) {
-      return { el: li, x: Number(li.getAttribute("data-x")), y: Number(li.getAttribute("data-y")), z: Number(li.getAttribute("data-z")) };
-    });
-    var globo = document.createElement("canvas");
-    globo.className = "esfera-globo";
-    globo.setAttribute("aria-hidden", "true");
-    esfera.insertBefore(globo, esfera.firstChild);
-    var gG = globo.getContext("2d");
-    var pontosGlobo = [];
-    for (var k = 0, N = 520; k < N; k++) {
-      var yy = 1 - (k + 0.5) / N * 2, rr = Math.sqrt(1 - yy * yy), ff = k * Math.PI * (3 - Math.sqrt(5));
-      pontosGlobo.push([Math.cos(ff) * rr, yy, Math.sin(ff) * rr, ruido(k, 3, 31)]);
-    }
-    var dprG = Math.min(window.devicePixelRatio || 1, 2), ladoG = 0;
-    var medirGlobo = function () {
-      var r = esfera.getBoundingClientRect();
-      ladoG = r.width;
-      globo.width = Math.round(r.width * dprG); globo.height = Math.round(r.height * dprG);
-    };
-    medirGlobo();
-    window.EscaliburRelogio.aoMedir(medirGlobo);
-    var giro = { ay: 0.6, ax: -0.32, vy: 0, arrasto: null, alvoMouse: 0, mouse: 0 };
-    esfera.addEventListener("pointerdown", function (e) { giro.arrasto = { x: e.clientX, ay: giro.ay }; esfera.setPointerCapture(e.pointerId); });
-    esfera.addEventListener("pointermove", function (e) {
-      if (giro.arrasto) { giro.ay = giro.arrasto.ay + (e.clientX - giro.arrasto.x) / 160; pedir(); }
-      else if (e.pointerType === "mouse") {
-        var r = esfera.getBoundingClientRect();
-        giro.alvoMouse = ((e.clientY - r.top) / r.height - 0.5) * 0.5;
-      }
-    });
-    var soltar = function () { giro.arrasto = null; };
-    esfera.addEventListener("pointerup", soltar);
-    esfera.addEventListener("pointercancel", soltar);
-    var visivelEsfera = false, ultimoT = 0, desenhouParada = false;
-    if (observa) new IntersectionObserver(function (e) { visivelEsfera = e[0].isIntersecting; if (visivelEsfera) pedir(); }, { rootMargin: "100px" }).observe(esfera);
-    window.EscaliburRelogio.registrar(function (estado) {
-      if (!visivelEsfera || document.hidden) return false;
-      if (!movimento && desenhouParada && !giro.arrasto) return false;
-      var t = estado.t, dt = ultimoT ? Math.min(0.05, t - ultimoT) : 0;
-      ultimoT = t;
-      if (movimento && !giro.arrasto) giro.ay += dt * 0.22;
-      giro.mouse += (giro.alvoMouse - giro.mouse) * 0.06;
-      var r = esfera.getBoundingClientRect();
-      var rolagem = movimento ? limitar((window.innerHeight / 2 - (r.top + r.height / 2)) / window.innerHeight, -1, 1) * 0.35 : 0;
-      var ax = giro.ax + giro.mouse + rolagem;
-      var cy = Math.cos(giro.ay), sy = Math.sin(giro.ay), cx = Math.cos(ax), sx = Math.sin(ax);
-      var raio = ladoG * 0.38, meio = ladoG / 2;
-      var gira = function (x, y, z) {
-        var x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
-        return [x1, y * cx - z1 * sx, y * sx + z1 * cx];
-      };
-      // O globo de pixels: os de tras mais apagados.
-      gG.clearRect(0, 0, globo.width, globo.height);
-      var lado = Math.max(1.5, 2.2 * dprG);
-      for (var p = 0; p < pontosGlobo.length; p++) {
-        var g3 = gira(pontosGlobo[p][0], pontosGlobo[p][1], pontosGlobo[p][2]);
-        var fundo = (g3[2] + 1) / 2;
-        var tom = Math.round(26 + fundo * 70 + pontosGlobo[p][3] * 30 * fundo);
-        gG.fillStyle = "rgb(" + tom + "," + tom + "," + (tom + 2) + ")";
-        gG.fillRect((meio + g3[0] * raio) * dprG - lado / 2, (meio - g3[1] * raio) * dprG - lado / 2, lado, lado);
-      }
-      itensEsfera.forEach(function (it) {
-        var q = gira(it.x, it.y, it.z);
-        var perto = (q[2] + 1) / 2;
-        var escala = 0.5 + 0.55 * perto;
-        it.el.style.transform = "translate3d(" + (q[0] * raio).toFixed(1) + "px," + (-q[1] * raio).toFixed(1) + "px,0) scale(" + escala.toFixed(3) + ")";
-        it.el.style.opacity = (0.28 + 0.72 * perto).toFixed(3);
-        it.el.style.zIndex = String(Math.round(perto * 100));
+  // MARK: Uma frase, as redes: as 12 palavras em glifos que cifram, trocando como no app
+  // (LiveCipher, num relogio proprio), e as redes acendendo em onda, cada uma com o desenho
+  // do seu endereco decifrando. Parado com movimento reduzido.
+  var fraseRedes = document.querySelector(".frase-redes");
+  if (fraseRedes) {
+    var glifosFrase = Array.prototype.slice.call(fraseRedes.querySelectorAll(".frase-glifos"));
+    var fichas = Array.prototype.slice.call(fraseRedes.querySelectorAll(".rede-ficha"));
+    var sortearGlifos = function (tique) {
+      glifosFrase.forEach(function (el, i) {
+        var n = Number(el.getAttribute("data-glifos")) || 5, s = "";
+        for (var k = 0; k < n; k++) s += "0123456789ABCDEF"[Math.floor(ruidoBits(i * 13 + k, tique, 77) * 16)];
+        el.textContent = s;
       });
-      desenhouParada = true;
-      return movimento || !!giro.arrasto;
-    });
+    };
+    sortearGlifos(1);
+    var fraseNaTela = false, ultimoTique = -1;
+    if (observa) {
+      new IntersectionObserver(function (e) {
+        fraseNaTela = e[0].isIntersecting;
+        if (fraseNaTela) {
+          fichas.forEach(function (f, i) { if (!f.classList.contains("acesa")) setTimeout(function () { f.classList.add("acesa"); }, movimento ? 300 + i * 70 : 0); });
+          pedir();
+        }
+      }, { threshold: 0.2 }).observe(fraseRedes);
+    } else {
+      fichas.forEach(function (f) { f.classList.add("acesa"); });
+    }
+    if (movimento) {
+      window.EscaliburRelogio.registrar(function (e) {
+        if (!fraseNaTela || document.hidden) return false;
+        var tique = Math.floor(e.t * 9);
+        if (tique !== ultimoTique) { ultimoTique = tique; sortearGlifos(tique); }
+        return true;
+      });
+    }
   }
 
   // MARK: Privacidade: cada icone se monta em pixels quando aparece.
@@ -1260,7 +1388,8 @@
     }
     var feito = false;
     cenaPixels(canvas, colunas, linhas, { fundo: 0.05, ritmo: 4, cifra: 0.2 }, function (px, t) {
-      if (!feito) { feito = true; px.mudar(mapa, movimento ? t + 0.2 + (i % 6) * 0.12 : t - 10, { duracao: porColuna ? 2 : 1.2, varrer: "esquerda" }); }
+      var atraso = canvas.hasAttribute("data-atraso") ? Number(canvas.getAttribute("data-atraso")) : 0.2 + (i % 6) * 0.12;
+      if (!feito) { feito = true; px.mudar(mapa, movimento ? t + atraso : t - 10, { duracao: porColuna ? 2 : 1.2, varrer: "esquerda" }); }
       px.desenhar(t, { calmo: !movimento, passada: -99 });
       return movimento;
     });
