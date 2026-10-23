@@ -1805,28 +1805,24 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
 @media (prefers-reduced-motion: reduce) { .moedas-trilho { animation: none; } }
 
 /* MARK: O podio do fim com a foto do bitcoin no meio (pedido do dono, 23/10/2026): a foto e a
-   principal, mais alta que as telas dos lados. O fundo dela e preto puro: com "lighten" sobre o
-   fundo da pagina, ele vira o proprio fundo, sem caixa em volta. O celular da foto fica a
-   direita do centro dela, e a margem esquerda maior o traz para o eixo da pagina. */
+   principal, mais alta que as telas dos lados, e a mao passa na frente da tela da esquerda. O
+   fundo preto da foto virou transparencia no proprio arquivo: sem caixa em volta e sem a tela
+   de tras aparecendo pela mao. O celular da foto fica a direita do centro dela, e a margem
+   esquerda maior o traz para o eixo da pagina. */
 .podio {
   --w: clamp(150px, 21vw, 270px); height: calc(var(--w) * 1.75); margin-top: clamp(28px, 4vw, 48px);
-  background: var(--void);
   -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent);
   mask-image: linear-gradient(180deg, #000 72%, transparent);
 }
 .podio .aparelho, .podio .aparelho.podio-lado { --w: inherit; }
 .podio .aparelho.podio-lado { margin-top: calc(var(--w) * 0.42); }
 .podio-foto {
-  position: relative; z-index: 2; flex: none; mix-blend-mode: lighten;
-  /* A mao nao chega na tela da esquerda (pedido do dono, 23/10/2026: o polegar passava por
-     baixo do saldo dela). A margem direita maior mantem o celular da foto no eixo. */
-  margin: calc(var(--w) * -0.56) calc(var(--w) * 0.19) 0 calc(var(--w) * -0.2);
+  position: relative; z-index: 2; flex: none;
+  margin: calc(var(--w) * -0.56) calc(var(--w) * -0.22) 0 calc(var(--w) * -0.62);
   width: calc(var(--w) * 2.05);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 86%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 86%, transparent);
 }
 .podio-foto img { display: block; width: 100%; height: auto; }
-/* No celular, so a foto, grande: as telas dos lados ficariam espremidas embaixo da mao. */
+/* No celular, so a foto, grande. */
 @media (max-width: 599px) {
   .podio { gap: 0; padding-inline: 0; height: 80vw; }
   .podio .aparelho.podio-lado { display: none; }
