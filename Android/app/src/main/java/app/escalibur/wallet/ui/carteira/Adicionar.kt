@@ -1,5 +1,9 @@
 package app.escalibur.wallet.ui.carteira
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
+import app.escalibur.wallet.ui.comp.SeloDaRede
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
@@ -32,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
@@ -79,7 +82,7 @@ fun AdicionarCarteira(primeira: Boolean, aoTerminar: () -> Unit) {
                 Text(t("Uma frase, um endereço em cada rede. As chaves ficam só neste celular."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
             }
             Column(Modifier.padding(top = Espaco.md)) {
-                LinhaDeOrigem(t("Importar com a senha da carteira"), t("Você já tem 12 ou 24 palavras de outra carteira."), Icones.teclado) { rota = "importar" }
+                LinhaDeOrigem(t("Importar com a senha da carteira"), t("Você já tem 12 ou 24 palavras de outra carteira."), Icones.palavras) { rota = "importar" }
                 LinhaDeOrigem(t("Importar de um envelope Escalibur"), t("O arquivo .esclbr e a senha do envelope."), Icones.envelope) { rota = "envelope" }
                 LinhaDeOrigem(t("Só observar um endereço"), t("Acompanhe um saldo sem poder enviar."), Icones.olho) { rota = "observar" }
             }
@@ -96,37 +99,50 @@ private fun LinhaDeOrigem(titulo: String, subtitulo: String, icone: ImageVector,
         Modifier.fillMaxWidth().clickable(onClick = acao).height(72.dp).padding(horizontal = Espaco.margem),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
     ) {
-        Box(Modifier.size(40.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) { Icone(icone, Paleta.tinta, tamanho = 19.dp) }
+        Box(Modifier.size(40.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) { Icone(icone, Color.White, tamanho = 18.dp) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(titulo, style = estilo(Tipo.linha), color = Paleta.tinta)
             Text(subtitulo, style = estilo(Tipo.nota), color = Paleta.tintaSuave)
         }
-        Icone(Icones.avancar, Paleta.tintaApagada, tamanho = 15.dp)
+        Icone(Icones.avancar, Paleta.tintaApagada, tamanho = 13.dp)
     }
 }
 
-/** O selo do app no centro e as redes em duas orbitas, girando devagar em sentidos opostos. */
+/**
+ * O selo do app no centro e as redes em duas orbitas, como o WalletOrbit do iOS: dentro as seis
+ * principais (34 dp, uma volta a cada 40 s), fora as doze seguintes da lista de redes (30 dp, uma
+ * volta a cada 60 s no sentido contrario). O selo entra crescendo, com uma mola.
+ */
 @Composable
 fun OrbitaDaCarteira(altura: Dp, modifier: Modifier = Modifier) {
-    val dentro = listOf("bitcoin", "ethereum", "solana", "ripple", "tron")
-    val fora = listOf("binancecoin", "the-open-network", "cardano", "stellar", "dogecoin", "polkadot", "sui", "near")
+    val principais = listOf("bitcoin", "ethereum", "solana", "xrpl", "tron", "ton")
+    val dentro = principais.mapNotNull { Redes.rede(it) }
+    val fora = Redes.todas.filter { it.id !in principais }.take(12)
     val giro = rememberInfiniteTransition(label = "orbita")
-    val tempo by giro.animateFloat(0f, (2 * PI * 20).toFloat(), infiniteRepeatable(tween(400_000, easing = LinearEasing)), label = "tempo")
-    Box(modifier.height(altura), contentAlignment = Alignment.Center) {
-        val raioDentro = altura * 0.27f
-        val raioFora = altura * 0.44f
-        Canvas(Modifier.size(altura)) {
-            drawCircle(Paleta.bordaForte, raioDentro.toPx(), style = Stroke(1.dp.toPx()))
-            drawCircle(Paleta.borda, raioFora.toPx(), style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(2.dp.toPx(), 6.dp.toPx()))))
+    val segundos by giro.animateFloat(0f, 120f, infiniteRepeatable(tween(120_000, easing = LinearEasing)), label = "tempo")
+    var apareceu by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { apareceu = true }
+    val entrada by androidx.compose.animation.core.animateFloatAsState(if (apareceu) 1f else 0f,
+        androidx.compose.animation.core.spring(dampingRatio = 0.72f, stiffness = 80f), label = "entrada")
+    BoxWithConstraints(modifier.height(altura).graphicsLayer { alpha = entrada.coerceIn(0f, 1f) }, contentAlignment = Alignment.Center) {
+        val raioFora = minOf(maxWidth, altura) / 2 - 20.dp
+        val raioDentro = raioFora * 0.66f
+        Canvas(Modifier.fillMaxSize()) {
+            drawCircle(Paleta.borda, raioFora.toPx(), style = Stroke(1.dp.toPx()))
+            drawCircle(Paleta.borda, raioDentro.toPx(), style = Stroke(1.dp.toPx()))
         }
-        dentro.forEachIndexed { indice, id ->
-            val angulo = indice.toDouble() / dentro.size * 2 * PI + tempo * 0.5
-            LogoDaMoeda(id, tamanho = altura * 0.13f, modifier = Modifier.offset(raioDentro * cos(angulo).toFloat(), raioDentro * sin(angulo).toFloat()))
+        val anguloFora = -segundos / 60.0 * 2 * PI
+        val anguloDentro = segundos / 40.0 * 2 * PI
+        fora.forEachIndexed { indice, rede ->
+            val angulo = anguloFora + indice.toDouble() / fora.size * 2 * PI
+            SeloDaRede(rede.id, rede.coingecko, tamanho = 30.dp,
+                       modifier = Modifier.offset(raioFora * cos(angulo).toFloat(), raioFora * sin(angulo).toFloat()))
         }
-        fora.forEachIndexed { indice, id ->
-            val angulo = indice.toDouble() / fora.size * 2 * PI + 0.3 - tempo * 0.32
-            LogoDaMoeda(id, tamanho = altura * 0.1f, modifier = Modifier.offset(raioFora * cos(angulo).toFloat(), raioFora * sin(angulo).toFloat()))
+        dentro.forEachIndexed { indice, rede ->
+            val angulo = anguloDentro + indice.toDouble() / dentro.size * 2 * PI
+            SeloDaRede(rede.id, rede.coingecko, tamanho = 34.dp,
+                       modifier = Modifier.offset(raioDentro * cos(angulo).toFloat(), raioDentro * sin(angulo).toFloat()))
         }
-        SeloDaCarteira(altura * 0.22f)
+        Box(Modifier.graphicsLayer { val escala = 0.7f + 0.3f * entrada; scaleX = escala; scaleY = escala }) { SeloDaCarteira(72.dp) }
     }
 }

@@ -204,10 +204,13 @@ fun GraficoDePreco(
                         return Offset(x, altura - espacoDoRotulo - (altura - espacoDoRotulo * 2) * fracao)
                     }
                     // O brilho desfocado embaixo da linha (o desfoque vale do Android 12 em diante).
+                    // Com o dedo no grafico, so ate o ponto escolhido.
                     Canvas(Modifier.fillMaxSize().blur(14.dp)) {
                         val brilho = Path()
                         mostrados.indices.forEach { i -> val p = lugar(i); if (i == 0) brilho.moveTo(p.x, p.y) else brilho.lineTo(p.x, p.y) }
-                        drawPath(brilho, cor.copy(alpha = 0.34f), style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+                        clipRect(right = indice?.let { lugar(it).x } ?: size.width) {
+                            drawPath(brilho, cor.copy(alpha = 0.34f), style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+                        }
                     }
                     Canvas(
                         Modifier.fillMaxSize().pointerInput(mostrados) {
@@ -230,7 +233,12 @@ fun GraficoDePreco(
                     ) {
                         val linha = Path()
                         mostrados.indices.forEach { i -> val p = lugar(i); if (i == 0) linha.moveTo(p.x, p.y) else linha.lineTo(p.x, p.y) }
-                        drawPath(linha, cor, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+                        val traco = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        // Com o dedo no grafico, o que vem depois do ponto escolhido fica cinza
+                        // apagado: o grafico "volta no tempo" ate ali (pedido do dono, 22/10/2026).
+                        val ate = indice?.let { lugar(it).x }
+                        if (ate != null) drawPath(linha, Paleta.bordaForte, style = traco)
+                        clipRect(right = ate ?: size.width) { drawPath(linha, cor, style = traco) }
                         indice?.let { i ->
                             val p = lugar(i)
                             drawLine(Paleta.tintaApagada, Offset(p.x, espacoDoRotulo), Offset(p.x, size.height - espacoDoRotulo), 1.dp.toPx())

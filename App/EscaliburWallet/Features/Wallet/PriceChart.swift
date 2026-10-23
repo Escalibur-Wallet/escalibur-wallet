@@ -85,20 +85,29 @@ struct PriceChart: View {
                 return CGPoint(x: x, y: plot.maxY - plot.height * CGFloat(fraction))
             }
             ZStack(alignment: .topLeading) {
-                Canvas { context, _ in
+                Canvas { context, size in
                     var line = Path()
                     for index in data.indices {
                         index == 0 ? line.move(to: place(index)) : line.addLine(to: place(index))
                     }
-                    // So a linha e o brilho: a area em pontinhos embaixo dela saiu (pedido do
-                    // dono, 14/10/2026).
-                    // O brilho: a linha larga e desfocada por baixo da linha nitida, 38% mais
-                    // fraco desde 15/10/2026 (pedido do dono).
-                    context.drawLayer { glow in
-                        glow.addFilter(.blur(radius: 14))
-                        glow.stroke(line, with: .color(color.opacity(0.34)), style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round))
+                    let lineStyle = StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                    // Com o dedo no grafico, o que vem depois do ponto escolhido fica cinza
+                    // apagado: o grafico "volta no tempo" ate ali (pedido do dono, 22/10/2026).
+                    let past = selection.flatMap { selected in data.firstIndex(where: { $0.time == selected.time }) }
+                        .map { Path(CGRect(x: 0, y: 0, width: place($0).x, height: size.height)) }
+                    if past != nil { context.stroke(line, with: .color(Palette.edgeStrong), style: lineStyle) }
+                    context.drawLayer { layer in
+                        if let past { layer.clip(to: past) }
+                        // So a linha e o brilho: a area em pontinhos embaixo dela saiu (pedido do
+                        // dono, 14/10/2026).
+                        // O brilho: a linha larga e desfocada por baixo da linha nitida, 38% mais
+                        // fraco desde 15/10/2026 (pedido do dono).
+                        layer.drawLayer { glow in
+                            glow.addFilter(.blur(radius: 14))
+                            glow.stroke(line, with: .color(color.opacity(0.34)), style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round))
+                        }
+                        layer.stroke(line, with: .color(color), style: lineStyle)
                     }
-                    context.stroke(line, with: .color(color), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
 
                     if let selection, let index = data.firstIndex(where: { $0.time == selection.time }) {
                         let point = place(index)

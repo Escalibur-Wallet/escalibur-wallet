@@ -181,6 +181,9 @@ object Icones {
     val setaCirculo = traco("setaCirculo", "M12 21 A9 9 0 1 0 12 3 A9 9 0 1 0 12 21 Z", "M7.5 12 H16 M12.5 8.5 L16 12 L12.5 15.5")
     val circulo = traco("circulo", "M12 21.5 A9.5 9.5 0 1 0 12 2.5 A9.5 9.5 0 1 0 12 21.5 Z", espessura = 1.5f)
     /** O keyboard do iOS: o teclado de cantos redondos com duas fileiras de seis teclas e a de baixo com a barra de espaco. */
+    /** text.word.spacing do iOS: palavras em quatro linhas. */
+    val palavras = traco("palavras", "M3 4.5 H13.5", "M16.7 4.5 H20.9", "M3 9.5 H4.7", "M8 9.5 H12.6", "M16.2 9.5 H20.9",
+                         "M3 14.6 H6.8", "M10.4 14.6 H20.9", "M3 19.5 H12.9", espessura = 2.1f)
     val teclado = tracoComPonta("teclado", "M5 5.6 H19 A2.6 2.6 0 0 1 21.6 8.2 V15.8 A2.6 2.6 0 0 1 19 18.4 H5 A2.6 2.6 0 0 1 2.4 15.8 V8.2 A2.6 2.6 0 0 1 5 5.6 Z",
         (0..5).joinToString(" ") { i -> val x = 5.1f + i * 2.76f; "M$x 8.6 h1.3 v1.3 h-1.3 Z M$x 11.3 h1.3 v1.3 h-1.3 Z" } +
             " M5.1 14 h1.3 v1.3 h-1.3 Z M8.1 14 H15.9 V15.3 H8.1 Z M17.6 14 h1.3 v1.3 h-1.3 Z", 1.6f)

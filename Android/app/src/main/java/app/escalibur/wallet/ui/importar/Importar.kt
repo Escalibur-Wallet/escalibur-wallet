@@ -94,6 +94,7 @@ import app.escalibur.wallet.ui.comp.Vidros
 import app.escalibur.wallet.ui.comp.vidro
 import app.escalibur.wallet.ui.comp.rememberPalavra
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
+import app.escalibur.wallet.ui.novacarteira.Responsabilidade
 import app.escalibur.wallet.ui.novacarteira.VerificacaoDoAparelho
 import app.escalibur.wallet.ui.objetos
 import app.escalibur.wallet.ui.receber.opcional
@@ -201,10 +202,11 @@ fun TextFieldState.bytes(): ByteArray {
     return saida
 }
 
-/** Importar com a senha da carteira: a checagem do aparelho, as palavras e a conferencia. */
+/** Importar com a senha da carteira: o aceite, a checagem do aparelho, as palavras e a conferencia
+ * (a ordem do AddWalletView do iOS). */
 @Composable
 fun FluxoDeImportar(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
-    var etapa by remember { mutableStateOf("checagem") }
+    var etapa by remember { mutableStateOf("aceite") }
     val entrada = remember { EntradaDaFrase() }
     val passphrase = remember { TextFieldState() }
     val repeticao = remember { TextFieldState() }
@@ -219,8 +221,15 @@ fun FluxoDeImportar(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
     }
     Box(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
         when (etapa) {
-            "checagem" -> {
+            "aceite" -> {
                 BackHandler(onBack = aoCancelar)
+                Column(Modifier.fillMaxSize()) {
+                    CabecalhoDeFolha("", aoCancelar)
+                    Responsabilidade(t("Conferir o aparelho")) { etapa = "checagem" }
+                }
+            }
+            "checagem" -> {
+                BackHandler { etapa = "aceite" }
                 Column(Modifier.fillMaxSize()) {
                     CabecalhoDeFolha("", aoCancelar)
                     VerificacaoDoAparelho(t("Deslize para digitar as palavras"), criando = false) { etapa = "frase" }
@@ -502,9 +511,9 @@ internal fun TelaDaFrase(
                 Modifier.padding(top = Espaco.lg).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.base),
                 verticalArrangement = Arrangement.spacedBy(Espaco.md),
             ) {
-                Garantia(Icones.cadeado, t("Escondidas nos campos"), t("Segure uma palavra para conferir. As sugestões mostram a palavra para você escolher."))
+                Garantia(Icones.cadeadoCheio, t("Escondidas nos campos"), t("Segure uma palavra para conferir. As sugestões mostram a palavra para você escolher."))
                 Garantia(Icones.celular, t("Só neste celular"), t("O app não manda as palavras para lugar nenhum, e ninguém da Escalibur pede estas palavras."))
-                Garantia(Icones.globo, t("Sem internet nesta tela"),
+                Garantia(Icones.wifiRiscado, t("Sem internet nesta tela"),
                          t("Enquanto ela está aberta, o app não fala com rede nenhuma. A conferência é feita aqui: a última palavra traz uma soma de verificação das outras, calculada no celular com a lista de 2048 palavras que vem dentro do app."))
             }
         }
