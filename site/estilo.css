@@ -1721,7 +1721,7 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
 /* MARK: "Seguranca que da para conferir" com o codigo do assinador (redesenho do dono, 23/10/2026):
    o texto a esquerda e, a direita, o trecho real numa janela; uma faixa de luz confere de cima
    para baixo e as duas travas ganham um selo. Destaque monocromatico, como o resto do site. */
-.conferir-grade { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); gap: clamp(32px, 5vw, 80px); align-items: center; }
+.conferir-grade { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr); gap: clamp(32px, 5vw, 80px); align-items: center; }
 .conferir-texto .lead { margin-top: 18px; }
 .conferir-pontos { list-style: none; padding: 0; margin: 26px 0 24px; display: grid; gap: 12px; }
 .conferir-pontos li { position: relative; padding-left: 30px; color: var(--ink-soft); font-size: 16px; line-height: 1.5; }
@@ -1772,6 +1772,7 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
 .janela-codigo.pronta .janela-pe { color: var(--ink); }
 @media (max-width: 899px) {
   .conferir-grade { grid-template-columns: minmax(0, 1fr); }
+  .conferir-texto { order: -1; }
   .janela-corpo { font-size: 11px; }
   .trava-selo { display: none; }
 }
