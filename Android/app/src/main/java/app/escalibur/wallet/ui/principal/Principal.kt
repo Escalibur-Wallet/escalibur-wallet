@@ -174,10 +174,16 @@ fun Principal() {
     var ofereceuBiometria by rememberSaveable { mutableStateOf(false) }
     var primeiraVez by rememberSaveable { mutableStateOf(estado.carteiras.isEmpty()) }
     if (estado.carteiras.isEmpty() || primeiraVez) {
-        if (!ofereceuBiometria && estado.biometriaPronta && !estado.biometriaLigada && !estado.reforcado) {
-            OfertaDeBiometria { ofereceuBiometria = true }
-        } else {
-            AdicionarCarteira(primeira = true) { primeiraVez = false }
+        // Sem carteira ainda nao ha abas, mas as folhas que a primeira abre (a lista de palavras,
+        // o "Sobre o Safe Keyboard") vem da mesma pilha: as camadas ficam por cima daqui tambem.
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            VoltarDoTopo()
+            if (!ofereceuBiometria && estado.biometriaPronta && !estado.biometriaLigada && !estado.reforcado) {
+                OfertaDeBiometria { ofereceuBiometria = true }
+            } else {
+                AdicionarCarteira(primeira = true) { primeiraVez = false }
+            }
+            Camadas(Navegacao.sobre, constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
         }
         return
     }
