@@ -117,8 +117,9 @@
     cada("[data-revelar]", function (el) { revelar.observe(el); });
   }
 
-  // MARK: Abertura: o palco fica fixo; o titulo sobe e some, o iPhone sobe ate o meio e a
-  // legenda aparece. As moedas 3D leem o mesmo progresso (window.EscaliburAbertura).
+  // MARK: Abertura: o palco fica fixo; o titulo sobe e some, o iPhone sobe ate o meio, a
+  // legenda aparece decifrando e, no fim, a pagina entra no iPhone (a tela do app cresce ate
+  // cobrir tudo, no mesmo preto do app). As moedas 3D leem o mesmo progresso.
   var abertura = document.querySelector(".abertura");
   if (abertura && movimento) {
     var palco = abertura.querySelector(".abertura-palco");
@@ -126,17 +127,27 @@
     var aparelhoAbertura = abertura.querySelector(".abertura-aparelho");
     var telaAbertura = aparelhoAbertura.querySelector(".tela");
     var legenda = abertura.querySelector(".abertura-legenda");
-    var medida = null, ultimo = -1;
+    var tituloLegenda = legenda.querySelector("[data-cifra]");
+    var imersao = document.createElement("div");
+    imersao.className = "abertura-imersao";
+    palco.appendChild(imersao);
+    var medida = null, ultimo = -1, legendaDecifrada = false;
     var medirAbertura = function () {
       aparelhoAbertura.style.transform = "";
       var rp = palco.getBoundingClientRect(), ra = aparelhoAbertura.getBoundingClientRect();
       var largo = window.innerWidth >= 900;
       var alturaPalco = rp.height;
       var destino = largo ? (alturaPalco - ra.height) / 2 : Math.max(alturaPalco - ra.height - 28, (alturaPalco - ra.height) / 2 + 40);
+      var sobe = destino - (ra.top - rp.top);
+      // A imersao: do lugar de chegada, o centro da tela do app vai ao centro do palco e cresce
+      // ate a tela cobrir o palco inteiro.
+      var centroChegada = ra.top - rp.top + sobe + ra.height / 2;
       medida = {
         inicio: abertura.getBoundingClientRect().top + window.pageYOffset,
         alcance: Math.max(1, abertura.offsetHeight - alturaPalco),
-        sobe: destino - (ra.top - rp.top),
+        sobe: sobe,
+        centraliza: alturaPalco / 2 - centroChegada,
+        cresce: Math.max(rp.width / (ra.width * 0.93), alturaPalco / (ra.height * 0.96)) * 1.12,
       };
       ultimo = -1;
     };
@@ -153,54 +164,70 @@
       if (p === ultimo) return false;
       ultimo = p;
       window.EscaliburAbertura.p = p;
-      var a = suave(0, 0.3, p);
+      var a = suave(0, 0.26, p);
       texto.style.transform = "translate3d(0," + (-a * 110).toFixed(1) + "px,0) scale(" + (1 - a * 0.05).toFixed(4) + ")";
       texto.style.opacity = (1 - a).toFixed(3);
       texto.style.visibility = a >= 1 ? "hidden" : "";
-      var b = suave(0.06, 0.48, p);
-      aparelhoAbertura.style.transform = "translate3d(0," + (medida.sobe * b).toFixed(1) + "px,0) scale(" + (0.92 + 0.08 * b).toFixed(4) + ")";
-      var c = suave(0.72, 0.88, p);
+      var b = suave(0.05, 0.42, p);
+      var z = suave(0.82, 0.99, p);
+      var escala = (0.92 + 0.08 * b) * (1 + (medida.cresce - 1) * z * z);
+      aparelhoAbertura.style.transform = "translate3d(0," + (medida.sobe * b + medida.centraliza * suave(0.78, 0.9, p)).toFixed(1) + "px,0) scale(" + escala.toFixed(4) + ")";
+      imersao.style.opacity = suave(0.93, 1, p).toFixed(3);
+      var c = suave(0.62, 0.72, p) * (1 - suave(0.8, 0.86, p));
       legenda.style.opacity = c.toFixed(3);
+      legenda.classList.toggle("visivel", c > 0.5);
+      if (c > 0.35 && !legendaDecifrada) { legendaDecifrada = true; decifrar(tituloLegenda, 0.9); }
+      if (c < 0.02 && p < 0.6) legendaDecifrada = false;
       var largo = e.vw >= 900;
       legenda.style.transform = (largo ? "translate3d(0,calc(-50% + " : "translate3d(0,") + ((1 - c) * 24).toFixed(1) + "px" + (largo ? ")" : "") + ",0)";
       return false;
     });
   }
 
-  // MARK: Manifesto: as palavras acendem, uma a uma, conforme o paragrafo passa pela tela.
+  // MARK: Manifesto: cada palavra comeca cifrada, em glifos que trocam como os do app, e
+  // decifra quando a rolagem chega nela.
   var manifesto = document.querySelector("[data-palavras]");
   if (manifesto && movimento) {
     var inteiro = manifesto.textContent.trim();
-    var palavras = inteiro.split(/\s+/);
+    var palavrasM = inteiro.split(/\s+/);
     manifesto.textContent = "";
     // O leitor de tela le a frase inteira; as palavras soltas sao so o desenho.
     var leitor = document.createElement("span");
     leitor.className = "so-leitor";
     leitor.textContent = inteiro;
     manifesto.appendChild(leitor);
-    var spans = palavras.map(function (palavra, i) {
+    var palavrasCifra = palavrasM.map(function (palavra, i) {
       var s = document.createElement("span");
-      s.className = "palavra";
+      s.className = "palavra cifrada";
       s.setAttribute("aria-hidden", "true");
-      s.textContent = palavra;
+      var real = document.createElement("span");
+      real.className = "real";
+      real.textContent = palavra;
+      var vista = document.createElement("span");
+      vista.className = "vista";
+      s.appendChild(real);
+      s.appendChild(vista);
       manifesto.appendChild(s);
-      if (i < palavras.length - 1) manifesto.appendChild(document.createTextNode(" "));
-      return s;
+      if (i < palavrasM.length - 1) manifesto.appendChild(document.createTextNode(" "));
+      return { el: s, vista: vista, texto: palavra, aberta: false, desde: -9, mostrado: "" };
     });
-    var ultimoManifesto = -1;
     window.EscaliburRelogio.registrar(function (e) {
       var r = manifesto.getBoundingClientRect();
-      if (r.bottom < -e.vh || r.top > e.vh * 2) return false;
-      var p = limitar((e.vh * 0.88 - r.top) / (e.vh * 0.5 + r.height * 0.6), 0, 1);
-      var passo = Math.round(p * 400);
-      if (passo === ultimoManifesto) return false;
-      ultimoManifesto = passo;
-      var n = spans.length;
-      for (var i = 0; i < n; i++) {
-        var o = 0.22 + 0.78 * limitar(p * (n + 3) - i, 0, 1);
-        spans[i].style.opacity = o.toFixed(3);
-      }
-      return false;
+      if (r.bottom < -40 || r.top > e.vh + 40) return false;
+      var p = limitar((e.vh * 0.9 - r.top) / (e.vh * 0.45 + r.height * 0.55), 0, 1);
+      var n = palavrasCifra.length, tique = Math.floor(e.t * 11);
+      palavrasCifra.forEach(function (w, i) {
+        var abrir = p * (n + 2) - i > 0.5;
+        if (abrir !== w.aberta) { w.aberta = abrir; w.desde = e.t; w.el.classList.toggle("cifrada", !abrir); }
+        var k = w.aberta ? (e.t - w.desde) / 0.32 : 0;
+        var saida = "";
+        for (var j = 0; j < w.texto.length; j++) {
+          var ch = w.texto[j];
+          saida += w.aberta && (j / w.texto.length < k || /[.,]/.test(ch)) ? ch : (/[.,]/.test(ch) ? ch : glifoDe(i * 31 + j, tique + i));
+        }
+        if (saida !== w.mostrado) { w.vista.textContent = saida; w.mostrado = saida; }
+      });
+      return true;
     });
   }
 
@@ -334,7 +361,8 @@
   // CoinGecko pelo servidor (cache de 60 s); no endereco antigo, sem Worker, e o retrato da
   // publicacao. O navegador de quem visita nao fala com mais ninguem.
   var precos = null;
-  var fiat = "brl";
+  // Tudo em dolar (pedido do dono, 23/10/2026).
+  var fiat = "usd";
   var escolhida = "bitcoin";
   var ouvintesPreco = [];
   var lista = document.getElementById("cotacoes");
@@ -366,7 +394,7 @@
     var vivo = !!(precos && precos.ao_vivo);
     estadoPrecos.classList.toggle("ao-vivo", vivo);
     if (precos && precos.hora && Object.keys(precos.moedas || {}).length) {
-      texto.textContent = vivo ? "Ao vivo, atualizado às " + horaCurta(precos.hora)
+      texto.textContent = vivo ? "Ao vivo, atualizado às " + horaCurta(precos.hora) + (precos.fonte && precos.fonte !== "CoinGecko" ? ", pelo " + precos.fonte : "")
         : "Preços de " + diaCurto(precos.hora) + " às " + horaCurta(precos.hora) + ", da publicação do site";
     } else {
       texto.textContent = "Os preços aparecem quando o servidor responde.";
@@ -419,6 +447,10 @@
       area.setAttribute("d", caminho + " L600 180 L0 180 Z");
       grafico.classList.toggle("baixa", d.linha[d.linha.length - 1] < d.linha[0]);
       pintarVariacao(destaque.querySelector("[data-destaque-semana]"), (d.linha[d.linha.length - 1] / d.linha[0] - 1) * 100);
+      // A semana vem da hora em que foi lida: se ja passou de 3 horas, a legenda diz ate quando.
+      var rotuloSemana = grafico.querySelector(".apoio").firstChild;
+      var horaLinha = precos && precos.linha_hora ? new Date(precos.linha_hora) : null;
+      rotuloSemana.nodeValue = horaLinha && Date.now() - horaLinha > 3 * 3600 * 1000 ? "Semana até " + diaCurto(precos.linha_hora) : "Últimos 7 dias";
     } else {
       traco.setAttribute("d", "");
       area.setAttribute("d", "");
@@ -454,14 +486,6 @@
         document.dispatchEvent(new CustomEvent("escalibur:moeda", { detail: { id: escolhida } }));
       });
     }, lista);
-    cada("[data-fiat]", function (botao) {
-      botao.addEventListener("click", function () {
-        fiat = botao.getAttribute("data-fiat");
-        cada("[data-fiat]", function (b) { b.setAttribute("aria-pressed", String(b === botao)); });
-        pintarLista();
-        ouvintesPreco.forEach(function (fn) { fn(); });
-      });
-    });
     pintarDestaque();
     buscarPrecos();
     if (observa) {
@@ -483,6 +507,7 @@
   function Escolha(el, rotulo) {
     this.el = el;
     this.rotulo = rotulo;
+    this.nota = el.getAttribute("data-nota");
     this.opcoes = [];
     this.valor = null;
     this.botao = document.createElement("button");
@@ -498,6 +523,10 @@
     this.botao.setAttribute("aria-controls", this.menu.id);
     el.appendChild(this.botao);
     el.appendChild(this.menu);
+    // No celular a lista abre como folha embaixo, sobre um fundo que fecha ao toque.
+    this.fundo = document.createElement("div");
+    this.fundo.className = "menu-fundo";
+    el.appendChild(this.fundo);
     var self = this;
     this.botao.addEventListener("click", function () { self.alternar(); });
     this.botao.addEventListener("keydown", function (e) {
@@ -529,6 +558,18 @@
   Escolha.prototype.montarMenu = function () {
     var self = this;
     this.menu.textContent = "";
+    var alca = document.createElement("span");
+    alca.className = "menu-alca";
+    this.menu.appendChild(alca);
+    var grade = document.createElement("div");
+    grade.className = "menu-grade" + (this.opcoes.length < 6 ? " uma" : "");
+    this.menu.appendChild(grade);
+    if (this.nota) {
+      var nota = document.createElement("p");
+      nota.className = "menu-nota";
+      nota.textContent = this.nota;
+      this.menu.appendChild(nota);
+    }
     this.opcoes.forEach(function (o) {
       var item = document.createElement("button");
       item.type = "button";
@@ -541,13 +582,14 @@
       if (o.detalhe) { var s = document.createElement("small"); s.textContent = o.detalhe; texto.appendChild(s); }
       item.appendChild(texto);
       item.addEventListener("click", function () { self.fechar(true); if (self.aoEscolher) self.aoEscolher(o.id); });
-      self.menu.appendChild(item);
+      grade.appendChild(item);
     });
   };
   Escolha.prototype.abrir = function () {
     abertos.slice().forEach(function (outro) { outro.fechar(false); });
     this.montarMenu();
     this.menu.classList.add("aberto");
+    this.fundo.classList.add("aberto");
     this.botao.setAttribute("aria-expanded", "true");
     abertos.push(this);
     var marcado = this.menu.querySelector('[aria-selected="true"]') || this.menu.querySelector(".opcao-menu");
@@ -556,6 +598,7 @@
   Escolha.prototype.fechar = function (devolverFoco) {
     if (!this.menu.classList.contains("aberto")) return;
     this.menu.classList.remove("aberto");
+    this.fundo.classList.remove("aberto");
     this.botao.setAttribute("aria-expanded", "false");
     abertos = abertos.filter(function (a) { return a !== this; }, this);
     if (devolverFoco) this.botao.focus();
@@ -564,7 +607,7 @@
     if (this.menu.classList.contains("aberto")) this.fechar(true); else this.abrir();
   };
   document.addEventListener("click", function (e) {
-    abertos.slice().forEach(function (a) { if (!a.el.contains(e.target)) a.fechar(false); });
+    abertos.slice().forEach(function (a) { if (!a.el.contains(e.target) || e.target === a.fundo) a.fechar(false); });
   });
 
   // MARK: A demonstracao da troca e da ponte. Os dados (redes com troca, tokens conferidos
@@ -707,6 +750,381 @@
     contaPonte();
   }
 
+  // MARK: Pixels que cifram: a mesma linguagem do app (PixelFill, CipherEmblem). Uma grade
+  // de pixels cinza, cada um trocando de tom no seu compasso, como bits de um texto cifrado;
+  // os desenhos (o PIN, a memoria, o chip, a chave, o cadeado) se montam e se desfazem pixel
+  // a pixel, com uma passada clara correndo. Sem sorteio: o hash do lugar decide o tom.
+  function ruido(a, b, c) {
+    var h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 1274126177)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1103515245);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967295;
+  }
+  function suaveT(t) { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); }
+
+  // Um desenho em texto: "#" aceso, "+" meio aceso, "." apagado.
+  function deTexto(linhas, cols, rows, x0, y0, escala) {
+    var m = new Float32Array(cols * rows), s = escala || 1;
+    linhas.forEach(function (linha, y) {
+      for (var x = 0; x < linha.length; x++) {
+        var v = linha[x] === "#" ? 1 : linha[x] === "+" ? 0.55 : 0;
+        if (!v) continue;
+        for (var dy = 0; dy < s; dy++) for (var dx = 0; dx < s; dx++) {
+          var cx = x0 + x * s + dx, cy = y0 + y * s + dy;
+          if (cx >= 0 && cy >= 0 && cx < cols && cy < rows) m[cy * cols + cx] = v;
+        }
+      }
+    });
+    return m;
+  }
+
+  function Pixels(canvas, cols, rows, opcoes) {
+    opcoes = opcoes || {};
+    this.canvas = canvas;
+    this.g = canvas.getContext("2d");
+    this.cols = cols; this.rows = rows;
+    this.n = cols * rows;
+    this.alvo = new Float32Array(this.n);
+    this.de = new Float32Array(this.n);
+    this.atual = new Float32Array(this.n);
+    this.inicio = new Float32Array(this.n);
+    this.fundo = opcoes.fundo === undefined ? 0.06 : opcoes.fundo;
+    this.ritmo = opcoes.ritmo || 6;
+    // Quanto o tom aceso varia com a cifra: nos icones, menos, para o desenho ler.
+    this.cifra = opcoes.cifra === undefined ? 0.42 : opcoes.cifra;
+    this.base = 0.84 - this.cifra;
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.agitado = 0;
+    this.medir();
+  }
+  Pixels.prototype.medir = function () {
+    var r = this.canvas.getBoundingClientRect();
+    this.w = Math.max(1, r.width); this.h = Math.max(1, r.height);
+    var w = Math.round(this.w * this.dpr), h = Math.round(this.h * this.dpr);
+    if (this.canvas.width !== w || this.canvas.height !== h) { this.canvas.width = w; this.canvas.height = h; }
+  };
+  // Troca o desenho: cada pixel muda no seu tempo, a partir de `centro` (ou ao acaso).
+  Pixels.prototype.mudar = function (mapa, agora, opcoes) {
+    opcoes = opcoes || {};
+    var dur = opcoes.duracao || 0.9, cx = (this.cols - 1) / 2, cy = (this.rows - 1) / 2, maxd = Math.hypot(cx, cy);
+    for (var i = 0; i < this.n; i++) {
+      var x = i % this.cols, y = (i / this.cols) | 0;
+      var ordem = opcoes.varrer === "esquerda" ? x / this.cols : opcoes.varrer === "acaso" ? ruido(x, y, 77) : Math.hypot(x - cx, y - cy) / maxd;
+      this.de[i] = this.atual[i];
+      this.alvo[i] = mapa[i];
+      this.inicio[i] = agora + ordem * dur * 0.75 + ruido(x, y, 3) * dur * 0.25;
+    }
+  };
+  Pixels.prototype.desenhar = function (t, efeitos) {
+    var g = this.g, cols = this.cols, rows = this.rows;
+    var passo = Math.min(this.w / cols, this.h / rows) * this.dpr;
+    var lado = passo * 0.8, ox = (this.canvas.width - passo * cols) / 2 + (passo - lado) / 2, oy = (this.canvas.height - passo * rows) / 2 + (passo - lado) / 2;
+    g.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    var niveis = 24, caminhos = [];
+    for (var k = 0; k < niveis; k++) caminhos.push([]);
+    var varre = efeitos && efeitos.passada !== undefined ? efeitos.passada : ((t / 2.4) % 1) * (cols + 16) - 8;
+    var calmo = efeitos && efeitos.calmo;
+    for (var i = 0; i < this.n; i++) {
+      var x = i % cols, y = (i / cols) | 0;
+      var p = suaveT((t - this.inicio[i]) / 0.42);
+      var aceso = this.de[i] + (this.alvo[i] - this.de[i]) * p;
+      this.atual[i] = aceso;
+      // O tom cifrado deste pixel agora: dois tons do hash, cruzados devagar, cada um no seu compasso.
+      var fase = ruido(x, y, 0x9e37);
+      var bit = 0.5;
+      if (!calmo) {
+        var batida = t * this.ritmo * (0.6 + 0.8 * fase) + fase * 8, k0 = Math.floor(batida), m = suaveT(batida - k0);
+        var a = ruido(x, y, k0), b = ruido(x, y, k0 + 1);
+        bit = a + (b - a) * m;
+      }
+      // Na troca, os pixels a caminho acendem mais: a frente que encaixa.
+      // So nos pixels que mudam: os outros nao piscam com a troca.
+      var frente = p > 0 && p < 1 ? Math.sin(p * Math.PI) * Math.abs(this.alvo[i] - this.de[i]) : 0;
+      var tom = this.fundo + aceso * (this.base + this.cifra * bit) + frente * 0.35 * bit;
+      if (!calmo) {
+        var d = (x - varre + (y - rows / 2) * 0.35) / 4;
+        tom += 0.18 * Math.exp(-d * d) * aceso;
+      }
+      if (efeitos && efeitos.extra) tom += efeitos.extra(x, y, aceso, bit) || 0;
+      var nivel = Math.max(0, Math.min(niveis - 1, Math.round(tom * (niveis - 1))));
+      if (tom > 0.02) caminhos[nivel].push(i);
+    }
+    for (k = 1; k < niveis; k++) {
+      var lista = caminhos[k];
+      if (!lista.length) continue;
+      var v = Math.round(Math.pow(k / (niveis - 1), 0.9) * 245 + 4);
+      g.fillStyle = "rgb(" + v + "," + v + "," + (v + 2) + ")";
+      g.beginPath();
+      for (var j = 0; j < lista.length; j++) {
+        var c = lista[j];
+        g.rect(ox + (c % cols) * passo, oy + ((c / cols) | 0) * passo, lado, lado);
+      }
+      g.fill();
+    }
+  };
+
+  // Os desenhos das cenas, numa grade de 36 por 36.
+  var G = 36;
+  function moldura() {
+    var m = new Float32Array(G * G);
+    for (var y = 2; y <= 33; y++) for (var x = 7; x <= 28; x++) {
+      var borda = x === 7 || x === 28 || y === 2 || y === 33;
+      var canto = (x === 7 || x === 28) && (y === 2 || y === 33);
+      if (borda && !canto) m[y * G + x] = 0.32;
+    }
+    for (x = 15; x <= 20; x++) m[4 * G + x] = 0.32;
+    return m;
+  }
+  function junta(a, b) { var m = new Float32Array(a.length); for (var i = 0; i < a.length; i++) m[i] = Math.max(a[i], b[i]); return m; }
+  var CENAS_CHAVE = [
+    // O PIN: seis pontos.
+    deTexto(["##.##.##.##.##.##", "##.##.##.##.##.##"], G, G, 9, 17),
+    // Argon2id: um bloco de memoria, cheio.
+    (function () { var m = new Float32Array(G * G); for (var y = 9; y <= 26; y++) for (var x = 10; x <= 25; x++) m[y * G + x] = 0.82; return m; })(),
+    // O chip: o quadrado com o miolo e as pernas.
+    deTexto([
+      "...#..#..#...", "...#..#..#...", "#############", "#...........#", "#...........#", "##..#####..##",
+      "#...#...#...#", "#...#.#.#...#", "##..#...#..##", "#...#####...#", "#...........#", "#############",
+      "...#..#..#...", "...#..#..#..."], G, G, 11, 11),
+    // A chave raiz.
+    deTexto([
+      ".#####.........", "##...##........", "#.....#........", "#.....#########", "#.....#....#..#",
+      "##...##....#..#", ".#####........."], G, G, 10, 14),
+    // A assinatura: o visto, e a chave apagada.
+    deTexto([
+      "...........###", "..........###.", ".........###..", "........###...", "#......###....",
+      "##....###.....", ".##..###......", "..#####.......", "...###........"], G, G, 11, 13),
+  ];
+  var CADEADO = deTexto(["..#####..", ".##...##.", ".#.....#.", ".#.....#.", "#########", "#########", "####.####", "####.####", "#########", "#########"], 32, 32, 7, 6, 2);
+  function anel(cols, raio, cx, cy) {
+    var lista = [];
+    for (var k = 0; k < 40; k++) {
+      var a = k / 40 * Math.PI * 2 - Math.PI / 2;
+      lista.push([Math.round(cx + Math.cos(a) * raio), Math.round(cy + Math.sin(a) * raio)]);
+    }
+    return lista;
+  }
+  // Os icones da Privacidade, numa grade de 16: o desenho em "#", e o risco do "sem" em "+"
+  // (um tom abaixo), com uma folga apagada dos dois lados para o desenho continuar lendo.
+  var ICONES = {
+    conta: [
+      "................", "......####......", ".....######.....", ".....######.....", ".....######.....", "......####......",
+      "................", "....########....", "...##########...", "..############..", "..############..", "..############..",
+      "................", "................", "................", "................"],
+    olho: [
+      "................", "................", "................", ".....######.....", "...###....###...", "..##..####..##..",
+      ".##..######..##.", ".##..######..##.", "..##..####..##..", "...###....###...", ".....######.....", "................",
+      "................", "................", "................", "................"],
+    servidores: [
+      "................", ".##############.", ".#............#.", ".#.##.........#.", ".#............#.", ".##############.",
+      "................", ".##############.", ".#............#.", ".#.##.........#.", ".#............#.", ".##############.",
+      "................", "......####......", "....########....", "................"],
+    site: [
+      "................", ".##############.", ".#.#.#........#.", ".##############.", ".#............#.", ".#..########..#.",
+      ".#............#.", ".#..######....#.", ".#............#.", ".#..########..#.", ".#............#.", ".#..####......#.",
+      ".#............#.", ".##############.", "................", "................"],
+  };
+  function icone(nome) {
+    var m = deTexto(ICONES[nome], 16, 16, 0, 0);
+    if (nome === "conta" || nome === "olho") {
+      for (var y = 1; y < 15; y++) for (var x = 1; x < 15; x++) {
+        var d = x - y;
+        if (d === 0) m[y * 16 + x] = 1;
+        else if (Math.abs(d) === 1) m[y * 16 + x] = 0;
+      }
+    }
+    return m;
+  }
+
+  // Uma cena de pixels que so anima na tela (e para fora dela).
+  function cenaPixels(canvas, cols, rows, opcoes, quadro) {
+    var px = new Pixels(canvas, cols, rows, opcoes);
+    var visivel = false;
+    if (observa) new IntersectionObserver(function (e) { visivel = e[0].isIntersecting; if (visivel) pedir(); }, { rootMargin: "80px" }).observe(canvas);
+    window.EscaliburRelogio.aoMedir(function () { px.medir(); });
+    window.EscaliburRelogio.registrar(function (estado) {
+      if (!visivel || document.hidden) return false;
+      return quadro(px, estado.t, estado) !== false;
+    });
+    return px;
+  }
+  function agoraS() { return performance.now() / 1000; }
+
+  // MARK: Chaves: o PIN, a memoria, o chip, a chave e a assinatura, dentro do celular, em
+  // pixels. O palco fica fixo; a rolagem escolhe a etapa e os pixels trocam de desenho.
+  var trilhoChaves = document.querySelector(".chaves-trilho");
+  var telaChaves = document.querySelector(".pixels-chave");
+  if (trilhoChaves && telaChaves) {
+    var passosChaves = Array.prototype.slice.call(document.querySelectorAll(".chaves-passos li"));
+    var fundoChaves = moldura();
+    var etapa = -1;
+    var mostrarEtapa = function (n, t) {
+      if (n === etapa) return;
+      etapa = n;
+      passosChaves.forEach(function (li, i) { li.classList.toggle("ativo", i === n); });
+      pxChaves.mudar(junta(fundoChaves, CENAS_CHAVE[n]), t, { duracao: n === 1 ? 0.6 : 0.9, varrer: n === 4 ? "esquerda" : n === 1 ? "acaso" : "centro" });
+    };
+    var pxChaves = cenaPixels(telaChaves, G, G, { fundo: 0.05 }, function (px, t) {
+      if (movimento) {
+        var r = trilhoChaves.getBoundingClientRect();
+        var p = limitar(-r.top / Math.max(1, r.height - window.innerHeight), 0, 0.9999);
+        mostrarEtapa(Math.floor(p * 5), t);
+      } else if (etapa < 0) {
+        mostrarEtapa(2, t - 10);
+      }
+      px.desenhar(t, {
+        calmo: !movimento,
+        extra: function (x, y, aceso, bit) {
+          // A memoria do Argon2id trabalhando: pixels que relampejam no bloco.
+          if (etapa === 1 && aceso > 0.5) return ruido(x, y, Math.floor(t * 9)) > 0.93 ? 0.35 : 0;
+          // O miolo do chip pulsa.
+          if (etapa === 2 && x >= 15 && x <= 19 && y >= 16 && y <= 20 && aceso > 0.5) return 0.18 * (0.5 + 0.5 * Math.sin(t * 3));
+          return 0;
+        },
+      });
+      return movimento;
+    });
+    pxChaves.mudar(fundoChaves, agoraS() - 10, {});
+  }
+
+  // MARK: Seguranca: o cadeado de pixels se monta e um anel acende em volta, em ordem, como o
+  // do envelope no app. Em laco.
+  var telaCadeado = document.querySelector(".pixels-cadeado");
+  if (telaCadeado) {
+    var pontosAnel = anel(32, 14, 15.5, 16);
+    var cicloInicio = null;
+    var montado = false;
+    cenaPixels(telaCadeado, 32, 32, { fundo: 0.045 }, function (px, t) {
+      if (!movimento) {
+        if (!montado) { px.mudar(CADEADO, t - 10, {}); montado = true; }
+        px.desenhar(t, { calmo: true, extra: function (x, y) { return pontosAnel.some(function (q) { return q[0] === x && q[1] === y; }) ? 0.8 : 0; } });
+        return false;
+      }
+      if (cicloInicio === null || t - cicloInicio > 7.5) {
+        cicloInicio = t;
+        px.mudar(new Float32Array(32 * 32), t - 1, {});
+        px.mudar(CADEADO, t + 0.2, { duracao: 1.2, varrer: "acaso" });
+      }
+      var dentro = t - cicloInicio;
+      px.desenhar(t, {
+        extra: function (x, y) {
+          for (var k = 0; k < pontosAnel.length; k++) {
+            var q = pontosAnel[k];
+            if (q[0] === x && q[1] === y) {
+              var aceso = suaveT((dentro - 1.8 - k * 0.035) / 0.25) * (1 - suaveT((dentro - 6.6) / 0.6));
+              return 0.12 + 0.72 * aceso;
+            }
+          }
+          return 0;
+        },
+      });
+    });
+  }
+
+  // MARK: Privacidade: cada icone se monta em pixels quando aparece.
+  cada(".pixels-icone", function (canvas) {
+    var mapa = icone(canvas.getAttribute("data-icone"));
+    var feito = false;
+    cenaPixels(canvas, 16, 16, { fundo: 0.05, ritmo: 3, cifra: 0.18 }, function (px, t) {
+      if (!feito) { feito = true; px.mudar(mapa, movimento ? t + 0.2 : t - 10, { duracao: 1.1, varrer: "acaso" }); }
+      px.desenhar(t, { calmo: !movimento });
+      return movimento;
+    });
+  });
+
+  // MARK: Novidades: o hash de cada commit em pixels, 40 tons de cinza, que decifram.
+  cada(".hash-pixels", function (canvas, i) {
+    var hash = canvas.getAttribute("data-hash");
+    // Os 40 digitos em duas fileiras de 20: o primeiro hexadecimal em cima, o seguinte embaixo.
+    var mapa = new Float32Array(40);
+    for (var k = 0; k < 40; k++) mapa[(k % 2) * 20 + (k >> 1)] = 0.1 + parseInt(hash[k], 16) / 15 * 0.9;
+    var feito = false;
+    cenaPixels(canvas, 20, 2, { fundo: 0.05, ritmo: 4 }, function (px, t) {
+      if (!feito) { feito = true; px.mudar(mapa, movimento ? t + 0.25 + i * 0.18 : t - 10, { duracao: 1.2, varrer: "esquerda" }); }
+      px.desenhar(t, { calmo: !movimento, passada: -99 });
+      return movimento;
+    });
+  });
+
+  // MARK: Texto que decifra: os glifos do app (os mesmos 16 do LiveCipher, em minuscula,
+  // para a linha nao pular) trocam ate a letra de verdade, da esquerda para a direita.
+  var GLIFOS = "0123456789abcdef";
+  function glifoDe(i, tique) { return GLIFOS[Math.floor(ruido(i, tique, 41) * 16)]; }
+  function decifrar(el, duracao) {
+    if (!movimento || !el) return;
+    var nos = [];
+    (function andar(no) {
+      if (no.nodeType === 3) { if (no.nodeValue.trim()) nos.push({ no: no, texto: no.nodeValue }); return; }
+      for (var c = no.firstChild; c; c = c.nextSibling) andar(c);
+    })(el);
+    var total = nos.reduce(function (s, n) { return s + n.texto.length; }, 0);
+    if (!total) return;
+    var dur = duracao || 0.7, t0 = agoraS();
+    el.setAttribute("data-decifrando", "");
+    var passo = function () {
+      var t = agoraS() - t0, tique = Math.floor(t * 14), base = 0;
+      nos.forEach(function (n) {
+        var saida = "";
+        for (var k = 0; k < n.texto.length; k++) {
+          var ch = n.texto[k], limite = ((base + k) / total) * dur * 0.75 + ruido(base + k, 5, 9) * dur * 0.25;
+          saida += t >= limite || /\s/.test(ch) ? ch : glifoDe(base + k, tique);
+        }
+        n.no.nodeValue = saida;
+        base += n.texto.length;
+      });
+      if (t < dur) window.requestAnimationFrame(passo);
+      else { nos.forEach(function (n) { n.no.nodeValue = n.texto; }); el.removeAttribute("data-decifrando"); }
+    };
+    window.requestAnimationFrame(passo);
+  }
+  window.EscaliburDecifrar = decifrar;
+
+  // As respostas do FAQ decifram ao abrir.
+  cada(".pergunta", function (d) {
+    d.addEventListener("toggle", function () { if (d.open) decifrar(d.querySelector("p"), 0.65); });
+  });
+
+  // MARK: O golpe do endereco parecido: o meio do falso decifra quando aparece, e as seis
+  // caixas se preenchem, uma a uma.
+  var golpe = document.querySelector(".golpe");
+  if (golpe && movimento && observa) {
+    var caixas = Array.prototype.slice.call(golpe.querySelectorAll(".golpe-caixas i"));
+    var letras = ["2", "0", "d", "3", "7", "4"];
+    var timers = [];
+    var tocarGolpe = function () {
+      timers.forEach(clearTimeout); timers = [];
+      decifrar(golpe.querySelector("[data-cifra-meio]"), 1.1);
+      caixas.forEach(function (c) { c.textContent = ""; c.className = ""; });
+      caixas[0].className = "cursor";
+      letras.forEach(function (l, i) {
+        timers.push(setTimeout(function () {
+          caixas[i].textContent = l;
+          caixas[i].className = "";
+          if (caixas[i + 1]) caixas[i + 1].className = "cursor";
+        }, 1300 + i * 260));
+      });
+    };
+    new IntersectionObserver(function (e) { if (e[0].isIntersecting) tocarGolpe(); }, { threshold: 0.45 }).observe(golpe);
+  }
+
+  // MARK: Codigo auditavel: uma rodada do verificador, linha a linha, quando aparece.
+  var feed = document.querySelector(".feed-verificacoes");
+  if (feed && movimento && observa) {
+    var linhasFeed = Array.prototype.slice.call(feed.querySelectorAll("li"));
+    var timersFeed = [];
+    new IntersectionObserver(function (e) {
+      timersFeed.forEach(clearTimeout); timersFeed = [];
+      if (!e[0].isIntersecting) { linhasFeed.forEach(function (li) { li.classList.remove("ok"); }); return; }
+      linhasFeed.forEach(function (li, i) { timersFeed.push(setTimeout(function () { li.classList.add("ok"); }, 250 + i * 320)); });
+    }, { threshold: 0.35 }).observe(feed);
+  }
+
+  // O podio do fim sobe quando aparece.
+  var podio = document.querySelector(".podio");
+  if (podio && movimento && observa) {
+    new IntersectionObserver(function (e) { if (e[0].isIntersecting) podio.classList.add("visivel"); }, { threshold: 0.15 }).observe(podio);
+  }
+
   // MARK: As moedas 3D: so com movimento, sem economia de dados e em aparelho que aguenta.
   // O moedas3d.js chega depois da pagina, e se o WebGL faltar, a imagem parada fica.
   function pode3D() {
@@ -717,7 +1135,7 @@
     if (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4) return false;
     return !!window.WebGLRenderingContext;
   }
-  if (pode3D() && document.querySelector(".abertura-3d, .destaque-3d, .final-3d")) {
+  if (pode3D() && document.querySelector(".abertura-3d, .destaque-3d, .final-3d, .redes-3d")) {
     var carregar3D = function () {
       var s = document.createElement("script");
       s.src = base + "moedas3d.js";

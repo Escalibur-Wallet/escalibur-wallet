@@ -233,14 +233,61 @@ def moedas_abertura(ctx, base):
     return '<div class="abertura-moedas" aria-hidden="true">' + "".join(itens) + "</div>"
 
 
-def resumo_novidades(ctx, base, quantos=3):
+def resumo_novidades(ctx, base, quantos=4):
+    """As ultimas entregas, cada uma com o hash do commit em pixels (o site.js desenha: os 40
+    digitos hexadecimais viram 40 tons de cinza, que decifram quando a lista aparece)."""
     itens = []
     for c in ctx["commits"][:quantos]:
+        hash_px = f'<canvas class="hash-pixels" data-hash="{e(c["sha"])}" width="320" height="16" aria-hidden="true"></canvas>' if re.fullmatch(r"[0-9a-f]{40}", c["sha"] or "") else ""
         itens.append(
             f'<li><time datetime="{data_iso(c["data"])}">{data_curta(c["data"])}</time>'
-            f'<p class="assunto"><a href="{base}novidades/#c-{c["sha"][:7]}">{acento(c["assunto"])}</a></p></li>'
+            f'<div class="entrega-resumo"><p class="assunto"><a href="{base}novidades/#c-{c["sha"][:7]}">{acento(c["assunto"])}</a></p>'
+            f'{hash_px}<code class="hash-texto">{e(c["sha"][:12])}</code></div></li>'
         )
     return '<ol class="linha-do-tempo">' + "".join(itens) + "</ol>"
+
+
+def orbita_de_redes(ctx, base):
+    """As redes em orbita da Escalibur (pedido do dono, 23/10/2026, no lugar da faixa que
+    deslizava): tres aneis inclinados que giram em sentidos opostos, cada logo sempre de pe.
+    So transform. Com "reduzir movimento", os aneis param. Os nomes ficam para o leitor de tela."""
+    redes = ctx["redes"]
+    cortes = [6, 15]
+    aneis = [redes[:cortes[0]], redes[cortes[0]:cortes[1]], redes[cortes[1]:]]
+    partes = []
+    for k, anel in enumerate(aneis):
+        itens = "".join(
+            f'<li><span class="orbita-gira"><span class="orbita-logo">{logo_rede(ctx, base, r)}</span></span></li>'
+            for r in anel)
+        partes.append(f'<ul class="anel anel-{k + 1} n{len(anel)}" aria-hidden="true">{itens}</ul>')
+    nomes = ", ".join(r["nome"] for r in redes)
+    return (f'<div class="orbita" role="img" aria-label="As {len(redes)} redes da carteira: {e(nomes)}">'
+            f'<div class="orbita-plano">{"".join(partes)}</div>'
+            f'<div class="orbita-centro" aria-hidden="true"><img src="{base}icone-256.png" alt="" width="96" height="96" draggable="false"></div>'
+            f'</div>')
+
+
+# As verificacoes que o painel "Codigo auditavel" mostra passando, uma de cada grupo, na ordem.
+FEED_GRUPOS = ["fronteira de rede", "chaveiro e biometria", "segredo", "hosts", "dependencias", "codigo vendorizado",
+               "registro e aleatoriedade", "plataforma", "privacidade", "workflows", "testes"]
+
+
+def feed_de_verificacoes(ctx, base):
+    """Afirmacoes reais do tools/verificar.sh, uma de cada grupo: o site.js as acende em
+    sequencia, como uma rodada do verificador. Cada uma leva a linha onde mora."""
+    por_nome = {s["nome"]: s for s in ctx["verificacoes"]}
+    itens = []
+    for nome in FEED_GRUPOS:
+        secao = por_nome.get(nome)
+        if not secao:
+            continue
+        for linha, mensagem, _ in secao["itens"]:
+            if "$" in mensagem:
+                continue
+            itens.append(f'<li><span class="feed-marca" aria-hidden="true"></span><span class="feed-texto">{acento(mensagem)}</span>'
+                         f'<a class="feed-linha" href="{blob(ctx, "tools/verificar.sh", linha)}" aria-label="verificar.sh, linha {linha}">linha {linha}</a></li>')
+            break
+    return '<ol class="feed-verificacoes" aria-label="Algumas das verificações">' + "".join(itens) + "</ol>"
 
 
 def link_codigo(base, slug, texto=None):
@@ -261,8 +308,10 @@ VITRINE = ["bitcoin", "ethereum", "tether", "ripple", "binancecoin", "solana", "
 # Na demonstracao da troca, os tokens de cada rede, por esta ordem de preferencia, ate quatro
 # alem da moeda da rede. So os da lista conferida daquela rede.
 TROCA_PREFERIDOS = [["usd-coin"], ["tether"], ["wrapped-bitcoin", "coinbase-wrapped-btc", "binance-bitcoin"], ["weth"],
-                    ["chainlink"], ["jupiter-exchange-solana"], ["arbitrum"], ["optimism"], ["uniswap"], ["euro-coin"],
-                    ["ripple-usd"], ["dai"]]
+                    ["chainlink"], ["jupiter-exchange-solana"], ["arbitrum"], ["optimism"], ["uniswap"], ["aave"],
+                    ["pancakeswap-token"], ["aerodrome-finance"], ["raydium"], ["pyth-network"], ["render-token"],
+                    ["euro-coin"], ["ripple-usd"], ["dai"], ["ethena-usde"]]
+TROCA_POR_REDE = 8
 
 PONTE_ATIVOS = [("usdc", "USDC", "usd-coin"), ("eth", "ETH", "ethereum"), ("usdt", "USDT", "tether"), ("wbtc", "WBTC", "wrapped-bitcoin")]
 
@@ -313,7 +362,7 @@ def dados_da_troca(ctx, base=""):
         so = dados.TROCA_SO.get(rede["id"])
         lista = {t["gecko"]: t for t in por_rede.get(rede["id"], [])}
         for grupo in TROCA_PREFERIDOS:
-            if len(moedas) >= 5:
+            if len(moedas) >= TROCA_POR_REDE:
                 break
             # Um token de cada grupo (um BTC embrulhado so), e o WETH so onde a moeda da rede nao e o ETH.
             gecko = next((g for g in grupo if g in lista and (so is None or g in so) and g != rede["gecko"]
@@ -347,7 +396,7 @@ def _significativo(valor, casas):
     return texto.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def formatar_preco(valor, moeda="brl"):
+def formatar_preco(valor, moeda="usd"):
     """Como o site.js formata: R$ ou US$, duas casas acima de 1, quatro acima de 0,01, seis
     abaixo disso."""
     if valor is None:
@@ -393,9 +442,9 @@ def lista_de_precos(ctx, base, retrato):
     for indice, gecko in enumerate(VITRINE):
         simbolo, nome = _nome_moeda(ctx, gecko)
         dado = moedas.get(gecko, {})
-        preco = formatar_preco(dado.get("brl"))
+        preco = formatar_preco(dado.get("usd"))
         caminho = _linha_svg(dado.get("linha"))
-        sobe = (dado.get("var_brl") if dado.get("var_brl") is not None else dado.get("var") or 0) >= 0
+        sobe = (dado.get("var") or 0) >= 0
         linha = (f'<svg class="faisca {"alta" if sobe else "baixa"}" viewBox="0 0 120 36" preserveAspectRatio="none" aria-hidden="true">'
                  f'<path d="{caminho}"/></svg>')
         selecionada = ' aria-pressed="true"' if indice == 0 else ' aria-pressed="false"'
@@ -404,7 +453,7 @@ def lista_de_precos(ctx, base, retrato):
             f'{logo(ctx, base, f"logo-{gecko}", "", simbolo)}'
             f'<span class="cotacao-nome"><b>{e(simbolo)}</b><small>{e(nome)}</small></span>'
             f'{linha}'
-            f'<span class="cotacao-valor"><b data-preco>{e(preco)}</b>{variacao(dado.get("var_brl", dado.get("var")))}</span>'
+            f'<span class="cotacao-valor"><b data-preco>{e(preco)}</b>{variacao(dado.get("var"))}</span>'
             f'</button></li>')
     return '<ol class="cotacoes" id="cotacoes">' + "".join(itens) + "</ol>"
 
@@ -441,8 +490,8 @@ def destaque_do_mercado(ctx, base, retrato):
 </div>
 <div class="destaque-dados" aria-live="polite">
 <p class="destaque-nome"><b data-destaque-simbolo>{e(simbolo)}</b><span data-destaque-nome>{e(nome)}</span></p>
-<p class="destaque-preco" data-destaque-preco>{e(formatar_preco(dado.get("brl")))}</p>
-<p class="destaque-variacao">{variacao(dado.get("var_brl", dado.get("var"))).replace("data-variacao", "data-destaque-variacao", 1)}<span class="apoio">em 24 h</span></p>
+<p class="destaque-preco" data-destaque-preco>{e(formatar_preco(dado.get("usd")))}</p>
+<p class="destaque-variacao">{variacao(dado.get("var")).replace("data-variacao", "data-destaque-variacao", 1)}<span class="apoio">em 24 h</span></p>
 </div>
 <div class="destaque-grafico{classe}" aria-hidden="true">
 <svg viewBox="0 0 600 180" preserveAspectRatio="none"><path class="area" d="{area}"/><path class="traco" d="{traco}"/></svg>
@@ -453,19 +502,19 @@ def destaque_do_mercado(ctx, base, retrato):
 # As telas do app na secao que fixa o iPhone: (cena, titulo, texto, rotulo da gravacao).
 TELAS = [
     ("receber", "Receber", "O QR e o endereço inteiro, com o começo e o fim em destaque para você conferir antes de passar adiante.",
-     "Receber: da Carteira até o QR do bitcoin, e o endereço copiado"),
+     "Receber, no app em inglês: da Carteira até o QR do bitcoin, e o endereço copiado"),
     ("envio", "Enviar", "A rede monta a transação, o app confere destino, valor e taxa, e acompanha a confirmação na própria rede.",
-     "Enviando 150 XRP, e a confirmação no XRP Ledger"),
+     "Enviar, no app em inglês: a moeda saindo da carteira e a confirmação no XRP Ledger"),
     ("trocar", "Trocar", "A cotação vem dos protocolos públicos de cada rede, comparados entre si. Você vê o mínimo que recebe antes de assinar.",
-     "Trocar: a rede XRP Ledger, 250 XRP digitados e a cotação chegando"),
+     "Trocar, no app em inglês: 250 XRP por RLUSD no XRP Ledger, com a cotação chegando"),
     ("limite", "Ordem limite", "O preço que você escolher, com prazo ou até cancelar. O celular avisa quando ela executa ou está perto de vencer.",
-     "Ordem limite: o preço acima do atual e o prazo da oferta"),
-    ("ponte", "Ponte entre redes", "A taxa e o tempo de cada rota aparecem antes de assinar. O destino é sempre a sua própria conta na outra rede.",
-     "Ponte: 250 USDC da Base para a Arbitrum pelo CCTP, nas rotas rápida e padrão"),
+     "Ordem limite, no app em inglês: o preço acima do atual e o prazo da oferta"),
+    ("ponte", "Ponte entre redes", "USDC da Base para a Arbitrum: a taxa e o tempo de cada rota aparecem antes de assinar, e o destino é sempre a sua própria conta.",
+     "Ponte, no app em inglês: USDC da Base para a Arbitrum pelo CCTP, nas rotas rápida e padrão"),
     ("moeda", "Página da moeda", "O gráfico corre no dedo, em cinco períodos, com o preço e a variação de cada um.",
-     "Página do bitcoin: o dedo correndo o gráfico e os períodos"),
-    ("alertas", "Alertas do próprio celular", "Preço e ordem limite conferidos pelo próprio aparelho, sem servidor de notificação no caminho e sem conta.",
-     "Alertas de preço: ligar e escolher quando avisar"),
+     "Página do bitcoin, no app em inglês: o dedo correndo o gráfico e os períodos"),
+    ("teclado", "Safe Keyboard", "As palavras da carteira num teclado desenhado pelo próprio app. O teclado do sistema não vê as letras, e nada é previsto nem aprendido.",
+     "Safe Keyboard, no app em inglês: o teclado do app digitando sozinho"),
 ]
 
 
@@ -585,7 +634,7 @@ def rodape(ctx, base):
 </div>
 <div>
 <h2>Segurança</h2>
-<ul><li><a href="{base}seguranca/">Como protege</a></li><li><a href="{base}auditoria/">Auditoria</a></li><li><a href="{dados.REPO}">Código no GitHub</a></li><li><a href="{base}suporte/">Relatar uma falha</a></li></ul>
+<ul><li><a href="{base}seguranca/">Como protege</a></li><li><a href="{base}auditoria/">Auditoria</a></li><li><a href="{dados.REPO}">Código no GitHub</a></li><li><a href="{base}suporte/">Relatar um bug</a></li></ul>
 </div>
 <div>
 <h2>Ajuda</h2>
@@ -651,6 +700,8 @@ def preencher(ctx, base, modelo, origem):
             "telas_aparelho": lambda: telas_do_app(ctx, base)[0],
             "telas_passos": lambda: telas_do_app(ctx, base)[1],
             "n_redes_troca": lambda: str(len(dados_da_troca(ctx)["redes"])),
+            "verificacoes_feed": lambda: feed_de_verificacoes(ctx, base),
+            "redes_orbita": lambda: orbita_de_redes(ctx, base),
         }
         if nome not in valores:
             raise SystemExit(f"gerar-site: marcador desconhecido {{{{{nome}}}}} em {origem}")
@@ -937,7 +988,7 @@ def secao_outro_app(ctx, base):
         linhas.append(f'<li>{logo_rede(ctx, base, primeiro)}<div><b>{e(nome)}</b>{extra}</div>'
                       f'<div class="outro-app-texto">{"".join(partes)}</div></li>')
     decifrar = blob(ctx, "tools/referencia/decifrar.py")
-    return f"""<section class="bloco" aria-labelledby="t-outro-app" id="outro-app"><div class="wrap">
+    return f"""<section class="bloco titulos-centro" aria-labelledby="t-outro-app" id="outro-app"><div class="wrap">
 <h2 id="t-outro-app">Abrir em outro app</h2>
 <p class="lead intro">As palavras da carteira abrem o mesmo saldo em outros apps, se você não tiver mais a Escalibur. Cada rede tem os apps que abrem a mesma conta.</p>
 <ul class="regras-outro-app">
@@ -1008,19 +1059,25 @@ def pagina_redes(ctx, base):
             f'<dl class="contratos">{"".join(contratos)}</dl></details></li>'
         )
 
-    corpo = f"""<header class="cabeca-pagina"><div class="wrap">
+    corpo = f"""<header class="cabeca-pagina cabeca-centro cabeca-moedas">
+<picture class="cabeca-moedas-paradas" aria-hidden="true">
+<source media="(max-width: 699px)" srcset="{base}midia/moedas-estreito.webp" width="780" height="1560">
+<img src="{base}midia/moedas-largo.webp" alt="" width="1600" height="1000" decoding="async" draggable="false">
+</picture>
+<canvas class="redes-3d" aria-hidden="true"></canvas>
+<div class="wrap">
 <p class="sobretitulo">Redes e moedas</p>
 <h1 class="titulo-pagina">{len(redes)} redes.<br>{len(ctx["tokens"])} tokens conferidos.</h1>
 <p class="lead">Esta página sai do código do app a cada publicação: as redes de <a href="{blob(ctx, "Kit/Sources/EscaliburChains/Chain.swift")}">Chain.swift</a> e os tokens de <a href="{blob(ctx, "Kit/Sources/EscaliburChains/TokenRegistry.swift")}">TokenRegistry.swift</a>. Nenhuma rede ou token entra no app por resposta de servidor.</p>
 </div></header>
 
-<section class="bloco" aria-labelledby="t-redes"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-redes"><div class="wrap">
 <h2 id="t-redes">As redes</h2>
 <p class="lead intro">Cada carteira é uma frase BIP-39 de 12 ou 24 palavras, derivada pelos caminhos padrão de cada rede. O chainId, o explorador e o tempo de confirmação são constantes compiladas.</p>
 <ul class="tabela-redes">{"".join(linhas)}</ul>
 </div></section>
 
-<section class="bloco" aria-labelledby="t-tokens"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-tokens"><div class="wrap">
 <h2 id="t-tokens">Os tokens conferidos</h2>
 <p class="lead intro">{len(grupos)} moedas em {len(ctx["tokens"])} contratos. Cada contrato foi conferido na fonte oficial do emissor e lido em dois nós da rede antes de entrar na lista. Token fora dela aparece no app como não verificado, sem entrar no saldo total sem preço pelo contrato.</p>
 <div class="busca"><label class="apoio" for="busca-token">Procurar por nome, símbolo ou rede</label><br><input id="busca-token" type="search" placeholder="USDC, Solana, Lido…" autocomplete="off" spellcheck="false"></div>

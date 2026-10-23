@@ -712,12 +712,12 @@
       ["ripple", -0.9, 0.79, -3.0, 0.28],
       ["near", -0.78, -0.87, -1.5, 0.34],
       ["solana", 0.78, -0.92, -2.0, 0.36],
-      ["avalanche-2", 0.97, -0.33, -3.5, 0.3],
+      ["sui", 0.97, -0.33, -3.5, 0.3],
     ],
   };
   // As moedas que pousam na lista de ativos da tela da Carteira (midia/carteira.webp): o
   // centro de cada logo, em fracao da tela do app, medido na gravacao.
-  var POUSO = { tether: 0.5208, ripple: 0.5942, near: 0.6673, solana: 0.7407, "avalanche-2": 0.8142 };
+  var POUSO = { tether: 0.5208, ripple: 0.5942, near: 0.6673, solana: 0.7407, sui: 0.8141 };
   var POUSO_X = 0.0986, POUSO_D = 0.0986;
   // Onde as outras ficam, em volta do iPhone, quando a pagina rola: lado e altura em
   // relacao a tela do app, profundidade e tamanho.
@@ -727,7 +727,7 @@
     ethereum: [-0.8, 0.04, -1.6, 0.52],
     "the-open-network": [1.9, 0.74, -2.6, 0.52],
     "usd-coin": [-1.75, -0.04, -6, 0.48],
-    sui: [1.45, 0.95, -5.5, 0.44],
+    "avalanche-2": [1.45, 0.95, -5.5, 0.44],
   };
 
   function diretorAbertura(palco, t, estado) {
@@ -750,7 +750,7 @@
       var dentro = (t + fase * 1.9) % periodo;
       var volta = dentro < 1.5 ? dentro / 1.5 : 1;
       volta = volta < 0.5 ? 4 * volta * volta * volta : 1 - Math.pow(-2 * volta + 2, 3) / 2;
-      var giro = Math.sin(t * 0.45 + fase) * 0.42 * (1 - curva(0.5, 0.9, p) * 0.6) + volta * Math.PI * 2 + curva(0, 0.62, p) * Math.PI * 2 * (1 + (i % 2));
+      var giro = Math.sin(t * 0.45 + fase) * 0.42 * (1 - curva(0.5, 0.9, p) * 0.6) + volta * Math.PI * 2 + curva(0, 0.55, p) * Math.PI * 2 * (1 + (i % 2));
       var c = {
         id: id,
         x: f[1] * m.w + px.x * 0.35 * (f[3] + 7) / 9,
@@ -765,7 +765,7 @@
       if (tela && POUSO[id] !== undefined) {
         // Pousa no logo da lista: de frente, no plano z = 0, do tamanho do logo, e some.
         var ordem = Object.keys(POUSO).indexOf(id);
-        var k = curva(0.3 + ordem * 0.05, 0.54 + ordem * 0.05, p);
+        var k = curva(0.24 + ordem * 0.045, 0.44 + ordem * 0.045, p);
         if (k > 0) {
           var alvo = palco.daTela(tela.left + tela.width * POUSO_X, tela.top + tela.height * POUSO[id], 0);
           var raio = (tela.width * POUSO_D / 2) * (2 * palco.meioQuadro(0).w / palco.largura);
@@ -789,7 +789,7 @@
         c.alfa = entrada * (1 - s);
       } else if (tela && AUREOLA[id]) {
         var a = AUREOLA[id];
-        var q = curva(0.3, 0.72, p);
+        var q = curva(0.28, 0.6, p);
         if (q > 0) {
           var z = a[2];
           var pos = palco.daTela(tela.left + tela.width * a[0], tela.top + tela.height * a[1], z);
@@ -799,6 +799,16 @@
           c.z = c.z + (z - c.z) * w;
           c.escala = c.escala + (a[3] - c.escala) * w;
         }
+      }
+      // A imersao no iPhone: as que ficaram de fora passam voando pela camera e somem.
+      var imersao = curva(0.8, 0.95, p);
+      if (imersao > 0) {
+        var fora = c.alfa > 0.01 && !(tela && POUSO[id] !== undefined);
+        c.escala *= 1 + imersao * (fora ? 2.2 : 0);
+        c.z += imersao * 6;
+        c.x *= 1 + imersao * 1.6;
+        c.y *= 1 + imersao * 1.6;
+        c.alfa *= 1 - curva(0.82, 0.93, p);
       }
       moedas.push(c);
     });
@@ -858,6 +868,30 @@
         });
         cenaAbertura.pesada = true;
         cenas.push(cenaAbertura);
+      }
+      // A cabeca da pagina Redes: as mesmas moedas da abertura, paradas no lugar, girando.
+      var c4 = document.querySelector(".redes-3d");
+      if (c4) {
+        // Nas bordas, longe do texto: seis moedas no largo, quatro nos cantos no celular.
+        var BORDAS = [
+          ["bitcoin", -0.78, 0.34, 0.9, 1], ["ethereum", 0.8, 0.4, 0.2, 1], ["solana", -0.86, -0.36, -1.2, 1],
+          ["tether", 0.84, -0.34, -0.6, 1], ["ripple", -0.5, -0.62, -3, 0], ["the-open-network", 0.54, 0.66, -3, 0],
+        ];
+        cenas.push(new Cena(c4, { dprMax: 2, exposicao: 1.05 }, function (palco, t) {
+          var estreito = palco.largura < 700;
+          var lado = Math.min(palco.meioQuadro(0).w, palco.meioQuadro(0).h);
+          return BORDAS.filter(function (b) { return !estreito || b[4]; }).map(function (b, i) {
+            var m = palco.meioQuadro(b[3]);
+            var x = b[1] * m.w, y = b[2] * m.h;
+            if (estreito) { x = (b[1] > 0 ? 1.02 : -1.02) * m.w; y = (b[2] > 0 ? 0.9 : -0.86) * m.h; }
+            var entrada = saida(lim((t - inicio - 0.15 * i) / 1.2, 0, 1));
+            return {
+              id: b[0], x: x + ponteiro.x * 0.25, y: y + Math.sin(t * 0.8 + i) * 0.08 - (1 - entrada) * 0.8, z: b[3],
+              rx: -0.2 + Math.sin(t * 0.5 + i) * 0.15, ry: Math.sin(t * 0.45 + i * 1.7) * 0.5 + t * 0.25 * (i % 2 ? 1 : -1),
+              rz: 0, escala: lado * (estreito ? 0.3 : 0.26), alfa: entrada,
+            };
+          });
+        }));
       }
       var c2 = document.querySelector(".destaque-3d");
       if (c2) {

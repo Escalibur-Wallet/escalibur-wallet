@@ -3,16 +3,20 @@
 // da carteira nunca fala com este servidor (pedido do dono, 19/10/2026): a lista de versoes
 // e a auditoria que o app abre vem do GitHub (escalibur-wallet.github.io).
 //
-// O /precos.json: quem busca o preco no CoinGecko e este Worker, nunca o navegador de quem
-// visita (a pagina so fala com o proprio site, pela Content Security Policy). As moedas sao
-// as do retrato que o gerador grava no mesmo caminho na publicacao, tiradas do codigo do
-// app. A resposta fica 60 s no cache da Cloudflare; se o CoinGecko nao responder, sai o
-// retrato da publicacao, com a hora em que foi tirado. Nada de quem visita vai ao CoinGecko:
-// o pedido sai com cabecalhos novos, sem cookie, IP ou endereco da pagina.
+// O /precos.json: quem busca o preco e este Worker, nunca o navegador de quem visita (a
+// pagina so fala com o proprio site, pela Content Security Policy). As moedas sao as do
+// retrato que o gerador grava no mesmo caminho na publicacao, tiradas do codigo do app. Duas
+// fontes, sem chave, nesta ordem: o CoinGecko (preco, variacao e a semana) e o CoinPaprika
+// (preco e variacao; a mesma reserva do app, com os mesmos ids). Se as duas falharem, sai o
+// retrato da publicacao, com a hora em que foi tirado. Em `falhas`, so o motivo de cada
+// fonte que falhou (o status HTTP ou "tempo", "vazio", "rede"), para conferir em producao:
+// nada de quem visita. O pedido as fontes sai com cabecalhos novos, sem cookie, IP ou
+// endereco da pagina. Tudo em dolar (pedido do dono, 23/10/2026).
 const DOMINIO = "escaliburwallet.com";
 const COINGECKO = "https://api.coingecko.com/api/v3";
 const PRECOS = "/precos.json";
-const CACHE_VIVO = 60;      // segundos no cache da Cloudflare, com o preco do CoinGecko
+const PAPRIKA = "https://api.coinpaprika.com/v1";
+const CACHE_VIVO = 60;      // segundos no cache da Cloudflare, com o preco ao vivo
 const CACHE_RETRATO = 30;   // com o retrato, para tentar de novo logo
 const CACHE_NAVEGADOR = 20; // no navegador
 
@@ -64,7 +68,8 @@ async function precos(request, env, ctx) {
 }
 
 async function montar(request, env) {
-  // O retrato da publicacao: as moedas que a pagina mostra e o que sai se o CoinGecko falhar.
+  // O retrato da publicacao: as moedas que a pagina mostra, os ids do CoinPaprika e o que
+  // sai se as duas fontes falharem.
   let retrato = null;
   try {
     const estatico = await env.ASSETS.fetch(new Request(new URL(PRECOS, request.url)));
@@ -72,24 +77,33 @@ async function montar(request, env) {
   } catch (erro) {
     retrato = null;
   }
-  const valido = (id) => typeof id === "string" && /^[a-z0-9-]{1,64}$/.test(id);
-  const ids = (retrato && Array.isArray(retrato.ids) ? retrato.ids.filter(valido) : []).slice(0, 60);
+  const valido = (id) => typeof id === "string" && /^[a-z0-9-]{1,80}$/.test(id);
+  const ids = (retrato && Array.isArray(retrato.ids) ? retrato.ids.filter(valido) : []).slice(0, 80);
   const vitrine = (retrato && Array.isArray(retrato.vitrine) ? retrato.vitrine : []).filter((id) => ids.includes(id));
+  const paprika = {};
+  if (retrato && retrato.paprika && typeof retrato.paprika === "object") {
+    for (const id of ids) if (valido(retrato.paprika[id])) paprika[id] = retrato.paprika[id];
+  }
+  const antigas = (retrato && retrato.moedas) || {};
+  const falhas = {};
   const reserva = () => ({
-    corpo: JSON.stringify(Object.assign({ hora: null, moedas: {}, ids, vitrine }, retrato || {}, { ao_vivo: false })),
+    corpo: JSON.stringify(Object.assign({ hora: null, moedas: {}, ids, vitrine }, retrato || {}, { ao_vivo: false, falhas })),
     idade: CACHE_RETRATO,
   });
   if (!ids.length) return reserva();
+  const cabecalhos = { Accept: "application/json", "User-Agent": "escaliburwallet.com (site)" };
+
+  // 1. CoinGecko: o preco, a variacao de 24 h e a semana.
   try {
-    const cabecalhos = { Accept: "application/json", "User-Agent": "escaliburwallet.com (site)" };
-    // Opcional: a chave gratuita "demo" do CoinGecko, num segredo do Worker, se o limite sem
-    // chave apertar (wrangler secret put COINGECKO_CHAVE).
-    if (env.COINGECKO_CHAVE) cabecalhos["x-cg-demo-api-key"] = env.COINGECKO_CHAVE;
+    const gecko = Object.assign({}, cabecalhos);
+    // Opcional: a chave gratuita "demo" do CoinGecko, num segredo do Worker
+    // (wrangler secret put COINGECKO_CHAVE), se o limite sem chave apertar.
+    if (env.COINGECKO_CHAVE) gecko["x-cg-demo-api-key"] = env.COINGECKO_CHAVE;
     const [mercado, simples] = await Promise.all([
       vitrine.length
-        ? buscar(`${COINGECKO}/coins/markets?vs_currency=usd&ids=${vitrine.join(",")}&sparkline=true&price_change_percentage=24h`, cabecalhos)
+        ? buscar(`${COINGECKO}/coins/markets?vs_currency=usd&ids=${vitrine.join(",")}&sparkline=true&price_change_percentage=24h`, gecko)
         : Promise.resolve([]),
-      buscar(`${COINGECKO}/simple/price?ids=${ids.join(",")}&vs_currencies=usd,brl&include_24hr_change=true`, cabecalhos),
+      buscar(`${COINGECKO}/simple/price?ids=${ids.join(",")}&vs_currencies=usd&include_24hr_change=true`, gecko),
     ]);
     const linhas = {};
     if (Array.isArray(mercado)) {
@@ -101,23 +115,72 @@ async function montar(request, env) {
     for (const id of ids) {
       const d = simples && simples[id];
       if (!d || numero(d.usd) === null) continue;
-      const antiga = retrato && retrato.moedas && retrato.moedas[id];
-      moedas[id] = {
-        usd: numero(d.usd), brl: numero(d.brl), var: numero(d.usd_24h_change, 4), var_brl: numero(d.brl_24h_change, 4),
-        linha: linhas[id] || (antiga && Array.isArray(antiga.linha) ? antiga.linha : []),
-      };
+      moedas[id] = { usd: numero(d.usd), var: numero(d.usd_24h_change, 4), linha: linhas[id] || linhaAntiga(antigas[id]) };
     }
-    if (!Object.keys(moedas).length) return reserva();
-    const hora = new Date().toISOString().replace(/\.\d+Z$/, "Z");
-    return { corpo: JSON.stringify({ hora, ao_vivo: true, fonte: "CoinGecko", ids, vitrine, moedas }), idade: CACHE_VIVO };
+    if (Object.keys(moedas).length) {
+      return vivo({ fonte: "CoinGecko", moedas, ids, vitrine, falhas, linha_hora: Object.keys(linhas).length ? agora() : (retrato && retrato.linha_hora) || null });
+    }
+    falhas.coingecko = "vazio";
   } catch (erro) {
-    return reserva();
+    falhas.coingecko = motivo(erro);
   }
+
+  // 2. CoinPaprika: a lista inteira numa chamada so, como o app faz com muitas moedas. Sem a
+  // semana: o grafico fica o do retrato, com a hora dele.
+  try {
+    if (!Object.keys(paprika).length) throw new Error("vazio");
+    const lista = await buscar(`${PAPRIKA}/tickers?quotes=USD`, cabecalhos);
+    if (!Array.isArray(lista)) throw new Error("vazio");
+    const porPaprika = {};
+    for (const item of lista) if (item && valido(item.id)) porPaprika[item.id] = item;
+    const moedas = {};
+    for (const id of ids) {
+      const item = paprika[id] && porPaprika[paprika[id]];
+      const usd = item && item.quotes && item.quotes.USD;
+      if (usd && numero(usd.price) !== null) {
+        moedas[id] = { usd: numero(usd.price), var: numero(usd.percent_change_24h, 4), linha: linhaAntiga(antigas[id]) };
+      } else if (antigas[id] && numero(antigas[id].usd) !== null) {
+        // Moeda que o CoinPaprika nao tem (so na demonstracao da troca): o preco do retrato, marcado.
+        moedas[id] = { usd: numero(antigas[id].usd), var: null, linha: linhaAntiga(antigas[id]), antigo: true };
+      }
+    }
+    if (Object.keys(moedas).some((id) => !moedas[id].antigo)) {
+      return vivo({ fonte: "CoinPaprika", moedas, ids, vitrine, falhas, linha_hora: (retrato && retrato.linha_hora) || null });
+    }
+    falhas.coinpaprika = "vazio";
+  } catch (erro) {
+    falhas.coinpaprika = motivo(erro);
+  }
+  return reserva();
+}
+
+function vivo(dados) {
+  return { corpo: JSON.stringify(Object.assign({ hora: agora(), ao_vivo: true }, dados)), idade: CACHE_VIVO };
+}
+
+function agora() {
+  return new Date().toISOString().replace(/\.\d+Z$/, "Z");
+}
+
+function linhaAntiga(antiga) {
+  return antiga && Array.isArray(antiga.linha) ? antiga.linha : [];
+}
+
+// So o motivo, curto: o status HTTP, "tempo" (passou de 6 s), "rede" ou "vazio".
+function motivo(erro) {
+  if (erro && typeof erro.status === "number") return erro.status;
+  if (erro && (erro.name === "TimeoutError" || erro.name === "AbortError")) return "tempo";
+  if (erro && erro.message === "vazio") return "vazio";
+  return "rede";
 }
 
 async function buscar(url, cabecalhos) {
   const resposta = await fetch(url, { headers: cabecalhos, signal: AbortSignal.timeout(6000) });
-  if (!resposta.ok) throw new Error(`CoinGecko ${resposta.status}`);
+  if (!resposta.ok) {
+    const erro = new Error("http");
+    erro.status = resposta.status;
+    throw erro;
+  }
   return resposta.json();
 }
 

@@ -562,3 +562,36 @@ def ponte():
     ordem = [redes_ponte[n]["rede"] for n in nomes + extras]
     return {"redes": ordem, "rotas": {ativo: [(redes_ponte[a]["rede"], redes_ponte[b]["rede"], via) for a, b, via in lista_rotas]
                                        for ativo, lista_rotas in rotas.items()}}
+
+
+# MARK: Ids do CoinPaprika (a segunda fonte de precos do site)
+
+MERCADO_APP = RAIZ / "Kit/Sources/EscaliburNetwork/Market.swift"
+PAPRIKA_GERADO = RAIZ / "Kit/Sources/EscaliburNetwork/PaprikaGeckoIDs.swift"
+
+
+def ids_paprika(ids_gecko):
+    """O id do CoinPaprika de cada moeda, pela mesma tabela do app: a feita a mao em
+    Market.swift (`paprikaIDs`, do CoinGecko para o CoinPaprika) e a gerada em
+    PaprikaGeckoIDs.swift (do CoinPaprika para o CoinGecko). Moeda sem par fica de fora."""
+    mapa = {}
+    texto = MERCADO_APP.read_text(encoding="utf-8") if MERCADO_APP.is_file() else ""
+    bloco = re.search(r"static let paprikaIDs: \[String: String\] = \[(.*?)\]", texto, re.S)
+    if bloco:
+        mapa.update(dict(re.findall(r'"([a-z0-9-]+)":\s*"([a-z0-9-]+)"', bloco.group(1))))
+    if PAPRIKA_GERADO.is_file():
+        for paprika, gecko in re.findall(r'"([a-z0-9-]+)":\s*"([a-z0-9-]+)"', PAPRIKA_GERADO.read_text(encoding="utf-8")):
+            mapa.setdefault(gecko, paprika)
+    mapa.update(PAPRIKA_DO_SITE)
+    return {g: mapa[g] for g in ids_gecko if g in mapa}
+
+
+# Ids que a tabela do app nao tem, ou que o CoinPaprika trocou, conferidos na lista de tickers
+# do CoinPaprika em 23/10/2026 (simbolo, nome e preco iguais aos do CoinGecko). O TON virou
+# `toncoin-the-open-network`: o `ton-toncoin` da tabela do app ja nao existe la.
+PAPRIKA_DO_SITE = {
+    "the-open-network": "toncoin-the-open-network", "ripple-usd": "rlusd-ripple-usd", "euro-coin": "euroc-euro-coin",
+    "weth": "weth-weth", "coinbase-wrapped-btc": "cbbtc-coinbase-wrapped-btc", "ethena-usde": "usde-ethena-usde",
+    "raydium": "ray-raydium", "pyth-network": "pyth-pyth-network", "render-token": "rndr-render-token",
+    "aerodrome-finance": "aero-aerodrome-finance",
+}
