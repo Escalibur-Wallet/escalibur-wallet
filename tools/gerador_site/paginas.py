@@ -630,6 +630,40 @@ def telas_do_app(ctx, base):
             f'</div>')
 
 
+def trecho_do_assinador(ctx, base):
+    """"Seguranca que da para conferir" (redesenho do dono, 23/10/2026): um trecho real do
+    assinador do app, lido do repositorio a cada publicacao, numa janela de codigo. Uma faixa de
+    luz confere o trecho de cima para baixo, e as duas travas ganham um visto: a chave tem de ser
+    a esperada, e a assinatura e conferida antes de sair. O link leva as mesmas linhas no GitHub."""
+    caminho = "Kit/Sources/EscaliburKeys/Signer.swift"
+    fonte = (dados.RAIZ / caminho).read_text(encoding="utf-8")
+    linhas = fonte.split("\n")
+    inicio = next(i for i, l in enumerate(linhas) if "static func sign(_ request: SigningRequest" in l)
+    trecho = linhas[inicio:inicio + 11]
+    # Sem o recuo comum: o trecho cabe na janela sem rolar.
+    recuo = min(len(l) - len(l.lstrip(" ")) for l in trecho if l.strip())
+    trecho = [l[recuo:] for l in trecho]
+    html_linhas = codigo.destacar(caminho, "\n".join(trecho))
+    # As travas: (texto que identifica a linha, o que ela garante).
+    travas = [("Hash.constantTimeEqual(publicKey, request.expectedPublicKey)", "A chave é a esperada"),
+              ("Secp256k1.verifyDER(signature: der", "A assinatura é conferida antes de sair")]
+    itens = []
+    for k, (cru, feito) in enumerate(zip(trecho, html_linhas)):
+        trava = next((t for marca, t in travas if marca in cru), None)
+        classe = ' class="trava"' if trava else ""
+        selo = f'<span class="trava-selo">{e(trava)}</span>' if trava else ""
+        itens.append(f'<li{classe}><span class="n">{inicio + 1 + k}</span><code>{feito or " "}</code>{selo}</li>')
+    fim = inicio + len(trecho)
+    return (f'<figure class="janela-codigo" data-conferir>'
+            f'<figcaption class="janela-barra"><span class="janela-pontos" aria-hidden="true"><i></i><i></i><i></i></span>'
+            f'<a href="{blob(ctx, caminho)}#L{inicio + 1}-L{fim}">{e(caminho.split("/")[-1])}</a>'
+            f'<span class="janela-linhas">linhas {inicio + 1} a {fim}</span></figcaption>'
+            f'<ol class="janela-corpo">{"".join(itens)}</ol>'
+            f'<span class="janela-luz" aria-hidden="true"></span>'
+            f'<p class="janela-pe"><svg class="visto" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>{ctx["n_verificacoes"]} verificações e {numero(ctx["n_testes"])} testes rodam a cada mudança</p>'
+            f'</figure>')
+
+
 # MARK: Moldura
 
 
@@ -789,6 +823,7 @@ def preencher(ctx, base, modelo, origem):
             "destaque": lambda: destaque_do_mercado(ctx, base, ctx.get("retrato")),
             "troca_dados": lambda: troca_dados_attr(ctx, base),
             "telas_passeio": lambda: telas_do_app(ctx, base),
+            "trecho_assinador": lambda: trecho_do_assinador(ctx, base),
             "n_redes_troca": lambda: str(len(dados_da_troca(ctx)["redes"])),
             "verificacoes_feed": lambda: feed_de_verificacoes(ctx, base),
             "redes_favo": lambda: favo_de_redes(ctx, base),

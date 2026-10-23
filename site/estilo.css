@@ -1323,7 +1323,8 @@ img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
 .podio .aparelho { --w: clamp(150px, 24vw, 300px); flex: none; }
 .podio .aparelho.podio-lado { margin-top: clamp(28px, 4vw, 56px); }
 @media (max-width: 599px) { .podio .aparelho { --w: 40vw; } .podio .aparelho.podio-lado { --w: 34vw; } .podio { gap: 10px; padding-inline: 0; } }
-.movimento .podio .aparelho { transform: translate3d(0, 80px, 0); opacity: 0; transition: transform 1.1s var(--ease), opacity 0.9s ease; }
+/* Os iPhones do fim ja estao no lugar, sem animacao de entrada (pedido do dono, 23/10/2026). */
+.movimento .podio .aparelho { transform: none; opacity: 1; transition: none; }
 .movimento .podio.visivel .aparelho { transform: none; opacity: 1; }
 .movimento .podio.visivel .aparelho:nth-child(1) { transition-delay: 0.12s; }
 .movimento .podio.visivel .aparelho:nth-child(3) { transition-delay: 0.24s; }
@@ -1716,3 +1717,61 @@ html:not(.movimento) .abertura-bits { display: none; }
 html:not(.js) .nota { position: static; width: auto; transform: none; text-align: center; margin-top: 10px; }
 html:not(.js) .nota::before, html:not(.js) .nota::after { display: none; }
 html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16px; }
+
+/* MARK: "Seguranca que da para conferir" com o codigo do assinador (redesenho do dono, 23/10/2026):
+   o texto a esquerda e, a direita, o trecho real numa janela; uma faixa de luz confere de cima
+   para baixo e as duas travas ganham um selo. Destaque monocromatico, como o resto do site. */
+.conferir-grade { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); gap: clamp(32px, 5vw, 80px); align-items: center; }
+.conferir-texto .lead { margin-top: 18px; }
+.conferir-pontos { list-style: none; padding: 0; margin: 26px 0 24px; display: grid; gap: 12px; }
+.conferir-pontos li { position: relative; padding-left: 30px; color: var(--ink-soft); font-size: 16px; line-height: 1.5; }
+.conferir-pontos .visto { position: absolute; left: 0; top: 3px; }
+.visto { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.conferir-texto .botoes { margin-top: 22px; justify-content: flex-start; }
+.janela-codigo {
+  position: relative; margin: 0; border-radius: 18px; background: #0E0E10; overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--edge-strong), 0 30px 80px rgba(0, 0, 0, 0.45);
+}
+.janela-barra { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--edge); font-size: 13px; color: var(--ink-muted); }
+.janela-pontos { display: inline-flex; gap: 6px; }
+.janela-pontos i { width: 10px; height: 10px; border-radius: 50%; background: var(--edge-strong); }
+.janela-barra a { color: var(--ink); font-weight: 600; text-decoration: none; }
+.janela-barra a:hover { text-decoration: underline; }
+.janela-linhas { margin-left: auto; }
+.janela-corpo {
+  list-style: none; margin: 0; padding: 14px 0; overflow-x: auto; color: #C9C9D0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.8;
+}
+.janela-corpo li { display: flex; align-items: center; padding-right: 16px; white-space: pre; transition: background 0.4s ease; }
+.janela-corpo .n { flex: none; width: 44px; padding-right: 14px; text-align: right; color: #4A4A52; user-select: none; -webkit-user-select: none; transition: color 0.4s ease; }
+.janela-corpo code { font: inherit; color: inherit; }
+.janela-corpo .k { color: var(--ink); font-weight: 600; }
+.janela-corpo .s { color: #B9B9C1; }
+.janela-corpo .c { color: #66666E; }
+.janela-corpo .a { color: #DADADF; }
+.janela-corpo li.conferida { background: rgba(255, 255, 255, 0.06); }
+.janela-corpo li.conferida .n { color: var(--ink); }
+.janela-corpo li { position: relative; }
+.trava-selo {
+  position: absolute; right: 12px; top: 50%; padding: 3px 10px 3px 8px; border-radius: 999px; white-space: nowrap;
+  background: #1C1C20; box-shadow: inset 0 0 0 1px var(--edge-strong);
+  opacity: 0; transform: translate(8px, -50%); transition: opacity 0.35s ease, transform 0.45s var(--ease);
+}
+.trava-selo::before { content: ""; display: inline-block; vertical-align: middle; margin-right: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
+.trava-selo { font-size: 12px; font-weight: 600; color: var(--ink); font-family: "Inter", system-ui, sans-serif; }
+.janela-corpo li.conferida .trava-selo { opacity: 1; transform: translate(0, -50%); }
+.janela-luz {
+  position: absolute; left: 0; right: 0; top: 0; height: 70px; pointer-events: none; opacity: 0;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.08) 50%, transparent);
+}
+.janela-codigo.conferindo .janela-luz { animation: janela-varre var(--dur, 2.2s) linear forwards; }
+@keyframes janela-varre { 0% { opacity: 1; transform: translateY(var(--de, 0px)); } 92% { opacity: 1; } 100% { opacity: 0; transform: translateY(var(--ate, 300px)); } }
+.janela-pe { display: flex; align-items: center; gap: 10px; margin: 0; padding: 12px 16px; border-top: 1px solid var(--edge); font-size: 13.5px; color: var(--ink-muted); transition: color 0.4s ease; }
+.janela-pe .visto { stroke: var(--ink-muted); transition: stroke 0.4s ease; }
+.janela-codigo.pronta .janela-pe .visto { stroke: var(--ink); }
+.janela-codigo.pronta .janela-pe { color: var(--ink); }
+@media (max-width: 899px) {
+  .conferir-grade { grid-template-columns: minmax(0, 1fr); }
+  .janela-corpo { font-size: 11px; }
+  .trava-selo { display: none; }
+}

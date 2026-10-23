@@ -424,6 +424,35 @@
     }
   }
 
+  // MARK: A janela do assinador: quando aparece, uma faixa de luz desce pelo codigo e as travas
+  // ganham o selo quando ela passa (pedido do dono, 23/10/2026). Uma vez por visita; com
+  // movimento reduzido, tudo conferido de saida.
+  cada("[data-conferir]", function (janela) {
+    var corpo = janela.querySelector(".janela-corpo");
+    var travas = Array.prototype.slice.call(janela.querySelectorAll("li.trava"));
+    var concluir = function () {
+      travas.forEach(function (li) { li.classList.add("conferida"); });
+      janela.classList.add("pronta");
+    };
+    if (!movimento) { concluir(); return; }
+    var feito = false;
+    new IntersectionObserver(function (entradas, obs) {
+      if (feito || !entradas[0].isIntersecting) return;
+      feito = true;
+      obs.disconnect();
+      var topo = corpo.offsetTop, altura = corpo.offsetHeight, dur = 2.2;
+      janela.style.setProperty("--de", (topo - 70) + "px");
+      janela.style.setProperty("--ate", (topo + altura) + "px");
+      janela.style.setProperty("--dur", dur + "s");
+      janela.classList.add("conferindo");
+      travas.forEach(function (li) {
+        var quando = (li.offsetTop + li.offsetHeight / 2 + 35) / (altura + 70) * dur;
+        setTimeout(function () { li.classList.add("conferida"); }, quando * 1000);
+      });
+      setTimeout(function () { janela.classList.add("pronta"); }, dur * 1000);
+    }, { threshold: 0.45 }).observe(janela);
+  });
+
   // MARK: A cadeia do PIN acende degrau por degrau.
   if (movimento) {
     var degraus = document.querySelectorAll(".cadeia-acende li");

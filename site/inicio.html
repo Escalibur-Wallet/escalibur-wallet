@@ -279,26 +279,24 @@
 </div>
 </section>
 
-<section class="aberto portas-secao" id="codigo" aria-labelledby="t-codigo">
-<div class="wrap">
-<div class="portas-cabeca" data-revelar>
+<section class="aberto conferir-secao" id="codigo" aria-labelledby="t-codigo">
+<div class="wrap conferir-grade">
+<div class="conferir-texto" data-revelar>
 <p class="sobretitulo">Código auditável</p>
 <h2 class="titulo-secao" id="t-codigo">Segurança que dá para conferir.</h2>
-<p class="lead">Toda mudança no código que guarda as chaves passa por quatro portas antes de chegar ao seu celular. Se uma delas não abre, a mudança não entra no app.</p>
-</div>
-<ol class="portas" data-portas>
-<li class="porta"><span class="porta-marca" aria-hidden="true"></span><b class="porta-titulo">Código aberto</b><span class="porta-texto">Cada linha que guarda as chaves e assina está publicada. Sem SDK de análise, anúncio ou rastreamento.</span></li>
-<li class="porta"><span class="porta-marca" aria-hidden="true"></span><b class="porta-titulo"><span class="porta-numero">{{n_verificacoes}}</span> verificações</b><span class="porta-texto">O <code>tools/verificar.sh</code> confere as regras de segurança no código inteiro, a cada mudança.</span></li>
-<li class="porta"><span class="porta-marca" aria-hidden="true"></span><b class="porta-titulo"><span class="porta-numero">{{n_testes}}</span> testes</b><span class="porta-texto">Do núcleo, com os vetores oficiais de cada rede. As bibliotecas de criptografia ficam no repositório, conferidas por SHA-256.</span></li>
-<li class="porta"><span class="porta-marca" aria-hidden="true"></span><b class="porta-titulo">Versão assinada</b><span class="porta-texto">Cada versão do app entra numa lista assinada pela chave da Escalibur, que o próprio app confere.</span></li>
-</ol>
-<div class="portas-pe">
+<p class="lead">Este é o código que assina as suas transações, do jeito que está no app. Ele só assina com a chave esperada e confere a própria assinatura antes de entregar. Qualquer pessoa pode ler, linha por linha.</p>
+<ul class="conferir-pontos">
+<li><svg class="visto" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>Código aberto, sem SDK de análise, anúncio ou rastreamento.</li>
+<li><svg class="visto" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>As bibliotecas de criptografia ficam no repositório, conferidas por SHA-256.</li>
+<li><svg class="visto" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>Cada versão do app entra numa lista assinada, que o próprio app confere.</li>
+</ul>
 {{estado_ci_curto}}
 <div class="botoes">
 <a class="botao botao-principal" href="{{base}}auditoria/">Abrir a auditoria</a>
 <a class="botao botao-secundario" href="{{repo}}">Ver no GitHub</a>
 </div>
 </div>
+{{trecho_assinador}}
 </div>
 </section>
 
