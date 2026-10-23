@@ -101,4 +101,21 @@ final class ReceiveFlowTests: XCTestCase {
         XCTAssertTrue(toast.waitForExistence(timeout: 5), "sem o aviso de copiado")
         XCTAssertFalse(app.staticTexts["Copiar endereço"].exists, "a tela nao fechou depois de copiar")
     }
+
+    /// Carteira sem saldo: Enviar mostra a ilustracao de nada para enviar e o caminho para receber.
+    func testEmptySend() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-reset", "-demo", "-vazia"]
+        app.launch()
+        let send = app.buttons["Enviar"].firstMatch
+        XCTAssertTrue(send.waitForExistence(timeout: 30))
+        send.tap()
+        XCTAssertTrue(app.staticTexts["Ainda não há ativos para enviar"].waitForExistence(timeout: 30), "sem a tela de nada para enviar")
+        sleep(2)
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "e1-enviar-vazio"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTAssertTrue(app.buttons["Receber"].exists)
+    }
 }

@@ -184,18 +184,17 @@ private fun ColumnScope.EscolhaDoAtivo(aoBloquear: (String, String) -> Unit, aoE
     CabecalhoDeFolha("", { Navegacao.fechar() })
     val lista = ativos ?: return
     if (lista.isEmpty()) {
-        Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs), horizontalAlignment = Alignment.CenterHorizontally) {
-            Spacer(Modifier.weight(1f))
+        // Como no iOS: a ilustracao logo abaixo do fechar, o texto embaixo dela e o Receber no rodape.
+        Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = Espaco.margem).padding(top = Espaco.md, bottom = Espaco.xs),
+               horizontalAlignment = Alignment.CenterHorizontally) {
             ArteDoEnvioVazio(280.dp, Modifier.padding(top = Espaco.sm))
             Text(t("Ainda não há ativos para enviar"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
                  modifier = Modifier.padding(top = Espaco.md))
             Text(t("Quando chegar saldo nesta carteira, ele aparece aqui para você escolher o que enviar."), style = estilo(Tipo.corpo),
                  color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
-            Spacer(Modifier.weight(1f))
-            BotaoPrimario(t("Receber")) {
-                Navegacao.fechar()
-                Navegacao.folha { FluxoDeReceber() }
-            }
+            Spacer(Modifier.weight(1f).heightIn(min = Espaco.md))
+            // O Receber abre por cima do Enviar, como no iOS: fechando, volta para ca.
+            BotaoPrimario(t("Receber")) { Navegacao.folha { FluxoDeReceber() } }
         }
         return
     }
