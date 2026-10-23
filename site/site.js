@@ -319,6 +319,10 @@
       // A camera chega inclinada e endireita ao entrar: o iPhone deita um pouco e volta.
       var inclina = 16 * Math.sin(Math.PI * suave(0.7, 0.9, p));
       aparelhoAbertura.style.transform = "translate3d(0," + (medida.sobe * b + medida.centraliza * suave(0.72, 0.86, p)).toFixed(1) + "px,0) perspective(1100px) rotateX(" + inclina.toFixed(2) + "deg) scale(" + escala.toFixed(4) + ")";
+      // Depois do mergulho a tela do app ja esta coberta pelos pixels e maior que a pagina: some.
+      // No Safari do iPhone, o iPhone gigante (com transformacao 3D) escapava do recorte do palco
+      // e uma faixa vermelha e branca da gravacao aparecia embaixo do manifesto (23/10/2026).
+      aparelhoAbertura.style.visibility = p >= 0.93 ? "hidden" : "";
       desenharBits(p, e.t);
       var c = suave(0.56, 0.64, p) * (1 - suave(0.7, 0.76, p));
       legenda.style.opacity = c.toFixed(3);
@@ -427,32 +431,6 @@
   // MARK: A janela do assinador: quando aparece, uma faixa de luz desce pelo codigo e as travas
   // ganham o selo quando ela passa (pedido do dono, 23/10/2026). Uma vez por visita; com
   // movimento reduzido, tudo conferido de saida.
-  cada("[data-conferir]", function (janela) {
-    var corpo = janela.querySelector(".janela-corpo");
-    var travas = Array.prototype.slice.call(janela.querySelectorAll("li.trava"));
-    var concluir = function () {
-      travas.forEach(function (li) { li.classList.add("conferida"); });
-      janela.classList.add("pronta");
-    };
-    if (!movimento) { concluir(); return; }
-    var feito = false;
-    new IntersectionObserver(function (entradas, obs) {
-      if (feito || !entradas[0].isIntersecting) return;
-      feito = true;
-      obs.disconnect();
-      var topo = corpo.offsetTop, altura = corpo.offsetHeight, dur = 2.2;
-      janela.style.setProperty("--de", (topo - 70) + "px");
-      janela.style.setProperty("--ate", (topo + altura) + "px");
-      janela.style.setProperty("--dur", dur + "s");
-      janela.classList.add("conferindo");
-      travas.forEach(function (li) {
-        var quando = (li.offsetTop + li.offsetHeight / 2 + 35) / (altura + 70) * dur;
-        setTimeout(function () { li.classList.add("conferida"); }, quando * 1000);
-      });
-      setTimeout(function () { janela.classList.add("pronta"); }, dur * 1000);
-    }, { threshold: 0.45 }).observe(janela);
-  });
-
   // MARK: A cadeia do PIN acende degrau por degrau.
   if (movimento) {
     var degraus = document.querySelectorAll(".cadeia-acende li");
@@ -1743,11 +1721,9 @@
       s.onerror = function () { raiz.classList.add("sem-3d"); };
       document.head.appendChild(s);
     };
-    var depois = function () {
-      if (window.requestIdleCallback) window.requestIdleCallback(carregar3D, { timeout: 1200 });
-      else window.setTimeout(carregar3D, 200);
-    };
-    if (document.readyState === "complete") depois(); else window.addEventListener("load", depois);
+    // Ja agora, sem esperar a pagina inteira carregar: as moedas da abertura sao a primeira coisa
+    // na tela, e esperar o "load" e o ocio atrasava a entrada delas no celular (23/10/2026).
+    carregar3D();
   } else {
     raiz.classList.add("sem-3d");
   }

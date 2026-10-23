@@ -302,7 +302,8 @@ a.selo-loja:hover { opacity: 0.86; }
 
 .abertura { position: relative; }
 .abertura-palco {
-  position: relative; min-height: 100vh; min-height: 100svh; overflow: hidden; isolation: isolate;
+  /* clip-path alem do overflow: o Safari nao corta filho com transformacao 3D so com overflow. */
+  position: relative; min-height: 100vh; min-height: 100svh; overflow: hidden; clip-path: inset(0); isolation: isolate;
   display: flex; flex-direction: column; align-items: center; padding-top: clamp(104px, 15vh, 160px);
 }
 .movimento .abertura { height: 290vh; height: 290svh; }
@@ -1613,8 +1614,14 @@ html:not(.movimento) .abertura-bits { display: none; }
 
 /* No celular, o palco das chaves comeca logo abaixo do texto: centralizado na tela inteira, ele
    deixava um vao grande depois de "Ela nasce no aparelho..." (pedido do dono, 23/10/2026). */
+/* E preso na rolagem, o vao ia todo para baixo (23/10/2026): o palco tem a altura do conteudo
+   e prende ja centralizado na tela, sem vao em cima antes de prender nem embaixo depois. */
 @media (max-width: 899px) {
-  .movimento .chaves-palco { align-items: flex-start; padding-top: 72px; }
+  .movimento .chaves-palco {
+    height: auto; align-items: flex-start; padding: 24px 0;
+    top: max(64px, calc(50vh - 250px)); top: max(64px, calc(50svh - 250px));
+  }
+  .movimento .pixels-chave { width: min(320px, 80vw, 46svh); }
 }
 
 /* MARK: "Seguranca que da para conferir" em quatro portas (pedido do dono, 23/10/2026): codigo
@@ -1749,12 +1756,6 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
 .janela-corpo li.conferida { background: rgba(255, 255, 255, 0.06); }
 .janela-corpo li.conferida .n { color: var(--ink); }
 .janela-corpo li { position: relative; }
-.janela-luz {
-  position: absolute; left: 0; right: 0; top: 0; height: 70px; pointer-events: none; opacity: 0;
-  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.08) 50%, transparent);
-}
-.janela-codigo.conferindo .janela-luz { animation: janela-varre var(--dur, 2.2s) linear forwards; }
-@keyframes janela-varre { 0% { opacity: 1; transform: translateY(var(--de, 0px)); } 92% { opacity: 1; } 100% { opacity: 0; transform: translateY(var(--ate, 300px)); } }
 .janela-pe { display: flex; align-items: center; gap: 10px; margin: 0; padding: 12px 16px; border-top: 1px solid var(--edge); font-size: 13.5px; color: var(--ink-muted); transition: color 0.4s ease; }
 .janela-pe .visto { stroke: var(--ink-muted); transition: stroke 0.4s ease; }
 .janela-codigo.pronta .janela-pe .visto { stroke: var(--ink); }

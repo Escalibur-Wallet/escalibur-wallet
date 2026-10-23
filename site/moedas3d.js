@@ -206,15 +206,20 @@
   // quadro da animacao, em pedacos de poucos milissegundos: o celular nao trava, e a moeda
   // aparece quando a face fica pronta.
   var fila = [], trabalhando = false, aoPronta = [];
+  // A vez seguinte vem por MessageChannel: o setTimeout(0) espera no minimo 4 ms a cada volta, e
+  // as faces demoravam a ficar prontas no celular (pedido do dono, 23/10/2026).
+  var canalFaces = window.MessageChannel ? new MessageChannel() : null;
+  var proximaVez = canalFaces ? function () { canalFaces.port2.postMessage(0); } : function () { setTimeout(trabalhar, 0); };
+  if (canalFaces) canalFaces.port1.onmessage = function () { trabalhar(); };
   function pedirFace(id) {
     if (faces[id] || fila.some(function (j) { return j.id === id; })) return;
     fila.push({ id: id, etapa: 0, linha: 0 });
-    if (!trabalhando) { trabalhando = true; setTimeout(trabalhar, 0); }
+    if (!trabalhando) { trabalhando = true; proximaVez(); }
   }
   function trabalhar() {
-    var fim = performance.now() + 7;
+    var fim = performance.now() + 10;
     while (fila.length && performance.now() < fim) passo(fila[0]);
-    if (fila.length) setTimeout(trabalhar, 0);
+    if (fila.length) proximaVez();
     else trabalhando = false;
   }
   function passo(j) {
@@ -866,7 +871,7 @@
     try {
       var c1 = document.querySelector(".abertura-3d");
       if (c1) {
-        var cenaAbertura = new Cena(c1, { dprMax: 2, exposicao: 1.05 }, function (palco, t) {
+        var cenaAbertura = new Cena(c1, { dprMax: 3, exposicao: 1.05 }, function (palco, t) {
           var ab = window.EscaliburAbertura || { p: 0 };
           var tela = null;
           if (ab.tela) {
@@ -939,7 +944,7 @@
         cabeca.addEventListener("pointerup", soltarRedes);
         cabeca.addEventListener("pointercancel", soltarRedes);
         cabeca.addEventListener("pointerleave", function () { cabeca.classList.remove("sobre-moeda"); });
-        cenas.push(new Cena(c4, { dprMax: 2, exposicao: 1.05 }, function (palco, t) {
+        cenas.push(new Cena(c4, { dprMax: 3, exposicao: 1.05 }, function (palco, t) {
           var estreito = palco.largura < 700;
           var lado = Math.min(palco.meioQuadro(0).w, palco.meioQuadro(0).h);
           naTela = [];
@@ -997,7 +1002,7 @@
           pega.addEventListener("pointercancel", soltar);
           pega.addEventListener("lostpointercapture", soltar);
         }
-        cenas.push(new Cena(c2, { dprMax: 2, exposicao: 1.05, distancia: 12 }, function (palco, t) {
+        cenas.push(new Cena(c2, { dprMax: 3, exposicao: 1.05, distancia: 12 }, function (palco, t) {
           if (!arrasto.ativo) {
             arrasto.ry += arrasto.v;
             arrasto.v *= 0.95;
@@ -1026,7 +1031,7 @@
       var c3 = document.querySelector(".final-3d");
       if (c3) {
         var vistoEm = null;
-        cenas.push(new Cena(c3, { dprMax: 2, exposicao: 1.05, distancia: 12 }, function (palco, t) {
+        cenas.push(new Cena(c3, { dprMax: 3, exposicao: 1.05, distancia: 12 }, function (palco, t) {
           if (vistoEm === null) vistoEm = t;
           var m = palco.meioQuadro(0);
           var raio = Math.min(m.w, m.h) / 1.4 * 0.96;
@@ -1095,15 +1100,16 @@
         if (lento.n >= 90) {
           var media = lento.soma / lento.n;
           lento.soma = 0; lento.n = 0;
-          if (media > 26) {
+          // 30 quadros por segundo nao e lentidao: e o iPhone em modo de pouca energia, que
+          // segura o quadro em 33 ms. So abaixo de 25 quadros a resolucao cai, e nunca abaixo
+          // de 2x em tela de alta densidade: em 1,5x a moeda pixelava no celular (23/10/2026).
+          if (media > 40) {
             var abaixou = false;
             cenas.forEach(function (c) {
-              // Piso de 1,5 em tela de alta densidade: abaixo disso a moeda pixela no celular
-              // (pedido do dono, 23/10/2026).
-              var piso = Math.min(window.devicePixelRatio || 1, 1.5);
+              var piso = Math.min(window.devicePixelRatio || 1, 2);
               if (c.palco.dpr > piso + 0.01) { c.palco.dpr = Math.max(piso, c.palco.dpr - 0.5); c.palco.redimensionar(); abaixou = true; }
             });
-            if (!abaixou && media > 36) desistir();
+            if (!abaixou && media > 55) desistir();
           }
         }
       } else {

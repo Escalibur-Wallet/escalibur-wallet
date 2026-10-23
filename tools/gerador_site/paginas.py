@@ -646,8 +646,8 @@ ABAS_DO_CODIGO = ["Kit/Sources/EscaliburKeys/Signer.swift", "Kit/Sources/Escalib
 def trecho_do_assinador(ctx, base):
     """"Codigo auditavel" (refeito pelo dono, 23/10/2026): um trecho real do assinador do app,
     lido do repositorio a cada publicacao, numa janela de editor com abas de outros arquivos
-    reais (o codigo do app inteiro e publico, nao so este trecho). Uma faixa de luz confere o
-    trecho de cima para baixo e acende as duas linhas que travam a assinatura. Linha longa
+    reais (o codigo do app inteiro e publico, nao so este trecho). As duas linhas que travam a
+    assinatura ficam marcadas, sem animacao de scanner (pedido do dono, 23/10/2026). Linha longa
     quebra com recuo, sem cortar nem rolar. O link leva as mesmas linhas no GitHub."""
     caminho = ABAS_DO_CODIGO[0]
     fonte = (dados.RAIZ / caminho).read_text(encoding="utf-8")
@@ -662,7 +662,7 @@ def trecho_do_assinador(ctx, base):
     travas = ["Hash.constantTimeEqual(publicKey, request.expectedPublicKey)", "Secp256k1.verifyDER(signature: der"]
     itens = []
     for k, (cru, feito) in enumerate(zip(trecho, html_linhas)):
-        classe = ' class="trava"' if any(t in cru for t in travas) else ""
+        classe = ' class="trava conferida"' if any(t in cru for t in travas) else ""
         itens.append(f'<li{classe}><span class="n">{inicio + 1 + k}</span><code>{feito or " "}</code></li>')
     fim = inicio + len(trecho)
     abas = []
@@ -675,13 +675,12 @@ def trecho_do_assinador(ctx, base):
         else:
             abas.append(f'<a class="janela-aba" href="{blob(ctx, arquivo)}">{nome}</a>')
     pasta = " / ".join(e(parte) for parte in caminho.split("/")[:-1])
-    return (f'<figure class="janela-codigo" data-conferir>'
+    return (f'<figure class="janela-codigo pronta">'
             f'<div class="janela-barra"><span class="janela-pontos" aria-hidden="true"><i></i><i></i><i></i></span>'
             f'<nav class="janela-abas" aria-label="Arquivos do app no GitHub">{"".join(abas)}</nav></div>'
             f'<figcaption class="janela-caminho"><span>{pasta} / <b>{e(caminho.split("/")[-1])}</b></span>'
             f'<span class="janela-linhas">linhas {inicio + 1} a {fim}</span></figcaption>'
             f'<ol class="janela-corpo">{"".join(itens)}</ol>'
-            f'<span class="janela-luz" aria-hidden="true"></span>'
             f'<p class="janela-pe"><svg class="visto" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>{ctx["n_verificacoes"]} verificações e {numero(ctx["n_testes"])} testes rodam a cada mudança</p>'
             f'</figure>')
 
