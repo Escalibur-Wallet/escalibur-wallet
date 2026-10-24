@@ -409,6 +409,15 @@
    ]
   ]
  },
+ "4b5f68d": {
+  "assunto": "Receipt alerts now include passphrase wallets",
+  "corpo": [
+   [
+    "p",
+    "On iOS and Android, wallets with a passphrase were left out of the receipt alert, so an EVM token received in one never notified. The wallet already sits in the wallet list inside the vault, and the alert file holds every watched wallet's addresses, so leaving it out protected almost nothing. It now joins like any other wallet once its words and passphrase are confirmed. The settings note says so in all 12 languages."
+   ]
+  ]
+ },
  "4ff7344": {
   "assunto": "UTXOReader: two initializers without delegation",
   "corpo": []
