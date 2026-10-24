@@ -1416,19 +1416,19 @@
   ];
 
   // MARK: Chaves: o PIN, a memoria, o chip, o cofre (o cadeado da pagina Seguranca, que abre)
-  // e a assinatura. Os passos sao botoes: tocar leva ao passo (e a rolagem acompanha);
-  // rolar tambem anda. Com movimento reduzido, o toque troca o desenho sem voo.
+  // e a assinatura. Os passos trocam sozinhos, sem prender a rolagem (pedido do dono,
+  // 24/10/2026); tocar num passo leva a ele e segura um pouco mais antes de seguir. Com
+  // movimento reduzido, nao anda sozinho: o toque troca o desenho sem voo.
   var trilhoChaves = document.querySelector(".chaves-trilho");
   var telaChaves = document.querySelector(".pixels-chave");
   if (trilhoChaves && telaChaves) {
     var botoesChaves = Array.prototype.slice.call(document.querySelectorAll(".chaves-passo"));
     var numeroChaves = document.querySelector("[data-chaves-n]");
-    var etapa = -1, travaAte = 0, prontaEm = 0;
-    // A velocidade da rolagem, em telas por segundo, suavizada: so a rolagem longa e rapida
-    // pula passos.
-    var yAntes = null, tAntes = 0, velocidade = 0, gesto = null;
+    // Cada passo fica 3,6 s na tela: 0,7 s de montagem e o resto para ler.
+    var etapa = -1, proximaEm = 0;
     var pxChaves;
-    var mostrarEtapa = function (n, t) {
+    var mostrarEtapa = function (n, t, espera) {
+      proximaEm = t + (espera || 3.6);
       if (n === etapa) return;
       etapa = n;
       botoesChaves.forEach(function (b, i) { b.classList.toggle("ativo", i === n); b.setAttribute("aria-pressed", String(i === n)); });
@@ -1443,40 +1443,11 @@
       }
       // Rapido, sem perder o voo (pedido do dono, 23/10/2026: a montagem demorava).
       pxChaves.formar(DESENHOS_CHAVE[n], movimento ? t : t - 10, { duracao: 0.5, espalha: 0.16 });
-      // O passo seguinte so entra quando este termina de montar (0,5 s de voo e 0,16 s de espera).
-      prontaEm = t + 0.7;
       pedir();
     };
-    var progressoDe = function () {
-      var r = trilhoChaves.getBoundingClientRect();
-      return limitar(-r.top / Math.max(1, r.height - window.innerHeight), 0, 0.9999);
-    };
     pxChaves = cenaParticulas(telaChaves, GC, GC, function (pt, t) {
-      if (etapa < 0) mostrarEtapa(movimento ? Math.floor(progressoDe() * 5) : 0, t);
-      if (movimento) {
-        var yAgora = window.pageYOffset;
-        if (yAntes !== null && t > tAntes) {
-          var instante = Math.abs(yAgora - yAntes) / window.innerHeight / (t - tAntes);
-          velocidade += (Math.min(instante, 20) - velocidade) * Math.min(1, (t - tAntes) * 6);
-        }
-        yAntes = yAgora; tAntes = t;
-      }
-      if (movimento && t > travaAte) {
-        // Cada passo ocupa uma tela inteira de rolagem e so troca depois de passar 35% do
-        // trecho seguinte (pedido do dono, 23/10/2026: pulava com um toque leve do trackpad).
-        // Um passo de cada vez, depois que o desenho anterior montou. So a rolagem longa e
-        // rapida vai direto: mais de 2 telas por segundo, por dois passos inteiros ou mais
-        // desde o comeco do gesto.
-        var seg = progressoDe() * 5, alvo = etapa;
-        if (velocidade > 2 && gesto === null) gesto = seg;
-        else if (velocidade < 0.5) gesto = null;
-        if (seg >= etapa + 1.35) alvo = Math.min(4, Math.floor(seg - 0.35));
-        else if (seg < etapa - 0.35) alvo = Math.max(0, Math.floor(seg + 0.35));
-        if (alvo !== etapa) {
-          if (gesto !== null && Math.abs(seg - gesto) >= 2) mostrarEtapa(alvo, t);
-          else if (t >= prontaEm) mostrarEtapa(etapa + (alvo > etapa ? 1 : -1), t);
-        }
-      }
+      if (etapa < 0) mostrarEtapa(0, t);
+      else if (movimento && t >= proximaEm) mostrarEtapa((etapa + 1) % botoesChaves.length, t);
       pt.desenhar(t, {
         calmo: !movimento,
         extra: function (p, q, bit, tique) {
@@ -1489,18 +1460,7 @@
       return movimento;
     });
     botoesChaves.forEach(function (botao, n) {
-      botao.addEventListener("click", function () {
-        var t = performance.now() / 1000;
-        if (movimento) {
-          // Leva a rolagem ao meio do trecho deste passo, e o desenho ja troca.
-          var r = trilhoChaves.getBoundingClientRect();
-          var alcance = r.height - window.innerHeight;
-          var alvo = window.pageYOffset + r.top + alcance * (n + 0.5) / 5;
-          travaAte = t + 1.1;
-          window.scrollTo({ top: alvo, behavior: "smooth" });
-        }
-        mostrarEtapa(n, t);
-      });
+      botao.addEventListener("click", function () { mostrarEtapa(n, performance.now() / 1000, 7); });
     });
   }
 
@@ -1718,9 +1678,9 @@
     if (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4) return false;
     return !!window.WebGLRenderingContext;
   }
-  // A imagem parada das moedas da abertura so aparece sem 3D ("sem-3d"): com 3D, as moedas
-  // entram uma vez, ja no lugar, sem a parada antes (pedido do dono, 23/10/2026: elas
-  // apareciam, sumiam e voltavam).
+  // A imagem parada das moedas da abertura chega com a pagina, e o 3D toma o lugar dela de uma
+  // vez, so com as faces de todas as moedas prontas (pedido do dono, 24/10/2026: as moedas
+  // apareciam depois da pagina; em 23/10, elas apareciam, sumiam e voltavam).
   if (pode3D() && document.querySelector(".abertura-3d, .destaque-3d, .final-3d, .redes-3d")) {
     var carregar3D = function () {
       var s = document.createElement("script");

@@ -1,8 +1,8 @@
 <section class="abertura" id="abertura" aria-labelledby="t-abertura">
 <div class="abertura-palco">
 <picture class="abertura-moedas-paradas" aria-hidden="true">
-<source media="(max-width: 699px)" srcset="{{base}}midia/moedas-estreito.webp" width="780" height="1560">
-<img src="{{base}}midia/moedas-largo.webp" alt="" width="1600" height="1000" decoding="async" fetchpriority="low" draggable="false">
+<source media="(max-width: 699px)" srcset="{{base}}midia/moedas-estreito.webp" width="780" height="1688">
+<img src="{{base}}midia/moedas-largo.webp" alt="" width="1600" height="1000" decoding="async" fetchpriority="high" draggable="false">
 </picture>
 <canvas class="abertura-3d" aria-hidden="true"></canvas>
 <div class="wrap abertura-texto">
@@ -48,6 +48,17 @@
 </div>
 </div>
 </div>
+</section>
+
+<section class="moedas" id="moedas" aria-labelledby="t-moedas">
+<div class="wrap">
+<div class="secao-cabeca centro" data-revelar>
+<p class="sobretitulo">Moedas</p>
+<h2 class="titulo-secao" id="t-moedas">Todas as moedas num app só.</h2>
+<p class="lead">Guarde, envie e troque {{n_tokens}} tokens conferidos um a um em {{n_redes}} redes, e adicione outros pelo endereço do contrato. No Mercado, o preço das 100 maiores.</p>
+</div>
+</div>
+{{moedas_vitrine}}
 </section>
 
 <section class="troca" id="trocar" aria-labelledby="t-trocar">
@@ -273,17 +284,6 @@
 <li data-revelar><canvas class="pixels-icone" data-icone="site" aria-hidden="true"></canvas><h3>Este site também</h3><p>Sem cookie, sem análise de uso e nada carregado de outro site. Até os preços chegam pelo próprio endereço do site.</p></li>
 </ul>
 </div>
-</section>
-
-<section class="moedas" id="moedas" aria-labelledby="t-moedas">
-<div class="wrap">
-<div class="secao-cabeca centro" data-revelar>
-<p class="sobretitulo">Moedas</p>
-<h2 class="titulo-secao" id="t-moedas">Todas as moedas num app só.</h2>
-<p class="lead">Guarde, envie e troque {{n_tokens}} tokens conferidos um a um em {{n_redes}} redes, e adicione outros pelo endereço do contrato. No Mercado, o preço das 100 maiores.</p>
-</div>
-</div>
-{{moedas_vitrine}}
 </section>
 
 <section class="aberto conferir-secao" id="codigo" aria-labelledby="t-codigo">

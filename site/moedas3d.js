@@ -571,6 +571,8 @@
     this.prontas = {};
     // Na bancada e nas imagens paradas, a face sai na hora; na pagina, em fatias.
     this.esperar = !!opcoes.esperar;
+    // Sem esmaecer, a moeda entra inteira: na abertura ela toma o lugar da imagem parada.
+    this.esmaecer = opcoes.esmaecer !== false;
     this.moedas = [];
     this.perdido = false;
     canvas.addEventListener("webglcontextlost", function (e) { e.preventDefault(); self.perdido = true; if (self.aoPerder) self.aoPerder(); });
@@ -674,7 +676,7 @@
       var frente = self.textura(m.id, self.esperar), verso = self.textura(m.verso || "verso", self.esperar);
       if (!frente || !verso) return;
       var chegou = self.prontas[m.id] || (self.prontas[m.id] = agora);
-      var alfa = m.alfa * (self.esperar ? 1 : Math.min(1, (agora - chegou) / 450));
+      var alfa = m.alfa * (self.esperar || !self.esmaecer ? 1 : Math.min(1, (agora - chegou) / 450));
       var r = rotacao(m.rx || 0, m.ry || 0, m.rz || 0), s = m.escala;
       var modelo = [r[0] * s, r[1] * s, r[2] * s, 0, r[3] * s, r[4] * s, r[5] * s, 0, r[6] * s, r[7] * s, r[8] * s, 0, m.x, m.y, m.z, 1];
       gl.uniformMatrix4fv(self.u.uModelo, false, new Float32Array(modelo));
@@ -742,6 +744,9 @@
     "usd-coin": [-1.75, -0.04, -6, 0.48],
     "avalanche-2": [1.45, 0.95, -5.5, 0.44],
   };
+
+  // O instante, em segundos, em que a imagem parada da abertura foi tirada do 3D.
+  var POSE_PARADA = 0.9;
 
   function diretorAbertura(palco, t, estado) {
     var largo = palco.largura >= 900 || palco.largura / palco.altura > 1;
@@ -874,7 +879,12 @@
       var c1 = document.querySelector(".abertura-3d");
       if (c1) {
         // As duas cenas de tela cheia ficam em 2x; as moedas pequenas (mercado e fim), em ate 3x.
-        var cenaAbertura = new Cena(c1, { dprMax: 2, exposicao: 1.05 }, function (palco, t) {
+        // O relogio da abertura fica em POSE_PARADA ate o 3D aparecer e anda dali: o primeiro quadro
+        // visivel e a pose da imagem parada (midia/moedas-*.webp, tirada do 3D nesse instante).
+        var desdeAbertura = null;
+        var cenaAbertura = new Cena(c1, { dprMax: 2, exposicao: 1.05, esmaecer: false }, function (palco, t) {
+          if (desdeAbertura === null && raiz.classList.contains("com-3d")) desdeAbertura = t;
+          t = POSE_PARADA + (desdeAbertura === null ? 0 : t - desdeAbertura);
           var ab = window.EscaliburAbertura || { p: 0 };
           var tela = null;
           if (ab.tela) {
