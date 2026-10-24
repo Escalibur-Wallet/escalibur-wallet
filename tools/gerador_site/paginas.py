@@ -8,6 +8,7 @@ Policy so deixa carregar o estilo e o script do proprio site.
 
 import hashlib
 import html
+import math
 import os
 import re
 from datetime import datetime
@@ -90,9 +91,6 @@ def blob(ctx, caminho, linha=None):
 
 # MARK: Componentes
 
-ICONE_PAUSA = '<svg class="pausa" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="2" width="3" height="10" rx="1" fill="currentColor"/><rect x="8.5" y="2" width="3" height="10" rx="1" fill="currentColor"/></svg>'
-ICONE_TOCAR = '<svg class="tocar" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2.4v9.2c0 .5.5.8.9.5l7-4.6c.4-.3.4-.8 0-1.1l-7-4.6c-.4-.2-.9 0-.9.6Z" fill="currentColor"/></svg>'
-
 
 def aparelho(base, cena, rotulo, classe="", video=True, cedo=False):
     """Um iPhone desenhado em CSS com a gravacao real do app dentro.
@@ -104,14 +102,13 @@ def aparelho(base, cena, rotulo, classe="", video=True, cedo=False):
     prioridade = ' fetchpriority="high"' if cedo else ""
     capa = (f'<img class="capa" src="{base}midia/{cena}.webp" alt="{e(rotulo)}" width="720" height="1566" '
             f'loading="{carregamento}" decoding="async"{prioridade}>')
-    botao = ""
+    # Sem botao de pausar (pedido do dono, 23/10/2026): o video toca so na tela e para ao sair;
+    # com "reduzir movimento", fica a capa parada.
     if video:
         capa += (f'<video muted loop playsinline preload="none" data-auto aria-hidden="true" tabindex="-1">'
                  f'<source src="{base}midia/{cena}.mp4" type="video/mp4"></video>')
-        botao = (f'<button class="pausar" type="button" data-estado="pausado" aria-label="Tocar a animação">'
-                 f'{ICONE_PAUSA}{ICONE_TOCAR}</button>')
     classes = "aparelho" + (f" {classe}" if classe else "")
-    return f'<div class="{classes}"><div class="tela">{capa}</div>{botao}</div>'
+    return f'<div class="{classes}"><div class="tela">{capa}</div></div>'
 
 
 def botoes_baixar(ctx, base):
@@ -149,7 +146,9 @@ def logo_rede(ctx, base, rede):
     if rede["id"] == "base":
         return '<span class="logo logo-base" aria-hidden="true"></span>'
     nome = f"rede-{rede['id']}" if f"rede-{rede['id']}" in ctx["logos"] else f"logo-{rede['gecko']}"
-    classe = "clara" if rede["id"] in ("xrpl", "stellar") else ""
+    # O disco claro e so para o logo escuro e vazado; o selo de rede do app ja vem num disco
+    # preto, e o claro vazava em volta dele (pedido do dono, 23/10/2026).
+    classe = "clara" if rede["id"] in ("xrpl", "stellar") and not nome.startswith("rede-") else ""
     return logo(ctx, base, nome, classe, rede["nome"])
 
 
@@ -179,6 +178,49 @@ def estado_ci(ctx, base, curto=False):
         texto = textos.get(ci["estado"], "verificação no CI")
         partes.append(f'<a href="{e(ci["url"])}">{texto}</a>' if ci.get("url") else texto)
     return f'<p class="estado-ci {e(classe)}"><span class="ponto" aria-hidden="true"></span>{" · ".join(partes)}</p>'
+
+
+def estado_ci_curto(ctx):
+    """A linha do commit publicado em uma linha so, em toda largura: o hash, a data curta e,
+    quando o build sabe, o resultado do CI. No build local, sem o CI."""
+    commit = ctx["commit"]
+    sha = commit["sha"]
+    if not sha:
+        return ""
+    ci = ctx["ci"]
+    estados = {"passou": "CI passou", "falhou": "CI falhou", "rodando": "CI rodando", "cancelado": "CI cancelado"}
+    classe = ci["estado"] if ci else "sem"
+    parte_ci = ""
+    if ci and ci["estado"] in estados:
+        rotulo = estados[ci["estado"]]
+        parte_ci = f' · <a href="{e(ci["url"])}">{rotulo}</a>' if ci.get("url") else f" · {rotulo}"
+    return (f'<p class="estado-ci curto {e(classe)}"><span class="ponto" aria-hidden="true"></span>'
+            f'<span><span class="ci-rotulo">Commit </span><a href="{dados.REPO}/commit/{sha}">{sha[:7]}</a> · {data_curta(commit["data"])}{parte_ci}</span></p>')
+
+
+def favo_de_redes(ctx, base):
+    """"26 redes. Uma frase." (quinta rodada, pedido do dono: so as logos). As 26 redes num
+    favo, fileiras de 7 e 6 no largo e de 5, 4 e 3 no celular (o CSS desloca as fileiras
+    pares meia ficha). As fichas flutuam numa onda lenta, da esquerda para a direita, e
+    aparecem do centro para fora. Sem orbita e sem esfera. Com movimento reduzido, paradas."""
+    redes = ctx["redes"]
+    # A posicao no favo largo (7, 6, 7, 6): a coluna em meias fichas, para a onda, e a
+    # distancia ao centro, para a ordem de entrada.
+    fileiras = [7, 6, 7, 6]
+    posicoes = []
+    for f, n in enumerate(fileiras):
+        for k in range(n):
+            posicoes.append((f, k * 2 + (f % 2)))
+    itens = []
+    for k, r in enumerate(redes):
+        f, meia = posicoes[k] if k < len(posicoes) else (len(fileiras), 0)
+        anel = min(5, round(math.hypot((meia - 6) / 2, (f - 1.5) * 0.87)))
+        # Ao passar o mouse (ou focar), a ficha so cresce (pedido do dono, 23/10/2026); o nome fica
+        # para o leitor de tela.
+        itens.append(f'<li class="favo-item onda-{meia % 14} anel-{anel}" tabindex="0">'
+                     f'<span class="favo-disco">{logo_rede(ctx, base, r)}</span>'
+                     f'<span class="favo-nome">{e(r["nome"])}</span></li>')
+    return f'<ul class="favo" aria-label="As {len(redes)} redes da carteira" data-revelar>{"".join(itens)}</ul>'
 
 
 def redes_com_tag(ctx):
@@ -233,14 +275,65 @@ def moedas_abertura(ctx, base):
     return '<div class="abertura-moedas" aria-hidden="true">' + "".join(itens) + "</div>"
 
 
-def resumo_novidades(ctx, base, quantos=3):
+def vitrine_moedas(ctx, base, faixas=4):
+    """Todas as moedas (pedido do dono, 23/10/2026): cada logo do catalogo do app, em faixas que
+    andam devagar, as pares no sentido contrario. As mais conhecidas abrem a vitrine; o resto
+    vem numa ordem fixa, embaralhada pelo hash do nome, para nao ficar em ordem alfabetica. Cada
+    faixa repete a lista uma vez (fora do leitor de tela) para o laco nao ter emenda."""
+    soltas, escuras = ctx["conjuntos_logo"]
+    nomes = [n for n in ctx["logos"] if n.startswith("logo-")]
+    primeiras = [f"logo-{g}" for g, _ in MOEDAS_ABERTURA if f"logo-{g}" in ctx["logos"]]
+    resto = sorted((n for n in nomes if n not in primeiras), key=lambda n: hashlib.sha256(n.encode()).hexdigest())
+    ordem = primeiras + resto
+
+    def item(nome):
+        gecko = nome.removeprefix("logo-")
+        classe = "solta" if gecko in soltas else ("clara" if gecko in escuras else "")
+        return f"<li>{logo(ctx, base, nome, classe)}</li>"
+
+    linhas = []
+    for i in range(faixas):
+        lista = "".join(item(n) for n in ordem[i::faixas])
+        linhas.append(f'<div class="moedas-faixa"><div class="moedas-trilho">'
+                      f'<ul class="moedas-lista">{lista}</ul><ul class="moedas-lista" aria-hidden="true">{lista}</ul>'
+                      f"</div></div>")
+    return (f'<div class="moedas-vitrine" role="img" aria-label="Os logos de {len(ordem)} moedas, passando devagar">'
+            + "".join(linhas) + "</div>")
+
+
+def resumo_novidades(ctx, base, quantos=4):
+    """As ultimas entregas, cada uma com o hash do commit em pixels (o site.js desenha: os 40
+    digitos hexadecimais viram 40 tons de cinza, que decifram quando a lista aparece)."""
     itens = []
     for c in ctx["commits"][:quantos]:
         itens.append(
             f'<li><time datetime="{data_iso(c["data"])}">{data_curta(c["data"])}</time>'
-            f'<p class="assunto"><a href="{base}novidades/#c-{c["sha"][:7]}">{acento(c["assunto"])}</a></p></li>'
+            f'<p class="assunto" lang="en"><a href="{base}novidades/#c-{c["sha"][:7]}">{texto_novidade(c, c["assunto"])}</a></p></li>'
         )
     return '<ol class="linha-do-tempo">' + "".join(itens) + "</ol>"
+
+
+# As verificacoes que o painel "Codigo auditavel" mostra passando, uma de cada grupo, na ordem.
+FEED_GRUPOS = ["fronteira de rede", "chaveiro e biometria", "segredo", "hosts", "dependencias", "codigo vendorizado",
+               "registro e aleatoriedade", "plataforma", "privacidade", "workflows", "testes"]
+
+
+def feed_de_verificacoes(ctx, base):
+    """Afirmacoes reais do tools/verificar.sh, uma de cada grupo: o site.js as acende em
+    sequencia, como uma rodada do verificador. Cada uma leva a linha onde mora."""
+    por_nome = {s["nome"]: s for s in ctx["verificacoes"]}
+    itens = []
+    for nome in FEED_GRUPOS:
+        secao = por_nome.get(nome)
+        if not secao:
+            continue
+        for linha, mensagem, _ in secao["itens"]:
+            if "$" in mensagem:
+                continue
+            itens.append(f'<li><span class="feed-marca" aria-hidden="true"></span><span class="feed-texto">{acento(mensagem)}</span>'
+                         f'<a class="feed-linha" href="{blob(ctx, "tools/verificar.sh", linha)}" aria-label="verificar.sh, linha {linha}">linha {linha}</a></li>')
+            break
+    return '<ol class="feed-verificacoes" aria-label="Algumas das verificações">' + "".join(itens) + "</ol>"
 
 
 def link_codigo(base, slug, texto=None):
@@ -261,8 +354,10 @@ VITRINE = ["bitcoin", "ethereum", "tether", "ripple", "binancecoin", "solana", "
 # Na demonstracao da troca, os tokens de cada rede, por esta ordem de preferencia, ate quatro
 # alem da moeda da rede. So os da lista conferida daquela rede.
 TROCA_PREFERIDOS = [["usd-coin"], ["tether"], ["wrapped-bitcoin", "coinbase-wrapped-btc", "binance-bitcoin"], ["weth"],
-                    ["chainlink"], ["jupiter-exchange-solana"], ["arbitrum"], ["optimism"], ["uniswap"], ["euro-coin"],
-                    ["ripple-usd"], ["dai"]]
+                    ["chainlink"], ["jupiter-exchange-solana"], ["arbitrum"], ["optimism"], ["uniswap"], ["aave"],
+                    ["pancakeswap-token"], ["aerodrome-finance"], ["raydium"], ["pyth-network"], ["render-token"],
+                    ["euro-coin"], ["ripple-usd"], ["dai"], ["ethena-usde"]]
+TROCA_POR_REDE = 8
 
 PONTE_ATIVOS = [("usdc", "USDC", "usd-coin"), ("eth", "ETH", "ethereum"), ("usdt", "USDT", "tether"), ("wbtc", "WBTC", "wrapped-bitcoin")]
 
@@ -313,7 +408,7 @@ def dados_da_troca(ctx, base=""):
         so = dados.TROCA_SO.get(rede["id"])
         lista = {t["gecko"]: t for t in por_rede.get(rede["id"], [])}
         for grupo in TROCA_PREFERIDOS:
-            if len(moedas) >= 5:
+            if len(moedas) >= TROCA_POR_REDE:
                 break
             # Um token de cada grupo (um BTC embrulhado so), e o WETH so onde a moeda da rede nao e o ETH.
             gecko = next((g for g in grupo if g in lista and (so is None or g in so) and g != rede["gecko"]
@@ -347,7 +442,7 @@ def _significativo(valor, casas):
     return texto.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def formatar_preco(valor, moeda="brl"):
+def formatar_preco(valor, moeda="usd"):
     """Como o site.js formata: R$ ou US$, duas casas acima de 1, quatro acima de 0,01, seis
     abaixo disso."""
     if valor is None:
@@ -393,9 +488,9 @@ def lista_de_precos(ctx, base, retrato):
     for indice, gecko in enumerate(VITRINE):
         simbolo, nome = _nome_moeda(ctx, gecko)
         dado = moedas.get(gecko, {})
-        preco = formatar_preco(dado.get("brl"))
+        preco = formatar_preco(dado.get("usd"))
         caminho = _linha_svg(dado.get("linha"))
-        sobe = (dado.get("var_brl") if dado.get("var_brl") is not None else dado.get("var") or 0) >= 0
+        sobe = (dado.get("var") or 0) >= 0
         linha = (f'<svg class="faisca {"alta" if sobe else "baixa"}" viewBox="0 0 120 36" preserveAspectRatio="none" aria-hidden="true">'
                  f'<path d="{caminho}"/></svg>')
         selecionada = ' aria-pressed="true"' if indice == 0 else ' aria-pressed="false"'
@@ -404,7 +499,7 @@ def lista_de_precos(ctx, base, retrato):
             f'{logo(ctx, base, f"logo-{gecko}", "", simbolo)}'
             f'<span class="cotacao-nome"><b>{e(simbolo)}</b><small>{e(nome)}</small></span>'
             f'{linha}'
-            f'<span class="cotacao-valor"><b data-preco>{e(preco)}</b>{variacao(dado.get("var_brl", dado.get("var")))}</span>'
+            f'<span class="cotacao-valor"><b data-preco>{e(preco)}</b>{variacao(dado.get("var"))}</span>'
             f'</button></li>')
     return '<ol class="cotacoes" id="cotacoes">' + "".join(itens) + "</ol>"
 
@@ -426,13 +521,14 @@ def destaque_do_mercado(ctx, base, retrato):
     caminho = _logo_moeda(ctx, base, gecko)
     logo_html = f'<img src="{caminho}" alt="" width="160" height="160">' if caminho else ""
     linha = dado.get("linha") or []
-    traco, area, semana, classe = "", "", None, ""
+    traco, semana, classe = "", None, ""
     if len(linha) > 1:
+        # O mesmo quadro do grafico do app (PriceChart): 26 px livres em cima e embaixo para a
+        # maxima e a minima. Sem JS, fica esta linha; com JS, o site.js redesenha no tamanho real.
         menor, maior = min(linha), max(linha)
         faixa = (maior - menor) or 1
-        passo = 600 / (len(linha) - 1)
-        traco = " ".join(f"{'M' if i == 0 else 'L'}{i * passo:.1f} {180 - 10 - (v - menor) / faixa * 160:.1f}" for i, v in enumerate(linha))
-        area = traco + " L600 180 L0 180 Z"
+        passo = 588 / (len(linha) - 1)
+        traco = " ".join(f"{'M' if i == 0 else 'L'}{6 + i * passo:.1f} {200 - 26 - (v - menor) / faixa * 148:.1f}" for i, v in enumerate(linha))
         semana = (linha[-1] / linha[0] - 1) * 100
         classe = " baixa" if linha[-1] < linha[0] else ""
     return f"""<div class="destaque-moeda">
@@ -441,11 +537,14 @@ def destaque_do_mercado(ctx, base, retrato):
 </div>
 <div class="destaque-dados" aria-live="polite">
 <p class="destaque-nome"><b data-destaque-simbolo>{e(simbolo)}</b><span data-destaque-nome>{e(nome)}</span></p>
-<p class="destaque-preco" data-destaque-preco>{e(formatar_preco(dado.get("brl")))}</p>
-<p class="destaque-variacao">{variacao(dado.get("var_brl", dado.get("var"))).replace("data-variacao", "data-destaque-variacao", 1)}<span class="apoio">em 24 h</span></p>
+<p class="destaque-preco" data-destaque-preco>{e(formatar_preco(dado.get("usd")))}</p>
+<p class="destaque-variacao">{variacao(dado.get("var")).replace("data-variacao", "data-destaque-variacao", 1)}<span class="apoio">em 24 h</span></p>
 </div>
-<div class="destaque-grafico{classe}" aria-hidden="true">
-<svg viewBox="0 0 600 180" preserveAspectRatio="none"><path class="area" d="{area}"/><path class="traco" d="{traco}"/></svg>
+<div class="destaque-grafico{classe}">
+<div class="grafico-area" aria-hidden="true">
+<svg viewBox="0 0 600 200" preserveAspectRatio="none"><defs><filter id="grafico-brilho" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="7"/></filter><clipPath id="grafico-antes"><rect class="antes" x="0" y="0" width="100%" height="100%"/></clipPath></defs><path class="passado" d=""/><g clip-path="url(#grafico-antes)"><path class="brilho" d="" filter="url(#grafico-brilho)"/><path class="traco" d="{traco}"/></g><line class="regua" x1="0" y1="0" x2="0" y2="0"/><circle class="ponto-fundo" r="6" cx="-20" cy="-20"/><circle class="ponto" r="4.5" cx="-20" cy="-20"/></svg>
+<span class="grafico-rotulo maxima"></span><span class="grafico-rotulo minima"></span><span class="grafico-rotulo escolhido"></span>
+</div>
 <p class="apoio">Últimos 7 dias{variacao(semana).replace("data-variacao", "data-destaque-semana", 1) if semana is not None else '<span class="variacao" data-destaque-semana></span>'}</p>
 </div>"""
 
@@ -453,41 +552,137 @@ def destaque_do_mercado(ctx, base, retrato):
 # As telas do app na secao que fixa o iPhone: (cena, titulo, texto, rotulo da gravacao).
 TELAS = [
     ("receber", "Receber", "O QR e o endereço inteiro, com o começo e o fim em destaque para você conferir antes de passar adiante.",
-     "Receber: da Carteira até o QR do bitcoin, e o endereço copiado"),
+     "Receber, no app em inglês: da Carteira até o QR do bitcoin, e o endereço copiado"),
     ("envio", "Enviar", "A rede monta a transação, o app confere destino, valor e taxa, e acompanha a confirmação na própria rede.",
-     "Enviando 150 XRP, e a confirmação no XRP Ledger"),
+     "Enviar, no app em inglês: a moeda saindo da carteira e a confirmação no XRP Ledger"),
     ("trocar", "Trocar", "A cotação vem dos protocolos públicos de cada rede, comparados entre si. Você vê o mínimo que recebe antes de assinar.",
-     "Trocar: a rede XRP Ledger, 250 XRP digitados e a cotação chegando"),
+     "Trocar, no app em inglês: 250 XRP por RLUSD no XRP Ledger, com a cotação chegando"),
     ("limite", "Ordem limite", "O preço que você escolher, com prazo ou até cancelar. O celular avisa quando ela executa ou está perto de vencer.",
-     "Ordem limite: o preço acima do atual e o prazo da oferta"),
-    ("ponte", "Ponte entre redes", "A taxa e o tempo de cada rota aparecem antes de assinar. O destino é sempre a sua própria conta na outra rede.",
-     "Ponte: 250 USDC da Base para a Arbitrum pelo CCTP, nas rotas rápida e padrão"),
-    ("moeda", "Página da moeda", "O gráfico corre no dedo, em cinco períodos, com o preço e a variação de cada um.",
-     "Página do bitcoin: o dedo correndo o gráfico e os períodos"),
-    ("alertas", "Alertas do próprio celular", "Preço e ordem limite conferidos pelo próprio aparelho, sem servidor de notificação no caminho e sem conta.",
-     "Alertas de preço: ligar e escolher quando avisar"),
+     "Ordem limite, no app em inglês: o preço acima do atual e o prazo da oferta"),
+    ("ponte", "Ponte entre redes", "USDC da Base para a Arbitrum: a taxa e o tempo de cada rota aparecem antes de assinar, e o destino é sempre a sua própria conta.",
+     "Ponte, no app em inglês: USDC da Base para a Arbitrum pelo CCTP, nas rotas rápida e padrão"),
+    ("moeda", "Página da moeda", "O gráfico em cinco períodos, de 24 horas a todo o histórico, com o preço, a variação e os números do mercado.",
+     "Página do bitcoin, no app em inglês: o gráfico de 7 dias, em alta"),
+    ("teclado", "Safe Keyboard", "As palavras da carteira num teclado desenhado pelo próprio app. O teclado do seu celular não vê as letras, e nada é previsto nem aprendido.",
+     "Safe Keyboard, no app em inglês: o teclado do app digitando sozinho"),
 ]
 
 
+ICONES_TELAS = {
+    "receber": '<path d="M12 4v12M7 11l5 5 5-5M5 20h14"/>',
+    "envio": '<path d="M12 20V8M7 13l5-5 5 5M5 4h14"/>',
+    "trocar": '<path d="M5 8h13M14.5 4.5 18 8l-3.5 3.5M19 16H6M9.5 12.5 6 16l3.5 3.5"/>',
+    "limite": '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
+    "ponte": '<path d="M3 16c3-5 6-7 9-7s6 2 9 7M7 12.2V17M12 9v8M17 12.2V17"/>',
+    "moeda": '<path d="M4 17l5-5 3.5 3.5L20 8M15 8h5v5"/>',
+    "teclado": '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M10.5 10h.01M14 10h.01M17.5 10h.01M8 14h8"/>',
+}
+
+
+# As anotacoes de cada tela (pedido do dono, 23/10/2026: redesenho completo da secao): (lado,
+# x, y, titulo, texto). x e y sao a posicao, de 0 a 1, do ponto da tela de que a anotacao fala,
+# medida na capa de cada gravacao; o lado e onde o texto fica. So o que aparece na gravacao.
+NOTAS = {
+    "receber": [
+        ("esq", 0.5, 0.38, "QR com a moeda", "O código leva o endereço e mostra a rede no meio."),
+        ("dir", 0.3, 0.65, "Começo e fim em destaque", "Para você conferir o endereço antes de passar adiante."),
+        ("esq", 0.5, 0.8, "Copiar ou compartilhar", "O endereço inteiro, sem cortar no meio."),
+    ],
+    "envio": [
+        ("dir", 0.5, 0.5, "A moeda a caminho", "O app acompanha a transação até a rede confirmar."),
+        ("esq", 0.5, 0.62, "Destino conferido", "Valor, destino e taxa conferidos antes de assinar."),
+    ],
+    "trocar": [
+        ("esq", 0.3, 0.27, "Você paga", "Com 25%, 50% e Máx a partir do saldo."),
+        ("dir", 0.45, 0.42, "Cotação comparada", "Protocolos públicos de cada rede, comparados entre si."),
+        ("esq", 0.5, 0.56, "Tolerância", "O mínimo que você aceita receber, antes de assinar."),
+        ("dir", 0.3, 0.8, "Taxa da Escalibur: 0%", "A taxa da rede aparece na revisão."),
+    ],
+    "limite": [
+        ("dir", 0.3, 0.42, "O seu preço", "A ordem executa quando a moeda chega ao valor escolhido."),
+        ("esq", 0.4, 0.71, "Prazo", "Um dia, uma semana, um mês ou até cancelar."),
+    ],
+    "ponte": [
+        ("esq", 0.5, 0.24, "De uma rede para outra", "USDC da Base para a Arbitrum, entre outras rotas."),
+        ("dir", 0.3, 0.61, "Rápida ou padrão", "A taxa e o tempo de cada rota, antes de assinar."),
+        ("esq", 0.5, 0.78, "Para a sua própria conta", "O destino é sempre a mesma carteira, na outra rede."),
+    ],
+    "moeda": [
+        ("dir", 0.6, 0.35, "Gráfico em cinco períodos", "De 24 horas a todo o histórico."),
+        ("esq", 0.5, 0.53, "Toque para voltar no tempo", "O preço de qualquer ponto do gráfico."),
+        ("dir", 0.3, 0.7, "Os números do mercado", "Capitalização, volume, posição e a faixa de 24 horas."),
+    ],
+    "teclado": [
+        ("dir", 0.8, 0.29, "Liga e desliga em Ajustes", "No Super Security, fica sempre ligado."),
+        ("esq", 0.5, 0.55, "Desenhado pelo app", "As palavras da carteira num teclado próprio."),
+        ("dir", 0.4, 0.82, "O teclado do seu celular não vê as letras", "Nada previsto, ditado ou aprendido."),
+    ],
+}
+
+
 def telas_do_app(ctx, base):
-    """O iPhone fixo da secao "Por dentro": uma camada por tela, a gravacao real do app em
-    cada uma. O site.js mostra a camada do passo que esta na tela e toca so o video dela;
-    sem JS, fica a primeira capa, e cada passo traz a sua."""
-    camadas, passos = [], []
+    """"Por dentro do app" (refeito pelo dono, 23/10/2026): um bloco para cada tela, um embaixo do
+    outro, com o iPhone de um lado e o texto do outro, alternando. A gravacao toca quando o
+    bloco aparece (os videos data-auto do site.js). Sem linhas e sem iPhone preso na rolagem."""
+    blocos = []
+    n = len(TELAS)
     for i, (cena, titulo, texto, rotulo) in enumerate(TELAS):
-        carregamento = "eager" if i == 0 else "lazy"
-        camadas.append(
-            f'<div class="camada{" ativa" if i == 0 else ""}" data-cena="{cena}">'
-            f'<img class="capa" src="{base}midia/{cena}.webp" alt="{e(rotulo)}" width="720" height="1566" loading="{carregamento}" decoding="async">'
-            f'<video muted loop playsinline preload="none" data-auto data-manual aria-hidden="true" tabindex="-1">'
-            f'<source src="{base}midia/{cena}.mp4" type="video/mp4"></video></div>')
-        passos.append(
-            f'<li class="passo-tela{" ativo" if i == 0 else ""}" data-cena="{cena}">'
-            f'<div class="passo-texto"><h3>{e(titulo)}</h3><p>{e(texto)}</p></div>'
-            f'<div class="passo-midia">{aparelho(base, cena, rotulo, "pequeno", video=False)}</div></li>')
-    telefone = (f'<div class="aparelho palco-telas"><div class="tela">{"".join(camadas)}</div>'
-                f'<button class="pausar" type="button" data-estado="pausado" aria-label="Tocar a animação">{ICONE_PAUSA}{ICONE_TOCAR}</button></div>')
-    return telefone, '<ol class="passos-telas">' + "".join(passos) + "</ol>"
+        notas = "".join(f'<li><b>{e(t)}</b><span>{e(d)}</span></li>' for _, _, _, t, d in NOTAS.get(cena, []))
+        lado = " recurso-inverso" if i % 2 else ""
+        blocos.append(
+            f'<article class="recurso{lado}" data-revelar>'
+            f'{aparelho(base, cena, rotulo, "recurso-aparelho")}'
+            f'<div class="recurso-texto"><p class="recurso-passo">{i + 1} de {n}</p>'
+            f'<h3 class="recurso-titulo">{e(titulo)}</h3><p class="recurso-lead">{e(texto)}</p>'
+            f'<ul class="recurso-notas">{notas}</ul></div></article>')
+    return f'<div class="recursos">{"".join(blocos)}</div>'
+
+
+# As abas da janela de codigo: arquivos reais do app, cada uma leva ao arquivo no GitHub.
+ABAS_DO_CODIGO = ["Kit/Sources/EscaliburKeys/Signer.swift", "Kit/Sources/EscaliburKeys/WalletVault.swift",
+                  "Kit/Sources/EscaliburKeys/Enclave.swift", "Kit/Sources/EscaliburNetwork/HTTPClient.swift"]
+
+
+def trecho_do_assinador(ctx, base):
+    """"Codigo auditavel" (refeito pelo dono, 23/10/2026): um trecho real do assinador do app,
+    lido do repositorio a cada publicacao, numa janela de editor com abas de outros arquivos
+    reais (o codigo do app inteiro e publico, nao so este trecho). As duas linhas que travam a
+    assinatura ficam marcadas, sem animacao de scanner (pedido do dono, 23/10/2026). Linha longa
+    quebra com recuo, sem cortar nem rolar. O link leva as mesmas linhas no GitHub."""
+    caminho = ABAS_DO_CODIGO[0]
+    fonte = (dados.RAIZ / caminho).read_text(encoding="utf-8")
+    linhas = fonte.split("\n")
+    inicio = next(i for i, l in enumerate(linhas) if "static func sign(_ request: SigningRequest" in l)
+    trecho = linhas[inicio:inicio + 11]
+    # Sem o recuo comum: o trecho cabe na janela.
+    recuo = min(len(l) - len(l.lstrip(" ")) for l in trecho if l.strip())
+    trecho = [l[recuo:] for l in trecho]
+    html_linhas = codigo.destacar(caminho, "\n".join(trecho))
+    # As linhas que travam a assinatura: a chave tem de ser a esperada, e a assinatura e conferida.
+    travas = ["Hash.constantTimeEqual(publicKey, request.expectedPublicKey)", "Secp256k1.verifyDER(signature: der"]
+    itens = []
+    for k, (cru, feito) in enumerate(zip(trecho, html_linhas)):
+        classe = ' class="trava conferida"' if any(t in cru for t in travas) else ""
+        itens.append(f'<li{classe}><span class="n">{inicio + 1 + k}</span><code>{feito or " "}</code></li>')
+    fim = inicio + len(trecho)
+    abas = []
+    for n, arquivo in enumerate(ABAS_DO_CODIGO):
+        if not (dados.RAIZ / arquivo).is_file():
+            continue
+        nome = e(arquivo.split("/")[-1])
+        if n == 0:
+            abas.append(f'<a class="janela-aba ativa" href="{blob(ctx, caminho)}#L{inicio + 1}-L{fim}" aria-current="true">{nome}</a>')
+        else:
+            abas.append(f'<a class="janela-aba" href="{blob(ctx, arquivo)}">{nome}</a>')
+    pasta = " / ".join(e(parte) for parte in caminho.split("/")[:-1])
+    return (f'<figure class="janela-codigo pronta">'
+            f'<div class="janela-barra"><span class="janela-pontos" aria-hidden="true"><i></i><i></i><i></i></span>'
+            f'<nav class="janela-abas" aria-label="Arquivos do app no GitHub">{"".join(abas)}</nav></div>'
+            f'<figcaption class="janela-caminho"><span>{pasta} / <b>{e(caminho.split("/")[-1])}</b></span>'
+            f'<span class="janela-linhas">linhas {inicio + 1} a {fim}</span></figcaption>'
+            f'<ol class="janela-corpo">{"".join(itens)}</ol>'
+            f'<p class="janela-pe"><svg class="visto" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>{ctx["n_verificacoes"]} verificações e {numero(ctx["n_testes"])} testes rodam a cada mudança</p>'
+            f'</figure>')
 
 
 # MARK: Moldura
@@ -578,6 +773,7 @@ def rodape(ctx, base):
 <div class="rodape-marca">
 <a class="marca" href="{base}"><img src="{base}icone-64.png" alt="" width="28" height="28">Escalibur Wallet</a>
 <p>Carteira cripto sem custódia.<br>Versão {e(v["marketing"])} (build {e(v["build"])}).</p>
+{botoes_baixar(ctx, base)}
 </div>
 <div>
 <h2>Produto</h2>
@@ -585,7 +781,7 @@ def rodape(ctx, base):
 </div>
 <div>
 <h2>Segurança</h2>
-<ul><li><a href="{base}seguranca/">Como protege</a></li><li><a href="{base}auditoria/">Auditoria</a></li><li><a href="{dados.REPO}">Código no GitHub</a></li><li><a href="{base}suporte/">Relatar uma falha</a></li></ul>
+<ul><li><a href="{base}seguranca/">Como protege</a></li><li><a href="{base}auditoria/">Auditoria</a></li><li><a href="{dados.REPO}">Código no GitHub</a></li><li><a href="{base}suporte/">Relatar um bug</a></li></ul>
 </div>
 <div>
 <h2>Ajuda</h2>
@@ -615,6 +811,12 @@ def preencher(ctx, base, modelo, origem):
         partes = [p.strip() for p in argumento.split("|")] if argumento else []
         if nome == "base":
             return base
+        # Um trecho de site/ repetido em mais de uma pagina (a secao final do Inicio tambem fecha
+        # a pagina Seguranca, pedido do dono, 23/10/2026).
+        if nome == "incluir":
+            if not re.fullmatch(r"[a-z-]+", argumento):
+                raise ValueError(f"trecho invalido: {argumento}")
+            return preencher(ctx, base, (dados.RAIZ / "site" / f"{argumento}.html").read_text(encoding="utf-8"), origem)
         classe = partes[2] if len(partes) > 2 else ""
         cedo = "cedo" in classe.split()
         classe = " ".join(c for c in classe.split() if c != "cedo")
@@ -632,11 +834,11 @@ def preencher(ctx, base, modelo, origem):
             "n_redes_resto": lambda: str(len(ctx["redes"]) - 7),
             "n_tokens": lambda: str(len(ctx["tokens"])),
             "n_verificacoes": lambda: str(ctx["n_verificacoes"]),
-            "n_hosts": lambda: str(len(ctx["hosts"])),
             "n_testes": lambda: numero(ctx["n_testes"]),
             "n_travados": lambda: str(ctx["n_travados"]),
             "redes_logos": lambda: grade_de_redes(ctx, base),
             "moedas_abertura": lambda: moedas_abertura(ctx, base),
+            "moedas_vitrine": lambda: vitrine_moedas(ctx, base),
             "redes_com_tag": lambda: redes_com_tag(ctx),
             "estado_ci": lambda: estado_ci(ctx, base),
             "novidades_resumo": lambda: resumo_novidades(ctx, base),
@@ -648,9 +850,12 @@ def preencher(ctx, base, modelo, origem):
             "precos_hora": lambda: e(hora_do_retrato(ctx.get("retrato"))),
             "destaque": lambda: destaque_do_mercado(ctx, base, ctx.get("retrato")),
             "troca_dados": lambda: troca_dados_attr(ctx, base),
-            "telas_aparelho": lambda: telas_do_app(ctx, base)[0],
-            "telas_passos": lambda: telas_do_app(ctx, base)[1],
+            "telas_passeio": lambda: telas_do_app(ctx, base),
+            "trecho_assinador": lambda: trecho_do_assinador(ctx, base),
             "n_redes_troca": lambda: str(len(dados_da_troca(ctx)["redes"])),
+            "verificacoes_feed": lambda: feed_de_verificacoes(ctx, base),
+            "redes_favo": lambda: favo_de_redes(ctx, base),
+            "estado_ci_curto": lambda: estado_ci_curto(ctx),
         }
         if nome not in valores:
             raise SystemExit(f"gerar-site: marcador desconhecido {{{{{nome}}}}} em {origem}")
@@ -659,8 +864,14 @@ def preencher(ctx, base, modelo, origem):
     return _MARCADOR.sub(troca, modelo)
 
 
+def _texto_security():
+    """O SECURITY.md, com o que a pessoa relata chamado de bug no site (pedido do dono,
+    23/10/2026: "Achou um bug?")."""
+    return (dados.RAIZ / "SECURITY.md").read_text(encoding="utf-8").replace("falha crítica", "bug crítico")
+
+
 def prazos_seguranca():
-    texto = (dados.RAIZ / "SECURITY.md").read_text(encoding="utf-8")
+    texto = _texto_security()
     bloco = re.search(r"Prazos que assumimos:\n((?:- .+\n?)+)", texto)
     if not bloco:
         return ""
@@ -670,7 +881,7 @@ def prazos_seguranca():
 
 def prazos_linha():
     """Os prazos do SECURITY.md numa linha do tempo: o prazo grande, o que acontece nele."""
-    texto = (dados.RAIZ / "SECURITY.md").read_text(encoding="utf-8")
+    texto = _texto_security()
     bloco = re.search(r"Prazos que assumimos:\n((?:- .+\n?)+)", texto)
     if not bloco:
         return ""
@@ -761,7 +972,7 @@ git checkout {e(ref[:12])}</code><span>O mesmo commit desta página.</span></li>
     hosts = []
     for rotulo, lista in ctx["grupos_hosts"]:
         chips = "".join(f"<li>{e(h)}</li>" for h in lista)
-        hosts.append(f'<section class="cartao"><h3>{e(rotulo)}<span class="conta">{len(lista)}</span></h3>'
+        hosts.append(f'<section class="cartao"><h3>{e(rotulo)}</h3>'
                      f'<ul class="hosts">{chips}</ul></section>')
 
     travas = []
@@ -804,45 +1015,58 @@ git checkout {e(ref[:12])}</code><span>O mesmo commit desta página.</span></li>
         for a in ctx["auditorias"]
     )
 
-    corpo = f"""<header class="cabeca-pagina"><div class="wrap">
+    hash_cabeca = ""
+    if sha and re.fullmatch(r"[0-9a-f]{40}", sha):
+        hash_cabeca = (f'<figure class="hash-cabeca"><canvas class="pixels-hash grande" data-hashes="{e(sha)}" data-colunas="8" data-linhas="5" aria-hidden="true"></canvas>'
+                       f'<figcaption>Commit publicado <code>{e(sha[:12])}</code>, em pixels: cada tom é um dígito do hash.</figcaption></figure>')
+    # As moedas 3D da pagina Redes tambem aqui (pedido do dono, 23/10/2026), nas bordas.
+    corpo = f"""<header class="cabeca-pagina cabeca-centro cabeca-moedas cabeca-auditoria">
+<canvas class="redes-3d" data-auditoria aria-hidden="true"></canvas>
+<div class="wrap">
+{hash_cabeca}
 <p class="sobretitulo">Auditoria</p>
 <h1 class="titulo-pagina">Confira você mesmo.</h1>
 <p class="lead">Tudo nesta página saiu do repositório no build que a publicou: as verificações que rodam a cada mudança, os servidores que o app pode chamar, o que vem de fora conferido arquivo por arquivo e os arquivos que guardam as chaves. Nada é buscado depois.</p>
+<ul class="seg-resumo" aria-label="Em resumo" data-revelar>
+<li><b>{ctx["n_verificacoes"]}</b><span>verificações a cada mudança</span></li>
+<li><b>0</b><span>dependências baixadas da internet para montar o app</span></li>
+<li><b>{numero(ctx["n_testes"])}</b><span>testes do núcleo</span></li>
+</ul>
 </div></header>
 
-<section class="bloco" aria-labelledby="t-build"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-build"><div class="wrap">
 <h2 id="t-build">Este build</h2>
 {publicado}
 <h3 class="sobretitulo subtitulo-bloco">Conferir na sua máquina</h3>
 {passos}
 </div></section>
 
-<section class="bloco" aria-labelledby="t-verificacoes"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-verificacoes"><div class="wrap">
 <h2 id="t-verificacoes">{ctx["n_verificacoes"]} verificações</h2>
 <p class="lead intro">O <code>tools/verificar.sh</code> confere no código o que o app promete em texto. Cada linha abaixo é uma afirmação que o script prova a cada mudança, no CI, e para o merge se falhar. Cada uma leva à linha onde mora.</p>
 <div class="mosaico">{"".join(grupos)}</div>
 </div></section>
 
-<section class="bloco" aria-labelledby="t-hosts"><div class="wrap">
-<h2 id="t-hosts">{len(ctx["hosts"])} servidores, e nenhum outro</h2>
+<section class="bloco titulos-centro" aria-labelledby="t-hosts"><div class="wrap">
+<h2 id="t-hosts">Uma lista fechada de servidores, e nenhum outro</h2>
 <p class="lead intro">O app só fala com os endereços do <code>hosts.lock</code>. O cliente HTTP recusa qualquer outro em tempo de execução, e cada um está na Política de privacidade, com o que vê. Agrupados como a Política descreve.</p>
 <p class="apoio links-bloco">{link_codigo(base, "hosts-permitidos", "Ler a lista compilada no app")} · <a href="{blob(ctx, "hosts.lock")}">hosts.lock no GitHub</a></p>
 <div class="mosaico">{"".join(hosts)}</div>
 </div></section>
 
-<section class="bloco" aria-labelledby="t-travas"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-travas"><div class="wrap">
 <h2 id="t-travas">O que vem de fora, conferido arquivo por arquivo</h2>
 <p class="lead intro">Nenhum pacote é baixado na hora de montar o app, e nenhum binário vem pronto. As bibliotecas de criptografia e as listas de palavras estão no repositório, compiladas do fonte, e o verificador confere a impressão digital (SHA-256) de cada arquivo.</p>
 <div class="verificacoes">{"".join(travas)}</div>
 </div></section>
 
-<section class="bloco" aria-labelledby="t-codigo"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-codigo"><div class="wrap">
 <h2 id="t-codigo">O código que importa</h2>
 <p class="lead intro">Os arquivos que assinam, conferem o que se assina, guardam as chaves e falam com a rede, linha a linha, no commit publicado. Cada linha leva à mesma linha no GitHub.</p>
 <div class="arquivos-grupos">{arquivos_html}</div>
 </div></section>
 
-<section class="bloco" aria-labelledby="t-auditorias"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-auditorias"><div class="wrap">
 <h2 id="t-auditorias">Auditorias de segurança</h2>
 <p class="lead intro">Os relatórios das revisões de segurança, com os achados e o que foi feito de cada um.</p>
 <ul class="auditorias">{auditorias}</ul>
@@ -937,7 +1161,7 @@ def secao_outro_app(ctx, base):
         linhas.append(f'<li>{logo_rede(ctx, base, primeiro)}<div><b>{e(nome)}</b>{extra}</div>'
                       f'<div class="outro-app-texto">{"".join(partes)}</div></li>')
     decifrar = blob(ctx, "tools/referencia/decifrar.py")
-    return f"""<section class="bloco" aria-labelledby="t-outro-app" id="outro-app"><div class="wrap">
+    return f"""<section class="bloco titulos-centro" aria-labelledby="t-outro-app" id="outro-app"><div class="wrap">
 <h2 id="t-outro-app">Abrir em outro app</h2>
 <p class="lead intro">As palavras da carteira abrem o mesmo saldo em outros apps, se você não tiver mais a Escalibur. Cada rede tem os apps que abrem a mesma conta.</p>
 <ul class="regras-outro-app">
@@ -1008,19 +1232,21 @@ def pagina_redes(ctx, base):
             f'<dl class="contratos">{"".join(contratos)}</dl></details></li>'
         )
 
-    corpo = f"""<header class="cabeca-pagina"><div class="wrap">
+    corpo = f"""<header class="cabeca-pagina cabeca-centro cabeca-moedas">
+<canvas class="redes-3d" aria-hidden="true"></canvas>
+<div class="wrap">
 <p class="sobretitulo">Redes e moedas</p>
 <h1 class="titulo-pagina">{len(redes)} redes.<br>{len(ctx["tokens"])} tokens conferidos.</h1>
 <p class="lead">Esta página sai do código do app a cada publicação: as redes de <a href="{blob(ctx, "Kit/Sources/EscaliburChains/Chain.swift")}">Chain.swift</a> e os tokens de <a href="{blob(ctx, "Kit/Sources/EscaliburChains/TokenRegistry.swift")}">TokenRegistry.swift</a>. Nenhuma rede ou token entra no app por resposta de servidor.</p>
 </div></header>
 
-<section class="bloco" aria-labelledby="t-redes"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-redes"><div class="wrap">
 <h2 id="t-redes">As redes</h2>
 <p class="lead intro">Cada carteira é uma frase BIP-39 de 12 ou 24 palavras, derivada pelos caminhos padrão de cada rede. O chainId, o explorador e o tempo de confirmação são constantes compiladas.</p>
 <ul class="tabela-redes">{"".join(linhas)}</ul>
 </div></section>
 
-<section class="bloco" aria-labelledby="t-tokens"><div class="wrap">
+<section class="bloco titulos-centro" aria-labelledby="t-tokens"><div class="wrap">
 <h2 id="t-tokens">Os tokens conferidos</h2>
 <p class="lead intro">{len(grupos)} moedas em {len(ctx["tokens"])} contratos. Cada contrato foi conferido na fonte oficial do emissor e lido em dois nós da rede antes de entrar na lista. Token fora dela aparece no app como não verificado, sem entrar no saldo total sem preço pelo contrato.</p>
 <div class="busca"><label class="apoio" for="busca-token">Procurar por nome, símbolo ou rede</label><br><input id="busca-token" type="search" placeholder="USDC, Solana, Lido…" autocomplete="off" spellcheck="false"></div>
@@ -1039,12 +1265,18 @@ def acentos_fora(texto):
 # MARK: Novidades
 
 
-def corpo_do_commit(blocos):
+def texto_novidade(c, texto):
+    """Em ingles, como esta; o portugues antigo ganhava acento aqui."""
+    return e(texto) if c.get("en") else acento(texto)
+
+
+def corpo_do_commit(blocos, c=None):
+    c = c or {}
     partes, lista = [], []
 
     def fecha():
         if lista:
-            partes.append("<ul>" + "".join(f"<li>{acento(i)}</li>" for i in lista) + "</ul>")
+            partes.append("<ul>" + "".join(f"<li>{texto_novidade(c, i)}</li>" for i in lista) + "</ul>")
             lista.clear()
 
     for tipo, texto in blocos:
@@ -1053,31 +1285,38 @@ def corpo_do_commit(blocos):
             continue
         fecha()
         if tipo == "titulo":
-            partes.append(f"<h3>{acento(texto)}</h3>")
+            partes.append(f"<h3>{texto_novidade(c, texto)}</h3>")
         else:
-            partes.append(f"<p>{acento(texto)}</p>")
+            partes.append(f"<p>{texto_novidade(c, texto)}</p>")
     fecha()
     return "".join(partes)
 
 
 def pagina_novidades(ctx, base):
+    """As entregas, em ingles (dados.em_ingles). Abrindo pelo link de uma novidade
+    (#c-xxxxxxx), o site.js ja abre aquela."""
     v = ctx["versao"]
     entregas = []
     for c in ctx["commits"]:
-        corpo = corpo_do_commit(c["corpo"])
-        detalhe = f'<details><summary>O que mudou</summary><div class="entrega-corpo">{corpo}</div></details>' if corpo else ""
+        corpo = corpo_do_commit(c["corpo"], c)
+        detalhe = f'<details class="entrega-detalhe"><summary>O que mudou</summary><div class="entrega-corpo" lang="en">{corpo}</div></details>' if corpo else ""
+        rodape = "" if c.get("anterior") else f'<p class="commit"><a href="{dados.REPO}/commit/{c["sha"]}">Commit {c["sha"][:7]} no GitHub</a></p>'
         entregas.append(
             f'<article class="entrega" id="c-{c["sha"][:7]}"><time datetime="{data_iso(c["data"])}">{data_longa(c["data"])}</time>'
-            f'<h2>{acento(c["assunto"])}</h2>{detalhe}'
-            + ('</article>' if c.get("anterior") else f'<p class="commit"><a href="{dados.REPO}/commit/{c["sha"]}">Commit {c["sha"][:7]} no GitHub</a></p></article>')
+            f'<h2 lang="en">{texto_novidade(c, c["assunto"])}</h2>{detalhe}{rodape}</article>'
         )
-    situacao = "Disponível na App Store." if ctx["app_store_url"] else "Em preparação para a App Store."
+    situacao = "Disponível na App Store." if ctx["app_store_url"] else "Em preparação para a App Store e o Google Play."
     vazio = "<p>O histórico não estava disponível neste build.</p>" if not entregas else ""
-    corpo = f"""<header class="cabeca-pagina"><div class="wrap estreito">
+    hashes = ",".join(c["sha"] for c in ctx["commits"] if re.fullmatch(r"[0-9a-f]{40}", c["sha"] or ""))
+    # A versao de agora em pixels que se juntam (pedido do dono, 23/10/2026: melhorar a animacao
+    # da primeira secao; antes, uma parede com os hashes dos commits).
+    parede = f'<canvas class="pixels-versao" data-texto="{e(v["marketing"])}" aria-hidden="true"></canvas>' 
+    corpo = f"""<header class="cabeca-pagina cabeca-centro"><div class="wrap">
+{parede}
 <p class="sobretitulo">Novidades</p>
 <h1 class="titulo-pagina">O que mudou.</h1>
-<p class="lead">Versão <strong>{e(v["marketing"])}</strong> (build {e(v["build"])}). {situacao}</p>
-<p class="apoio">Esta página é gerada a cada publicação, do histórico da main no GitHub: cada item é uma entrega, com o que mudou e o commit. Os textos do repositório são escritos sem acento; aqui o acento volta onde não há dúvida.</p>
+<p class="lead">Versão <strong>{e(v["marketing"])}</strong> (build {e(v["build"])}). {situacao} Cada entrega é um commit público no GitHub.</p>
+<p class="apoio">Gerada a cada publicação, do histórico da main. As entregas aparecem em inglês, a língua dos commits.</p>
 </div></header>
 <section class="bloco"><div class="wrap estreito">{vazio}{"".join(entregas)}</div></section>"""
     return moldura(ctx, base, "novidades", "Novidades", "As últimas atualizações da Escalibur Wallet, geradas do histórico de commits.", corpo, "novidades")
@@ -1143,7 +1382,7 @@ def pagina_suporte(ctx, base, itens, email, inline):
     palavras = next((v for k, v in secoes.items() if k.startswith("Nunca mande")), [])
     duvidas = next((v for k, v in secoes.items() if k.startswith("Antes de escrever")), [])
     nao_faz = next((v for k, v in secoes.items() if k.startswith("O que a Escalibur")), [])
-    falha_titulo = next((k for k in secoes if k.startswith("Falha")), "")
+    falha_titulo = next((k for k in secoes if k.startswith("Bug")), "")
     falha = secoes.get(falha_titulo, [])
 
     opcoes = "".join(

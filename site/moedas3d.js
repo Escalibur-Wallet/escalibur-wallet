@@ -76,7 +76,7 @@
     bitcoin: { campo: "#F7931A", simbolo: { d: "bitcoin", modo: "disco", escala: 1.02 } },
     ethereum: { campo: "#627EEA", simbolo: { d: "ethereum", modo: "cheio", escala: 0.6 } },
     solana: { campo: "#16161B", simbolo: { d: "solana", modo: "cheio", escala: 0.56, gradiente: ["#9945FF", "#19FB9B"], esmalte: true }, fosco: true },
-    tether: { campo: "#26A17B", simbolo: { d: "tether", modo: "poligono", escala: 0.86 } },
+    tether: { campo: "#26A17B", simbolo: { d: "tether", modo: "poligono", escala: 0.86, desce: 1.1 } },
     ripple: { campo: "#EDEDF0", simbolo: { d: "ripple", modo: "cheio", escala: 1.0, recorte: [5.95, 0, 18.1, 24], metal: GRAFITE } },
     "the-open-network": { campo: "#0098EA", simbolo: { d: "the-open-network", modo: "disco", escala: 1.0 } },
     dogecoin: { campo: "#C2A633", simbolo: { d: "dogecoin", modo: "disco", escala: 1.0 } },
@@ -138,6 +138,8 @@
     g.translate(LADO / 2, LADO / 2);
     g.scale(k, k);
     g.translate(-12, -12);
+    // O simbolo que pesa em cima (o pentagono do USDT) desce um pouco para parecer no centro.
+    if (s.desce) g.translate(0, s.desce);
     g.fillStyle = "#fff";
     g.strokeStyle = "#fff";
     if (s.desenho) {
@@ -167,13 +169,16 @@
 
   // O que e igual em toda face (o aro, as contas, o guilhoche) sai uma vez so, para a
   // pagina: por pixel, sem raiz nem seno na hora de cada moeda.
-  var BASE = null;
-  function baseDaFace() {
+  var BASE = null, baseParcial = null;
+  // Em fatias de linhas (`ate`): sem tarefa longa no celular. Sem argumento, termina tudo.
+  function baseDaFace(ate) {
     if (BASE) return BASE;
     var l = LADO, n = l * l, c = l / 2, raio = l * RAIO_UV;
-    var aroA = new Float32Array(n), contaA = new Float32Array(n), guiA = new Float32Array(n), alturaA = new Float32Array(n);
+    if (!baseParcial) baseParcial = { linha: 0, aro: new Float32Array(n), conta: new Float32Array(n), gui: new Float32Array(n), altura: new Float32Array(n) };
+    var aroA = baseParcial.aro, contaA = baseParcial.conta, guiA = baseParcial.gui, alturaA = baseParcial.altura;
     var contas = 90, raioContas = 0.79, tamConta = 0.0115;
-    for (var y = 0; y < l; y++) {
+    var y0 = baseParcial.linha, y1 = ate === undefined ? l : Math.min(l, y0 + ate);
+    for (var y = y0; y < y1; y++) {
       for (var x = 0; x < l; x++) {
         var dx = (x + 0.5 - c) / raio, dy = (y + 0.5 - c) / raio;
         var r = Math.sqrt(dx * dx + dy * dy), a = Math.atan2(dy, dx), i = y * l + x;
@@ -191,6 +196,8 @@
         guiA[i] = Math.sin(r * 210 + 3.2 * Math.sin(a * 14)) * 0.5 + 0.5;
       }
     }
+    baseParcial.linha = y1;
+    if (y1 < l) return null;
     BASE = { aro: aroA, conta: contaA, gui: guiA, altura: alturaA };
     return BASE;
   }
@@ -199,22 +206,26 @@
   // quadro da animacao, em pedacos de poucos milissegundos: o celular nao trava, e a moeda
   // aparece quando a face fica pronta.
   var fila = [], trabalhando = false, aoPronta = [];
+  // A vez seguinte vem por MessageChannel: o setTimeout(0) espera no minimo 4 ms a cada volta, e
+  // as faces demoravam a ficar prontas no celular (pedido do dono, 23/10/2026).
+  var canalFaces = window.MessageChannel ? new MessageChannel() : null;
+  var proximaVez = canalFaces ? function () { canalFaces.port2.postMessage(0); } : function () { setTimeout(trabalhar, 0); };
+  if (canalFaces) canalFaces.port1.onmessage = function () { trabalhar(); };
   function pedirFace(id) {
     if (faces[id] || fila.some(function (j) { return j.id === id; })) return;
     fila.push({ id: id, etapa: 0, linha: 0 });
-    if (!trabalhando) { trabalhando = true; setTimeout(trabalhar, 0); }
+    if (!trabalhando) { trabalhando = true; proximaVez(); }
   }
   function trabalhar() {
-    var fim = performance.now() + 7;
+    var fim = performance.now() + 10;
     while (fila.length && performance.now() < fim) passo(fila[0]);
-    if (fila.length) setTimeout(trabalhar, 0);
+    if (fila.length) proximaVez();
     else trabalhando = false;
   }
   function passo(j) {
     var l = LADO;
     if (j.etapa === 0) {
-      baseDaFace();
-      j.etapa = 1;
+      if (baseDaFace(48)) j.etapa = 1;
     } else if (j.etapa === 1) {
       j.def = MOEDAS[j.id] || MOEDAS.bitcoin;
       j.nitida = mascara(j.def);
@@ -712,12 +723,12 @@
       ["ripple", -0.9, 0.79, -3.0, 0.28],
       ["near", -0.78, -0.87, -1.5, 0.34],
       ["solana", 0.78, -0.92, -2.0, 0.36],
-      ["avalanche-2", 0.97, -0.33, -3.5, 0.3],
+      ["sui", 0.97, -0.33, -3.5, 0.3],
     ],
   };
   // As moedas que pousam na lista de ativos da tela da Carteira (midia/carteira.webp): o
   // centro de cada logo, em fracao da tela do app, medido na gravacao.
-  var POUSO = { tether: 0.5208, ripple: 0.5942, near: 0.6673, solana: 0.7407, "avalanche-2": 0.8142 };
+  var POUSO = { tether: 0.5208, ripple: 0.5942, near: 0.6673, solana: 0.7407, sui: 0.8141 };
   var POUSO_X = 0.0986, POUSO_D = 0.0986;
   // Onde as outras ficam, em volta do iPhone, quando a pagina rola: lado e altura em
   // relacao a tela do app, profundidade e tamanho.
@@ -727,7 +738,7 @@
     ethereum: [-0.8, 0.04, -1.6, 0.52],
     "the-open-network": [1.9, 0.74, -2.6, 0.52],
     "usd-coin": [-1.75, -0.04, -6, 0.48],
-    sui: [1.45, 0.95, -5.5, 0.44],
+    "avalanche-2": [1.45, 0.95, -5.5, 0.44],
   };
 
   function diretorAbertura(palco, t, estado) {
@@ -743,14 +754,16 @@
     lista.forEach(function (f, i) {
       var id = f[0], fase = i * 1.7 + 0.4;
       var m = palco.meioQuadro(f[3]);
-      var entrada = saida(lim((t - (estado.inicio || 0) - 0.12 * i) / 1.3, 0, 1));
+      // Sem entrada (pedido do dono, 23/10/2026): as moedas ja nascem no lugar da imagem parada,
+      // para a troca pela 3D nao parecer que elas somem e voltam.
+      var entrada = 1;
       // Quase sempre de frente, balancando; de tempos em tempos, um giro inteiro. Rolando a
       // pagina, duas voltas, para chegar de frente no fim.
       var periodo = 8.5 + (i % 4) * 2.1;
       var dentro = (t + fase * 1.9) % periodo;
       var volta = dentro < 1.5 ? dentro / 1.5 : 1;
       volta = volta < 0.5 ? 4 * volta * volta * volta : 1 - Math.pow(-2 * volta + 2, 3) / 2;
-      var giro = Math.sin(t * 0.45 + fase) * 0.42 * (1 - curva(0.5, 0.9, p) * 0.6) + volta * Math.PI * 2 + curva(0, 0.62, p) * Math.PI * 2 * (1 + (i % 2));
+      var giro = Math.sin(t * 0.45 + fase) * 0.42 * (1 - curva(0.5, 0.9, p) * 0.6) + volta * Math.PI * 2 + curva(0, 0.55, p) * Math.PI * 2 * (1 + (i % 2));
       var c = {
         id: id,
         x: f[1] * m.w + px.x * 0.35 * (f[3] + 7) / 9,
@@ -765,7 +778,7 @@
       if (tela && POUSO[id] !== undefined) {
         // Pousa no logo da lista: de frente, no plano z = 0, do tamanho do logo, e some.
         var ordem = Object.keys(POUSO).indexOf(id);
-        var k = curva(0.3 + ordem * 0.05, 0.54 + ordem * 0.05, p);
+        var k = curva(0.24 + ordem * 0.045, 0.44 + ordem * 0.045, p);
         if (k > 0) {
           var alvo = palco.daTela(tela.left + tela.width * POUSO_X, tela.top + tela.height * POUSO[id], 0);
           var raio = (tela.width * POUSO_D / 2) * (2 * palco.meioQuadro(0).w / palco.largura);
@@ -789,7 +802,7 @@
         c.alfa = entrada * (1 - s);
       } else if (tela && AUREOLA[id]) {
         var a = AUREOLA[id];
-        var q = curva(0.3, 0.72, p);
+        var q = curva(0.28, 0.6, p);
         if (q > 0) {
           var z = a[2];
           var pos = palco.daTela(tela.left + tela.width * a[0], tela.top + tela.height * a[1], z);
@@ -799,6 +812,16 @@
           c.z = c.z + (z - c.z) * w;
           c.escala = c.escala + (a[3] - c.escala) * w;
         }
+      }
+      // A imersao no iPhone: as que ficaram de fora passam voando pela camera e somem.
+      var imersao = curva(0.8, 0.95, p);
+      if (imersao > 0) {
+        var fora = c.alfa > 0.01 && !(tela && POUSO[id] !== undefined);
+        c.escala *= 1 + imersao * (fora ? 2.2 : 0);
+        c.z += imersao * 6;
+        c.x *= 1 + imersao * 1.6;
+        c.y *= 1 + imersao * 1.6;
+        c.alfa *= 1 - curva(0.82, 0.93, p);
       }
       moedas.push(c);
     });
@@ -841,13 +864,14 @@
       if (desistiu) return;
       desistiu = true;
       raiz.classList.remove("com-3d");
+      raiz.classList.add("sem-3d");
       cenas.forEach(function (c) { c.parada = true; try { c.palco.destruir(); } catch (e) { /* ja perdido */ } });
     }
 
     try {
       var c1 = document.querySelector(".abertura-3d");
       if (c1) {
-        var cenaAbertura = new Cena(c1, { dprMax: 2, exposicao: 1.05 }, function (palco, t) {
+        var cenaAbertura = new Cena(c1, { dprMax: 3, exposicao: 1.05 }, function (palco, t) {
           var ab = window.EscaliburAbertura || { p: 0 };
           var tela = null;
           if (ab.tela) {
@@ -859,9 +883,135 @@
         cenaAbertura.pesada = true;
         cenas.push(cenaAbertura);
       }
+      // A cabeca da pagina Redes: as mesmas moedas da abertura, paradas no lugar, girando.
+      var c4 = document.querySelector(".redes-3d");
+      if (c4) {
+        // Nas bordas, longe do texto: seis moedas no largo, quatro nos cantos no celular.
+        var BORDAS = [
+          ["bitcoin", -0.78, 0.34, 0.9, 1], ["ethereum", 0.8, 0.4, 0.2, 1], ["solana", -0.86, -0.36, -1.2, 1],
+          ["tether", 0.84, -0.34, -0.6, 1], ["ripple", -0.5, -0.62, -3, 0], ["the-open-network", 0.54, 0.66, -3, 0],
+        ];
+        // Na Auditoria, a cabeca tem o hash em pixels em cima e os numeros embaixo: as duas do
+        // fundo sobem para os cantos de cima, longe dos dois.
+        if (c4.hasAttribute("data-auditoria")) {
+          BORDAS = [
+            ["bitcoin", -0.8, 0.28, 0.9, 1], ["ethereum", 0.8, 0.34, 0.2, 1], ["solana", -0.84, -0.42, -1.2, 1],
+            ["tether", 0.84, -0.4, -0.6, 1], ["ripple", -0.6, 0.7, -3, 0], ["the-open-network", 0.6, 0.68, -3, 0],
+          ];
+        }
+        // Paradas no lugar, sem seguir o mouse (pedido do dono, 23/10/2026): so giram quando a
+        // pessoa clica (uma volta) ou arrasta (gira com o dedo e segue com inercia).
+        var giros = BORDAS.map(function () { return { extra: 0, v: 0 }; });
+        var naTela = [];
+        var cabeca = c4.closest(".cabeca-moedas") || c4.parentNode;
+        var pegaRedes = null;
+        var acharMoeda = function (e) {
+          var rc = c4.getBoundingClientRect(), x = e.clientX - rc.left, y = e.clientY - rc.top;
+          for (var k = 0; k < naTela.length; k++) {
+            var q = naTela[k];
+            if (q && Math.hypot(x - q.x, y - q.y) <= q.r * 1.1) return q.i;
+          }
+          return -1;
+        };
+        cabeca.addEventListener("pointerdown", function (e) {
+          if (e.button || (e.target.closest && e.target.closest("a, button, input"))) return;
+          var i = acharMoeda(e);
+          if (i < 0) return;
+          pegaRedes = { i: i, x: e.clientX, andou: 0, r: naTela.filter(function (q) { return q && q.i === i; })[0].r };
+          giros[i].v = 0;
+          cabeca.classList.add("girando");
+          try { cabeca.setPointerCapture(e.pointerId); } catch (erro) { /* sem captura */ }
+        });
+        cabeca.addEventListener("pointermove", function (e) {
+          if (!pegaRedes) {
+            if (e.pointerType === "mouse") cabeca.classList.toggle("sobre-moeda", acharMoeda(e) >= 0);
+            return;
+          }
+          var dx = e.clientX - pegaRedes.x, passo = dx / Math.max(pegaRedes.r, 20) * 0.9;
+          pegaRedes.x = e.clientX;
+          pegaRedes.andou += Math.abs(dx);
+          giros[pegaRedes.i].extra += passo;
+          giros[pegaRedes.i].v = giros[pegaRedes.i].v * 0.5 + passo * 0.5;
+        });
+        var soltarRedes = function () {
+          if (!pegaRedes) return;
+          // Um toque sem arrastar: uma volta inteira.
+          if (pegaRedes.andou < 4) giros[pegaRedes.i].v = 0.32;
+          pegaRedes = null;
+          cabeca.classList.remove("girando");
+          if (window.EscaliburRelogio) window.EscaliburRelogio.pedir();
+        };
+        cabeca.addEventListener("pointerup", soltarRedes);
+        cabeca.addEventListener("pointercancel", soltarRedes);
+        cabeca.addEventListener("pointerleave", function () { cabeca.classList.remove("sobre-moeda"); });
+        cenas.push(new Cena(c4, { dprMax: 3, exposicao: 1.05 }, function (palco, t) {
+          var estreito = palco.largura < 700;
+          var lado = Math.min(palco.meioQuadro(0).w, palco.meioQuadro(0).h);
+          naTela = [];
+          return BORDAS.filter(function (b) { return !estreito || b[4]; }).map(function (b, i) {
+            var m = palco.meioQuadro(b[3]);
+            var x = b[1] * m.w, y = b[2] * m.h, escala = lado * 0.26;
+            if (estreito) {
+              // No celular, inteiras nos quatro cantos (pedido do dono, 23/10/2026: a borda cortava
+              // as moedas): 68 px, acima do titulo e abaixo do texto. `k` converte px em unidades
+              // da cena na profundidade de cada uma.
+              var k = m.w / (palco.largura / 2);
+              escala = 34 * k;
+              x = (b[1] > 0 ? 1 : -1) * (m.w - escala * 1.5);
+              y = b[2] > 0 ? m.h - 120 * k : -m.h + 58 * k;
+            }
+            var entrada = saida(lim((t - inicio - 0.15 * i) / 1.2, 0, 1));
+            var gi = giros[BORDAS.indexOf(b)];
+            if (!pegaRedes || pegaRedes.i !== BORDAS.indexOf(b)) { gi.extra += gi.v; gi.v *= 0.95; }
+            var yy = y + Math.sin(t * 0.8 + i) * 0.08 - (1 - entrada) * 0.8;
+            // Onde a moeda cai na tela, para o clique achar qual foi tocada.
+            naTela.push({ i: BORDAS.indexOf(b), x: (x / m.w + 1) / 2 * palco.largura, y: (1 - yy / m.h) / 2 * palco.altura, r: escala / m.w * palco.largura / 2 });
+            return {
+              id: b[0], x: x, y: yy, z: b[3],
+              rx: -0.2 + Math.sin(t * 0.5 + i) * 0.15, ry: Math.sin(t * 0.45 + i * 1.7) * 0.5 + t * 0.25 * (i % 2 ? 1 : -1) + gi.extra,
+              rz: 0, escala: escala, alfa: entrada,
+            };
+          });
+        }));
+      }
       var c2 = document.querySelector(".destaque-3d");
       if (c2) {
-        cenas.push(new Cena(c2, { dprMax: 2, exposicao: 1.05, distancia: 12 }, function (palco, t) {
+        // Girar com a mao (pedido do dono, 23/10/2026): arrastar para os lados gira a moeda; ao
+        // soltar, ela segue com inercia e depois volta de frente sozinha.
+        var arrasto = { ry: 0, rx: 0, v: 0, ativo: false, x: 0, y: 0 };
+        var pega = c2.closest(".destaque-moeda");
+        if (pega) {
+          pega.classList.add("giravel");
+          pega.addEventListener("pointerdown", function (e) {
+            if (e.button) return;
+            arrasto.ativo = true; arrasto.x = e.clientX; arrasto.y = e.clientY; arrasto.v = 0;
+            pega.classList.add("girando");
+            try { pega.setPointerCapture(e.pointerId); } catch (erro) { /* sem captura */ }
+          });
+          pega.addEventListener("pointermove", function (e) {
+            if (!arrasto.ativo) return;
+            var lado = pega.getBoundingClientRect().width || 240;
+            var passo = (e.clientX - arrasto.x) / lado * Math.PI * 1.4;
+            arrasto.ry += passo;
+            arrasto.v = arrasto.v * 0.5 + passo * 0.5;
+            arrasto.rx = lim(arrasto.rx + (e.clientY - arrasto.y) / lado * 1.2, -0.6, 0.6);
+            arrasto.x = e.clientX; arrasto.y = e.clientY;
+          });
+          var soltar = function () { arrasto.ativo = false; pega.classList.remove("girando"); };
+          pega.addEventListener("pointerup", soltar);
+          pega.addEventListener("pointercancel", soltar);
+          pega.addEventListener("lostpointercapture", soltar);
+        }
+        cenas.push(new Cena(c2, { dprMax: 3, exposicao: 1.05, distancia: 12 }, function (palco, t) {
+          if (!arrasto.ativo) {
+            arrasto.ry += arrasto.v;
+            arrasto.v *= 0.95;
+            arrasto.rx *= 0.9;
+            if (Math.abs(arrasto.v) < 0.004) {
+              var frente = Math.round(arrasto.ry / (Math.PI * 2)) * Math.PI * 2;
+              arrasto.ry += (frente - arrasto.ry) * 0.05;
+            }
+          }
           var m = palco.meioQuadro(0);
           var raio = Math.min(m.w, m.h) / 1.4 * 0.96;
           var k = lim((t - giro.desde) / 0.9, 0, 1);
@@ -872,8 +1022,8 @@
           var dy = lim(((ponteiro.y + 1) / 2 * window.innerHeight - (rc.top + rc.height / 2)) / rc.height, -1, 1);
           return [{
             id: giro.de, x: 0, y: Math.sin(t * 0.9) * 0.04, z: 0,
-            rx: -0.16 + Math.sin(t * 0.45) * 0.06 + dy * 0.3,
-            ry: Math.sin(t * 0.6) * 0.32 + e * Math.PI * 2 + dx * 0.5,
+            rx: -0.16 + Math.sin(t * 0.45) * 0.06 + dy * 0.3 + arrasto.rx,
+            ry: Math.sin(t * 0.6) * 0.32 + e * Math.PI * 2 + dx * 0.5 + arrasto.ry,
             rz: 0, escala: raio, alfa: 1,
           }];
         }));
@@ -881,7 +1031,7 @@
       var c3 = document.querySelector(".final-3d");
       if (c3) {
         var vistoEm = null;
-        cenas.push(new Cena(c3, { dprMax: 2, exposicao: 1.05, distancia: 12 }, function (palco, t) {
+        cenas.push(new Cena(c3, { dprMax: 3, exposicao: 1.05, distancia: 12 }, function (palco, t) {
           if (vistoEm === null) vistoEm = t;
           var m = palco.meioQuadro(0);
           var raio = Math.min(m.w, m.h) / 1.4 * 0.96;
@@ -902,6 +1052,7 @@
       }
     } catch (erro) {
       cenas.forEach(function (c) { try { c.palco.destruir(); } catch (e) { /* nada */ } });
+      raiz.classList.add("sem-3d");
       return;
     }
     if (!cenas.length) return;
@@ -927,9 +1078,17 @@
       cenas.forEach(function (c) {
         if (c.parada || !c.visivel || document.hidden) return;
         algum = true;
-        c.palco.desenhar(c.diretor(c.palco, t));
+        var lista = c.diretor(c.palco, t);
+        c.ids = (lista || []).map(function (m) { return m && m.id; }).filter(Boolean);
+        c.palco.desenhar(lista);
       });
-      if (algum && primeiro) { primeiro = false; raiz.classList.add("com-3d"); }
+      // A imagem parada so sai quando as faces de todas as moedas na tela ficaram prontas: antes, ela sumia
+      // no primeiro quadro e as moedas 3D ainda iam aparecendo uma a uma, e a cabeca da pagina
+      // Redes piscava vazia (pedido do dono, 23/10/2026).
+      var facesProntas = cenas.every(function (c) {
+        return c.parada || !c.visivel || (c.ids || []).every(function (id) { return faces[id]; });
+      });
+      if (algum && primeiro && facesProntas) { primeiro = false; raiz.classList.add("com-3d"); }
       // O governador: se o quadro passa do tempo, a resolucao cai; se nem assim, as moedas
       // param e a imagem parada volta.
       if (algum) {
@@ -941,12 +1100,16 @@
         if (lento.n >= 90) {
           var media = lento.soma / lento.n;
           lento.soma = 0; lento.n = 0;
-          if (media > 26) {
+          // 30 quadros por segundo nao e lentidao: e o iPhone em modo de pouca energia, que
+          // segura o quadro em 33 ms. So abaixo de 25 quadros a resolucao cai, e nunca abaixo
+          // de 2x em tela de alta densidade: em 1,5x a moeda pixelava no celular (23/10/2026).
+          if (media > 40) {
             var abaixou = false;
             cenas.forEach(function (c) {
-              if (c.palco.dpr > 1.01) { c.palco.dpr = Math.max(1, c.palco.dpr - 0.5); c.palco.redimensionar(); abaixou = true; }
+              var piso = Math.min(window.devicePixelRatio || 1, 2);
+              if (c.palco.dpr > piso + 0.01) { c.palco.dpr = Math.max(piso, c.palco.dpr - 0.5); c.palco.redimensionar(); abaixou = true; }
             });
-            if (!abaixou && media > 36) desistir();
+            if (!abaixou && media > 55) desistir();
           }
         }
       } else {

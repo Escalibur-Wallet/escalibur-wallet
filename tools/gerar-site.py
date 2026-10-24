@@ -202,6 +202,8 @@ def preparar_logos(saida, redes, tokens):
     for token in tokens:
         nomes.add(f"logo-{token['gecko']}")
     nomes.update(f"logo-{gecko}" for gecko, _ in paginas.MOEDAS_ABERTURA)
+    # A vitrine "Todas as moedas" mostra o catalogo inteiro do app.
+    nomes.update(p.name.removesuffix(".imageset") for p in dados.LOGOS.glob("logo-*.imageset"))
     pasta = saida / "logos"
     pasta.mkdir()
     mapa = {}
@@ -326,6 +328,7 @@ def palavras_bip39(saida):
 # MARK: Precos (o retrato da publicacao)
 
 COINGECKO = "https://api.coingecko.com/api/v3"
+PAPRIKA = "https://api.coinpaprika.com/v1"
 CACHE_PRECOS = CACHE / "precos.json"
 
 
@@ -355,40 +358,60 @@ def retrato_de_precos(ids, vitrine):
     nao responde e no endereco antigo, que nao tem Worker. So com SITE_PRECOS=1 (o
     tools/publicar-site.sh liga): o verificar.sh e o CI geram o site sem rede, e ai o retrato
     sai sem precos, com os ids que o Worker le."""
-    retrato = {"hora": None, "ao_vivo": False, "fonte": "CoinGecko", "ids": ids, "vitrine": vitrine, "moedas": {}}
+    # Em dolar so (pedido do dono, 23/10/2026). `paprika`: o id de cada moeda no CoinPaprika, a
+    # segunda fonte do Worker, pela mesma tabela do app.
+    retrato = {"hora": None, "ao_vivo": False, "fonte": "CoinGecko", "ids": ids, "vitrine": vitrine, "moedas": {},
+               "paprika": dados.ids_paprika(ids), "linha_hora": None}
     if os.environ.get("SITE_PRECOS") != "1":
         return retrato
     try:
         if CACHE_PRECOS.is_file() and time.time() - CACHE_PRECOS.stat().st_mtime < 600:
             guardado = json.loads(CACHE_PRECOS.read_text(encoding="utf-8"))
-            if guardado.get("ids") == ids:
+            if guardado.get("ids") == ids and "paprika" in guardado:
                 return guardado
         mercado = _buscar_json(f"{COINGECKO}/coins/markets?" + urllib.parse.urlencode(
             {"vs_currency": "usd", "ids": ",".join(vitrine), "sparkline": "true", "price_change_percentage": "24h"}))
         simples = _buscar_json(f"{COINGECKO}/simple/price?" + urllib.parse.urlencode(
-            {"ids": ",".join(ids), "vs_currencies": "usd,brl", "include_24hr_change": "true"}))
-    except Exception as erro:  # sem rede, limite da API: o site sai sem retrato
-        print(f"gerar-site: precos fora do ar ({erro}); o retrato sai sem precos", file=sys.stderr)
-        return retrato
-    if not isinstance(mercado, list) or not isinstance(simples, dict):
-        print("gerar-site: resposta inesperada do CoinGecko; o retrato sai sem precos", file=sys.stderr)
-        return retrato
+            {"ids": ",".join(ids), "vs_currencies": "usd", "include_24hr_change": "true"}))
+        if not isinstance(mercado, list) or not isinstance(simples, dict):
+            raise ValueError("resposta inesperada")
+    except Exception as erro:  # sem rede, limite da API: a reserva do CoinPaprika, como no Worker
+        print(f"gerar-site: CoinGecko fora do ar ({erro}); tentando o CoinPaprika", file=sys.stderr)
+        return retrato_do_paprika(retrato)
     linhas = {m["id"]: _amostra((m.get("sparkline_in_7d") or {}).get("price") or []) for m in mercado if isinstance(m, dict)}
     for gecko in ids:
         dado = simples.get(gecko) or {}
         if dado.get("usd") is None:
             continue
         retrato["moedas"][gecko] = {
-            "usd": _redondo(dado.get("usd"), 8), "brl": _redondo(dado.get("brl"), 8),
-            "var": _redondo(dado.get("usd_24h_change"), 4), "var_brl": _redondo(dado.get("brl_24h_change"), 4),
+            "usd": _redondo(dado.get("usd"), 8), "var": _redondo(dado.get("usd_24h_change"), 4),
             "linha": linhas.get(gecko, []),
         }
     retrato["hora"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    retrato["linha_hora"] = retrato["hora"]
     try:
         CACHE.mkdir(parents=True, exist_ok=True)
         CACHE_PRECOS.write_text(json.dumps(retrato), encoding="utf-8")
     except OSError:
         pass
+    return retrato
+
+
+def retrato_do_paprika(retrato):
+    """A reserva: o preco e a variacao de 24 h do CoinPaprika, numa chamada so, sem a semana."""
+    try:
+        lista = _buscar_json(f"{PAPRIKA}/tickers?quotes=USD")
+        por_id = {item.get("id"): item for item in lista if isinstance(item, dict)}
+    except Exception as erro:
+        print(f"gerar-site: CoinPaprika fora do ar ({erro}); o retrato sai sem precos", file=sys.stderr)
+        return retrato
+    for gecko, paprika in retrato["paprika"].items():
+        usd = ((por_id.get(paprika) or {}).get("quotes") or {}).get("USD") or {}
+        if usd.get("price") is not None:
+            retrato["moedas"][gecko] = {"usd": _redondo(usd["price"], 8), "var": _redondo(usd.get("percent_change_24h"), 4), "linha": []}
+    if retrato["moedas"]:
+        retrato["hora"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        retrato["fonte"] = "CoinPaprika"
     return retrato
 
 
@@ -423,7 +446,7 @@ def main():
     modelo("", "inicio.html", "", "A hot wallet mais segura: carteira cripto sem custódia, com as chaves só no seu celular. "
            f"Envie e receba em {len(ctx['redes'])} redes, troque e confira cada transação antes de assinar.")
     modelo("seguranca", "seguranca.html", "Segurança",
-           "O que protege a sua carteira na Escalibur Wallet, contra quem, e onde cada proteção para.", "seguranca")
+           "As camadas que trancam a chave da sua carteira na Escalibur Wallet, o custo de cada uma para quem ataca e onde cada uma termina.", "seguranca")
 
     gravar(saida, "auditoria", paginas.pagina_auditoria(ctx, "../"))
     rotas.append("auditoria")

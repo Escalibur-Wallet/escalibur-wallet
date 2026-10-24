@@ -10,6 +10,15 @@ import XCTest
 /// Regra: nenhuma cena passa pela tela das palavras da carteira.
 final class Cenas: XCTestCase {
     private var marcas: String? { ProcessInfo.processInfo.environment["GRAVACAO_MARCAS"] }
+    /// O idioma da gravacao (`GRAVAR_IDIOMA` do gravar.sh): os videos do site sao em ingles
+    /// desde 23/10/2026, a pedido do dono. Os rotulos que o teste toca vem nos dois idiomas.
+    private var ingles: Bool { (ProcessInfo.processInfo.environment["GRAVACAO_IDIOMA"] ?? "en").hasPrefix("en") }
+    private func t(_ pt: String, _ en: String) -> String { ingles ? en : pt }
+    /// Fotos paradas (o podio do fim do site): `GRAVACAO_FOTOS` e a pasta.
+    private func fotografar(_ nome: String) {
+        guard let pasta = ProcessInfo.processInfo.environment["GRAVACAO_FOTOS"] else { return }
+        try? XCUIScreen.main.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: "\(pasta)/\(nome).png"))
+    }
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -17,9 +26,9 @@ final class Cenas: XCTestCase {
 
     // MARK: Apoio
 
-    private func abrir(_ tela: String?) -> XCUIApplication {
+    private func abrir(_ tela: String?, _ extras: [String] = []) -> XCUIApplication {
         let app = XCUIApplication(bundleIdentifier: "app.escalibur.wallet")
-        app.launchArguments = ["-demo"] + (tela.map { ["-tela", $0] } ?? [])
+        app.launchArguments = ["-demo"] + (tela.map { ["-tela", $0] } ?? []) + extras
         app.launch()
         return app
     }
@@ -72,10 +81,10 @@ final class Cenas: XCTestCase {
     }
 
     /// Digita como gente, uma tecla por vez.
-    private func digitar(_ campo: XCUIElement, _ texto: String) {
+    private func digitar(_ campo: XCUIElement, _ texto: String, intervalo: Double = 0.28) {
         for letra in texto {
             campo.typeText(String(letra))
-            pausa(0.28)
+            pausa(intervalo)
         }
     }
 
@@ -87,16 +96,18 @@ final class Cenas: XCTestCase {
         aceitarAvisos()
         let xrp = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'XRP,'")).firstMatch
         // O "esconder valores" fica gravado entre aberturas: a cena comeca com eles a mostra.
-        if app.buttons["Mostrar valores"].waitForExistence(timeout: 3) { app.buttons["Mostrar valores"].tap() }
+        let mostrar = app.buttons[t("Mostrar valores", "Show amounts")], ocultar = app.buttons[t("Ocultar valores", "Hide amounts")]
+        if mostrar.waitForExistence(timeout: 3) { mostrar.tap() }
         esperar(xrp, 90)
         pausa(8)
+        fotografar("carteira")
         marcar("inicio")
         pausa(1.8)
-        tocar(app.buttons["Ocultar valores"]); pausa(1.6)
-        tocar(app.buttons["Mostrar valores"]); pausa(1.6)
+        tocar(ocultar); pausa(1.6)
+        tocar(mostrar); pausa(1.6)
         xrp.tap()
         pausa(4.2)
-        tocar(app.buttons["Voltar"].firstMatch, 5)
+        tocar(app.buttons[t("Voltar", "Back")].firstMatch, 5)
         pausa(2.2)
         marcar("fim")
     }
@@ -109,7 +120,7 @@ final class Cenas: XCTestCase {
         pausa(8)
         marcar("inicio")
         pausa(1.5)
-        tocar(app.buttons["Receber"])
+        tocar(app.buttons[t("Receber", "Receive")])
         pausa(1.8)
         // O BTC fica depois das moedas da carteira: rola ate ele.
         let btc = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'BTC'")).firstMatch
@@ -123,12 +134,12 @@ final class Cenas: XCTestCase {
         _ = redes.firstMatch.waitForExistence(timeout: 4)
         pausa(1.2)
         if let rede = redes.allElementsBoundByIndex.first(where: { $0.frame.width > 200 }) { rede.tap() }
-        esperar(texto(app, comecando: "Receber BTC"), 30)
+        esperar(texto(app, comecando: t("Receber BTC", "Receive BTC")), 30)
         pausa(1.0)
         marcar("capa")
         pausa(1.2)
         // O da folha, nao o "Copiar endereço" do topo da Carteira, que fica por baixo.
-        tocar(app.buttons.matching(NSPredicate(format: "label == 'Copiar endereço' AND identifier != 'copiar-endereco-carteira'")).firstMatch)
+        tocar(app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != 'copiar-endereco-carteira'", t("Copiar endereço", "Copy address"))).firstMatch)
         pausa(2.6)
         marcar("fim")
     }
@@ -137,26 +148,28 @@ final class Cenas: XCTestCase {
     func testTrocar() throws {
         let app = abrir("trocar")
         aceitarAvisos()
-        let rede = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Rede:'")).firstMatch
+        let rede = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", t("Rede:", "Network:"))).firstMatch
         esperar(rede, 60)
         pausa(4)
-        marcar("inicio")
-        pausa(1.4)
+        // A rede e escolhida antes da gravacao: o video comeca no valor (pedido do dono,
+        // 23/10/2026: a troca estava lenta).
         rede.tap()
         pausa(1.0)
         tocar(app.buttons["XRP Ledger"].firstMatch, 10)
-        pausa(1.4)
+        pausa(2.0)
+        marcar("inicio")
+        pausa(0.6)
         let campo = app.textFields.firstMatch
         tocar(campo)
-        pausa(0.6)
-        digitar(campo, "250")
+        pausa(0.3)
+        digitar(campo, "250", intervalo: 0.14)
         // A proxima cotacao e o relogio redondo ao lado do preco: ele aparece com a cotacao.
         esperar(app.descendants(matching: .any)["troca-proxima-cotacao"], 40, "a cotacao nao chegou")
-        pausa(1.6)
-        tocar(app.buttons["Pronto"], 5)
-        pausa(1.4)
+        pausa(0.6)
+        tocar(app.buttons[t("Pronto", "Done")], 5)
+        pausa(0.8)
         marcar("capa")
-        pausa(3.6)
+        pausa(2.2)
         marcar("fim")
     }
 
@@ -164,16 +177,16 @@ final class Cenas: XCTestCase {
     func testLimite() throws {
         let app = abrir("limite-xrp")
         aceitarAvisos()
-        esperar(app.buttons["Revisar ordem"], 60)
+        esperar(app.buttons[t("Revisar ordem", "Review order")], 60)
         pausa(4)
         marcar("inicio")
-        pausa(1.4)
-        tocar(app.buttons["+5%"]); pausa(1.6)
-        tocar(app.buttons["+10%"]); pausa(1.6)
-        tocar(app.buttons["30 dias"]); pausa(1.6)
-        tocar(app.buttons["Até cancelar"]); pausa(1.6)
-        tocar(app.buttons["7 dias"]); pausa(1.0)
-        tocar(app.buttons["Atual"]); pausa(1.8)
+        pausa(1.2)
+        tocar(app.buttons["+5%"]); pausa(1.3)
+        tocar(app.buttons["+10%"]); pausa(1.3)
+        tocar(app.buttons[t("30 dias", "30 days")]); pausa(1.3)
+        tocar(app.buttons[t("Até cancelar", "Until canceled")]); pausa(1.3)
+        tocar(app.buttons[t("7 dias", "7 days")]); pausa(1.0)
+        tocar(app.buttons[t("Atual", "Current")]); pausa(1.6)
         marcar("fim")
     }
 
@@ -197,7 +210,7 @@ final class Cenas: XCTestCase {
     func testEnviando() throws {
         let app = abrir("envio-enviando")
         aceitarAvisos()
-        esperar(texto(app, comecando: "Enviando"), 60)
+        esperar(texto(app, comecando: t("Enviando", "Sending")), 60)
         pausa(2)
         marcar("inicio")
         pausa(6)
@@ -208,29 +221,39 @@ final class Cenas: XCTestCase {
     func testEnviado() throws {
         let app = abrir("enviado")
         aceitarAvisos()
-        esperar(texto(app, comecando: "Enviado"), 60)
+        esperar(texto(app, comecando: t("Enviado", "Sent")), 60)
         pausa(2)
         marcar("inicio")
         pausa(6)
         marcar("fim")
     }
 
-    /// Pagina da moeda: o dedo correndo o grafico e os periodos.
+    /// Pagina da moeda: o dedo correndo o grafico, so no periodo em que o grafico sobe (pedido
+    /// do dono, 23/10/2026: so grafico verde). `GRAVACAO_PERIODO` escolhe o periodo ("7 dias"
+    /// por padrao; o nome em portugues, a cena traduz).
     func testMoeda() throws {
         let app = abrir("moeda")
         aceitarAvisos()
-        esperar(app.buttons["7 dias"], 60)
-        pausa(6)
+        let periodos = ["24h": "24h", "7 dias": "7 days", "30 dias": "30 days", "1 ano": "1 year"]
+        let escolhido = ProcessInfo.processInfo.environment["GRAVACAO_PERIODO"] ?? "7 dias"
+        let botao = app.buttons[t(escolhido, periodos[escolhido] ?? escolhido)]
+        esperar(botao, 60)
+        pausa(5)
+        botao.tap()
+        pausa(3)
         marcar("inicio")
-        pausa(1.4)
+        pausa(1.2)
         let janela = app.windows.firstMatch
         let inicio = janela.coordinate(withNormalizedOffset: CGVector(dx: 0.14, dy: 0.36))
         let fim = janela.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.36))
         inicio.press(forDuration: 0.5, thenDragTo: fim, withVelocity: 110, thenHoldForDuration: 0.6)
-        pausa(1.2)
-        tocar(app.buttons["7 dias"]); pausa(2.2)
-        tocar(app.buttons["30 dias"]); pausa(2.2)
-        tocar(app.buttons["24h"]); pausa(2.0)
+        pausa(1.4)
+        marcar("capa")
+        pausa(1.6)
+        let volta = janela.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.36))
+        let meio = janela.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.36))
+        volta.press(forDuration: 0.4, thenDragTo: meio, withVelocity: 140, thenHoldForDuration: 0.5)
+        pausa(2.0)
         marcar("fim")
     }
 
@@ -262,11 +285,11 @@ final class Cenas: XCTestCase {
     func testPromessa() throws {
         let app = abrir("promessa")
         aceitarAvisos()
-        esperar(texto(app, comecando: "Uma chave para todas"), 60)
+        esperar(texto(app, comecando: t("Uma chave para todas", "One key for all")), 60)
         pausa(3)
         marcar("inicio")
         pausa(5)
-        tocar(app.buttons["Continuar"], 5)
+        tocar(app.buttons[t("Continuar", "Continue")], 5)
         pausa(5.5)
         marcar("fim")
     }
@@ -275,7 +298,7 @@ final class Cenas: XCTestCase {
     func testEnvelope() throws {
         let app = abrir("lacrar")
         aceitarAvisos()
-        esperar(texto(app, comecando: "Criptografar a senha"), 60)
+        esperar(texto(app, comecando: t("Criptografar a senha", "Encrypt the recovery")), 60)
         pausa(3)
         marcar("inicio")
         pausa(12)
@@ -286,7 +309,7 @@ final class Cenas: XCTestCase {
     func testPassphrase() throws {
         let app = abrir("passphrase-como")
         aceitarAvisos()
-        let proximo = app.buttons["Próximo"]
+        let proximo = app.buttons[t("Próximo", "Next")]
         esperar(proximo, 60)
         pausa(3)
         marcar("inicio")
@@ -303,7 +326,7 @@ final class Cenas: XCTestCase {
     func testMercado() throws {
         let app = abrir("mercado")
         aceitarAvisos()
-        esperar(app.buttons["Relevância"].firstMatch, 60)
+        esperar(app.buttons[t("Relevância", "Relevance")].firstMatch, 60)
         pausa(6)
         marcar("inicio")
         pausa(1.6)
@@ -314,19 +337,60 @@ final class Cenas: XCTestCase {
         marcar("fim")
     }
 
-    /// Ponte: USDC da Base para a Arbitrum pelo CCTP, rapida e padrao. A carteira de teste
-    /// nao tem USDC na Base: a tela diz isso, como diria a qualquer um.
+    /// Ponte: USDC da Base para a Arbitrum pelo CCTP, rapida e padrao, com saldo. A carteira de
+    /// teste nao tem USDC nas redes da ponte: `-saldo-ponte` poe 1.250 USDC de exemplo na Base,
+    /// so na tela do modo demo (pedido do dono, 23/10/2026: o video mostrava "saldo insuficiente").
     func testPonte() throws {
-        let app = abrir("ponte")
+        let app = abrir("ponte", ["-saldo-ponte"])
         aceitarAvisos()
-        let padrao = app.buttons["Padrão"].firstMatch
+        let padrao = app.buttons[t("Padrão", "Standard")].firstMatch
         esperar(padrao, 60)
         pausa(5)
         marcar("inicio")
-        pausa(1.8)
-        padrao.tap(); pausa(2.4)
-        tocar(app.buttons["Rápida"].firstMatch); pausa(2.2)
+        pausa(1.4)
+        padrao.tap(); pausa(2.0)
+        tocar(app.buttons[t("Rápida", "Fast")].firstMatch); pausa(1.6)
+        marcar("capa")
+        pausa(1.6)
         marcar("fim")
+    }
+
+    /// Safe Keyboard: Ajustes, Seguranca, Safe Keyboard, com o teclado digitando sozinho (no
+    /// lugar dos alertas de preco, pedido do dono, 23/10/2026).
+    func testTeclado() throws {
+        let app = abrir("ajustes")
+        aceitarAvisos()
+        tocar(app.buttons[t("Segurança", "Security")].firstMatch, 60)
+        pausa(1.2)
+        tocar(app.buttons["ajustes-teclado"].firstMatch, 20)
+        esperar(app.staticTexts["Safe Keyboard"].firstMatch, 20)
+        // O interruptor ligado no video (pedido do dono, 23/10/2026): liga antes de gravar.
+        let chave = app.switches["teclado-proprio"].firstMatch
+        if chave.waitForExistence(timeout: 10), (chave.value as? String) == "0" {
+            chave.switches.firstMatch.exists ? chave.switches.firstMatch.tap() : chave.tap()
+            pausa(1.5)
+        }
+        pausa(3)
+        marcar("inicio")
+        pausa(3.2)
+        // A capa no meio de uma palavra digitada.
+        marcar("capa")
+        pausa(6.8)
+        marcar("fim")
+    }
+
+    /// As fotos paradas do fim do site (o podio): a pagina do bitcoin em cada periodo, para
+    /// escolher a de grafico subindo, e a Carteira.
+    func testFotos() throws {
+        let app = abrir("moeda")
+        aceitarAvisos()
+        esperar(app.buttons[t("7 dias", "7 days")], 60)
+        pausa(8)
+        fotografar("moeda-24h")
+        for (rotulo, nome) in [(t("7 dias", "7 days"), "moeda-7d"), (t("30 dias", "30 days"), "moeda-30d"), (t("1 ano", "1 year"), "moeda-1a")] {
+            let botao = app.buttons[rotulo]
+            if botao.waitForExistence(timeout: 5) { botao.tap(); pausa(3.5); fotografar(nome) }
+        }
     }
 
     // MARK: Conferencia do site no Safari do simulador (nao grava video)

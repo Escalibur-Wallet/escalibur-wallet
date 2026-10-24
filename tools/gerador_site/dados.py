@@ -258,12 +258,43 @@ RAIZ_DO_HISTORICO = "Escalibur Wallet 1.0.0: o código publicado"
 
 def commits(limite=40):
     """O historico da main pela primeira linha de pais (cada mescla conta como uma entrega),
-    e depois as entregas de antes do recomeco do historico."""
-    lista = [c for c in _commits_do_git(limite) if c["assunto"] != RAIZ_DO_HISTORICO]
+    e depois as entregas de antes do recomeco do historico. Em ingles (pedido do dono,
+    23/10/2026): cada entrega passa pela tabela de traducao (novidades-en.json, pelo hash
+    curto); a que nao esta na tabela e parece escrita em portugues fica de fora, com aviso."""
+    lista = [c for c in _commits_do_git(limite + 10) if c["assunto"] != RAIZ_DO_HISTORICO]
     if NOVIDADES_ANTERIORES.is_file():
         anteriores = json.loads(NOVIDADES_ANTERIORES.read_text(encoding="utf-8"))
         lista += [dict(c, corpo=[tuple(b) for b in c["corpo"]], anterior=True) for c in anteriores]
-    return lista[:limite]
+    saida = []
+    for c in lista:
+        if len(saida) >= limite:
+            break
+        # Os commits do proprio site saem da lista depois (gerar-site.py, novidades_do_app).
+        traduzida = c if re.match(r"^Site\b", c["assunto"]) else em_ingles(c)
+        if traduzida:
+            saida.append(traduzida)
+    return saida
+
+
+NOVIDADES_EN = RAIZ / "tools" / "gerador_site" / "novidades-en.json"
+_TRADUCOES = None
+# Palavras que so aparecem em texto em portugues (os commits sao escritos sem acento).
+_PORTUGUES = re.compile(r"\b(nao|para|com|uma|sem|quando|pelo|pela|dos|das|nos|nas|agora|tambem|ate|entre|mais|so|ja|tela|carteira|redes)\b")
+
+
+def em_ingles(c):
+    global _TRADUCOES
+    if _TRADUCOES is None:
+        _TRADUCOES = json.loads(NOVIDADES_EN.read_text(encoding="utf-8")) if NOVIDADES_EN.is_file() else {}
+    traducao = _TRADUCOES.get((c.get("sha") or "")[:7])
+    if traducao:
+        return dict(c, assunto=traducao["assunto"], corpo=[tuple(b) for b in traducao["corpo"]], en=True)
+    texto = " ".join([c["assunto"]] + [b[1] for b in c["corpo"]]).lower()
+    if len(_PORTUGUES.findall(texto)) >= 2:
+        print(f"gerar-site: a novidade {c.get('sha', '')[:7]} esta em portugues e sem traducao em novidades-en.json; fica de fora",
+              file=sys.stderr)
+        return None
+    return dict(c, en=True)
 
 
 def _commits_do_git(limite):
@@ -421,7 +452,9 @@ def verificacoes():
 
 
 def _limpa_mensagem(mensagem, n_hosts):
-    mensagem = mensagem.replace("$(wc -l < hosts.lock | tr -d ' ')", str(n_hosts))
+    # Sem o numero de servidores no site (pedido do dono, 23/10/2026): "os hosts", sem contar.
+    mensagem = mensagem.replace("$(wc -l < hosts.lock | tr -d ' ') hosts", "os hosts")
+    mensagem = mensagem.replace("$(wc -l < hosts.lock | tr -d ' ')", "")
     mensagem = re.sub(r"\s*\((?:[^()]|\([^)]*\))*\$[^)]*\)\)?", "", mensagem)
     mensagem = re.sub(r"\$\([^)]*\)|\$\{?\w+\}?", "", mensagem)
     mensagem = re.sub(r"\(\s*\)", "", mensagem)
@@ -562,3 +595,36 @@ def ponte():
     ordem = [redes_ponte[n]["rede"] for n in nomes + extras]
     return {"redes": ordem, "rotas": {ativo: [(redes_ponte[a]["rede"], redes_ponte[b]["rede"], via) for a, b, via in lista_rotas]
                                        for ativo, lista_rotas in rotas.items()}}
+
+
+# MARK: Ids do CoinPaprika (a segunda fonte de precos do site)
+
+MERCADO_APP = RAIZ / "Kit/Sources/EscaliburNetwork/Market.swift"
+PAPRIKA_GERADO = RAIZ / "Kit/Sources/EscaliburNetwork/PaprikaGeckoIDs.swift"
+
+
+def ids_paprika(ids_gecko):
+    """O id do CoinPaprika de cada moeda, pela mesma tabela do app: a feita a mao em
+    Market.swift (`paprikaIDs`, do CoinGecko para o CoinPaprika) e a gerada em
+    PaprikaGeckoIDs.swift (do CoinPaprika para o CoinGecko). Moeda sem par fica de fora."""
+    mapa = {}
+    texto = MERCADO_APP.read_text(encoding="utf-8") if MERCADO_APP.is_file() else ""
+    bloco = re.search(r"static let paprikaIDs: \[String: String\] = \[(.*?)\]", texto, re.S)
+    if bloco:
+        mapa.update(dict(re.findall(r'"([a-z0-9-]+)":\s*"([a-z0-9-]+)"', bloco.group(1))))
+    if PAPRIKA_GERADO.is_file():
+        for paprika, gecko in re.findall(r'"([a-z0-9-]+)":\s*"([a-z0-9-]+)"', PAPRIKA_GERADO.read_text(encoding="utf-8")):
+            mapa.setdefault(gecko, paprika)
+    mapa.update(PAPRIKA_DO_SITE)
+    return {g: mapa[g] for g in ids_gecko if g in mapa}
+
+
+# Ids que a tabela do app nao tem, ou que o CoinPaprika trocou, conferidos na lista de tickers
+# do CoinPaprika em 23/10/2026 (simbolo, nome e preco iguais aos do CoinGecko). O TON virou
+# `toncoin-the-open-network`: o `ton-toncoin` da tabela do app ja nao existe la.
+PAPRIKA_DO_SITE = {
+    "the-open-network": "toncoin-the-open-network", "ripple-usd": "rlusd-ripple-usd", "euro-coin": "euroc-euro-coin",
+    "weth": "weth-weth", "coinbase-wrapped-btc": "cbbtc-coinbase-wrapped-btc", "ethena-usde": "usde-ethena-usde",
+    "raydium": "ray-raydium", "pyth-network": "pyth-pyth-network", "render-token": "rndr-render-token",
+    "aerodrome-finance": "aero-aerodrome-finance",
+}

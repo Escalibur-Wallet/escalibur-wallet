@@ -657,7 +657,24 @@ final class Portfolio {
         return before > 0 ? change24hFiat / before * 100 : 0
     }
 
-    func balance(_ chain: Chain) -> ChainBalance? { balances[chain.id] }
+    #if DEBUG
+    /// `-tela ponte` com `-saldo-ponte` (so o modo demo de depuracao): um saldo de exemplo na
+    /// rede de origem da ponte, para a gravacao do site mostrar o fluxo com saldo. A carteira
+    /// publica de teste nao tem USDC nem ETH nas redes da ponte.
+    var debugHoldings: [String: [Holding]] = [:]
+    #endif
+
+    func balance(_ chain: Chain) -> ChainBalance? {
+        #if DEBUG
+        if let extra = debugHoldings[chain.id] {
+            let real = balances[chain.id]
+            let rest = (real?.holdings ?? []).filter { held in !extra.contains { $0.asset.id == held.asset.id } }
+            return ChainBalance(chainID: chain.id, holdings: rest + extra, accountExists: true, unknownTokenCount: real?.unknownTokenCount ?? 0,
+                                fetchedAt: real?.fetchedAt ?? Date(), unlisted: real?.unlisted, reservedNative: real?.reservedNative)
+        }
+        #endif
+        return balances[chain.id]
+    }
 
     /// O que da para mover de um ativo: o saldo menos a reserva que a rede prende (XRP
     /// Ledger, Stellar). A reserva continua no saldo, mas nao e "disponivel".

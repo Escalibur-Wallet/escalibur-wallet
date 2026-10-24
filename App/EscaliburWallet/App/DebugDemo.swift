@@ -222,6 +222,15 @@ enum DebugDemo {
                     record.settledTxHash = "0x" + String(repeating: "cd", count: 32)
                     session.metadata.bridges = [record]
                 }
+                // `-saldo-ponte`: 1.250 USDC e 0,05 ETH de exemplo na Base, so na tela, para o fluxo
+                // seguir ate a revisao (a carteira de teste nao tem saldo nas redes da ponte).
+                if arguments.contains("-saldo-ponte"),
+                   let usdc = TokenRegistry.tokens.first(where: { $0.chainID == "base" && $0.symbol == "USDC" }) {
+                    portfolio?.debugHoldings["base"] = [
+                        Holding(asset: usdc, amount: BigUInt(1_250_000_000)),
+                        Holding(asset: .native(.base), amount: BigUInt(5) * BigUInt.power(of: 10, 16)),
+                    ]
+                }
             // `-tela ponte-tron`: a ponte em Trocar, 1.000 USDT da Ethereum para a Tron, cotados ao
             // vivo no contrato da Tether.
             case "ponte-tron":

@@ -1,0 +1,1432 @@
+{
+ "00623af": {
+  "assunto": "A batch of screens: swap, limit order, envelope, Super Security and Safe Keyboard on every field",
+  "corpo": [
+   [
+    "titulo",
+    "Swap"
+   ],
+   [
+    "item",
+    "Tolerance up to 10% on every network (Stellar, XRP Ledger and Solana went up from 5%); above 3% the control turns purple, at most the Escalibur color with the light sweep. The automatic text short and without yellow."
+   ],
+   [
+    "item",
+    "A quote for a request that already changed (tolerance dragged) no longer shows a blinking error."
+   ],
+   [
+    "item",
+    "Tiny token prices with the base in thousands/millions/billions/trillions (\"1M BNBFROG = 12.34 USDT\")."
+   ],
+   [
+    "item",
+    "Next quote in a round yellow clock next to the price."
+   ],
+   [
+    "item",
+    "Choose another provider from the round on the route (TradeQuote.choosing, with a test): the plan re-quotes, validates and simulates that provider; the best becomes an alternative."
+   ],
+   [
+    "item",
+    "An error while building the swap or the order goes back to the swap screen."
+   ],
+   [
+    "item",
+    "Official PancakeSwap logo; verified tokens before unlisted ones in the picker."
+   ],
+   [
+    "item",
+    "A small arrow on the amount opens a balance percentage control."
+   ],
+   [
+    "titulo",
+    "Limit order"
+   ],
+   [
+    "item",
+    "Its own edit screen; cancel asks in a popup; details with \"Redo when it expires\"; 30-day default deadline; \"Expires in\" counting real time; review without the two-signatures notice and with \"From\" translated (also on the bridge); orders on the send sheet in the Open orders design, dark background; \"See addresses and contracts\" in a dark card."
+   ],
+   [
+    "titulo",
+    "Security and envelope"
+   ],
+   [
+    "item",
+    "Super Security turns on with the backup of every wallet checked, without typing the phrases again (the vault still refuses the old passphrase outside NFKD); centered title."
+   ],
+   [
+    "item",
+    "Full Safe Keyboard (letters, numbers, symbols, accents and numeric) on every field when on, going through each field's delegate (the password goes to the secure buffer)."
+   ],
+   [
+    "item",
+    "The 12th generated word kept out of screenshots; the word list doesn't reopen the keyboard."
+   ],
+   [
+    "item",
+    "Envelope: sealed without moving up and centered, no capsule on the name nor light sweep, lock on black; weak password sheet at the content's height; hold to use with the pixels; hold to see on the repeat."
+   ],
+   [
+    "item",
+    "Keyboard texts, \"Default\" tag removed, green switches, centered loading states, the addresses scene with coin and address, centered words, \"Audit the code\" in About, contract on the Receive card with copy, a collapsible custom coin notice."
+   ]
+  ]
+ },
+ "013db36": {
+  "assunto": "Opening with the new video of coins around the sword",
+  "corpo": [
+   [
+    "p",
+    "The same format: 7.5 s in HEVC, without audio, and the loop seam blending the end into the start in half a second. The still frame comes from the start of the video."
+   ]
+  ]
+ },
+ "0ba5f3e": {
+  "assunto": "Wallet: copy address moves to the wallet list",
+  "corpo": [
+   [
+    "p",
+    "The copy button leaves the top of the Wallet and goes to the list that opens on the wallet name, on each wallet, next to the pencil (above the row, with its own tap, without selecting the wallet). It opens the same copy screen, network by network. The test opens the list by the name (`carteira-nome`) and takes its photo."
+   ]
+  ]
+ },
+ "0f6345d": {
+  "assunto": "Android: Manage assets and custom coins, as on iOS",
+  "corpo": [
+   [
+    "p",
+    "The Manage link next to Assets opens the list of each asset and of other tokens with the show switch, custom coins with remove, and Add coin: the coin orbit, the pasted contract (the network comes from it) or the code and issuer, the on-chain read from two sources and the preview with the full contract, badges and notices. In the core, the ativos.* and tokens.* methods and the snapshot with all other tokens."
+   ]
+  ]
+ },
+ "108079f": {
+  "assunto": "iOS: white alerts through a single modifier (whiteAlert)",
+  "corpo": [
+   [
+    "p",
+    "Three modifiers per alert made the import screen too complex for the compiler. whiteAlert does the same in one: the alert gets white and the screen keeps the pink. It compiles again."
+   ]
+  ]
+ },
+ "1afad15": {
+  "assunto": "Android and iOS: parity adjustments and the seal that went back to the start",
+  "corpo": [
+   [
+    "item",
+    "Device check without the clipboard item, in both apps."
+   ],
+   [
+    "item",
+    "Watch an address with the coin orbit from Add coin, the eye in the center."
+   ],
+   [
+    "item",
+    "Seal the envelope: the wait after biometrics change now refuses right at Continue, before the check and the PIN, with the notice next to the button (before it was hidden below the list and the flow seemed to go back to the start). On Android, the core checks the wait before the PIN keyboard, like iOS retrying."
+   ],
+   [
+    "item",
+    "Import: the other option next to 24 words stays the last one chosen, in both apps. On Android, Paste on the size row, 01 numbering and positions at the iOS size, and the word list to pick by tapping."
+   ],
+   [
+    "item",
+    "Android: Receive with the coin + by contract, the full network badge on the QR and the spacing between address blocks at the iOS size; the Settings gear with the iOS measurements; the tolerance slider doesn't restart the gesture mid-drag; Saved addresses as on iOS."
+   ],
+   [
+    "item",
+    "The Android core builds without paths from the user's folder."
+   ]
+  ]
+ },
+ "1bee2a4": {
+  "assunto": "Screens: choose words, check the device and copy address",
+  "corpo": [
+   [
+    "item",
+    "Word list: the tapped word lights up in the verification green and fades by itself (the list is public, which words are in the phrase isn't), and a progress bar fills."
+   ],
+   [
+    "item",
+    "\"The app picks\": a reserved position with a twinkling pixel matrix instead of the die, and the chosen-words notice rewritten."
+   ],
+   [
+    "item",
+    "Check the device: the outer pixels light up one by one, softly and in sequence; the shield background became concentric rings (it was an octagon) that breathe, with a wave from the center."
+   ],
+   [
+    "item",
+    "Copy address: on the EVM row, tapping opens the networks and copy stays on the button; the text shows two networks."
+   ],
+   [
+    "item",
+    "Text catalog synced with the code and English complete."
+   ]
+  ]
+ },
+ "1d44975": {
+  "assunto": "Android and iOS: icons as on iOS, green network confirmation and centered envelope",
+  "corpo": [
+   [
+    "item",
+    "Android: key (key.horizontal), keyboard (keyboard), bell (bell) and bell with dot (bell.badge) redrawn from the iOS symbol measurements; the receipt alert with the arrow in a circle; the passphrase lock slightly outside the corner of the wallet icon, as on iOS."
+   ],
+   [
+    "item",
+    "Send: the confirmation that the recipient accepts the network is a green switch in both (on Android it was a checkbox)."
+   ],
+   [
+    "item",
+    "Open an envelope: the content in the middle of the page, in both."
+   ]
+  ]
+ },
+ "20afc04": {
+  "assunto": "A batch of screens: envelope, hold in green, alerts, plate, copy, receive, add coin and Wallet",
+  "corpo": [
+   [
+    "titulo",
+    "Envelope"
+   ],
+   [
+    "item",
+    "Generate with the \"the app picks\" pixels (DrawPixels) instead of the die, on both buttons."
+   ],
+   [
+    "item",
+    "The create password screen says the next one asks for the password again; the repeat one got a back button (close moves to the right), and the generated words come back the same."
+   ],
+   [
+    "item",
+    "Without the flash drive sentence on the weak password sheet."
+   ],
+   [
+    "item",
+    "\"Encrypt the recovery phrase\" with \"How it works\" and the scene higher up."
+   ],
+   [
+    "titulo",
+    "Screens"
+   ],
+   [
+    "item",
+    "HoldButton: the green fills from the left, with the right end slightly rounded, and the text darkens where the green passed (instead of the pixels). `-segure <fraction>` in the test."
+   ],
+   [
+    "item",
+    "Price alerts: the check on chosen coins in green."
+   ],
+   [
+    "item",
+    "The steel plate: a thinner bottom edge, capped when dragging up."
+   ],
+   [
+    "item",
+    "\"Copy the words\" with a white background (PrimaryButton light)."
+   ],
+   [
+    "item",
+    "Receive: \"Contract of coin X\", without \"the sender must use this one\"."
+   ],
+   [
+    "item",
+    "Add coin: coin logos spinning around the \"+\" (the ones that ship with the app)."
+   ],
+   [
+    "item",
+    "Wallet: the copy button smaller, right after the name's arrow."
+   ],
+   [
+    "p",
+    "\"Open in another app\" left Settings and moved to the site, on the Networks and coins page, with the rules and each network (the data that was in RecoveryGuideView). The text after the words points to the site."
+   ],
+   [
+    "p",
+    "Tests: the envelope one holds to the end, repeats and goes back; the alerts one follows the coins that come already on (it was outdated: it expected an empty list)."
+   ]
+  ]
+ },
+ "25b8fef": {
+  "assunto": "Ignores the wrangler cache",
+  "corpo": []
+ },
+ "25d7db3": {
+  "assunto": "\"All\" chart: the whole history from Kraken and OKX, whichever starts earlier",
+  "corpo": [
+   [
+    "p",
+    "CoinGecko and CoinPaprika without a key only give 365 days, and \"All\" came from OKX, where BTC only exists since 2017 and stablecoins aren't there. Now Kraken (weekly candles in dollars, no key) and OKX are read in parallel and the older series is kept: BTC since 2013, ETH since 2015, USDT since 2017, USDC, DAI and PYUSD with years of history; BNB stays on OKX. api.kraken.com goes into hosts.lock and the Privacy Policy."
+   ]
+  ]
+ },
+ "28575d8": {
+  "assunto": "iOS and Android: open envelope 24 points above center; Android: acceptance icons as on iOS",
+  "corpo": [
+   [
+    "item",
+    "Open an envelope: the group moves up 24 points, the optical center in the space above the pink button (both apps)."
+   ],
+   [
+    "item",
+    "Only you have the key: lock.shield at the top and lock.iphone, eye.slash, key.horizontal and hand.raised on the items, drawn from the measurements of the iOS symbols."
+   ]
+  ]
+ },
+ "2ca1c03": {
+  "assunto": "Versions: authorizes Android 1.0.0 (1004); versionCode 1004",
+  "corpo": []
+ },
+ "3132e0d": {
+  "assunto": "Android: Support and About as on iOS",
+  "corpo": [
+   [
+    "item",
+    "Support: the title in the bar and the content scrolling under it; the topics in a single card, with each one's icon and the green check on the chosen one; the network in a menu with each badge; borderless fields; steps at the iOS size; the notices in a card, with the raised hand, the phone and the document with a magnifier."
+   ],
+   [
+    "item",
+    "About: \"Audit the code\" with the code icon, the privacy policy with the raised hand, and the iOS top margin."
+   ],
+   [
+    "item",
+    "New icons: code, up and down arrows, light bulb, speech bubble with ellipsis and document with magnifier."
+   ]
+  ]
+ },
+ "31a5496": {
+  "assunto": "Word list: the chosen word turns green, with its position, and tapping again unselects it",
+  "corpo": [
+   [
+    "p",
+    "A word that is in the phrase stays marked in green, with its position number in the corner, while it's there; tapping again removes it from the last position it holds, and that position becomes the current one again. With the phrase full, only the marked ones respond (to swap one). The sheet stays behind the capture guard. Test: mark, unmark and mark again."
+   ]
+  ]
+ },
+ "326400f": {
+  "assunto": "Android: sheets also open before the first wallet",
+  "corpo": [
+   [
+    "p",
+    "Without a wallet, the main screen only showed the add screen and returned before the layers: the word list (choosing your own words) and About the Safe Keyboard were stacked and never showed up."
+   ]
+  ]
+ },
+ "3f50181": {
+  "assunto": "Store images: text in a single centered paragraph, and the opening with networks in orbit",
+  "corpo": []
+ },
+ "41ce1c2": {
+  "assunto": "Store images: back to a title and small supporting text, with the support in the font's spacing",
+  "corpo": []
+ },
+ "45183a4": {
+  "assunto": "Envelope opening in pixels, lock with a slider, audit in the app and alerts up to 7 coins",
+  "corpo": [
+   [
+    "item",
+    "Open an envelope: the seal's pixel scene played backwards (EnvelopePixelScene opening): the ring dims, the lock comes apart, the flap opens, the pixels rise and assemble into the words, and the cipher becomes a sample word. Title \"Open an encrypted envelope\" and the whole path in the text."
+   ],
+   [
+    "item",
+    "\"Only your password opens it\": the revealed words on the same background as before."
+   ],
+   [
+    "item",
+    "Lock the wallets: title \"Lock for good if Face ID changes\", text rewritten and centered, and the pixel slider instead of the button (it goes back to the start if activation stops with a warning). Leaving the chosen lock asks for the PIN also with Super Security off. The reason under the PIN: \"To change what to do if Face ID changes.\""
+   ],
+   [
+    "item",
+    "Audit the code: the site's audit page inside the app, in Apple's browser (SiteBrowser, SFSafariViewController in another process, only https://tmzzjr.github.io). The repository is private, and the site's audit is public. Rule 21 of verificar.sh and of the security doc: WKWebView and the like remain forbidden; Apple's Safari only in that file."
+   ],
+   [
+    "item",
+    "Price alerts: at most 7 coins (it was 30), with \"N of 7\" and a notice when it's full."
+   ],
+   [
+    "item",
+    "Transaction detail: \"Checked on the network\" in gray, without the badge background."
+   ],
+   [
+    "item",
+    "The wallet list with the previous background."
+   ],
+   [
+    "item",
+    "Tests: the audit opens inside the app; the lock one slides."
+   ]
+  ]
+ },
+ "4579f9d": {
+  "assunto": "Android: steel plate, word deck and reading history, as on iOS",
+  "corpo": [
+   [
+    "item",
+    "All words: the brushed steel plate from iOS (the same scratches from the same seed, slotted screws, a reflection that moves with the tilt, bevel, thick edge), words engraved, tilt from your finger and from the phone's gravity, and the flip to the back when the words hide."
+   ],
+   [
+    "item",
+    "Groups of three: the iOS deck, with cards cycling (the one that leaves goes to the back), tones and scale by slot, the lacquered card with a cut corner, and the buttons throwing the card aside before it goes back."
+   ],
+   [
+    "item",
+    "Word list: a solid band behind the Android buttons."
+   ],
+   [
+    "item",
+    "Activity: the reading-history indicator in the middle of the screen, over the list."
+   ]
+  ]
+ },
+ "45ed4c3": {
+  "assunto": "Audit 6: four reviewers, the findings and the fixes",
+  "corpo": [
+   [
+    "p",
+    "Turning on Super Security from \"Lock the wallets\" asks for the words again (A6-04); locking closes the PIN, passphrase and voice sheets, and saving while locked returns an error (A6-05); direct quotes count as a single source (A6-06); weak word choices refused (A6-08); 33-byte Korean words (A6-09); a Receive search that looks like a phrase doesn't leave the iPhone (A6-11); versoes.swift checks before signing, respects the threshold and checks the list inside the built app (A6-12); verificar.sh with any .package(, Package.resolved and the symbol list (A6-14, A6-15); vulnerability reports by email (A6-16). The high ones await the owner's decision."
+   ]
+  ]
+ },
+ "47443ea": {
+  "assunto": "Receipt alerts: a second opinion on every network, checked address by address",
+  "corpo": [
+   [
+    "p",
+    "Second security review of Oct 23, in both apps:"
+   ],
+   [
+    "item",
+    "outside the UTXO networks, the asset that changes (or the starting balance) is read again from a provider run by a different company. On the way up the lower value counts, on the way down the higher one, and at the start both must match; without confirmation, the last seen balance stays. A single RPC can no longer invent 'Received 10,000 USDT';"
+   ],
+   [
+    "item",
+    "UTXO networks: the seen balance is kept per address. Pinned provider and witness must match exactly, including the starting balance, and a provider that is down only silences its own addresses. On Litecoin and Dogecoin, only owners that don't read the other network come first;"
+   ],
+   [
+    "item",
+    "price by id only while the recognition is still valid."
+   ],
+   [
+    "p",
+    "iOS: only the logos from the list and from Market are stored on disk; logos of unlisted tokens stay in memory only. The folder is deleted when the wallet is removed and on erase all."
+   ]
+  ]
+ },
+ "4ff7344": {
+  "assunto": "UTXOReader: two initializers without delegation",
+  "corpo": []
+ },
+ "632ee7b": {
+  "assunto": "Authorized version: a list signed outside GitHub and Apple, and the alarm in the app",
+  "corpo": [
+   [
+    "item",
+    "ReleaseKeys (P-256 keys compiled into the app, with a threshold) and ReleaseManifest (the signed manifest, checked byte by byte: unknown key, tampered text, unmet threshold and another app's list are refused)."
+   ],
+   [
+    "item",
+    "ReleaseWatch: the installed version asks the App Store (itunes.apple.com/lookup) which is the newest and checks it against the site's list (tmzzjr.github.io/.../versoes.json). A new version outside the list or a missing list: \"Update not confirmed by Escalibur\"; a signature that doesn't match: \"Escalibur's version list doesn't match\". Without an answer, no warning."
+   ],
+   [
+    "item",
+    "UpdateGuard in the app: when returning to the foreground, at most every 6 hours; the notice stays in the Wallet, under the balance. UI test with -alarme-versao."
+   ],
+   [
+    "item",
+    "tools/versoes/versoes.swift: the key in the Secure Enclave of the owner's Mac, bound to it and to Touch ID on every signature; authorize and check the list. verificar.sh checks the site's versoes.json against the compiled keys; the site generator publishes the file."
+   ],
+   [
+    "item",
+    "The two new hosts in hosts.lock, in AllowedHosts and in the Privacy Policy (pt and en)."
+   ],
+   [
+    "item",
+    "docs/seguranca.md §8.6 with what stays protected and the limit (whoever controls the phone's system can swap the app; only a comparison with the attested build shows it); docs/release.md with the step to authorize the version; item 06 of the security page rewritten."
+   ],
+   [
+    "item",
+    "The Stellar test that still expected the old 5% tolerance cap now tests 10.01%."
+   ]
+  ]
+ },
+ "6b4abbe": {
+  "assunto": "Android: Wallets and Copy address, same as iOS",
+  "corpo": [
+   [
+    "p",
+    "Copy address: three overlapping EVM networks, \"BNB Chain, Ethereum and N more\", a two-column grid, a green check when copying and the short address with the network prefix (from the core). Wallet picker: button at the bottom, iOS sizes and icons, drag with shadow. Settings > Wallets: glyph without background and drag to reorder. A medium-height sheet doesn't shrink the background. Check, copy, pencil and filled wallet icons measured on the iOS symbols."
+   ]
+  ]
+ },
+ "75a46f3": {
+  "assunto": "Android: passphrase wallet and illustrations as on iOS",
+  "corpo": [
+   [
+    "item",
+    "Passphrase wallet: the pixel wall with the hidden door at the top, \"How it works\" with the four iOS scenes (hidden door, only the words, their own codes, forgotten key) and the content scrolling under the back button."
+   ],
+   [
+    "item",
+    "\"No assets to send yet\" and \"Back up the phrase before receiving\" with the iOS illustrations instead of the icon and the paper."
+   ],
+   [
+    "item",
+    "Copy-first debug route, to see the screen before receiving."
+   ],
+   [
+    "item",
+    "Translations of the new phrases in the 12 languages."
+   ]
+  ]
+ },
+ "7d9fdd5": {
+  "assunto": "Opening with the video of coins spiraling together into the sword's hilt",
+  "corpo": [
+   [
+    "p",
+    "6.2 s in HEVC, without audio; the end dissolves back into the calm peak of the beginning in 0.8 s."
+   ]
+  ]
+ },
+ "8515ff6": {
+  "assunto": "Android: Receive and network menus as on iOS",
+  "corpo": [
+   [
+    "item",
+    "Receive: the iOS sheet header, search on the rail, steps pushing inside the sheet, the glass bar, the title with the network beside it, the QR on the cut-corner plate and the animated Copy address."
+   ],
+   [
+    "item",
+    "The iOS floating menu to pick the network (Swap, Bridge, Receive), attached to the capsule, instead of the Material sheet and menu."
+   ],
+   [
+    "item",
+    "A medium-height sheet shows the grabber; inside a sheet, the navigation bar doesn't count the status bar."
+   ],
+   [
+    "item",
+    "Debug shortcuts to open screens with the app open."
+   ]
+  ]
+ },
+ "862c5a1": {
+  "assunto": "Copy the words: the clock becomes a smooth green ring and counts the minute in real time",
+  "corpo": [
+   [
+    "p",
+    "The pixel ring is gone; in its place, a continuous green ring that empties in 60 s, with the real seconds in the middle (1:00 to 0:00). The words come in before and dissolve at zero, and the cycle starts again."
+   ]
+  ]
+ },
+ "893b2ed": {
+  "assunto": "Android: sheets, switch, notice and Settings icons as on iOS",
+  "corpo": [
+   [
+    "item",
+    "Sheets opened from inside a screen (FolhaDoIos) with the iOS slide up and recess, the medium height that can be pulled up, and the iOS header (large title and close in a small circle). The Material sheet leaves the wallet list, copy address and the swap sheets."
+   ],
+   [
+    "item",
+    "iOS 26 switch (63 by 28, capsule knob) instead of the Material Switch."
+   ],
+   [
+    "item",
+    "Short iOS notice: a card at screen width, with the type icon, 2.5 s and swipe up to dismiss."
+   ],
+   [
+    "item",
+    "Thin Settings icons like the iOS ones (wallet, book, network, receipt)."
+   ]
+  ]
+ },
+ "8c49cba": {
+  "assunto": "Wallet donut: tiny slices go to Others, without animating values",
+  "corpo": [
+   [
+    "p",
+    "TestFlight (build 11) crashed inside Swift Charts when switching the currency to R$, with BNB Frog Inu (price near 10^-19) as a slice of billionths. Slices under 1% go into Others, each drawn slice takes at least 2% of the circle (the legend shows the real percentage) and values change without animating. The same rule on the Android donut. Price alerts: a zero or infinite price magnitude no longer breaks them."
+   ]
+  ]
+ },
+ "8c5ff77": {
+  "assunto": "Order created higher up, \"Order canceled\", Safe Keyboard with a bar, hold without the magnifier and the wrong passphrase warning",
+  "corpo": [
+   [
+    "item",
+    "Limit order created, swap sent and cancellation: the badge and text slightly above center; cancellation says \"Order canceled\" (the texts below still say what may still happen)."
+   ],
+   [
+    "item",
+    "Text Safe Keyboard with the top bar, like the words one: the keyboard name and \"Done\", without suggestions (they would show the password). The space bar says \"space\"."
+   ],
+   [
+    "item",
+    "Password field: holding to reveal no longer opens the iOS magnifier (the field gestures wait for the hold to fail)."
+   ],
+   [
+    "item",
+    "Wrong passphrase: the warning appears at the top of the screen, above everything (each screen's error sat at its bottom, out of view). Creating a wallet with a passphrase counts the attempt without the warning."
+   ],
+   [
+    "item",
+    "The passphrase sheet with a smaller badge, so \"Continue\" fits above the keyboard."
+   ]
+  ]
+ },
+ "8cd8c3d": {
+  "assunto": "A batch of screens: Super Security, locked keyboard, 10 minutes, passphrase, envelope and the lock",
+  "corpo": [
+   [
+    "titulo",
+    "Super Security"
+   ],
+   [
+    "item",
+    "Without the \"Off\" tag (the \"On\" one stays); the new-face warning and the \"wait 24 hours\" one short, with each option's risk on the policy screen."
+   ],
+   [
+    "item",
+    "With Super Security on, the Safe Keyboard can't be turned off: no globe on the words keyboard or on other fields, and no \"Use the iPhone keyboard on this screen\"."
+   ],
+   [
+    "item",
+    "\"Lock the wallets\": without the three wallets below; frame 2 with Face ID and a pixel ring lighting up like a face enrollment, and the \"+\" at the end; frame 3 with the pixel badge and the red lock; frame 4 with the words sheet being written down (PaperScribble). The button says \"Turn on the lock\"."
+   ],
+   [
+    "titulo",
+    "Screens"
+   ],
+   [
+    "item",
+    "Lock the app: 10 minutes too."
+   ],
+   [
+    "item",
+    "Passphrase: the create screen with the content higher up; the pixel badge (CipherEmblem) on the typing and confirming screens and on the one that asks before moving balance."
+   ],
+   [
+    "item",
+    "\"Check the seed phrase of X\" instead of \"Check the backup of X\"."
+   ],
+   [
+    "item",
+    "The wallet list with the same background as the copy address screen."
+   ],
+   [
+    "titulo",
+    "Envelope"
+   ],
+   [
+    "item",
+    "Background pixels of the card and of the envelope drawing in dark gray, almost black; the revealed words on a darker background; when opening, no scan band."
+   ],
+   [
+    "item",
+    "The pixel badge on the password typing screens (create, repeat and open), which now scroll with the button pinned above the keyboard; title and text centered; the \"Encrypt the recovery phrase\" scene no longer cut at the top."
+   ],
+   [
+    "item",
+    "\"Hold to use anyway\" back to pixels, with a straight front (PixelFill.tilt 0)."
+   ],
+   [
+    "p",
+    "Test flags: `-tela bloquear`, `-quadros` (the still frames) and `-segure <fraction>`."
+   ]
+  ]
+ },
+ "8eefa4c": {
+  "assunto": "iOS and Android: swipe to delete a wallet, with hold to remove",
+  "corpo": [
+   [
+    "item",
+    "In the Wallets list and in the wallet switcher, swiping a row to the left shows Delete, as in iOS lists (one row open at a time; tapping closes it)."
+   ],
+   [
+    "item",
+    "Delete opens a popup in the middle of the screen with a warning of what is lost and a button that only removes when held, filling with red; letting go early cancels. Then come the usual PIN and biometrics (watch-only wallets don't ask)."
+   ],
+   [
+    "item",
+    "Wallet settings use the same popup instead of the alert, and removal is a single path (WalletRemoval on iOS, RemocaoDeCarteira on Android)."
+   ],
+   [
+    "item",
+    "The hold button accepts a fill color instead of the pixels."
+   ]
+  ]
+ },
+ "90b70a1": {
+  "assunto": "Alert lock: a frame with pixels, new texts and a footer without the slider",
+  "corpo": [
+   [
+    "item",
+    "The \"Your funds are safe\" frame with the ciphering pixel badge (green CipherEmblem) instead of the lock; \"encrypted only on the chip\", without \"funds only move with them\"."
+   ],
+   [
+    "item",
+    "\"Don't update the app for now, until Escalibur confirms the new version\"; \"don't view the wallet's words\" instead of \"don't use the wallet\"."
+   ],
+   [
+    "item",
+    "UpdateAlarmView without `onEmergency` shows a fixed footer instead of the slider."
+   ],
+   [
+    "item",
+    "English translations; UI tests for the lock."
+   ]
+  ]
+ },
+ "954189e": {
+  "assunto": "Swap: quotes go out with a random address, never the owner's",
+  "corpo": [
+   [
+    "p",
+    "While the owner is quoting, each round sends the aggregators (Velora, KyberSwap, LI.FI, De1, CoW) a random address; the calldata is validated against it the same way. The plan, when you tap Review, asks only the chosen provider for the swap again, with the owner. The owner's open CoW orders are kept for 5 minutes for the quote. Checked live on Base: five providers quote with the random address. Applies to both apps."
+   ]
+  ]
+ },
+ "96da605": {
+  "assunto": "Android: Send with no assets, same as iOS",
+  "corpo": [
+   [
+    "p",
+    "The illustration right below the close button, the text below it and Receive at the bottom, and Receive opens on top of Send. iOS UI test for the same screen."
+   ]
+  ]
+ },
+ "975c3fc": {
+  "assunto": "Alert lock: label and title centered, new text, clears by itself, and no build without the list",
+  "corpo": [
+   [
+    "item",
+    "The unconfirmed version lock: \"Security alert\" and the title centered and in white; without the step of not opening the new version; \"the possibly tampered version never ran here\"; and the notice that the alert clears by itself when Escalibur confirms."
+   ],
+   [
+    "item",
+    "It clears by itself after Escalibur's check: a signed version, or the outside one replaced in the store by a signed one, and the next check removes the lock. With the lock on screen, the check repeats on every return to the foreground (at least 1 minute apart) and every 5 minutes."
+   ],
+   [
+    "item",
+    "UpdateAlarmView receives the text from whoever locks; UpdateAlarmWindow with the window level."
+   ],
+   [
+    "item",
+    "Periodic check when returning to the foreground."
+   ],
+   [
+    "item",
+    "release.yml: the signing job refuses the tag (testflight-* and v*) if the commit's site/versoes.json doesn't carry the version with that build; docs/release.md with the order (authorize, list on main, tag)."
+   ]
+  ]
+ },
+ "9a101c6": {
+  "assunto": "Share image with a version in the URL, so previews fetch the new one",
+  "corpo": []
+ },
+ "9a6f805": {
+  "assunto": "iOS and Android: Privacy Policy on the second line of the agreement; tolerance test on the 10% scale",
+  "corpo": [
+   [
+    "p",
+    "The slider test still expected the old 3% maximum and broke CI. Android versionCode 1003."
+   ]
+  ]
+ },
+ "9b6dcb9": {
+  "assunto": "Alert lock: a single step without a number, automatic Face ID waits for the lock to clear",
+  "corpo": [
+   [
+    "item",
+    "UpdateAlarmView: with a single step, the text goes without the number."
+   ],
+   [
+    "item",
+    "UpdateAlarmWindow.covering: some lock on screen. LockView doesn't open automatic Face ID over it."
+   ],
+   [
+    "item",
+    "Periodic check with the session."
+   ]
+  ]
+ },
+ "9ba3da1": {
+  "assunto": "iOS and Android: security alert without the part about when the words leave the chip",
+  "corpo": []
+ },
+ "9eedd95": {
+  "assunto": "Build 9: the tour before the PIN, the new opening texts and the version list with build 9",
+  "corpo": [
+   [
+    "p",
+    "The opening says the keys are kept encrypted and that Escalibur has no way to help recover the recovery phrase; the tour comes before the PIN and the second step became \"You're in control\"; the PIN footer shows in full; \"Before you see the words\" is centered, with the new texts about screenshots and the 2 minutes; the agreement says \"encrypted\" and \"Escalibur has no access\". Store screenshots get the language and the send review, and tools/loja builds the images on the site's device."
+   ]
+  ]
+ },
+ "a4524ce": {
+  "assunto": "Privacy policies matching the code",
+  "corpo": [
+   [
+    "titulo",
+    "iOS and Android, in Portuguese and English:"
+   ],
+   [
+    "item",
+    "what Escalibur receives: the Alchemy logging exception;"
+   ],
+   [
+    "item",
+    "receipt alerts only when the owner turns them on, and what they query;"
+   ],
+   [
+    "item",
+    "price alerts on by default with BTC, ETH, XRP and SOL;"
+   ],
+   [
+    "item",
+    "the widget;"
+   ],
+   [
+    "item",
+    "the explorer in the browser;"
+   ],
+   [
+    "item",
+    "the token contract sent to CoinGecko;"
+   ],
+   [
+    "item",
+    "the swap quote without the address;"
+   ],
+   [
+    "item",
+    "Alchemy keeping the IP for 90 days."
+   ],
+   [
+    "titulo",
+    "Android:"
+   ],
+   [
+    "item",
+    "local search;"
+   ],
+   [
+    "item",
+    "the lock screen and the clipboard, as the code does now."
+   ],
+   [
+    "p",
+    "The App Store label changes to Other financial info."
+   ]
+  ]
+ },
+ "a556ad8": {
+  "assunto": "Signed version list: 1.0.0 build 8",
+  "corpo": []
+ },
+ "a5e11b7": {
+  "assunto": "Versions: authorizes Android 1.0.0 (1005); versionCode 1005",
+  "corpo": []
+ },
+ "a716b8e": {
+  "assunto": "Versions: authorizes Android 1.0.0 (1002)",
+  "corpo": []
+ },
+ "a7dae66": {
+  "assunto": "Device check: \"Installed from the App Store\", and -checagem-aparelho for store screenshots",
+  "corpo": [
+   [
+    "p",
+    "The origin item no longer mentions TestFlight on screen (the failure message still does). Debug only: -checagem-aparelho shows jailbreak and origin as on an iPhone with the store app and clears the simulator clipboard."
+   ]
+  ]
+ },
+ "a958220": {
+  "assunto": "Android: audit fixes before the Play Store, and the CoW floor in both apps",
+  "corpo": [
+   [
+    "p",
+    "PIN vault (format 2): the PIN-derived password goes through an HMAC key in the Keystore and becomes the AES key of the wrapper. In format 1 it was only AAD, and KeyMint returns the plaintext before checking the tag: anyone running code in the app would get an offline verifier. Format 1 can only be opened (emulator test vaults)."
+   ],
+   [
+    "item",
+    "Android 11: setHideOverlayWindows only from API 31; on 30, a touch with a window on top is refused (filterTouchesWhenObscured)."
+   ],
+   [
+    "item",
+    "Accessibility: the window marked as sensitive data (API 34), and no autofill."
+   ],
+   [
+    "item",
+    "Lock: locks when the screen turns off, and a recreated Activity goes through the automatic lock; a cover hides the wallet until the core answers."
+   ],
+   [
+    "item",
+    "Without a screen lock on the phone, the vault doesn't open and the screen explains why."
+   ],
+   [
+    "item",
+    "Safe Keyboard: turning it off asks for the PIN; password field without the globe and never on third-party keyboards."
+   ],
+   [
+    "item",
+    "Secrets through the bridge with the length up front (a passphrase with a line break arrived truncated); JNI strings in UTF-16 (emoji)."
+   ],
+   [
+    "item",
+    "Attempt counter with fsync of the folder; AAD zeroed after use."
+   ],
+   [
+    "item",
+    "Notifications carry an app token (an outside intent doesn't navigate); taskAffinity."
+   ],
+   [
+    "item",
+    "Envelope saved with \"wt\" and checked by reading it back."
+   ],
+   [
+    "item",
+    "Support: six BIP-39 words in a row, as on iOS."
+   ],
+   [
+    "item",
+    "A token quote with quadrillions of units no longer crashes the app."
+   ],
+   [
+    "item",
+    "The hardware check also looks at the PIN key and at Android 11."
+   ],
+   [
+    "item",
+    "Build: no configuration cache when signing; the release refuses a debug core; verificar.sh covers the Android Swift."
+   ],
+   [
+    "item",
+    "iOS and Android: without a reference price, CoW also has a 5% floor against the aggregators."
+   ],
+   [
+    "p",
+    "versionCode 1002."
+   ]
+  ]
+ },
+ "ae15289": {
+  "assunto": "Audit 5: what changed since audit 4, the findings and the fixes",
+  "corpo": [
+   [
+    "item",
+    "docs/auditoria-5.md: what was reviewed, the findings (medium: the iOS password window on the PIN keys, build 8 outside the pipeline, a single signing key, the text of the auditable code), the fixes and the tests."
+   ],
+   [
+    "item",
+    "The signed version list ships inside the app (resource from the commit): checking the installed version no longer depends on the network."
+   ],
+   [
+    "item",
+    "The core test of the list also checks the project build: bumping the build requires signing first."
+   ],
+   [
+    "item",
+    "Create wallet: the 12 or 24 words choice comes out from behind the footer."
+   ],
+   [
+    "item",
+    "Device check: VoiceOver reads the time without the icon name."
+   ],
+   [
+    "item",
+    "UI tests outdated by the new screens, fixed."
+   ]
+  ]
+ },
+ "af33ab9": {
+  "assunto": "Unconfirmed version: locks the whole app with the hacking attempt alert",
+  "corpo": [
+   [
+    "item",
+    "Instead of the notice in the Wallet, a screen in its own window, above everything (even the PIN prompt): \"We detected a hacking attempt\", what happened, that the Escalibur team is investigating, that the words remain encrypted on the chip and the tampered version didn't run there, and what to do. The \"Use in an emergency\" pixel slider removes the lock until the app closes."
+   ],
+   [
+    "item",
+    "The alarm is kept between launches (Preferences.updateAlarm): offline, the lock stays; only a check that answers removes it."
+   ],
+   [
+    "item",
+    "CipherEmblem with the symbol color; the red shield on the lock."
+   ],
+   [
+    "item",
+    "UI test: the lock appears, the slider removes it, the wallet responds. English translations."
+   ],
+   [
+    "item",
+    "docs/seguranca.md §8.6, docs/release.md and the security page talk about the lock."
+   ],
+   [
+    "item",
+    "The swap soft deadline test with slack for a loaded CI runner: the slow source at 3.2 s, between the soft and hard deadlines, and the partial before 2.9 s (on CI it came at 2.6 s)."
+   ]
+  ]
+ },
+ "b03e70e": {
+  "assunto": "escaliburwallet.com domain: the site on Cloudflare, domain support email",
+  "corpo": [
+   [
+    "p",
+    "The site is also served at escaliburwallet.com, by a static-files Worker on Cloudflare, with security headers and www redirecting to the domain. The app never talks to that server: the version list and the audit keep coming from GitHub. The contact in the app, the Policy, the Terms, the site and the licenses becomes support@escaliburwallet.com (security@ for vulnerability reports). The site's share image is the campaign photo of the hand pulling the iPhone from the stone."
+   ]
+  ]
+ },
+ "b1d5cb3": {
+  "assunto": "Launch: the App Store privacy label now declares Other financial info",
+  "corpo": []
+ },
+ "bbfbc91": {
+  "assunto": "Device check in the debug build also translated, and the island only on a plain background",
+  "corpo": []
+ },
+ "bca1f51": {
+  "assunto": "Privacy: receipt alerts only by the owner, lock screen and clipboard",
+  "corpo": [
+   [
+    "p",
+    "In both apps (privacy audit, Oct 22, 2026):"
+   ],
+   [
+    "item",
+    "receipt alerts no longer turn on by themselves; they turn on in Settings;"
+   ],
+   [
+    "item",
+    "watch-only wallets are left out, unless the owner turns them on;"
+   ],
+   [
+    "item",
+    "on UTXO networks, only the next receiving address and the last two used;"
+   ],
+   [
+    "item",
+    "each address always goes to the same provider (salt per install), and the second provider only checks when the balance goes up;"
+   ],
+   [
+    "item",
+    "networks in random order, each with its own delay; the file stores the account by a digest, not by the address;"
+   ],
+   [
+    "item",
+    "random draws through SecRandomCopyBytes (SecureRandom)."
+   ],
+   [
+    "titulo",
+    "Android:"
+   ],
+   [
+    "item",
+    "background check every hour;"
+   ],
+   [
+    "item",
+    "a received amount never on the lock screen;"
+   ],
+   [
+    "item",
+    "a copied address is cleared when you come back to the app after the timeout ran out in the background."
+   ]
+  ]
+ },
+ "bdb2755": {
+  "assunto": "Policies: checks when the balance changes, swap services, tokens and logos",
+  "corpo": []
+ },
+ "be8d37b": {
+  "assunto": "Signed version list: 1.0.0 build 11",
+  "corpo": []
+ },
+ "c311b44": {
+  "assunto": "Rare tokens: price by id in a single request, logos stored on the device",
+  "corpo": [
+   [
+    "item",
+    "A token already recognized by its exact contract gets its price in a single request, by CoinGecko id (in both apps). Price by contract for the others goes from 5 to 15 minutes."
+   ],
+   [
+    "item",
+    "iOS: each logo, and each logo that doesn't exist, is stored on the device (Caches, complete protection). Before, the app asked GitHub and CoinGecko again on every launch."
+   ]
+  ]
+ },
+ "c57ccf8": {
+  "assunto": "Android: Safe Keyboard on every field, as on iOS",
+  "corpo": [
+   [
+    "item",
+    "Security gets the Safe Keyboard row and the screen with the keyboard typing by itself; with Super Security it's always on (core: ajustes.tecladoProprio)"
+   ],
+   [
+    "item",
+    "When on, every field opens the app keyboard over the screen (letters, numbers, symbols and accents; digits only on amounts), with the globe for the phone keyboard on that field"
+   ],
+   [
+    "item",
+    "Words keyboard with the iOS last row (globe, Safe Keyboard, Next) and the sheet that explains it and turns it off"
+   ],
+   [
+    "item",
+    "When off, the words go through the phone keyboard without learning or suggestions; the import globe serves phrases in Japanese, Chinese and Korean"
+   ],
+   [
+    "item",
+    "Screens move up with the Safe Keyboard as with the phone keyboard; the rename alert shows the keyboard in its own window"
+   ],
+   [
+    "item",
+    "The device check warns when the Safe Keyboard is off"
+   ],
+   [
+    "item",
+    "Alert: step numbers in a circle, as on iOS"
+   ],
+   [
+    "item",
+    "New phrases in the 12 languages"
+   ]
+  ]
+ },
+ "c6ffd4e": {
+  "assunto": "Android: Forgot PIN in an iOS sheet",
+  "corpo": [
+   [
+    "item",
+    "FolhaSolta: the iOS sheet outside navigation (lock screen), with the slide up, the drag down and the dimming background."
+   ],
+   [
+    "item",
+    "The phone with lock icon and the iOS sheet header."
+   ]
+  ]
+ },
+ "c74ad10": {
+  "assunto": "iOS and Android: gray chart after the chosen point; Android: first wallet and import as on iOS",
+  "corpo": [
+   [
+    "item",
+    "Chart: with your finger on it, the line after the point turns dim gray and the glow only goes up to there (both apps)."
+   ],
+   [
+    "item",
+    "Your first wallet: the WalletOrbit orbit (six networks inside, twelve outside, full rings, a 72 badge with a spring) and the words icon on the import row."
+   ],
+   [
+    "item",
+    "Import: the responsibility screen before the device check, as on iOS; guarantee icons like the iOS ones (filled lock, phone, crossed-out wi-fi)."
+   ]
+  ]
+ },
+ "c8c0ef9": {
+  "assunto": "Versions: authorizes Android 1.0.0 (1003)",
+  "corpo": []
+ },
+ "d11356b": {
+  "assunto": "iOS: alert buttons in white",
+  "corpo": [
+   [
+    "p",
+    "Alerts took the pink of the screen that opened them. Now each alert gets white, and the screen keeps the pink. On Android they were already white."
+   ]
+  ]
+ },
+ "d3030c1": {
+  "assunto": "Bridge: USDT to Tron through Tether's own USDT0 (Legacy Mesh)",
+  "corpo": [
+   [
+    "p",
+    "From Ethereum and Arbitrum to the Tron account of the same wallet. Tether's contracts (UsdtOFT, verified on Sourcify with an exact match, no proxy) checked on chain from two sources on each side: the token, the fee, the peer on Tron and, on Tron, the TR7NH USDT and the return peers. Nothing comes from an API: what arrives, the liquidity and the message fee come from the contract itself (quoteOFT, quoteSend). The app builds the send and reads it back through the strict decoder: Tron destination and no other, the wallet's Tron account, no options or call, change to the owner, the quoted minimum. In the plan, the contract read again, exact approve, simulation in two sources with OFTSent, and the Tron account must be under its own key. Arrival is checked by the message guid: its OFTReceived and the USDT Transfer on Tron, read from the solidified node of two providers."
+   ],
+   [
+    "p",
+    "Unit tests for each refusal and live tests: a plan with a real simulation on Ethereum and Arbitrum, and a real delivery on Tron found by the guid. On screen, Tron shows up in To."
+   ]
+  ]
+ },
+ "d34ef07": {
+  "assunto": "XRP Ledger with three servers again: Ripple's port 51234 allowed, and the store images",
+  "corpo": [
+   [
+    "p",
+    "Audit 6's port lock refused s1 and s2.ripple.com on 51234, their JSON-RPC port: the XRP Ledger was left with a single server and two-source reads stopped (swap, limit order and send, in build 9). Port 51234 is allowed only for those two, and a new test checks every address written in the code against the HTTPClient rule."
+   ],
+   [
+    "p",
+    "Store screenshots come out in Portuguese and English: the review with the plate open, the XRP swap the test wallet can do, the envelope frozen on locked, and the Dynamic Island covered when the capture comes from simctl."
+   ]
+  ]
+ },
+ "d3f972d": {
+  "assunto": "iOS and Android: watch-only wallet, animated hiding and centered passphrase",
+  "corpo": [
+   [
+    "item",
+    "The watch-only wallet uses the same wallet icon, without the eye."
+   ],
+   [
+    "item",
+    "The watch-only wallet has no Receive: not in the Wallet actions, nor in the empty assets and Activity states."
+   ],
+   [
+    "item",
+    "Hiding the balance animates: the number rises and dissolves into a blur and the dots come in one by one; row values change without a hard cut."
+   ],
+   [
+    "item",
+    "Typing the passphrase: title and text centered."
+   ]
+  ]
+ },
+ "d69f60a": {
+  "assunto": "iOS and Android: consensus only between providers run by different companies",
+  "corpo": [
+   [
+    "p",
+    "Each provider gets its owner (operatorName). The first two of any consensus are from different companies, and two endpoints from the same company count as a single answer (ProviderPool.agreeing and Quorum.gather/agree/collect). Ripple's s1 and s2 servers now count as one company: if xrplcluster went down, the XRP Ledger consensus would have been Ripple agreeing with itself."
+   ]
+  ]
+ },
+ "db5e3ce": {
+  "assunto": "Signed version list: 1.0.0 build 10",
+  "corpo": []
+ },
+ "db97fdb": {
+  "assunto": "Device check without the hidden jailbreak phrase, and the share image with both badges",
+  "corpo": [
+   [
+    "p",
+    "The finished device check only says everything was checked here, offline, and that nothing leaves the device. The site's share image: the photo on the left, and on the right the icon, the name, a line and the App Store and Google Play badges at the same height."
+   ]
+  ]
+ },
+ "dd14e8a": {
+  "assunto": "Version list key with a neutral name: escalibur-mac-1",
+  "corpo": [
+   [
+    "p",
+    "The same Secure Enclave key pair on the owner's Mac, under another name from build 11. The signature covers only the text of the list, so nothing was signed again: the list on the site carries the same signature under both names (builds 7 to 10 only know the old one), and the list shipped inside the app, now in its own file, only under the new one. versoes.swift writes both and checks they have the same text; a test checks both the way the new and old builds do."
+   ]
+  ]
+ },
+ "e1ca24e": {
+  "assunto": "Versions: authorizes iOS 1.0.0 (12)",
+  "corpo": []
+ },
+ "e3fe5fc": {
+  "assunto": "Build 7",
+  "corpo": []
+ },
+ "e4f6bff": {
+  "assunto": "Security review of Oct 23: receipt alerts, block proofs and providers",
+  "corpo": [
+   [
+    "titulo",
+    "In both apps:"
+   ],
+   [
+    "item",
+    "receipt alerts: a fixed provider for the whole list (salted HMAC), with no fallback. When the balance changes, a provider from another company checks both ways; without confirmation, the seen balance stays. This closes the fake alert with the fixed provider down and the one that lowers the balance only to bring it back;"
+   ],
+   [
+    "item",
+    "alerts: an EVM token that wasn't read doesn't count as sent;"
+   ],
+   [
+    "item",
+    "alerts: a normal wallet wins over a watch-only one with the same address;"
+   ],
+   [
+    "item",
+    "alerts: the salt is drawn again if it's missing;"
+   ],
+   [
+    "item",
+    "block proof: a witness from another company is required, and nothing above the tip;"
+   ],
+   [
+    "item",
+    "status: confirmed only with two companies or with the proof, and without a tip it stays pending; status and fee ask the full providers first;"
+   ],
+   [
+    "item",
+    "a single company in front of a network family (EndpointsFamilyTests): Solana through its own RPC, Aptos through Sentio, Litecoin between litecoinspace and Bitcore, Dogecoin through Atomic;"
+   ],
+   [
+    "item",
+    "swap: CoW's split sample goes with the random address, and the aggregator cache works again (without the owner in the key);"
+   ],
+   [
+    "item",
+    "price alerts: a 10^21% change no longer breaks the check."
+   ],
+   [
+    "p",
+    "iOS: the background alert runs at most once an hour. Android: updating replaces the 20-minute schedule with an hourly one."
+   ]
+  ]
+ },
+ "e675b31": {
+  "assunto": "Signed version list: 1.0.0 build 7, by the key on the owner's Mac",
+  "corpo": [
+   [
+    "item",
+    "site/versoes.json, signed in the Secure Enclave of the owner's Mac, with Touch ID. The site publishes the list; the app checks it against the compiled keys."
+   ],
+   [
+    "item",
+    "Core test: the site's list goes through the same code as the app (ReleaseManifest.verified, ReleaseKeys) and authorizes the project.yml version."
+   ]
+  ]
+ },
+ "eba1479": {
+  "assunto": "Super Security without the iOS password prompt, a new \"Before turning on\", free balance in swaps and orders 10 at a time",
+  "corpo": [
+   [
+    "item",
+    "PIN keys (kpin, kand.pin.a/b): the wrapper fetched the Secure Enclave key without the application password, and on the iPhone iOS opened \"Enter the password for Escalibur\" when turning Super Security on and off (and could open when creating or changing the PIN). Now the wrapper of those keys carries the password and forbids UI (`wrap(_:slot:password:)`); the wrapper without a password refuses the PIN slots and shows no UI either. The test double flags any PIN key wrap without the password. The simulator has no application password: only the next build on the iPhone confirms it."
+   ],
+   [
+    "item",
+    "PIN sheet in Super Security: the reason and, on the line below, \"After the PIN, Face ID confirms it's you.\" (without the gap and without \"Super Security:\" again)."
+   ],
+   [
+    "item",
+    "\"Before turning on\": the PIN and face emblem, the summary of what changes, the policy on a line that opens the three options, and the pixel slider. \"Continue as usual\" without the \"resetting may close\", which applies to all three and stays on the policy screen."
+   ],
+   [
+    "item",
+    "Instant swap: the available balance subtracts what open orders will still sell, as in limit orders (\"Free X, the rest in orders\")."
+   ],
+   [
+    "item",
+    "Open orders: \"(N)\" in the title and 10 at a time, with \"Load more\"."
+   ],
+   [
+    "item",
+    "Tests: the lock one scrolls to the policy row; the orders one accepts the counter."
+   ]
+  ]
+ },
+ "ec6679a": {
+  "assunto": "Device check back to only asking whether there is copied text, and tools/loja/encaixar.swift",
+  "corpo": [
+   [
+    "p",
+    "Clearing the clipboard in the demo broke the verificar.sh rule that the check never touches the content; it's gone. encaixar.swift fits 9:16 campaign images to the App Store 6.9\" size, cropping the sides."
+   ]
+  ]
+ },
+ "ef86431": {
+  "assunto": "iOS and Android: Bitcoin confirmed only with an SPV proof",
+  "corpo": [
+   [
+    "p",
+    "Coins to send and confirmed receipts require proof that the transaction is in a mined block: a Merkle path up to the header root, a header with the work of its own target and a target never easier than the floor (16x that of block 972,695), up to six chained headers, and the same block at that height from a provider run by another company when it answers. Before, a provider could invent a transaction with the right txid paying the wallet and it showed as confirmed."
+   ],
+   [
+    "p",
+    "Coins without proof go to the unverified ones; receipts without proof stay pending. On for Bitcoin with the app's providers; proven headers are cached for the session. Tests with real data from block 972,600."
+   ]
+  ]
+ },
+ "f105a32": {
+  "assunto": "Android: Super Security same as iOS, with the fingerprint instead of Face ID",
+  "corpo": [
+   [
+    "item",
+    "Main screen in the iOS layout: content scrolls under the back button (without the black band cutting it), the emblem of the two discs joining at the lock, \"What changes\" with the iOS icons, the \"When the fingerprint changes\" row with its value, \"To turn on\" with the fingerprint switch right there and the backup"
+   ],
+   [
+    "item",
+    "\"When the fingerprint changes\" became its own screen, with the three options, the check and, when on, switching right away with the PIN and the fingerprint"
+   ],
+   [
+    "item",
+    "\"Lock the wallets\": the four-frame animation (the PIN and the fingerprint, another fingerprint being enrolled, the red pixel badge, the words paper), the agreement and the \"Turn on the lock\" slider"
+   ],
+   [
+    "item",
+    "\"Before turning on\" with the close button, the summary and the iOS options sheet"
+   ],
+   [
+    "item",
+    "TelaComBarra accepts the close button in the corner (screens that cover navigation)"
+   ],
+   [
+    "item",
+    "Fingerprint texts and 41 iOS phrases that only had English, in the 12 languages; textos.py warns about iOS phrases missing a language"
+   ]
+  ]
+ },
+ "f47eb6b": {
+  "assunto": "Android: cipher badge, envelope in pixels and Receive and alerts adjustments",
+  "corpo": [
+   [
+    "p",
+    "The ciphering pixel badge (CipherEmblem) on the secret screens, on the opening and on the security alert; the system opening with the still badge, continued by the animated one. The envelope as on iOS: the pixel scene, the cipher card, How it works, the sealing steps and the pixel bar. Balance and activity snapshots read off the main thread (ANR while typing the PIN). Full-screen headers with the button on the left, sheets with a lower bar, redrawn icons."
+   ]
+  ]
+ },
+ "f7de1f2": {
+  "assunto": "Android: Security in the iOS order, add coin sheet and relief for the main thread",
+  "corpo": [
+   [
+    "p",
+    "Security with the PIN, Super Security, biometrics and the lock in one group, the passphrase wallet and the iOS notes (envelope and orders). Alerts with the warning bell, the bitcoin symbol and the minus in a circle; the add coin sheet with the glass OK. Send with the iOS spacing at the top and paste text only. Immutable snapshots at most five per second, so the wallet doesn't redraw everything for every network that arrives."
+   ]
+  ]
+ },
+ "fc0b00b": {
+  "assunto": "Litecoin: inclusion proof (SPV) with scrypt",
+  "corpo": [
+   [
+    "p",
+    "The work of each header is measured with scrypt (N=1024, r=1, p=1), with a floor of 16 times the target of Oct 22, 2026. Blockbook is the second company that checks the block at that height. With no proof provider online, Litecoin falls back to the previous consensus; a proof that arrives and doesn't add up is always refused. Header cache separated by network."
+   ]
+  ]
+ },
+ "fcc3b57": {
+  "assunto": "Balance currency without re-reading the wallet, dollar first, paste into the field and a calm copy animation",
+  "corpo": [
+   [
+    "item",
+    "Changing the currency at the top converts the prices on screen by the bitcoin rate in both and only fetches the new prices underneath; network balances aren't read again. The bitcoin rate in the other currencies now merges with the previous one: a failed fetch no longer removes the unit from the picker. US$ first, R$ next. UI test."
+   ],
+   [
+    "item",
+    "Receive: the card says it's the coin's contract (or issuer)."
+   ],
+   [
+    "item",
+    "Add coin: a paste button inside the empty field."
+   ],
+   [
+    "item",
+    "Copy the words: the animation clock counts in 8 s, 10 seconds at a time, in a 12 s cycle (it counted the minute in under 3 s)."
+   ]
+  ]
+ },
+ "fcd40a2": {
+  "assunto": "Clean share image: the iPhone on the Bitcoin chart, the icon and the name",
+  "corpo": [
+   [
+    "p",
+    "Until the app is in the store, \"Coming soon to the App Store\" instead of the official badge (the script generates the version with the badge with the selo argument)."
+   ]
+  ]
+ },
+ "fd040a1": {
+  "assunto": "Android: iOS 26 alert and Settings subscreens with the glass bar",
+  "corpo": [
+   [
+    "item",
+    "iOS alert (AlertaDoIos): dark card with round corners, title and message on the left, capsule buttons side by side or stacked, entering as on iOS. Confirmation and Wallet name now use it instead of AlertDialog."
+   ],
+   [
+    "item",
+    "Settings subscreen with the iOS bar and content scrolling under it."
+   ]
+  ]
+ }
+}
