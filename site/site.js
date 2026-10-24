@@ -1700,6 +1700,14 @@
     new IntersectionObserver(function (e) { if (e[0].isIntersecting) podio.classList.add("visivel"); }, { threshold: 0.15 }).observe(podio);
   }
 
+  // As faixas de logos so andam na tela: fora dela, quase 800 logos em camadas largas seguiam
+  // animando e pesavam no celular (24/10/2026).
+  var vitrine = document.querySelector(".moedas-vitrine");
+  if (vitrine && observa) {
+    vitrine.classList.add("parada");
+    new IntersectionObserver(function (e) { vitrine.classList.toggle("parada", !e[0].isIntersecting); }, { rootMargin: "100px" }).observe(vitrine);
+  }
+
   // MARK: As moedas 3D: so com movimento, sem economia de dados e em aparelho que aguenta.
   // O moedas3d.js chega depois da pagina, e se o WebGL faltar, a imagem parada fica.
   function pode3D() {

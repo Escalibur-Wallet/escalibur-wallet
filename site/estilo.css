@@ -1079,8 +1079,8 @@ html:not(.js) .chamado .passo, html:not(.js) .chamado .botao, html:not(.js) .cha
 .fonte tr:last-child td { padding-bottom: 16px; }
 .fonte tr:target td { background: rgba(255, 214, 10, 0.10); }
 .fonte .c { color: #7D7D86; }
-.fonte .s { color: #F2B5A0; }
-.fonte .k { color: #FF7AB8; }
+.fonte .s { color: #D9D9E0; }
+.fonte .k { color: var(--up); }
 .fonte .t { color: #B9D9F5; }
 .fonte .a { color: #D9C2FF; }
 
@@ -1807,6 +1807,7 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
 .moedas-lista { display: flex; gap: clamp(14px, 1.6vw, 20px); padding: 0 clamp(14px, 1.6vw, 20px) 0 0; margin: 0; list-style: none; }
 .moedas-lista .logo { width: clamp(44px, 4.2vw, 60px); height: clamp(44px, 4.2vw, 60px); }
 @keyframes moedas-andar { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.moedas-vitrine.parada .moedas-trilho { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) { .moedas-trilho { animation: none; } }
 
 /* MARK: O podio do fim com a foto do bitcoin no meio (pedido do dono, 23/10/2026): a foto e a
@@ -1832,8 +1833,12 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
   .podio { gap: 0; padding-inline: 0; height: 80vw; }
   .podio .aparelho.podio-lado { display: none; }
   .podio-foto { width: 92vw; margin: -24vw 9vw 0 0; }
-  /* A moeda do fim menor e mais para cima no celular (pedido do dono, 23/10/2026). */
-  .final-texto .final-moeda { width: min(168px, 42vw); margin-top: -24px; margin-bottom: 4px; }
+  /* A moeda do fim menor, com ar em cima da secao e longe do titulo (pedidos do dono, 23 e
+     24/10/2026). */
+  .final { padding-top: 88px; }
+  .final-texto .final-moeda { width: min(168px, 42vw); margin-top: 0; margin-bottom: 36px; }
+  /* No celular, os selos das lojas ficam so no fim da pagina, nao no rodape (24/10/2026). */
+  .rodape .lojas { display: none; }
 }
 
 /* MARK: A moeda do Mercado gira na mao (pedido do dono, 23/10/2026): arrastar para os lados

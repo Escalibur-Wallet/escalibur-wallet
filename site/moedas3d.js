@@ -535,7 +535,9 @@
     this.dprMax = opcoes.dprMax || 2;
     this.dpr = Math.min(window.devicePixelRatio || 1, this.dprMax);
     this.exposicao = opcoes.exposicao || 1.0;
-    var gl = canvas.getContext("webgl", { alpha: true, antialias: true, premultipliedAlpha: true, depth: true, powerPreference: "high-performance", failIfMajorPerformanceCaveat: true });
+    // Em tela de alta densidade o proprio dpr ja suaviza a borda: o antisserrilhado (MSAA) so
+    // pesava a GPU do celular, quatro amostras por pixel em tela cheia (24/10/2026).
+    var gl = canvas.getContext("webgl", { alpha: true, antialias: (window.devicePixelRatio || 1) < 2, premultipliedAlpha: true, depth: true, powerPreference: "high-performance", failIfMajorPerformanceCaveat: true });
     if (!gl) throw new Error("sem WebGL");
     this.gl = gl;
     var derivadas = !!gl.getExtension("OES_standard_derivatives");
@@ -871,7 +873,8 @@
     try {
       var c1 = document.querySelector(".abertura-3d");
       if (c1) {
-        var cenaAbertura = new Cena(c1, { dprMax: 3, exposicao: 1.05 }, function (palco, t) {
+        // As duas cenas de tela cheia ficam em 2x; as moedas pequenas (mercado e fim), em ate 3x.
+        var cenaAbertura = new Cena(c1, { dprMax: 2, exposicao: 1.05 }, function (palco, t) {
           var ab = window.EscaliburAbertura || { p: 0 };
           var tela = null;
           if (ab.tela) {
@@ -944,7 +947,7 @@
         cabeca.addEventListener("pointerup", soltarRedes);
         cabeca.addEventListener("pointercancel", soltarRedes);
         cabeca.addEventListener("pointerleave", function () { cabeca.classList.remove("sobre-moeda"); });
-        cenas.push(new Cena(c4, { dprMax: 3, exposicao: 1.05 }, function (palco, t) {
+        cenas.push(new Cena(c4, { dprMax: 2, exposicao: 1.05 }, function (palco, t) {
           var estreito = palco.largura < 700;
           var lado = Math.min(palco.meioQuadro(0).w, palco.meioQuadro(0).h);
           naTela = [];
@@ -1078,8 +1081,13 @@
       cenas.forEach(function (c) {
         if (c.parada || !c.visivel || document.hidden) return;
         algum = true;
-        var lista = c.diretor(c.palco, t);
-        c.ids = (lista || []).map(function (m) { return m && m.id; }).filter(Boolean);
+        // So as moedas que aparecem: depois do mergulho, as da abertura ficam invisiveis com o
+        // palco ainda na tela, e eram desenhadas em tela cheia a cada quadro por todo o
+        // manifesto (o site travava no celular, 24/10/2026). Sem nenhuma, o canvas limpa uma vez.
+        var lista = (c.diretor(c.palco, t) || []).filter(function (m) { return m && !(m.alfa <= 0.004); });
+        c.ids = lista.map(function (m) { return m.id; }).filter(Boolean);
+        if (!lista.length && c.vazio) return;
+        c.vazio = !lista.length;
         c.palco.desenhar(lista);
       });
       // A imagem parada so sai quando as faces de todas as moedas na tela ficaram prontas: antes, ela sumia
