@@ -51,7 +51,49 @@ final class Ordens: @unchecked Sendable {
         return Date().timeIntervalSince(enviado) < 600
     }
 
-    func ordem(_ id: String) -> OpenOrder? { trava.withLock { ordens?.first { $0.id == id } } }
+    /// Tambem a do Enviar, lida so na rede dele: o cancelar de la passa pela mesma revisao.
+    func ordem(_ id: String) -> OpenOrder? {
+        trava.withLock { ordens?.first { $0.id == id } ?? doEnvio?.ordens.first { $0.id == id } }
+    }
+
+    // MARK: O que o envio consulta
+
+    /// As ordens abertas que vendem o ativo do envio, lidas so na rede dele, e nao em todas (o
+    /// `loadSellingOrders` do iOS): o Enviar mostra quanto esta reservado e deixa cancelar a ordem ou
+    /// enviar so o livre.
+    private var doEnvio: (carteira: UUID, ordens: [OpenOrder])?
+
+    struct DoEnvio: Encodable {
+        /// O que falta vender nelas, em unidades inteiras do ativo (texto decimal). As com cancelamento
+        /// enviado contam ate a rede parar de lista-las: ate la elas ainda executam.
+        let reservado: String
+        let ordens: [Linha]
+        let cancelando: [String]
+    }
+
+    func lerDoEnvio(_ ativo: Asset) async {
+        let metadata = Sessao.shared.metadata
+        guard let carteira = metadata.selectedWallet, let rede = ativo.chain, let motor = TradeEngines.engine(for: rede), motor.supportsLimitOrders,
+              let conta = carteira.account(rede), let lidas = try? await motor.openOrders(account: conta) else { return }
+        let id = ativo.id.lowercased()
+        trava.withLock { doEnvio = (carteira.id, lidas.filter { $0.sellAssetID.lowercased() == id && $0.chain.id == rede.id }) }
+    }
+
+    func retratoDoEnvio(_ ativo: Asset) -> DoEnvio? {
+        let carteira = Sessao.shared.metadata.selectedWallet
+        let podeAssinar = carteira?.isWatchOnly == false
+        let id = ativo.id.lowercased()
+        return trava.withLock {
+            guard let lidas = doEnvio, lidas.carteira == carteira?.id else { return nil }
+            let doAtivo = lidas.ordens.filter { $0.sellAssetID.lowercased() == id && $0.chain.id == ativo.chainID }
+            guard !doAtivo.isEmpty else { return nil }
+            return DoEnvio(
+                reservado: doAtivo.reduce(BigUInt()) { $0 + $1.remainingSell }.decimalString,
+                ordens: doAtivo.map { linha($0, podeAssinar: podeAssinar) },
+                cancelando: doAtivo.map(\.id).filter(cancelandoAgora)
+            )
+        }
+    }
 
     /// Um jeito so de cancelar, o garantido: a transacao na rede, que invalida a ordem de vez. O
     /// pedido gratis a CoW nao garante (um solver que ja estava executando ainda conclui).

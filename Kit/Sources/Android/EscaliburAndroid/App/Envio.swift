@@ -1260,6 +1260,9 @@ extension Envio {
             envio.voltar(para: etapa)
         case "envio.valor": envio.mudarValor(pedido["texto"]?.stringValue ?? "", tudo: pedido["tudo"]?.boolValue ?? false)
         case "envio.disponivel": Nucleo.esperarSemErro { await envio.carregarDisponivel() }
+        case "envio.ordens":
+            let ativo = envio.holding.asset
+            Nucleo.esperarSemErro { await Ordens.shared.lerDoEnvio(ativo) }
         case "envio.revisar": Nucleo.esperarSemErro { await envio.revisar() }
         case "envio.renovar": Nucleo.esperarSemErro { _ = await envio.renovar() }
         case "envio.retransmitir": Nucleo.esperarSemErro { await envio.retransmitir() }
@@ -1289,7 +1292,8 @@ extension Envio {
         let estado = envio.estado()
         let preco = Saldos.shared.preco(envio.holding.asset)
         return try Nucleo.json(Retrato(numero: numero, id: envio.id.uuidString, envio: estado, preco: preco, moeda: Sessao.shared.metadata.settings.currency,
-                                       pedePassphrase: PortaDaPassphrase.precisa(envio.wallet), nomeDaCarteira: envio.wallet.name))
+                                       pedePassphrase: PortaDaPassphrase.precisa(envio.wallet), nomeDaCarteira: envio.wallet.name,
+                                       ordens: Ordens.shared.retratoDoEnvio(envio.holding.asset)))
     }
 
     private static let contagem = NSLock()
@@ -1311,5 +1315,7 @@ extension Envio {
         let moeda: String
         let pedePassphrase: Bool
         let nomeDaCarteira: String
+        /// As ordens de venda abertas deste ativo, se houver (lidas com "envio.ordens").
+        let ordens: Ordens.DoEnvio?
     }
 }

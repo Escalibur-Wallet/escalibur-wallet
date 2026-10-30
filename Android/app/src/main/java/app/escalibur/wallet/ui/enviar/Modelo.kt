@@ -8,6 +8,7 @@ import app.escalibur.wallet.nucleo.FalhaDoNucleo
 import app.escalibur.wallet.ui.objetos
 import app.escalibur.wallet.ui.receber.opcional
 import app.escalibur.wallet.ui.textos
+import app.escalibur.wallet.ui.trocar.LinhaDaOrdem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -16,6 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.math.BigInteger
 
 /** Um trecho do endereco que o dono le e digita. */
 data class Trecho(val inicio: Int, val tamanho: Int) {
@@ -25,6 +27,13 @@ data class Trecho(val inicio: Int, val tamanho: Int) {
 }
 
 /** O retrato de um envio, como o nucleo devolve (Envio.Estado, no Swift). */
+/** O que esta reservado em ordens de venda abertas do ativo do envio, e as ordens, para cancelar dali mesmo. */
+class OrdensDoEnvio(j: JSONObject) {
+    val reservado: BigInteger = runCatching { BigInteger(j.getString("reservado")) }.getOrDefault(BigInteger.ZERO)
+    val ordens: List<LinhaDaOrdem> = j.optJSONArray("ordens").objetos().map(::LinhaDaOrdem)
+    val cancelando: Set<String> = j.optJSONArray("cancelando").textos().toSet()
+}
+
 class RetratoDoEnvio(json: JSONObject) {
     val numero = json.getInt("numero")
     val id = json.getString("id")
@@ -32,6 +41,8 @@ class RetratoDoEnvio(json: JSONObject) {
     val moeda = json.getString("moeda")
     val pedePassphrase = json.getBoolean("pedePassphrase")
     val nomeDaCarteira = json.getString("nomeDaCarteira")
+    /** As ordens de venda abertas deste ativo, se houver (o `sellingOrders` do iOS). */
+    val ordens: OrdensDoEnvio? = json.optJSONObject("ordens")?.let(::OrdensDoEnvio)
     private val e = json.getJSONObject("envio")
 
     val etapa: String = e.getString("etapa")

@@ -1,5 +1,8 @@
 package app.escalibur.wallet.ui.enviar
 
+import app.escalibur.wallet.ui.trocar.RevisaoDoCancelamento
+import app.escalibur.wallet.ui.trocar.LinhaDaOrdemQueCancela
+import app.escalibur.wallet.ui.trocar.Folha
 import app.escalibur.wallet.ui.comp.PlacaLaqueada
 import app.escalibur.wallet.ui.carteira.TipoDeSelo
 import app.escalibur.wallet.ui.comp.Girando
@@ -719,11 +722,18 @@ private fun ColumnScope.EtapaDoValor(controle: ControleDoEnvio, r: RetratoDoEnvi
     val limite = runCatching { BigInteger(r.disponivel) }.getOrDefault(BigInteger.ZERO)
     val pedido: BigInteger? = if (r.tudo) limite else Formato.lerQuantidade(valor, r.casas)
     val passou = !r.tudo && pedido != null && pedido > limite
+    // O que esta reservado em ordens de venda abertas deste ativo: o valor que passa do livre abre a folha de liberar.
+    val reservado = r.ordens?.reservado ?: BigInteger.ZERO
+    val livre = (limite - reservado).max(BigInteger.ZERO)
+    val passaDoLivre = reservado.signum() > 0 && pedido != null && pedido > livre
+    var mostrandoOrdens by remember { mutableStateOf(false) }
     val foco = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         runCatching { foco.requestFocus() }
         controle.chamar("envio.disponivel")
     }
+    // As ordens limite abertas que vendem este ativo, lidas so na rede dele.
+    LaunchedEffect(r.rede, r.ativoID) { controle.chamar("envio.ordens") }
 
     fun mudar(texto: String, tudo: Boolean) {
         valor = texto
@@ -773,6 +783,14 @@ private fun ColumnScope.EtapaDoValor(controle: ControleDoEnvio, r: RetratoDoEnvi
     Deslizante(limite, pedido, r.tudo, r.casas) { fracao, parte ->
         if (fracao >= 0.995f) mudar(valor, true) else mudar(if (parte.signum() == 0) "" else Formato.decimalSimples(parte.toString(), r.casas), false)
     }
+    if (reservado.signum() > 0) {
+        Row(Modifier.padding(top = Espaco.sm).heightIn(min = 32.dp).clickable { mostrandoOrdens = true },
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
+            Text(t("%@ em ordens de venda abertas", Formato.cripto(reservado.min(limite).toString(), r.casas, r.simbolo)), style = estilo(Tipo.nota),
+                 color = if (passaDoLivre) Paleta.cautela else Paleta.tintaSuave)
+            Icone(Icones.avancar, Paleta.tintaApagada, tamanho = 11.dp)
+        }
+    }
     r.notaDeReserva?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.xs)) }
     r.notaDeTaxa?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.xxs)) }
     r.ativacao?.let { minimo ->
@@ -785,7 +803,54 @@ private fun ColumnScope.EtapaDoValor(controle: ControleDoEnvio, r: RetratoDoEnvi
     BotaoPrimario(
         if (passou) t("Saldo insuficiente") else t("Revisar"),
         ligado = pedido != null && pedido.signum() > 0 && !passou, carregando = controle.trabalhando,
-    ) { escopo.launch { controle.trabalhar("envio.revisar") } }
+    ) {
+        // Parte do valor esta numa ordem de venda: antes, a folha de liberar.
+        if (passaDoLivre) mostrandoOrdens = true else escopo.launch { controle.trabalhar("envio.revisar") }
+    }
+    if (mostrandoOrdens && r.ordens != null) {
+        FolhaDasOrdens(controle, r, limite, livre, pedido, aoFechar = { mostrandoOrdens = false }) { texto -> mudar(texto, false) }
+    }
+}
+
+/**
+ * Parte do valor esta numa ordem de venda aberta (o `LockedOrdersSheet` do iOS): para enviar, cancela a ordem antes, ou envia so
+ * o que esta livre. O cancelamento passa pela mesma revisao, PIN e assinatura de Ordens abertas, e o valor so fica livre quando a
+ * rede confirma (ate la a ordem ainda pode executar). A lista rele a cada 6 s.
+ */
+@Composable
+private fun FolhaDasOrdens(
+    controle: ControleDoEnvio, r: RetratoDoEnvio, limite: BigInteger, livre: BigInteger, pedido: BigInteger?, aoFechar: () -> Unit,
+    aoEnviarOLivre: (String) -> Unit,
+) {
+    val ordens = r.ordens ?: return
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(6_000)
+            controle.chamar("envio.ordens")
+        }
+    }
+    fun quantia(valor: BigInteger) = Formato.cripto(valor.toString(), r.casas, r.simbolo)
+    val liberado = pedido != null && pedido <= livre
+    Folha(t("Moeda em ordem de venda"), aoFechar) { fechar ->
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md),
+               verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
+            Text(t("Do disponível de %@, %@ estão reservados em ordens de venda abertas. ", quantia(limite), quantia(ordens.reservado.min(limite)))
+                     + t("Para enviar %@, cancele a ordem antes. O que ela não vendeu volta a ficar livre na carteira assim que a rede confirmar.", pedido?.let(::quantia) ?: ""),
+                 style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
+            Column {
+                for (ordem in ordens.ordens) {
+                    LinhaDaOrdemQueCancela(ordem, ordem.id in ordens.cancelando) { Navegacao.cobrir { RevisaoDoCancelamento(ordem.id) } }
+                }
+            }
+            if (liberado) Faixa(TipoDeFaixa.neutra, t("Liberado. O valor que você digitou já pode ser enviado."))
+            when {
+                liberado -> BotaoPrimario(t("Continuar o envio")) { fechar {} }
+                livre.signum() > 0 -> BotaoSecundario(t("Enviar só o livre, %@", quantia(livre)), Modifier.fillMaxWidth()) {
+                    fechar { aoEnviarOLivre(Formato.decimalSimples(livre.toString(), r.casas)) }
+                }
+            }
+        }
+    }
 }
 
 /**

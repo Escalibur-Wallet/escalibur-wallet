@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.trocar
 
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
 import app.escalibur.wallet.ui.comp.Interruptor
 import app.escalibur.wallet.ui.comp.Girando
 import androidx.compose.material3.Switch
@@ -154,7 +156,7 @@ fun OrdensAbertas(soComOrdens: Boolean, modifier: Modifier = Modifier) {
 
 /** A revisao do cancelamento de uma ordem: a mesma revisao, PIN e assinatura de qualquer plano. */
 @Composable
-private fun RevisaoDoCancelamento(ordem: String) {
+fun RevisaoDoCancelamento(ordem: String) {
     val controle = remember { ControleDaTroca("cancelamento") }
     RevisaoDaTroca(controle, encerra = true) { it.trabalhar("troca.cancelar", JSONObject().put("ordem", ordem)) }
 }
@@ -175,6 +177,34 @@ private fun LinhaDaOrdemAberta(ordem: LinhaDaOrdem, acao: () -> Unit) {
         val fracao = ordem.fracao
         if (fracao != null) AnelDoPreenchimento(fracao, 44.dp)
         else Text(vencimento(ordem.vence), style = estilo(Tipo.nota), color = Paleta.tintaSuave, textAlign = TextAlign.End)
+    }
+}
+
+/**
+ * A linha da ordem dentro do Enviar (o `LockedOrdersSheet` do iOS): como em Ordens abertas, com o cancelar na ponta. Com o
+ * cancelamento enviado, o aviso de que a rede ainda confirma: ate la a ordem ainda pode executar.
+ */
+@Composable
+fun LinhaDaOrdemQueCancela(ordem: LinhaDaOrdem, cancelando: Boolean, aoCancelar: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = Altura.linha).padding(vertical = Espaco.xxs),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
+    ) {
+        LogoDaOrdem(ordem.vende, ordem.rede, ordem.redeCoingecko)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(ordem.titulo, style = estilo(Tipo.linha), color = Paleta.tinta)
+            Text(ordem.detalhe, style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+            ordem.preco?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1) }
+            if (cancelando) Text(t("Cancelamento enviado. Esperando a rede confirmar."), style = estilo(Tipo.nota), color = Paleta.cautela)
+            else Text(vencimento(ordem.vence), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+        }
+        when {
+            cancelando -> Girando(Paleta.tintaSuave, 18.dp)
+            ordem.podeCancelar -> Box(
+                Modifier.height(34.dp).clip(CircleShape).background(Paleta.trilho).clickable(onClick = aoCancelar).padding(horizontal = Espaco.sm),
+                contentAlignment = Alignment.Center,
+            ) { Text(t("Cancelar"), style = estilo(Tipo.rotulo), color = Paleta.baixa) }
+        }
     }
 }
 
