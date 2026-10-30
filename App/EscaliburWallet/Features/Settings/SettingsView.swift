@@ -1183,7 +1183,9 @@ struct PixelTrashScene: View {
     private static let wallet = ["###########", "###########", "#######----", "#######-o--", "#######----", "###########", "###########"]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
+        // A cada quadro da tela (60 ou 120 por segundo): a 30, a tampa fechando pulava quadros
+        // (pedido do dono, 30/10/2026).
+        TimelineView(.animation(minimumInterval: nil, paused: reduceMotion)) { timeline in
             let t = reduceMotion ? 0.6 : timeline.date.timeIntervalSince(start).truncatingRemainder(dividingBy: Self.period)
             let clock = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in draw(context, size: size, t: t, clock: clock) }
@@ -1200,10 +1202,11 @@ struct PixelTrashScene: View {
         let lidTop = bodyTop - 3 * p
         let handleTop = lidTop - 2 * p
 
-        // A historia: a carteira chega, a tampa abre, a carteira desce, a tampa fecha e quica.
+        // A historia: a carteira chega, a tampa abre, a carteira desce, a tampa fecha e quica. O
+        // fechar leva 0,3 s (antes 0,22, rapido demais para parecer continuo).
         let arrive = Self.smooth(t / 0.4)
-        let open = Self.easeOut((t - 0.55) / 0.3) * (1 - Self.smooth((t - 1.55) / 0.22))
-        let bounce = t > 1.77 && t < 2.1 ? sin((t - 1.77) / 0.33 * .pi) : 0
+        let open = Self.easeOut((t - 0.55) / 0.3) * (1 - Self.smooth((t - 1.55) / 0.3))
+        let bounce = t > 1.85 && t < 2.18 ? sin((t - 1.85) / 0.33 * .pi) : 0
         let fall = Self.easeIn((t - 0.85) / 0.6)
         let walletRest = handleTop - 9 * p
         let walletTop = walletRest + CGFloat(fall) * (bodyTop + 2 * p - walletRest) + CGFloat(1 - arrive) * -6

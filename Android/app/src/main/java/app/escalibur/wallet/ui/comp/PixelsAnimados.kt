@@ -180,8 +180,9 @@ fun LixeiraDePixels(modifier: Modifier = Modifier) {
         val topoDaTampa = topoDoCorpo - 3 * p
         val topoDaAlca = topoDaTampa - 2 * p
         val chega = suaveD(t / 0.4)
-        val abre = saidaD((t - 0.55) / 0.3) * (1 - suaveD((t - 1.55) / 0.22))
-        val quique = if (t > 1.77 && t < 2.1) sin((t - 1.77) / 0.33 * Math.PI) else 0.0
+        // O fechar leva 0,3 s, como no iOS (antes 0,22, rapido demais para parecer continuo).
+        val abre = saidaD((t - 0.55) / 0.3) * (1 - suaveD((t - 1.55) / 0.3))
+        val quique = if (t > 1.85 && t < 2.18) sin((t - 1.85) / 0.33 * Math.PI) else 0.0
         val cai = entradaD((t - 0.85) / 0.6)
         val repouso = topoDaAlca - 9 * p
         val topoDaCarteira = repouso + cai.toFloat() * (topoDoCorpo + 2 * p - repouso) - (1 - chega).toFloat() * 6
