@@ -53571,78 +53571,78 @@
         }
       }
     },
-    "Colado. A área de transferência foi limpa agora, mas pode já ter sincronizado com outros aparelhos Apple." : {
+    "Colado. A área de transferência foi limpa agora." : {
       "localizations" : {
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "تم اللصق. مُسحت الحافظة للتو، لكنها ربما تزامنت بالفعل مع أجهزة Apple الأخرى لديك."
+            "value" : "تم اللصق. مُسحت الحافظة للتو."
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Eingefügt. Die Zwischenablage wurde gerade geleert, kann aber schon mit deinen anderen Apple-Geräten synchronisiert worden sein."
+            "value" : "Eingefügt. Die Zwischenablage wurde gerade geleert."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pasted. The clipboard was just cleared, but it may have already synced to your other Apple devices."
+            "value" : "Pasted. The clipboard was just cleared."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pegado. El portapapeles se acaba de limpiar, pero puede que ya se haya sincronizado con otros dispositivos Apple."
+            "value" : "Pegado. Se acaba de limpiar el portapapeles."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Collé. Le presse-papiers vient d’être vidé, mais il a peut-être déjà été synchronisé avec vos autres appareils Apple."
+            "value" : "Collé. Le presse-papiers vient d’être vidé."
           }
         },
         "hi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "पेस्ट हो गया. क्लिपबोर्ड अभी साफ़ कर दिया गया, लेकिन हो सकता है यह आपके दूसरे Apple डिवाइस पर पहले ही सिंक हो चुका हो."
+            "value" : "पेस्ट हो गया। क्लिपबोर्ड अभी साफ़ कर दिया गया।"
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ditempel. Papan klip baru saja dikosongkan, tetapi mungkin sudah tersinkron ke perangkat Apple Anda yang lain."
+            "value" : "Ditempel. Papan klip baru saja dibersihkan."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "貼り付けました。クリップボードは今消去されましたが、すでにほかの Apple デバイスと同期されている可能性があります。"
+            "value" : "ペーストしました。クリップボードは今消去されました。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "붙여 넣었습니다. 클립보드는 방금 지웠지만, 이미 다른 Apple 기기와 동기화되었을 수 있습니다."
+            "value" : "붙여넣었습니다. 클립보드를 방금 비웠습니다."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Yapıştırıldı. Pano az önce temizlendi ama diğer Apple cihazlarınla eşzamanlanmış olabilir."
+            "value" : "Yapıştırıldı. Pano az önce temizlendi."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Đã dán. Bộ nhớ tạm vừa được xóa, nhưng có thể đã đồng bộ sang các thiết bị Apple khác của bạn."
+            "value" : "Đã dán. Bộ nhớ tạm vừa được xóa."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已粘贴。剪贴板刚刚已清空，但内容可能已同步到你的其他 Apple 设备。"
+            "value" : "已粘贴。剪贴板刚刚已清空。"
           }
         }
       }

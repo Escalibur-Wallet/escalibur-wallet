@@ -1394,20 +1394,6 @@
   "vi": "%@ hỏi passphrase khi chuyển số dư. Sau đó là sinh trắc học hoặc mã PIN, như mọi khi.",
   "ar": "تطلب %@ العبارة السرية الإضافية لنقل الرصيد. وبعدها المصادقة الحيوية أو رمز PIN كالمعتاد."
  },
- "Colado. A área de transferência foi limpa agora.": {
-  "en": "Pasted. The clipboard was just cleared.",
-  "es": "Pegado. Se acaba de limpiar el portapapeles.",
-  "fr": "Collé. Le presse-papiers vient d’être vidé.",
-  "de": "Eingefügt. Die Zwischenablage wurde gerade geleert.",
-  "hi": "पेस्ट हो गया। क्लिपबोर्ड अभी साफ़ कर दिया गया।",
-  "id": "Ditempel. Papan klip baru saja dibersihkan.",
-  "ja": "ペーストしました。クリップボードは今消去されました。",
-  "ko": "붙여넣었습니다. 클립보드를 방금 비웠습니다.",
-  "tr": "Yapıştırıldı. Pano az önce temizlendi.",
-  "zh-Hans": "已粘贴。剪贴板刚刚已清空。",
-  "vi": "Đã dán. Bộ nhớ tạm vừa được xóa.",
-  "ar": "تم اللصق. مُسحت الحافظة للتو."
- },
  "Escondidas nos campos": {
   "en": "Hidden in the fields",
   "es": "Ocultas en los campos",

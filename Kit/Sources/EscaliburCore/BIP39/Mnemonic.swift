@@ -54,6 +54,14 @@ public enum Mnemonic {
         return canonical.isEmpty ? [] : canonical.split(separator: " ").map(String.init)
     }
 
+    /// As palavras de uma frase colada: tudo o que nao e letra separa. Outras carteiras e o
+    /// Notas mostram a frase numerada ("1. abandon", "2) ability"), com virgula ou com
+    /// marcador; separando so por espaco, os numeros viravam palavras e nada conferia (pedido
+    /// do dono, 30/10/2026). Nenhuma palavra das listas tem digito ou pontuacao.
+    public static func pastedWords(_ raw: String) -> [String] {
+        canonicalize(raw).split { !$0.isLetter }.map(String.init)
+    }
+
     // MARK: Tamanho
 
     /// Os cinco tamanhos do padrao. `ENT = palavras * 32 / 3` e `CS = ENT / 32`.

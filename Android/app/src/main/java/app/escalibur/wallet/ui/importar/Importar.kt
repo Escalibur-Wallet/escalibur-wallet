@@ -164,9 +164,13 @@ class EntradaDaFrase(quantas: Int = 12) {
     /** So para mostrar enquanto o dono segura a posicao. */
     fun texto(indice: Int): String = posicoes.getOrNull(indice)?.let { String(it, Charsets.UTF_8) } ?: ""
 
-    /** Distribui uma frase colada. Com uma contagem que nao e de frase, nada entra. */
+    /**
+     * Distribui uma frase colada. Com uma contagem que nao e de frase, nada entra. Tudo o que nao e
+     * letra separa: a frase numerada ("1. abandon", "2) ability") de outras carteiras e do bloco de
+     * notas colava os numeros como palavras (pedido do dono, 30/10/2026). Igual ao iOS.
+     */
     fun colar(texto: String): Int {
-        val palavras = texto.split(Regex("[\\s,;]+")).filter { it.isNotBlank() }
+        val palavras = texto.split(Regex("[^\\p{L}\\p{M}]+")).filter { it.isNotBlank() }
         if (palavras.size !in TAMANHOS) return palavras.size
         mudarQuantidade(palavras.size)
         palavras.forEachIndexed { indice, palavra -> definir(palavra, indice) }
@@ -351,7 +355,7 @@ internal fun TelaDaFrase(
         palavra.limpar()
         val quantas = entrada.colar(texto)
         runCatching { gerente.clearPrimaryClip() }
-        colado = true
+        colado = quantas in EntradaDaFrase.TAMANHOS
         digitando = false
         mensagem = if (quantas in EntradaDaFrase.TAMANHOS) null
                    else t("O texto colado tem %lld palavras, e uma frase tem 12, 15, 18, 21 ou 24. Nada foi preenchido: confira o que você copiou.", quantas)
@@ -466,7 +470,7 @@ internal fun TelaDaFrase(
                 }
             }
             if (colado) {
-                Text(t("Colado. A área de transferência foi limpa agora."), style = estilo(Tipo.nota), color = Paleta.cautela, modifier = Modifier.padding(top = Espaco.xs))
+                Text(t("Colado. A área de transferência foi limpa agora."), style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs))
             }
             GradeDaFrase(entrada, revisao, digitando, palavra.texto, mostrar, Modifier.padding(top = Espaco.md), sorteada = escolhendo) { indice ->
                 pronto {

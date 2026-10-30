@@ -65,7 +65,7 @@ final class PhraseEntry {
     /// (auditoria 4, C7-17). Devolve quantas palavras vieram.
     @discardableResult
     func paste(_ text: String) -> Int {
-        let words = Mnemonic.words(in: text)
+        let words = Mnemonic.pastedWords(text)
         guard Mnemonic.validWordCounts.contains(words.count) else { return words.count }
         count = words.count
         for (index, word) in words.enumerated() { set(word, at: index) }
@@ -240,9 +240,10 @@ struct ImportPhraseView: View {
                     }
                     .padding(.top, Space.lg)
 
+                    // So quando colou de verdade, e sem susto (pedido do dono, 30/10/2026).
                     if pasteNotice {
-                        Text("Colado. A área de transferência foi limpa agora, mas pode já ter sincronizado com outros aparelhos Apple.")
-                            .typeStyle(.note).foregroundStyle(Palette.caution).padding(.top, Space.xs)
+                        Text("Colado. A área de transferência foi limpa agora.")
+                            .typeStyle(.note).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -653,7 +654,7 @@ struct ImportPhraseView: View {
         typed = ""
         // Conferindo uma copia de N palavras, colar outro tamanho nao preenche nada.
         if let verify {
-            let count = Mnemonic.words(in: text).count
+            let count = Mnemonic.pastedWords(text).count
             guard count == verify.wordCount else {
                 UIPasteboard.general.items = []
                 focused = false
@@ -663,7 +664,7 @@ struct ImportPhraseView: View {
         }
         let pasted = entry.paste(text)
         UIPasteboard.general.items = []
-        pasteNotice = true
+        pasteNotice = Mnemonic.validWordCounts.contains(pasted)
         focused = false
         // Conferindo uma copia, o tamanho e o da carteira: colar outro tamanho nao muda.
         if let verify, Mnemonic.validWordCounts.contains(pasted), pasted != verify.wordCount { entry.count = verify.wordCount }

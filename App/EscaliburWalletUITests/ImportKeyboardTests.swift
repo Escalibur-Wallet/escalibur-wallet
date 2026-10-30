@@ -35,6 +35,26 @@ final class ImportKeyboardTests: XCTestCase {
         XCTAssertEqual(app.otherElements["palavra-12"].label, "Palavra 12, preenchida")
     }
 
+    /// A frase numerada, como outras carteiras e o Notas mostram (pedido do dono, 30/10/2026):
+    /// os numeros nao viram palavras, e o aviso de colado nao fala em sincronizar.
+    func testNumberedPasteFills() {
+        let words = Array(repeating: "abandon", count: 11) + ["about"]
+        UIPasteboard.general.string = words.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
+        let app = XCUIApplication()
+        app.launchArguments = ["-reset", "-demo", "-tela", "frase", "-frase-topo"]
+        app.launch()
+        let paste = app.buttons.matching(NSPredicate(format: "label == 'Colar' OR label == 'Paste'")).firstMatch
+        XCTAssertTrue(paste.waitForExistence(timeout: 30))
+        paste.tap()
+        let first = app.otherElements["palavra-1"]
+        let filled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == 'Palavra 1, preenchida'"), object: first)
+        XCTAssertEqual(XCTWaiter.wait(for: [filled], timeout: 10), .completed, "a frase numerada nao colou")
+        XCTAssertEqual(app.otherElements["palavra-12"].label, "Palavra 12, preenchida")
+        XCTAssertTrue(app.staticTexts["Colado. A área de transferência foi limpa agora."].exists)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'sincroniz'")).firstMatch.exists)
+        shot("k0-colar-numerada", app)
+    }
+
     func testOwnKeyboardTypesOnlyListWords() {
         let app = XCUIApplication()
         app.launchArguments = ["-reset", "-demo", "-tela", "frase", "-frase-topo", "-teclado-proprio"]

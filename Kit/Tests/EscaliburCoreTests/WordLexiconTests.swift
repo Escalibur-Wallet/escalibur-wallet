@@ -77,4 +77,21 @@ struct WordLexiconTests {
         // Uma frase que nao fecha em idioma nenhum nao vira nada.
         #expect(WordLexicon.resolve(Array(repeating: secure("abaco"), count: 12)) == nil)
     }
+
+    @Test("Frase colada: numeracao, virgula, marcador e quebra de linha separam; as palavras saem iguais em todo idioma")
+    func pastedWords() throws {
+        let twelve = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+        let expected = Mnemonic.words(in: twelve)
+        let numbered = expected.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
+        #expect(Mnemonic.pastedWords(numbered) == expected)
+        #expect(Mnemonic.pastedWords(expected.enumerated().map { "\($0.offset + 1)) \($0.element)" }.joined(separator: " ")) == expected)
+        #expect(Mnemonic.pastedWords(expected.joined(separator: ", ")) == expected)
+        #expect(Mnemonic.pastedWords(expected.map { "• \($0)" }.joined(separator: "\n")) == expected)
+        #expect(Mnemonic.pastedWords("  " + expected.joined(separator: "\t").uppercased() + ".\n") == expected)
+        for language in BIP39Language.allCases {
+            let phrase = try Mnemonic.generate(wordCount: 24, language: language)
+            let numberedPhrase = Mnemonic.words(in: phrase).enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
+            #expect(Mnemonic.pastedWords(numberedPhrase) == Mnemonic.words(in: phrase), "\(language)")
+        }
+    }
 }
