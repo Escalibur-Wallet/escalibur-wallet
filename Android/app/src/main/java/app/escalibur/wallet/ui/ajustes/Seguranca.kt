@@ -115,7 +115,7 @@ fun TelaDeSeguranca() {
         }
         NotaDeAjuste(
             erroDoEndereco ?: if (estado.reforcado) t("No Super Security, a conferência do endereço fica sempre ligada.")
-            else t("Todo envio pede os 6 últimos caracteres do endereço de destino, lidos de onde você copiou."),
+            else t("Todo envio para fora das suas carteiras pede os 6 últimos caracteres do endereço de destino, lidos de onde você copiou."),
             cor = if (erroDoEndereco == null) Paleta.tintaApagada else Paleta.baixa,
         )
         estado.carteira?.takeIf { !it.observacao && !it.temPassphrase }?.let { carteira ->

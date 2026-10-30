@@ -194814,78 +194814,78 @@
         }
       }
     },
-    "Todo envio pede os 6 últimos caracteres do endereço de destino, lidos de onde você copiou." : {
+    "Todo envio para fora das suas carteiras pede os 6 últimos caracteres do endereço de destino, lidos de onde você copiou." : {
       "localizations" : {
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "كل إرسال يطلب آخر 6 أحرف من عنوان الوجهة، تقرؤها من حيث نسخته."
+            "value" : "كل إرسال إلى خارج محافظك يطلب آخر 6 أحرف من عنوان الوجهة، تقرؤها من حيث نسخته."
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Jedes Senden fragt die letzten 6 Zeichen der Zieladresse ab, abgelesen dort, wo du sie kopiert hast."
+            "value" : "Jedes Senden außerhalb deiner eigenen Wallets fragt die letzten 6 Zeichen der Zieladresse ab, abgelesen dort, wo du sie kopiert hast."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Every send asks for the last 6 characters of the destination address, read from where you copied it."
+            "value" : "Every send outside your own wallets asks for the last 6 characters of the destination address, read from where you copied it."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cada envío pide los 6 últimos caracteres de la dirección de destino, leídos de donde la copiaste."
+            "value" : "Cada envío fuera de tus propias billeteras pide los 6 últimos caracteres de la dirección de destino, leídos de donde la copiaste."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Chaque envoi demande les 6 derniers caractères de l'adresse de destination, lus là où vous l'avez copiée."
+            "value" : "Chaque envoi hors de vos propres portefeuilles demande les 6 derniers caractères de l'adresse de destination, lus là où vous l'avez copiée."
           }
         },
         "hi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "हर भेजने पर गंतव्य पते के आखिरी 6 अक्षर मांगे जाते हैं, जहां से आपने कॉपी किया वहीं से पढ़कर।"
+            "value" : "आपके अपने वॉलेट के बाहर हर भेजने पर गंतव्य पते के आखिरी 6 अक्षर मांगे जाते हैं, जहां से आपने कॉपी किया वहीं से पढ़कर।"
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Setiap pengiriman meminta 6 karakter terakhir alamat tujuan, dibaca dari tempat Anda menyalinnya."
+            "value" : "Setiap pengiriman ke luar dompet Anda sendiri meminta 6 karakter terakhir alamat tujuan, dibaca dari tempat Anda menyalinnya."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "送金のたびに、宛先アドレスの最後の6文字を、コピー元を見ながら入力します。"
+            "value" : "自分のウォレット以外への送金のたびに、宛先アドレスの最後の6文字を、コピー元を見ながら入力します。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "보낼 때마다 받는 주소의 마지막 6자를 복사해 온 곳에서 읽어 입력해야 합니다."
+            "value" : "내 지갑이 아닌 곳으로 보낼 때마다 받는 주소의 마지막 6자를 복사해 온 곳에서 읽어 입력해야 합니다."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Her gönderim, hedef adresin son 6 karakterini, kopyaladığınız yerden okuyarak ister."
+            "value" : "Kendi cüzdanların dışına yapılan her gönderim, hedef adresin son 6 karakterini, kopyaladığın yerden okuyarak ister."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mỗi lần gửi đều yêu cầu 6 ký tự cuối của địa chỉ nhận, đọc từ nơi bạn đã sao chép."
+            "value" : "Mỗi lần gửi ra ngoài các ví của bạn đều yêu cầu 6 ký tự cuối của địa chỉ nhận, đọc từ nơi bạn đã sao chép."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每次发送都要求输入目标地址的最后 6 个字符，从你复制地址的地方读取。"
+            "value" : "每次发送到你自己钱包以外的地址，都要求输入目标地址的最后 6 个字符，从你复制地址的地方读取。"
           }
         }
       }

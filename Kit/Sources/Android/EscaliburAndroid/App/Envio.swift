@@ -490,8 +490,11 @@ final class Envio: @unchecked Sendable {
             // "Conferir o endereco em todo envio" (Ajustes, Seguranca), sempre ligada no Super
             // Security: sem outro desafio na tela, todo envio pede os 6 ultimos caracteres,
             // escondidos, lidos na fonte. O mesmo desafio do historico ilegivel (pedido do dono, 23/10/2026).
+            // Para uma carteira deste celular, nao pede: o endereco vem da propria carteira (pedido
+            // do dono, 30/10/2026).
             if metadata.settings.confirmEveryAddress == true || Chaves.root.securityMode == .hardened,
-               parecido == nil, outroID == nil, trechoCego == nil, let ultimos = AddressPoisoning.tailSegment(texto) {
+               parecido == nil, outroID == nil, trechoCego == nil, !carteiras.contains(destination.address),
+               let ultimos = AddressPoisoning.tailSegment(texto) {
                 fonteCega = texto
                 trechoCego = ultimos
                 cegoDeTodoEnvio = true

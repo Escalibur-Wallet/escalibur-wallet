@@ -924,7 +924,10 @@ struct SendStages: View {
             // "Conferir o endereco em todo envio" (Ajustes, Seguranca): sem outro desafio na tela,
             // todo envio pede os 6 ultimos caracteres, escondidos, lidos na fonte. O mesmo desafio
             // do historico ilegivel, conferido no endereco como foi colado (pedido do dono, 23/10/2026).
+            // Para uma carteira deste iPhone, nao pede: o endereco vem da propria carteira (pedido
+            // do dono, 30/10/2026).
             if session.confirmEveryAddressOn, model.lookalike == nil, model.otherID == nil, model.blindSegment == nil,
+               !wallets.contains(destination.address),
                let tail = AddressPoisoning.tailSegment(text) {
                 model.blindSource = text
                 model.blindSegment = tail

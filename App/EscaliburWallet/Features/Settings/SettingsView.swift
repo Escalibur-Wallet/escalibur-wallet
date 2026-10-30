@@ -541,7 +541,7 @@ struct SecuritySettingsView: View {
                 .padding(.top, Space.lg)
                 Text(addressError ?? (session.hardenedModeOn
                      ? String(localized: "No Super Security, a conferência do endereço fica sempre ligada.")
-                     : String(localized: "Todo envio pede os 6 últimos caracteres do endereço de destino, lidos de onde você copiou.")))
+                     : String(localized: "Todo envio para fora das suas carteiras pede os 6 últimos caracteres do endereço de destino, lidos de onde você copiou.")))
                     .typeStyle(.note).foregroundStyle(addressError == nil ? Palette.inkMuted : Palette.down)
                     .padding(.horizontal, Space.gutter).padding(.top, Space.xs)
                     .fixedSize(horizontal: false, vertical: true)

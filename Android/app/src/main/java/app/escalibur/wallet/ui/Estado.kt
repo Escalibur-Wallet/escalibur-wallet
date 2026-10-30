@@ -80,7 +80,7 @@ data class EstadoDoApp(
     val autoTravar: Int,
     val tecladoProprio: Boolean,
     val responsabilidade: Int?,
-    /** Todo envio pede os 6 ultimos caracteres do destino (Seguranca); sempre ligado no Super Security. */
+    /** Todo envio para fora das carteiras do app pede os 6 ultimos caracteres do destino (Seguranca); sempre ligado no Super Security. */
     val conferirEndereco: Boolean = false,
     val redesDesligadas: Set<String> = emptySet(),
     /** Apagar as carteiras depois de tantos PINs errados seguidos; nulo, nunca. */
