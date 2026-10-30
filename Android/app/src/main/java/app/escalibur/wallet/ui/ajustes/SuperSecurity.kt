@@ -164,7 +164,8 @@ private class RetratoDoReforco(j: JSONObject) {
 private val textoDoAceite get() =
     t("Entendo que, se a digital deste celular mudar, as carteiras daqui fecham de vez, e só as palavras de cada carteira trazem de volta. Os nomes, endereços salvos e ajustes daqui se perdem junto.")
 
-private fun mensagemDaEspera(segundos: Double) =
+/** A espera de "Esperar 24 horas": o que voltou a valer e quando, dito na Carteira, em Seguranca e no bloqueio. */
+fun mensagemDaEspera(segundos: Double) =
     t("A biometria deste celular mudou. Enviar, trocar e ver as palavras voltam em %@. São 24 horas com o celular ligado; reiniciar ou uma biometria nova recomeça a contagem. Se não foi você, troque o bloqueio de tela do celular.", Formato.duracao(segundos))
 
 /** O erro de ligar, desligar ou mudar a politica, dito ao dono. */

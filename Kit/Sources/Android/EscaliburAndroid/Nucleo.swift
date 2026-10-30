@@ -717,6 +717,8 @@ struct Estado: Encodable {
     let atraso: Double
     let erros: Int
     let reforcado: Bool
+    /// O que falta da espera de "Esperar 24 horas" (Super Security), em segundos: a faixa da Carteira, de Seguranca e do bloqueio.
+    let espera: Double
     let carteiras: [CarteiraResumo]
     let selecionada: String?
     let ajustes: Ajustes
@@ -744,6 +746,7 @@ struct Estado: Encodable {
             atraso: root.throttleRemaining(),
             erros: Int(root.failureCount()),
             reforcado: root.securityMode == .hardened,
+            espera: root.securityMode == .hardened ? max(0, root.hardenedHoldRemaining) : 0,
             carteiras: metadata.wallets.map { CarteiraResumo($0, selecionada: $0.id == selecionada) },
             selecionada: selecionada?.uuidString,
             ajustes: Ajustes(

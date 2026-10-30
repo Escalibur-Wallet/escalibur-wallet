@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.ajustes
 
+import app.escalibur.wallet.ui.comp.TipoDeFaixa
+import app.escalibur.wallet.ui.comp.Faixa
 import app.escalibur.wallet.ui.tema.Altura
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.graphicsLayer
@@ -84,6 +86,7 @@ fun TelaDeSeguranca() {
         }
     }
     Subtela(t("Segurança")) {
+        if (estado.espera > 0) Faixa(TipoDeFaixa.cautela, mensagemDaEspera(estado.espera), Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md))
         // Na ordem do iOS: o PIN, o Super Security, o Safe Keyboard, a biometria (escondida no Super Security, que ja a
         // inclui) e o bloqueio; depois a carteira com passphrase e o apagar.
         GrupoDeAjustes(Modifier.padding(top = Espaco.md)) {

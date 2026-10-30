@@ -222,6 +222,11 @@ fun TelaDaCarteira() {
                 }
             }
 
+            // Super Security com "Esperar 24 horas": a biometria mudou, e so o saldo vale ate a espera acabar.
+            if (estado.espera > 0) {
+                Faixa(TipoDeFaixa.cautela, app.escalibur.wallet.ui.ajustes.mensagemDaEspera(estado.espera),
+                      Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg))
+            }
             if (!carteira.temCopia && !carteira.observacao) {
                 val titulo = if (carteira.palavrasConfirmadas) t("Falta conferir a passphrase") else t("Falta confirmar que você anotou as palavras")
                 val mensagem = if (carteira.palavrasConfirmadas) t("Digite a passphrase de novo, de onde você anotou, antes de receber.")

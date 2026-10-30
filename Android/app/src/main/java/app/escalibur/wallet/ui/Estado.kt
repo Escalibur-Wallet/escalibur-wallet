@@ -89,6 +89,8 @@ data class EstadoDoApp(
     val contatos: Int = 0,
     /** O alerta de seguranca por cima de tudo, quando o nucleo manda. */
     val aviso: JSONObject? = null,
+    /** O que falta da espera de "Esperar 24 horas" do Super Security, em segundos. */
+    val espera: Double = 0.0,
 ) {
     val carteira: Carteira? get() = carteiras.firstOrNull { it.id == selecionada } ?: carteiras.firstOrNull()
     val biometriaPronta: Boolean get() = biometriaDoSistema == "pronta"
@@ -108,6 +110,7 @@ data class EstadoDoApp(
                 atraso = json.optDouble("atraso", 0.0),
                 erros = json.optInt("erros"),
                 reforcado = json.optBoolean("reforcado"),
+                espera = json.optDouble("espera", 0.0),
                 carteiras = json.getJSONArray("carteiras").objetos().map(Carteira::de),
                 selecionada = json.optString("selecionada").takeIf { it.isNotEmpty() && it != "null" },
                 moeda = ajustes.getString("moeda"),

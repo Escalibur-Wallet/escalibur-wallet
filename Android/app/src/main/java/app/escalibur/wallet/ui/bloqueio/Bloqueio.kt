@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.bloqueio
 
+import app.escalibur.wallet.ui.ajustes.mensagemDaEspera
 import app.escalibur.wallet.ui.comp.CabecalhoDaFolha
 import app.escalibur.wallet.ui.comp.FolhaSolta
 import androidx.activity.compose.BackHandler
@@ -111,6 +112,8 @@ fun TelaDeBloqueio(vinda: Int) {
     TelaDoPin(
         titulo = t("Digite o seu PIN"),
         subtitulo = when {
+            // A espera de "Esperar 24 horas", se correndo: abrir o app vale, o saldo aparece e o resto espera.
+            estado.reforcado && estado.espera > 0 -> mensagemDaEspera(estado.espera)
             estado.reforcado -> t("Super Security: depois do PIN, a biometria confirma que é você.")
             depoisDeReiniciar -> t("O celular reiniciou. Depois de reiniciar ou de a bateria acabar, o PIN é necessário uma vez antes de a biometria voltar a valer.")
             else -> null
