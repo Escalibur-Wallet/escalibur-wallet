@@ -627,6 +627,10 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
             }
         }
         BotaoTerciario(if (todas) t("Ver três por vez") else t("Ver todas de uma vez"), Modifier.fillMaxWidth()) { todas = !todas }
+        if (!todas && grupo == grupoDaPassphrase) {
+            Text(t("Sem ela, as palavras acima abrem uma carteira diferente e vazia."), style = estilo(Tipo.nota), color = Paleta.tintaSuave,
+                 modifier = Modifier.padding(top = Espaco.sm))
+        }
         if (!todas) Spacer(Modifier.weight(1f))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
             if (grupo > 0 && !todas) BotaoSecundario(t("Anteriores"), Modifier.weight(1f), altura = Altura.primaria) { mover(-1) }

@@ -343,7 +343,8 @@ private fun NovoContato() {
                 } else {
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = Altura.campo).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo)
-                            .border(1.dp, Paleta.borda, RoundedCornerShape(Raio.cartao)).padding(start = Espaco.md, end = Espaco.xs, top = Espaco.xs, bottom = Espaco.xs),
+                            .border(1.dp, if (valido) Paleta.alta.copy(alpha = 0.6f) else Paleta.borda, RoundedCornerShape(Raio.cartao))
+                            .padding(start = Espaco.md, end = Espaco.xs, top = Espaco.xs, bottom = Espaco.xs),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(Modifier.weight(1f)) {
@@ -381,6 +382,13 @@ private fun NovoContato() {
                 r?.optJSONObject("sugestao")?.let { sugestao ->
                     BotaoSecundario(t("Parece um endereço da %@. Usar a %@?", sugestao.getString("nome"), sugestao.getString("nome")), Modifier.padding(top = Espaco.xs)) {
                         rede = sugestao.getString("id")
+                    }
+                }
+                // O endereco confere com a rede escolhida: o verde de que pode seguir, como no iOS.
+                if (valido && r?.has("sugestao") != true) {
+                    Row(Modifier.padding(top = Espaco.xs), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icone(Icones.vistoCheio, Paleta.alta, tamanho = 14.dp)
+                        Text(t("Endereço válido na %@", redeAtual?.nome ?: rede), style = estilo(Tipo.nota), color = Paleta.alta)
                     }
                 }
             }

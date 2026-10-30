@@ -220,6 +220,8 @@ final class Ordens: @unchecked Sendable {
         let onde: String
         let podeCancelar: Bool
         let explicacao: String
+        /// "Refazer quando vencer" ligado nesta ordem; nil sem prazo ou na rede sem refazer.
+        let refazer: Bool?
     }
 
     struct Terminada: Encodable {
@@ -315,7 +317,8 @@ final class Ordens: @unchecked Sendable {
             vence: ordem.expiresAt.map { $0.timeIntervalSince1970 * 1000 }, fracao: ordem.filledFraction,
             recebido: recebido, falta: recebido == nil ? nil : falta, criada: ordem.createdAt.map { $0.timeIntervalSince1970 * 1000 },
             onde: Self.onde(ordem.chain), podeCancelar: podeAssinar && via != nil && vende != nil && compra != nil,
-            explicacao: Self.explicacao(via)
+            explicacao: Self.explicacao(via),
+            refazer: ordem.expiresAt != nil && Renovacoes.suporta(ordem.chain) ? Renovacoes.renova(ordem.id) : nil
         )
     }
 

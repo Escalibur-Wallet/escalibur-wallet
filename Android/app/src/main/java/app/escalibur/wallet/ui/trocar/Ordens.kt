@@ -252,6 +252,7 @@ private fun FolhaDaOrdem(ordem: LinhaDaOrdem, podeAssinar: Boolean, aoFechar: ()
                     LinhaDoDetalhe(t("Criada em"), DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Formato.locale).format(Date(it)))
                 }
                 LinhaDoDetalhe(t("Vence"), vencimento(ordem.vence))
+                ordem.refazer?.let { LinhaDoDetalhe(t("Refazer quando vencer"), if (it) t("Sim, com o mesmo preço") else t("Não")) }
                 LinhaDoDetalhe(t("Rede"), ordem.redeNome)
                 LinhaDoDetalhe(t("Onde"), ordem.onde)
             }

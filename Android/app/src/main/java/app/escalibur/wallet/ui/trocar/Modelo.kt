@@ -304,6 +304,8 @@ class LinhaDaOrdem(j: JSONObject) {
     val onde: String = j.getString("onde")
     val podeCancelar: Boolean = j.getBoolean("podeCancelar")
     val explicacao: String = j.getString("explicacao")
+    /** "Refazer quando vencer" ligado nesta ordem; nulo sem prazo ou na rede sem refazer. */
+    val refazer: Boolean? = if (j.has("refazer") && !j.isNull("refazer")) j.getBoolean("refazer") else null
 }
 
 class OrdemTerminada(j: JSONObject) {
