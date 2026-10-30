@@ -201,9 +201,10 @@ fun TelaDeGerenciarAtivos() {
  * so entao guardar.
  */
 @Composable
-fun AdicionarMoedaCustom(aoTerminar: () -> Unit) {
+fun AdicionarMoedaCustom(inicial: String? = null, aoTerminar: () -> Unit) {
     val escopo = rememberCoroutineScope()
-    var endereco by remember { mutableStateOf("") }
+    // `inicial`: o contrato de uma moeda achada na busca do Receber, ja lido na rede ao abrir.
+    var endereco by remember { mutableStateOf(inicial ?: "") }
     var codigo by remember { mutableStateOf("") }
     var emissor by remember { mutableStateOf("") }
     var emitida by remember { mutableStateOf(false) }
@@ -247,6 +248,7 @@ fun AdicionarMoedaCustom(aoTerminar: () -> Unit) {
         }
     }
 
+    LaunchedEffect(Unit) { if (inicial != null) ler() }
     val conferindo = token
     TelaComBarra(null, titulo = if (conferindo == null) t("Adicionar moeda") else t("Conferir moeda"), fundo = Paleta.vazio) { espaco ->
         Column(Modifier.fillMaxSize().acimaDoTeclado().verticalScroll(rolagem).padding(espaco).padding(horizontal = Espaco.margem).padding(top = Espaco.sm, bottom = Espaco.xl)) {

@@ -4417,5 +4417,19 @@
   "zh-Hans": "开启 Super Security 后，这部手机上的钱包只能用 PIN 码和开启时相同的生物识别打开。录入信息已变更，任何人都无法打开，包括 Escalibur。要再次使用应用，请重新开始：",
   "vi": "Với Super Security, các ví trên điện thoại này chỉ mở bằng PIN và cùng sinh trắc học như khi bật. Đăng ký đã thay đổi, và không ai mở được, kể cả Escalibur. Để dùng lại ứng dụng, hãy bắt đầu lại:",
   "ar": "مع Super Security، لا تُفتح محافظ هذا الهاتف إلا برمز PIN ونفس القياسات الحيوية التي كانت عند تفعيله. تغيّر التسجيل، ولا يستطيع أحد فتحها، ولا حتى Escalibur. لاستخدام التطبيق من جديد، ابدأ من البداية:"
+ },
+ "Isto parece o começo das palavras de uma carteira, e a busca não saiu do celular. As palavras só se digitam ao importar uma carteira.": {
+  "en": "This looks like the start of a wallet's words, so the search didn't leave the phone. Words are only typed when importing a wallet.",
+  "es": "Esto parece el comienzo de las palabras de una billetera, así que la búsqueda no salió del teléfono. Las palabras solo se escriben al importar una billetera.",
+  "fr": "Cela ressemble au début des mots d’un portefeuille, la recherche n’a donc pas quitté le téléphone. Les mots ne se tapent que pour importer un portefeuille.",
+  "de": "Das sieht aus wie der Anfang der Wörter eines Wallets, darum hat die Suche das Handy nicht verlassen. Wörter werden nur beim Importieren eines Wallets getippt.",
+  "hi": "यह किसी वॉलेट के शब्दों की शुरुआत जैसा लगता है, इसलिए खोज फ़ोन से बाहर नहीं गई. शब्द सिर्फ़ वॉलेट इंपोर्ट करते समय टाइप किए जाते हैं.",
+  "id": "Ini terlihat seperti awal kata-kata sebuah dompet, jadi pencarian tidak keluar dari ponsel. Kata-kata hanya diketik saat mengimpor dompet.",
+  "ja": "ウォレットの単語の先頭のように見えるため、検索はスマートフォンの外に出ませんでした。単語はウォレットのインポート時にのみ入力します。",
+  "ko": "지갑 단어의 시작처럼 보여서 검색이 휴대폰 밖으로 나가지 않았습니다. 단어는 지갑을 가져올 때만 입력합니다.",
+  "tr": "Bu bir cüzdanın kelimelerinin başlangıcına benziyor, bu yüzden arama telefondan çıkmadı. Kelimeler yalnızca cüzdan içe aktarılırken yazılır.",
+  "zh-Hans": "这看起来像钱包单词的开头，所以搜索没有离开手机。单词只在导入钱包时输入。",
+  "vi": "Đây có vẻ là phần đầu các từ của một ví, nên việc tìm kiếm không rời khỏi điện thoại. Các từ chỉ được gõ khi nhập ví.",
+  "ar": "يبدو هذا كبداية كلمات محفظة، لذا لم يغادر البحث الهاتف. تُكتب الكلمات فقط عند استيراد محفظة."
  }
 }

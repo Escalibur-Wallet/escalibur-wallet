@@ -206,7 +206,14 @@ enum Nucleo {
         case "receber.moedas":
             return try json(Receber.moedas())
         case "receber.endereco":
-            return try json(try Receber.endereco(ativo: pedido["ativo"]?.stringValue ?? ""))
+            return try json(try Receber.endereco(ativo: pedido["ativo"]?.stringValue ?? "", rede: pedido["rede"]?.stringValue))
+        case "receber.buscar":
+            let texto = pedido["texto"]?.stringValue ?? ""
+            return try json(esperar { await Receber.buscar(texto) })
+        case "receber.redes":
+            let id = pedido["id"]?.stringValue ?? ""
+            let simbolo = pedido["simbolo"]?.stringValue, nome = pedido["nome"]?.stringValue
+            return try json(esperar { try await Receber.redes(id: id, simbolo: simbolo, nome: nome) })
 
         case let envio where envio.hasPrefix("envio."):
             return try Envio.chamar(envio, pedido)

@@ -153,16 +153,154 @@ enum Receber {
         }
     }
 
-    static func endereco(ativo id: String) throws -> Endereco {
+    /// `rede`: a moeda achada na busca, fora da lista; o endereco e o da conta nessa rede.
+    static func endereco(ativo id: String, rede: String? = nil) throws -> Endereco {
         let metadata = Sessao.shared.metadata
         guard let wallet = metadata.selectedWallet else { throw Sessao.Falha.carteiraNaoEncontrada }
-        guard let ativo = recebiveis(metadata).first(where: { $0.id == id }), let chain = ativo.chain,
+        let achado = recebiveis(metadata).first(where: { $0.id == id })
+        guard let chain = achado?.chain ?? rede.flatMap(Chain.find), achado != nil || CustomToken.supports(chain),
               let conta = wallet.account(chain) else { throw Nucleo.Falha(erro: "ativo desconhecido") }
+        let ativo = achado ?? Asset(chainID: chain.id, kind: .native, symbol: "", name: "", decimals: 0, coingeckoID: nil,
+                                    isStablecoin: false, origin: .discovered)
         let saldo = metadata.balanceCache[wallet.id]?[chain.id]
         return Endereco(
             endereco: conta.address, existe: saldo?.accountExists ?? true,
             temLinha: saldo?.holdings.contains { $0.asset.id == ativo.id } ?? false,
             observacao: wallet.isWatchOnly, tronOutraChave: chain.family == .tron && wallet.tronForeignControl == true
         )
+    }
+
+    // MARK: Busca fora da lista
+
+    /// A busca de qualquer moeda, a mesma do iOS (`CoinSearchStore`, pedido do dono, 30/10/2026: o
+    /// Android so filtrava a lista verificada). O CoinGecko primeiro; com ele em pausa (resposta do
+    /// CoinPaprika) ou sem nada, a lista embarcada antes; as duas fontes fora, so a lista.
+    struct Resultado: Encodable {
+        let id: String
+        let simbolo: String
+        let nome: String
+        let posicao: Int?
+    }
+
+    struct Busca: Encodable {
+        /// "ok", "frase" (parece o comeco das palavras de uma carteira: nada saiu do celular) ou
+        /// "falhou" (as fontes e a lista nao responderam).
+        let estado: String
+        let resultados: [Resultado]
+    }
+
+    static func buscar(_ texto: String) async -> Busca {
+        let chave = texto.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard chave.count >= 2 else { return Busca(estado: "ok", resultados: []) }
+        if pareceFrase(chave) { return Busca(estado: "frase", resultados: []) }
+        func saida(_ lista: [CoinSearchResult]) -> Busca {
+            Busca(estado: "ok", resultados: lista.map { Resultado(id: $0.id, simbolo: $0.symbol, nome: $0.name, posicao: $0.rank) })
+        }
+        if let achados = try? await CoinCatalog.search(chave) {
+            let reserva = achados.isEmpty || achados.contains { $0.id.hasPrefix(CoinCatalog.paprikaPrefix) }
+            let locais = reserva ? (lista()?.search(chave) ?? []) : []
+            guard !locais.isEmpty else { return saida(achados) }
+            return saida(locais + achados.filter { r in !locais.contains { $0.symbol == r.symbol && $0.name == r.name } })
+        }
+        let locais = lista()?.search(chave) ?? []
+        return locais.isEmpty ? Busca(estado: "falhou", resultados: []) : saida(locais)
+    }
+
+    /// Tres palavras ou mais das listas BIP-39: quem cola a frase aqui mandaria ao CoinGecko o
+    /// bastante para o resto cair numa GPU (auditoria 6, A6-11). A mesma regra do iOS.
+    static func pareceFrase(_ chave: String) -> Bool {
+        let palavras = chave.split { !$0.isLetter }
+        guard palavras.count >= 3 else { return false }
+        let listas = BIP39Language.allCases.compactMap { try? WordlistStore.shared.wordlist(for: $0) }
+        return palavras.filter { palavra in listas.contains { $0.contains(String(palavra)) } }.count >= 3
+    }
+
+    /// As redes de uma moeda da busca em que esta carteira recebe ela.
+    struct Redes: Encodable {
+        let id: String
+        let simbolo: String
+        let nome: String
+        /// O CoinGecko publicou um aviso sobre a moeda (ataque, migracao, golpe).
+        let aviso: Bool
+        /// Uma por rede, com o contrato, e se ja esta entre as moedas custom da carteira.
+        let ativos: [AtivoDoCatalogo]
+        /// Redes em que a moeda existe e a carteira tem, mas que estao desligadas nela.
+        let desligadas: [String]
+    }
+
+    struct AtivoDoCatalogo: Encodable {
+        let ativo: Ativo
+        let jaAdicionada: Bool
+    }
+
+    /// A lista embarcada primeiro, sem esperar; a leitura na rede (o aviso e as redes do
+    /// CoinPaprika) entra se responder em ate 2 s, como no iOS. Sem a moeda na lista, so a rede.
+    static func redes(id: String, simbolo: String?, nome: String?) async throws -> Redes {
+        let local = lista()?.coin(id: id)
+        let moeda: CatalogCoin
+        if let local {
+            let naRede = await comPrazo(segundos: 2) { try? await CoinCatalog.coinAllNetworks(id: id, symbol: simbolo, name: nome) }
+            moeda = naRede.map { local.merged(with: $0, addingNetworks: true) } ?? local
+        } else {
+            moeda = try await CoinCatalog.coinAllNetworks(id: id, symbol: simbolo, name: nome)
+        }
+        let metadata = Sessao.shared.metadata
+        let contas = Set(metadata.selectedWallet?.accounts.map(\.chainID) ?? [])
+        let conhecidos = Set(recebiveis(metadata).map(\.id))
+        var ativos: [AtivoDoCatalogo] = []
+        for rede in moeda.networks where contas.contains(rede.chainID) {
+            guard let ativo = ativoDoCatalogo(moeda, rede), !conhecidos.contains(ativo.id) else { continue }
+            ativos.append(AtivoDoCatalogo(ativo: Ativo(ativo), jaAdicionada: jaAdicionada(ativo, metadata)))
+        }
+        let desligadas = moeda.networks.filter { !contas.contains($0.chainID) }.compactMap { $0.chain?.name }
+        return Redes(id: moeda.id, simbolo: moeda.symbol, nome: moeda.name, aviso: moeda.hasNotice, ativos: ativos, desligadas: desligadas)
+    }
+
+    /// A moeda da busca como ativo: token fora da lista, so para mostrar. O contrato passa pela
+    /// validacao completa da moeda custom; invalido, nil. O mesmo `catalogAsset` do iOS.
+    static func ativoDoCatalogo(_ moeda: CatalogCoin, _ rede: CatalogCoin.Network) -> Asset? {
+        guard let chain = rede.chain, case .token(let contrato)? = try? CustomToken.kind(chain: chain, address: rede.contract) else { return nil }
+        let preco = moeda.id.hasPrefix(CoinCatalog.paprikaPrefix) ? nil : moeda.id
+        return Asset(chainID: chain.id, kind: .token(contract: contrato), symbol: moeda.symbol, name: moeda.name, decimals: 0,
+                     coingeckoID: preco, isStablecoin: false, origin: .discovered)
+    }
+
+    /// O mesmo contrato na mesma rede ja esta entre as custom (na EVM, sem olhar a caixa).
+    static func jaAdicionada(_ ativo: Asset, _ metadata: Metadata) -> Bool {
+        guard let referencia = CustomToken.reference(ativo.kind), let chain = ativo.chain else { return false }
+        return metadata.customTokens.contains { token in
+            guard token.chainID == chain.id, let salvo = CustomToken.reference(token.kind) else { return false }
+            return chain.family == .evm ? salvo.lowercased() == referencia.lowercased() : salvo == referencia
+        }
+    }
+
+    /// O resultado de `operacao`, ou nil se passar de `segundos`.
+    static func comPrazo<T: Sendable>(segundos: Double, _ operacao: @escaping @Sendable () async -> T?) async -> T? {
+        await withTaskGroup(of: T?.self) { grupo in
+            grupo.addTask { await operacao() }
+            grupo.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(segundos * 1_000_000_000))
+                return nil
+            }
+            let primeiro = await grupo.next() ?? nil
+            grupo.cancelAll()
+            return primeiro
+        }
+    }
+
+    /// A lista embarcada (catalogo-moedas.json, a mesma do iOS), que o app copia do APK para a pasta
+    /// dos recursos do nucleo. Lida uma vez.
+    nonisolated(unsafe) private static var listaLida: CoinList??
+    private static let trava = NSLock()
+
+    static func lista() -> CoinList? {
+        trava.lock()
+        defer { trava.unlock() }
+        if let listaLida { return listaLida }
+        let lida = CoreResources.directory.flatMap { pasta in
+            (try? Data(contentsOf: URL(fileURLWithPath: pasta).appendingPathComponent("catalogo-moedas.json"))).flatMap { try? CoinList(data: $0) }
+        }
+        listaLida = .some(lida)
+        return lida
     }
 }

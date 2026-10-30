@@ -107,6 +107,10 @@ suspend fun iniciarNucleo(contexto: Context) = withContext(Dispatchers.IO) {
                 contexto.assets.open("nucleo/$pasta/$nome").use { entrada -> File(destino, nome).outputStream().use { entrada.copyTo(it) } }
             }
         }
+        // A lista de moedas da busca do Receber (2,7 MB), lida pelo nucleo na primeira busca.
+        runCatching {
+            contexto.assets.open("nucleo/catalogo-moedas.json").use { entrada -> File(recursos, "catalogo-moedas.json").outputStream().use { entrada.copyTo(it) } }
+        }
         marca.writeText(versao)
     }
     val pasta = File(contexto.noBackupFilesDir, "carteira").apply { mkdirs() }

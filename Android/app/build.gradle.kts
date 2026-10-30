@@ -181,7 +181,8 @@ val copiarLogos = tasks.register<CopiarParaOApp>("copiarLogos") {
 }
 val copiarListas = tasks.register<CopiarParaOApp>("copiarListas") {
     origem.from(fileTree(raiz.resolve("Kit/Sources/EscaliburCore/Resources")) { include("Wordlists/**", "Forca/**") })
-    origem.from(fileTree(raiz.resolve("App/EscaliburWallet/Resources")) { include("Versoes/**") })
+    // A lista de moedas com as redes da busca do Receber, a mesma do iOS (tools/catalogo).
+    origem.from(fileTree(raiz.resolve("App/EscaliburWallet/Resources")) { include("Versoes/**", "catalogo-moedas.json") })
     subpasta.set("nucleo")
     achatar.set(false)
     saida.set(layout.buildDirectory.dir("gerado/nucleo"))

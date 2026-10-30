@@ -11,6 +11,9 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.unit.IntOffset
 import app.escalibur.wallet.ui.comp.BotaoDeCopiar
+import app.escalibur.wallet.ui.comp.Girando
+import app.escalibur.wallet.ui.comp.Esqueleto
+import app.escalibur.wallet.ui.comp.BotaoTerciario
 import app.escalibur.wallet.ui.comp.BotaoDoGrupo
 import app.escalibur.wallet.ui.comp.CabecalhoDaFolha
 import app.escalibur.wallet.ui.comp.PlacaLaqueada
@@ -118,6 +121,30 @@ data class MoedaRecebivel(
     val todas: List<AtivoRecebivel> get() = ativos + outrasFormas
 }
 
+/** Uma moeda achada na busca, fora da lista verificada (o `Receber.Resultado` do nucleo). */
+data class ResultadoDaBusca(val id: String, val simbolo: String, val nome: String)
+
+/**
+ * As redes de uma moeda da busca em que a carteira recebe ela (o `Receber.Redes` do nucleo): cada
+ * uma com o contrato, e se a moeda ja esta entre as custom da carteira.
+ */
+data class MoedaDoCatalogo(
+    val id: String, val simbolo: String, val nome: String, val aviso: Boolean,
+    val ativos: List<AtivoRecebivel>, val adicionadas: Set<String>, val desligadas: List<String>,
+) {
+    companion object {
+        fun de(j: JSONObject): MoedaDoCatalogo {
+            val itens = j.getJSONArray("ativos").objetos()
+            return MoedaDoCatalogo(
+                j.getString("id"), j.getString("simbolo"), j.getString("nome"), j.getBoolean("aviso"),
+                itens.map { AtivoRecebivel.de(it.getJSONObject("ativo")) },
+                itens.filter { it.getBoolean("jaAdicionada") }.map { it.getJSONObject("ativo").getString("id") }.toSet(),
+                (0 until j.getJSONArray("desligadas").length()).map { j.getJSONArray("desligadas").getString(it) },
+            )
+        }
+    }
+}
+
 /** O texto de uma chave que pode faltar (o JSON do Swift omite o nulo). */
 fun JSONObject.opcional(chave: String): String? = if (has(chave) && !isNull(chave)) getString(chave) else null
 
@@ -128,6 +155,9 @@ fun FluxoDeReceber(preescolhido: String? = null) {
     var moedas by remember { mutableStateOf<List<MoedaRecebivel>>(emptyList()) }
     var moeda by remember { mutableStateOf<MoedaRecebivel?>(null) }
     var ativo by remember { mutableStateOf<AtivoRecebivel?>(null) }
+    // A moeda tocada na busca, fora da lista, e as redes dela depois de lidas.
+    var resultado by remember { mutableStateOf<ResultadoDaBusca?>(null) }
+    var catalogo by remember { mutableStateOf<MoedaDoCatalogo?>(null) }
     LaunchedEffect(Unit) {
         moedas = runCatching {
             Api.lista("receber.moedas").objetos().map { j ->
@@ -144,7 +174,7 @@ fun FluxoDeReceber(preescolhido: String? = null) {
     val etapa = when {
         !carteira.temCopia && !carteira.observacao -> 0
         ativo != null -> 3
-        moeda != null -> 2
+        moeda != null || resultado != null -> 2
         else -> 1
     }
     AnimatedContent(
@@ -164,15 +194,27 @@ fun FluxoDeReceber(preescolhido: String? = null) {
             when {
                 qual == 0 -> AntesDaCopia(carteira)
                 qual == 3 && atual != null -> {
-                    BackHandler { if (preescolhido != null) Navegacao.fechar() else ativo = null }
+                    // Da busca com uma rede so, voltar leva a lista, e nao a leitura das redes de novo.
+                    val doCatalogo = catalogo?.takeIf { c -> c.ativos.any { it.id == atual.id } }
+                    fun voltar() {
+                        if (preescolhido != null) return Navegacao.fechar()
+                        ativo = null
+                        if (doCatalogo != null && doCatalogo.ativos.size == 1) { resultado = null; catalogo = null }
+                    }
+                    BackHandler { voltar() }
                     val formas = moedas.firstOrNull { m -> m.todas.any { it.id == atual.id } }?.todas ?: listOf(atual)
-                    TelaDoEndereco(atual, formas, direto = preescolhido != null, aoTrocar = { ativo = it }) { if (preescolhido != null) Navegacao.fechar() else ativo = null }
+                    TelaDoEndereco(atual, formas, direto = preescolhido != null, catalogo = doCatalogo, aoTrocar = { ativo = it }) { voltar() }
+                }
+                qual == 2 && resultado != null -> {
+                    val achado = resultado!!
+                    BackHandler { resultado = null; catalogo = null }
+                    RedesDoCatalogo(achado, catalogo, aoLer = { catalogo = it }, aoVoltar = { resultado = null; catalogo = null }) { ativo = it }
                 }
                 qual == 2 && escolhida != null -> {
                     BackHandler { moeda = null }
                     EscolhaDaRede(escolhida, aoVoltar = { moeda = null }) { ativo = it }
                 }
-                else -> Escolha(moedas) { if (it.redes == 1) ativo = it.ativos.first() else moeda = it }
+                else -> Escolha(moedas, aoEscolherResultado = { resultado = it; catalogo = null }) { if (it.redes == 1) ativo = it.ativos.first() else moeda = it }
             }
         }
     }
@@ -208,12 +250,24 @@ internal fun AntesDaCopia(carteira: Carteira) {
 
 /** So as moedas: a mesma moeda em redes diferentes e uma linha so; a rede vem depois. */
 @Composable
-private fun Escolha(moedas: List<MoedaRecebivel>, aoEscolher: (MoedaRecebivel) -> Unit) {
+private fun Escolha(moedas: List<MoedaRecebivel>, aoEscolherResultado: (ResultadoDaBusca) -> Unit, aoEscolher: (MoedaRecebivel) -> Unit) {
     var busca by remember { mutableStateOf("") }
     val termo = busca.trim()
+    val buscando = termo.length >= 2
     val filtradas = if (termo.isEmpty()) moedas else moedas.filter { it.simbolo.contains(termo, true) || it.nome.contains(termo, true) }
     val naCarteira = filtradas.filter { it.naCarteira }
     val outras = filtradas.filter { !it.naCarteira }
+    // Qualquer moeda, fora da lista verificada: a mesma busca do iOS (pedido do dono, 30/10/2026).
+    // Uma pergunta por texto, depois de uma pausa curta na digitacao.
+    var tentativa by remember { mutableStateOf(0) }
+    var resposta by remember { mutableStateOf<Pair<String, JSONObject?>?>(null) }
+    LaunchedEffect(termo.lowercase(), tentativa) {
+        if (!buscando) return@LaunchedEffect
+        resposta = null
+        kotlinx.coroutines.delay(350)
+        resposta = termo.lowercase() to runCatching { Api.objeto("receber.buscar", JSONObject().put("texto", termo)) }.getOrNull()
+    }
+    val listadas = moedas.mapNotNull { it.coingecko }.toSet()
     Column(Modifier.fillMaxSize()) {
         // A moeda que nao esta na lista, pelo contrato colado (o "+" do iOS).
         CabecalhoDaFolha(t("Receber"), { Navegacao.fechar() },
@@ -227,8 +281,40 @@ private fun Escolha(moedas: List<MoedaRecebivel>, aoEscolher: (MoedaRecebivel) -
                 items(naCarteira, key = { "c" + it.id }) { LinhaDeMoeda(it) { aoEscolher(it) } }
             }
             if (outras.isNotEmpty()) {
-                if (naCarteira.isNotEmpty()) item { TituloDeSecao(t("Todas")) }
+                if (naCarteira.isNotEmpty() || buscando) item { TituloDeSecao(if (buscando) t("Verificadas") else t("Todas")) }
                 items(outras, key = { "o" + it.id }) { LinhaDeMoeda(it) { aoEscolher(it) } }
+            }
+            if (buscando) {
+                val atual = resposta?.takeIf { it.first == termo.lowercase() }
+                val r = atual?.second
+                when {
+                    atual == null -> {
+                        item { TituloDeSecao(t("Mais moedas, fora da lista verificada")) }
+                        items(3) { LinhaEsperando() }
+                    }
+                    r == null || r.optString("estado") == "falhou" -> item {
+                        Column(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md)) {
+                            NotaDaBusca(t("O CoinGecko não respondeu agora. Aparecem só as moedas verificadas."))
+                            BotaoTerciario(t("Buscar de novo")) { tentativa++ }
+                        }
+                    }
+                    r.optString("estado") == "frase" -> item {
+                        Box(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md)) {
+                            NotaDaBusca(t("Isto parece o começo das palavras de uma carteira, e a busca não saiu do celular. As palavras só se digitam ao importar uma carteira."))
+                        }
+                    }
+                    else -> {
+                        val achados = r.getJSONArray("resultados").objetos()
+                            .map { ResultadoDaBusca(it.getString("id"), it.getString("simbolo"), it.getString("nome")) }
+                            .filter { it.id !in listadas }
+                        if (achados.isNotEmpty()) {
+                            item { TituloDeSecao(t("Mais moedas, fora da lista verificada")) }
+                            items(achados, key = { "b" + it.id }) { achado -> LinhaDoResultado(achado) { aoEscolherResultado(achado) } }
+                        } else if (filtradas.isEmpty()) {
+                            item { Box(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md)) { NotaDaBusca(t("Nenhuma moeda com esse nome ou símbolo.")) } }
+                        }
+                    }
+                }
             }
             item { Spacer(Modifier.height(Espaco.lg)) }
         }
@@ -285,6 +371,104 @@ private fun LinhaDeMoeda(moeda: MoedaRecebivel, aoTocar: () -> Unit) {
     }
 }
 
+@Composable
+private fun NotaDaBusca(texto: String) {
+    Text(texto, style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+}
+
+/** O lugar de uma moeda enquanto a busca responde. */
+@Composable
+private fun LinhaEsperando() {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = Altura.linha).padding(horizontal = Espaco.margem),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
+    ) {
+        Box(Modifier.size(36.dp).clip(CircleShape).background(Paleta.trilho))
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Esqueleto(72.dp, 14.dp)
+            Esqueleto(140.dp, 12.dp)
+        }
+    }
+}
+
+@Composable
+private fun LinhaDoResultado(achado: ResultadoDaBusca, aoTocar: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = aoTocar).heightIn(min = Altura.linha).padding(horizontal = Espaco.margem),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
+    ) {
+        LogoDaMoeda(achado.id.takeUnless { it.startsWith("paprika:") }, achado.simbolo, 36.dp, anel = Paleta.corpo)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(achado.simbolo, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
+            Text(achado.nome, style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
+        }
+        Icone(Icones.avancar, Paleta.tintaApagada, tamanho = 14.dp)
+    }
+}
+
+/**
+ * Tocou numa moeda da busca: le as redes dela e segue para o endereco (uma rede), a escolha da rede
+ * (mais de uma) ou o aviso de que ainda nao recebe aqui. O mesmo `catalogLookup` do iOS.
+ */
+@Composable
+private fun RedesDoCatalogo(
+    achado: ResultadoDaBusca, lida: MoedaDoCatalogo?, aoLer: (MoedaDoCatalogo) -> Unit, aoVoltar: () -> Unit, aoEscolher: (AtivoRecebivel) -> Unit,
+) {
+    var falhou by remember(achado.id) { mutableStateOf(false) }
+    var tentativa by remember(achado.id) { mutableStateOf(0) }
+    LaunchedEffect(achado.id, tentativa) {
+        if (lida != null) return@LaunchedEffect
+        falhou = false
+        val r = runCatching {
+            Api.objeto("receber.redes", JSONObject().put("id", achado.id).put("simbolo", achado.simbolo).put("nome", achado.nome))
+        }.getOrNull()
+        if (r == null) { falhou = true; return@LaunchedEffect }
+        val moeda = MoedaDoCatalogo.de(r)
+        aoLer(moeda)
+        moeda.ativos.singleOrNull()?.let(aoEscolher)
+    }
+    TelaComBarra(aoVoltar = aoVoltar, fundo = Paleta.corpo) { espaco ->
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(espaco).padding(horizontal = Espaco.margem).padding(top = Espaco.xs, bottom = Espaco.lg)) {
+            when {
+                falhou -> {
+                    Text(t("Receber %@", achado.simbolo), style = estilo(Tipo.titulo), color = Paleta.tinta)
+                    Text(t("O CoinGecko não respondeu agora, e sem ele a carteira não sabe em que rede esta moeda existe."),
+                         style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
+                    BotaoSecundario(t("Tentar de novo"), Modifier.padding(top = Espaco.md)) { tentativa++ }
+                }
+                lida == null || lida.ativos.size == 1 -> Column(Modifier.fillMaxWidth().padding(top = Espaco.xl), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Girando(Paleta.tintaSuave)
+                    Text(t("Buscando as redes de %@", achado.simbolo), style = estilo(Tipo.nota), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
+                         modifier = Modifier.padding(top = Espaco.md))
+                }
+                lida.ativos.isEmpty() -> {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                        LogoDaMoeda(achado.id.takeUnless { it.startsWith("paprika:") }, lida.simbolo, 32.dp, anel = Paleta.corpo)
+                        Text(t("Receber %@", lida.simbolo), style = estilo(Tipo.titulo), color = Paleta.tinta)
+                    }
+                    // Mandar para um endereco de outra rede perderia o valor.
+                    Text(
+                        if (lida.desligadas.isEmpty()) t("A Escalibur ainda não recebe %@: ela existe só em redes que a carteira não tem, ou em que a carteira ainda não mostra token fora da lista. Não envie %@ para nenhum endereço desta carteira.", lida.simbolo, lida.simbolo)
+                        else t("%@ existe na %@, que está desligada nesta carteira. Ligue a rede em Ajustes para receber.", lida.simbolo, lida.desligadas.joinToString(", ")),
+                        style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm),
+                    )
+                }
+                else -> {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                        LogoDaMoeda(achado.id.takeUnless { it.startsWith("paprika:") }, lida.simbolo, 32.dp, anel = Paleta.corpo)
+                        Text(t("Receber %@", lida.simbolo), style = estilo(Tipo.titulo), color = Paleta.tinta)
+                    }
+                    Text(t("Escolha a rede. Tem de ser a mesma que quem envia escolher: %@ enviado por outra rede não chega a este endereço.", lida.simbolo),
+                         style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
+                    Column(Modifier.padding(top = Espaco.md)) {
+                        for (ativo in lida.ativos) LinhaDeRede(ativo, ativo.redeNome, t("%@ · não verificado", ativo.padrao)) { aoEscolher(ativo) }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** A rede. Quem envia escolhe a rede do lado de la; as duas tem de ser a mesma. */
 @Composable
 private fun EscolhaDaRede(moeda: MoedaRecebivel, aoVoltar: () -> Unit, aoEscolher: (AtivoRecebivel) -> Unit) {
@@ -327,10 +511,18 @@ private fun LinhaDeRede(ativo: AtivoRecebivel, titulo: String, detalhe: String?,
 
 /** O endereco: o QR com o logo da moeda, a rede, o endereco em blocos, o aviso da rede, copiar e compartilhar. */
 @Composable
-private fun TelaDoEndereco(ativo: AtivoRecebivel, formas: List<AtivoRecebivel>, direto: Boolean, aoTrocar: (AtivoRecebivel) -> Unit, aoVoltar: () -> Unit) {
+private fun TelaDoEndereco(
+    ativo: AtivoRecebivel, formas: List<AtivoRecebivel>, direto: Boolean, catalogo: MoedaDoCatalogo? = null,
+    aoTrocar: (AtivoRecebivel) -> Unit, aoVoltar: () -> Unit,
+) {
     val contexto = LocalContext.current
     var dados by remember(ativo.id) { mutableStateOf<JSONObject?>(null) }
-    LaunchedEffect(ativo.id) { dados = runCatching { Api.objeto("receber.endereco", JSONObject().put("ativo", ativo.id)) }.getOrNull() }
+    LaunchedEffect(ativo.id) {
+        val pedido = JSONObject().put("ativo", ativo.id)
+        // A moeda da busca nao esta na lista da carteira: o endereco e o da conta na rede dela.
+        if (catalogo != null) pedido.put("rede", ativo.rede)
+        dados = runCatching { Api.objeto("receber.endereco", pedido) }.getOrNull()
+    }
     val info = dados ?: return
     val endereco = info.getString("endereco")
     val existe = info.getBoolean("existe")
@@ -369,7 +561,22 @@ private fun TelaDoEndereco(ativo: AtivoRecebivel, formas: List<AtivoRecebivel>, 
             }
             EnderecoEmBlocos(endereco, Modifier.padding(top = Espaco.base))
             Text(avisoDaRede(ativo, existe), style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.md))
-            ativo.contrato?.let { contrato -> CartaoDoContrato(contrato, ativo, Modifier.padding(top = Espaco.sm)) }
+            if (catalogo?.aviso == true) {
+                // O texto do aviso e de quem escreveu, com link: a tela so diz que existe.
+                Text(t("O CoinGecko publicou um aviso sobre %@ (ataque, migração ou golpe). Confira as notícias da moeda antes de receber.", ativo.simbolo),
+                     style = estilo(Tipo.nota), color = Paleta.cautela, modifier = Modifier.padding(top = Espaco.sm))
+            }
+            ativo.contrato?.let { contrato -> CartaoDoContrato(contrato, ativo, Modifier.padding(top = Espaco.sm), naoVerificado = catalogo != null) }
+            if (catalogo != null) {
+                Text(t("Contrato listado pelo CoinGecko ou pelo CoinPaprika, fora da lista verificada da Escalibur. Para o saldo aparecer na carteira, adicione a moeda: a carteira lê nome, símbolo e casas na própria rede antes de salvar."),
+                     style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.xs))
+                if (ativo.id !in catalogo.adicionadas) {
+                    BotaoSecundario(t("Adicionar %@ à carteira", ativo.simbolo), Modifier.padding(top = Espaco.xs)) {
+                        val contrato = ativo.contrato ?: return@BotaoSecundario
+                        Navegacao.folha { app.escalibur.wallet.ui.carteira.AdicionarMoedaCustom(inicial = contrato) { Navegacao.fechar() } }
+                    }
+                }
+            }
             if (ativo.emitido && !info.getBoolean("temLinha")) {
                 Text(
                     if (ativo.custom) t("Para receber %@, esta conta precisa antes de uma linha de confiança com o emissor. A Escalibur ainda não abre linha de confiança para moeda custom: sem ela, o envio de quem manda não passa e o valor fica com quem enviou.", ativo.simbolo)
@@ -433,7 +640,7 @@ private fun SeletorDeForma(formas: List<AtivoRecebivel>, escolhida: AtivoRecebiv
 
 /** O contrato do token, num desenho que nao se confunde com o endereco de deposito. */
 @Composable
-private fun CartaoDoContrato(contrato: String, ativo: AtivoRecebivel, modifier: Modifier) {
+private fun CartaoDoContrato(contrato: String, ativo: AtivoRecebivel, modifier: Modifier, naoVerificado: Boolean = false) {
     val contexto = LocalContext.current
     Row(
         // Um cartao liso, da cor da folha, como no iOS: o contrato nao se confunde com o endereco.
@@ -443,6 +650,7 @@ private fun CartaoDoContrato(contrato: String, ativo: AtivoRecebivel, modifier: 
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (ativo.custom) SeloDeToken(TipoDeSelo.custom)
+                if (naoVerificado) SeloDeToken(TipoDeSelo.naoVerificado)
                 Text(if (ativo.usaEmissor) t("Emissor da moeda %@", ativo.simbolo) else t("Contrato da moeda %@", ativo.simbolo), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
             }
             Text(contrato, fontFamily = FontFamily.Monospace, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Paleta.tintaSuave)
