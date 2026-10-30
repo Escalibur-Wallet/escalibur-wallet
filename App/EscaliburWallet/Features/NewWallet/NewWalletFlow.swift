@@ -1,0 +1,435 @@
+import EscaliburCore
+import EscaliburKeys
+import SwiftUI
+
+/// A frase de uma carteira recem-criada, enquanto o dono anota e confere.
+/// Buffer seguro; as palavras so viram `String` no grupo de 3 que esta na tela.
+@MainActor
+@Observable
+final class PhraseDraft {
+    let phrase: SecureBytes
+    let wordCount: Int
+
+    init(wordCount: Int) throws {
+        phrase = try BIP39.generate(wordCount: wordCount)
+        self.wordCount = wordCount
+    }
+
+    init(phrase: SecureBytes, wordCount: Int) {
+        self.phrase = phrase
+        self.wordCount = wordCount
+    }
+
+    /// As palavras de `range` (base 0), tiradas direto dos bytes: so as tres da placa
+    /// viram `String`, nunca a frase inteira. Quem chama guarda em estado da tela e
+    /// solta ao trocar de grupo; nunca chamar de dentro de `body`.
+    func words(_ range: Range<Int>) -> [String] {
+        phrase.withUnsafeBytes { raw in
+            let spans = Self.spans(raw)
+            return range.compactMap { spans.indices.contains($0) ? String(decoding: raw[spans[$0]], as: UTF8.self) : nil }
+        }
+    }
+
+    /// A palavra digitada confere com a da posicao? Comparacao em tempo constante
+    /// sobre os bytes canonicos.
+    func matches(_ typed: String, at index: Int) -> Bool {
+        var candidate = Array(Mnemonic.canonicalize(typed).utf8)
+        defer { candidate.resetBytes() }
+        return phrase.withUnsafeBytes { raw in
+            let spans = Self.spans(raw)
+            guard spans.indices.contains(index) else { return false }
+            var word = Array(raw[spans[index]])
+            defer { word.resetBytes() }
+            return Hash.constantTimeEqual(word, candidate)
+        }
+    }
+
+    /// Onde comeca e termina cada palavra da frase canonica (um espaco entre elas).
+    private static func spans(_ raw: UnsafeRawBufferPointer) -> [Range<Int>] {
+        var out: [Range<Int>] = []
+        var start = 0
+        for index in 0...raw.count where index == raw.count || raw[index] == 0x20 {
+            if index > start { out.append(start..<index) }
+            start = index + 1
+        }
+        return out
+    }
+
+    func wipe() { phrase.wipe() }
+}
+
+/// O2 a O5: da decisao de criar ate a carteira com copia conferida.
+struct NewWalletFlow: View {
+    @Environment(AppSession.self) private var session
+    @Environment(AuthCoordinator.self) private var auth
+    @Environment(\.dismiss) private var dismiss
+    let isFirstWallet: Bool
+    let onFinished: () -> Void
+
+    @State private var step: Step = .before
+    @State private var wordCount = 12
+    @State private var draft: PhraseDraft?
+    @State private var wallet: WalletMeta?
+    @State private var saving = false
+    @State private var error: String?
+    @State private var askingLater = false
+    /// O dono escolhe as palavras (pedido do dono, 17/10/2026): digita todas menos a ultima,
+    /// e o app sorteia a ultima, que fecha a conta.
+    @State private var ownWords = false
+    /// A palavra sorteada, so enquanto a tela dela esta aberta.
+    @State private var drawnWord: String?
+
+    /// `pledge` e o aceite de responsabilidade; `check`, a conferencia do aparelho, igual a
+    /// de antes de digitar as palavras ao importar (pedido do dono, 15/10/2026). So depois
+    /// dela a frase nasce e aparece. `own` e `drawn`: as palavras escolhidas e a ultima,
+    /// sorteada.
+    enum Step { case before, pledge, check, own, drawn, record, confirm, created }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                switch step {
+                case .before: before
+                case .pledge:
+                    ResponsibilityView(continueTitle: String(localized: "Conferir o aparelho")) { step = .check }
+                case .check:
+                    ZStack {
+                        DeviceCheckView(slideTitle: ownWords ? String(localized: "Deslize para escolher as palavras") : String(localized: "Deslize para ver as palavras"),
+                                        creating: true) {
+                            if ownWords { step = .own } else { Task { await start() } }
+                        }
+                        // Depois do PIN, enquanto o cofre guarda a carteira, a checagem com o
+                        // deslizar ja usado nao reaparece.
+                        if saving { CipherWorking(title: String(localized: "Criando a carteira")) }
+                    }
+                    .animation(Motion.fade, value: saving)
+                case .own:
+                    ImportPhraseView(onFinished: { step = .before }, choose: .init(wordCount: wordCount) { firstWords in
+                        await startOwn(firstWords)
+                    })
+                case .drawn:
+                    drawn
+                case .record:
+                    if let draft {
+                        RecordWordsView(draft: draft, walletName: nil) { step = .confirm }
+                    }
+                case .confirm:
+                    if let draft {
+                        ConfirmWordsView(draft: draft, onBack: { step = .record }, onLater: { askingLater = true }) { confirmed() }
+                    }
+                case .created:
+                    if let wallet { WalletCreatedView(wallet: wallet, isFirst: isFirstWallet, onFinish: finish) }
+                }
+            }
+            .background(Palette.void.ignoresSafeArea())
+            .toolbar {
+                if step == .pledge || step == .check || step == .confirm || step == .own {
+                    // Voltar um passo: a carteira em criacao e as palavras continuam.
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            switch step {
+                            case .pledge: step = .before
+                            case .check: step = .pledge
+                            case .own: step = .before
+                            default: step = .record
+                            }
+                        } label: {
+                            Image(systemName: "chevron.backward").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.inkSoft)
+                        }
+                        .accessibilityLabel("Voltar")
+                    }
+                } else if step != .created {
+                    // Com a carteira ja guardada e sem copia, fechar passa pelo aviso.
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { if wallet == nil { cancel() } else { askingLater = true } } label: {
+                            Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.inkSoft)
+                        }
+                        .accessibilityLabel("Fechar")
+                    }
+                }
+            }
+            .whiteAlert("Confirmar depois?", isPresented: $askingLater) {
+                Button("Voltar e anotar", role: .cancel) {}
+                Button("Confirmar depois", role: .destructive) { cancel() }
+            } message: {
+                Text("Sem a senha da carteira anotada, perder o iPhone é perder os ativos. Até você confirmar, a carteira fica marcada Palavras não confirmadas e não recebe.")
+            }
+        }
+        .interactiveDismissDisabled()
+        // As palavras, a conferencia e as sugestoes da conferencia: tudo atras da guarda
+        // (auditoria 4, C7-11).
+        .guardedAgainstCapture()
+    }
+
+    /// Antes das palavras (pedido do dono, 15/10/2026: mais bonita e com animacao): a
+    /// folha de papel sendo preenchida a mao, linha por linha, e o que vale saber, no
+    /// mesmo desenho do "So voce tem a chave". O botao fica preso embaixo; no iPhone
+    /// pequeno o texto rola por tras dele.
+    private var before: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                PaperScribble(words: wordCount)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, Space.xs)
+                // Titulo, texto e a escolha de 12 ou 24 no centro, embaixo da folha; os pontos
+                // seguem alinhados a esquerda (pedido do dono, 19/10/2026).
+                VStack(spacing: 0) {
+                    Text("Antes de ver as palavras").typeStyle(.title).foregroundStyle(Palette.ink).padding(.top, Space.lg)
+                    Text("A senha da carteira são \(wordCount) palavras, em ordem. Quem tiver as palavras tem o saldo. Sem elas, ninguém recupera a carteira, nem a Escalibur.")
+                        .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
+                        .fixedSize(horizontal: false, vertical: true)
+                    // Logo abaixo do texto que diz quantas sao: no fim, ficava atras do rodape desde
+                    // que ele ganhou o "Prefiro escolher" (auditoria 5, 19/10/2026).
+                    Segmented(options: [(12, String(localized: "12 palavras")), (24, String(localized: "24 palavras"))], selection: $wordCount)
+                        .frame(width: 220)
+                        .padding(.top, Space.md)
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                VStack(alignment: .leading, spacing: Space.md) {
+                    point("pencil.and.scribble", String(localized: "No papel, à mão"),
+                          String(localized: "Jamais tire print: a foto pode subir para o iCloud, e isso aumenta a chance de a sua carteira ser hackeada."))
+                    point("clock", String(localized: "Uns 2 minutos"),
+                          String(localized: "As palavras aparecem de três em três, na ordem. Anote cada grupo antes de passar para o próximo."))
+                    point("iphone.slash", String(localized: "Fora do backup do iPhone"),
+                          String(localized: "Num iPhone novo, só as palavras ou um envelope trazem a carteira de volta."))
+                }
+                .padding(.top, Space.lg)
+                if let error {
+                    Banner(kind: .failure, title: error).padding(.top, Space.md)
+                }
+            }
+            .padding(.bottom, Space.md)
+            .padding(.horizontal, Space.gutter)
+            .padding(.top, Space.md)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom) {
+            ActionFooter {
+                PrimaryButton(title: String(localized: "Continuar")) { error = nil; ownWords = false; step = .pledge }
+                TertiaryButton(title: String(localized: "Prefiro escolher as minhas palavras")) { error = nil; ownWords = true; step = .pledge }
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("escolher-palavras")
+            }
+        }
+    }
+
+    private func point(_ icon: String, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: Space.sm) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Palette.ink)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(Palette.control))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).typeStyle(.row).foregroundStyle(Palette.ink)
+                Text(detail).typeStyle(.note).foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// A ultima palavra, sorteada: grande, com o numero, para o dono anotar no papel junto
+    /// das que escolheu. Depois, as palavras e a conferencia de sempre.
+    private var drawn: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("A \(wordCount)ª palavra").typeStyle(.title).foregroundStyle(Palette.ink)
+            Text("O app sorteou esta entre as \(wordCount == 12 ? 128 : 8) que fecham a conta com as suas \(wordCount - 1). Anote no papel, como a \(wordCount)ª.")
+                .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline, spacing: Space.sm) {
+                Text(verbatim: "\(wordCount)").font(.system(size: 22, weight: .semibold).monospacedDigit()).foregroundStyle(Palette.plateMuted)
+                // A palavra fora da captura, como as da chapa: a guarda so avisa depois do print.
+                Text(verbatim: drawnWord ?? "").font(.system(size: 40, weight: .bold)).foregroundStyle(Palette.plateInk)
+                    .accessibilityIdentifier("ultima-palavra")
+                    .protectedFromCapture(interactive: false)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Space.lg).padding(.vertical, Space.lg)
+            .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.live))
+            .padding(.top, Space.lg)
+            Text("Em seguida vêm as \(wordCount) palavras, para conferir o que você anotou, e a conferência de sempre.")
+                .typeStyle(.note).foregroundStyle(Palette.inkMuted).padding(.top, Space.md)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+        .padding(.horizontal, Space.gutter)
+        .padding(.top, Space.md)
+        .safeAreaInset(edge: .bottom) {
+            ActionFooter {
+                PrimaryButton(title: String(localized: "Anotei")) { drawnWord = nil; step = .record }
+                    .accessibilityIdentifier("anotei-ultima")
+            }
+        }
+        .onAppear { drawnWord = draft?.words((wordCount - 1)..<wordCount).first }
+        .onDisappear { drawnWord = nil }
+    }
+
+    /// As palavras que o dono escolheu viram a frase com a ultima sorteada, e a carteira e
+    /// guardada como a sorteada inteira: antes de mostrar a palavra nova.
+    private func startOwn(_ firstWords: SecureBytes) async -> String? {
+        let full: SecureBytes
+        do {
+            full = try BIP39.completing(firstWords)
+        } catch let weak as BIP39.WeakChoice {
+            return Self.weakMessage(weak)
+        } catch {
+            return String(localized: "Use só palavras da lista em inglês, uma em cada campo.")
+        }
+        guard await save(PhraseDraft(phrase: full, wordCount: wordCount)) else { return error }
+        step = .drawn
+        return nil
+    }
+
+    static func weakMessage(_ weak: BIP39.WeakChoice) -> String {
+        switch weak {
+        case .repeated: return String(localized: "Uma palavra aparece três vezes ou mais. Frases assim são as primeiras que os robôs testam: troque algumas.")
+        case .sequence: return String(localized: "Três palavras seguidas estão na ordem da lista. Frases assim são as primeiras que os robôs testam: troque algumas.")
+        case .pattern: return String(localized: "As palavras se repetem em bloco. Frases assim são as primeiras que os robôs testam: troque algumas.")
+        }
+    }
+
+    /// A carteira e guardada **antes** de mostrar as palavras: se o dono sair no
+    /// meio, ela existe marcada "Sem copia", e receber fica bloqueado ate conferir.
+    private func start() async {
+        let created: PhraseDraft
+        do {
+            created = try PhraseDraft(wordCount: wordCount)
+        } catch {
+            self.error = String(localized: "Não foi possível guardar a carteira. Tente de novo.")
+            step = .before
+            return
+        }
+        if await save(created) { step = .record }
+    }
+
+    /// Guarda a carteira desta frase; o rascunho fica para anotar e conferir. Falhou ou o dono
+    /// cancelou o PIN: o rascunho e zerado e a tela volta ao comeco com o motivo.
+    private func save(_ newDraft: PhraseDraft) async -> Bool {
+        saving = true
+        defer { saving = false }
+        error = nil
+        do {
+            let copy = SecureBytes(capacity: newDraft.phrase.capacity)
+            newDraft.phrase.withUnsafeBytes { copy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+            let secret = try WalletSecret.from(phrase: copy, language: .english)
+            copy.wipe()
+            let name = session.metadata.wallets.isEmpty ? String(localized: "Carteira principal") : String(localized: "Carteira \(session.metadata.wallets.count + 1)")
+            let words = wordCount
+            guard let saved = try await auth.retrying(reason: String(localized: "Guardar a carteira nova neste iPhone"), { credential in
+                try await session.addWallet(secret: secret, name: name, origin: .created, wordCount: words, backupConfirmed: false, credential: credential)
+            }) else {
+                secret.wipe()
+                newDraft.wipe()
+                return false
+            }
+            wallet = saved
+            draft = newDraft
+            return true
+        } catch {
+            newDraft.wipe()
+            self.error = AuthCoordinator.refusalMessage(error) ?? String(localized: "Não foi possível guardar a carteira. Tente de novo.")
+            step = .before
+            return false
+        }
+    }
+
+    private func confirmed() {
+        guard var wallet else { return }
+        wallet.backupConfirmedAt = .now
+        session.update(wallet)
+        self.wallet = wallet
+        draft?.wipe()
+        draft = nil
+        step = .created
+    }
+
+    private func cancel() {
+        draft?.wipe()
+        draft = nil
+        dismiss()
+        onFinished()
+    }
+
+    private func finish() {
+        draft?.wipe()
+        dismiss()
+        onFinished()
+    }
+}
+
+/// A folha de anotar as palavras (pedido do dono, 15/10/2026): papel claro com as linhas
+/// numeradas, em duas colunas, preenchidas uma a uma com um risco de letra a mao, e o lapis
+/// correndo junto. Cheia, ela segura um instante, apaga e recomeca. Nenhuma palavra de
+/// verdade: so o risco. Com Reduzir Movimento, a folha cheia e parada. Tambem e o ultimo
+/// quadro de "Bloquear as carteiras", menor (pedido do dono, 18/10/2026).
+struct PaperScribble: View {
+    let words: Int
+    var size = CGSize(width: 270, height: 178)
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var start = Date()
+
+    var body: some View {
+        let perRow = words > 12 ? 0.16 : 0.3
+        let writing = Double(words) * perRow
+        let period = writing + 1.6
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
+            let t = reduceMotion ? writing + 0.5 : timeline.date.timeIntervalSince(start).truncatingRemainder(dividingBy: period)
+            let fade = reduceMotion ? 0 : min(max((t - writing - 1.1) / 0.4, 0), 1)
+            Canvas { context, size in
+                draw(&context, size: size, t: t, perRow: perRow, fade: fade)
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .rotationEffect(.degrees(-2))
+        .shadow(color: .black.opacity(0.45), radius: size.height * 0.08, y: size.height * 0.056)
+        .onAppear { start = Date() }
+        .onChange(of: words) { _, _ in start = Date() }
+        .accessibilityHidden(true)
+    }
+
+    private func draw(_ context: inout GraphicsContext, size: CGSize, t: Double, perRow: Double, fade: Double) {
+        let paper = Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 10, style: .continuous)
+        context.fill(paper, with: .color(Palette.live))
+        let rows = (words + 1) / 2
+        let top: CGFloat = 16, bottom: CGFloat = 12
+        let rowHeight = (size.height - top - bottom) / CGFloat(rows)
+        let columnWidth = (size.width - 24) / 2
+        var pencil: CGPoint?
+        for index in 0..<words {
+            let column = index / rows, row = index % rows
+            let x = 14 + CGFloat(column) * (columnWidth + 4)
+            let baseline = top + (CGFloat(row) + 0.78) * rowHeight
+            // A linha do caderno e o numero.
+            context.fill(Path(CGRect(x: x + 20, y: baseline + 2, width: columnWidth - 26, height: 0.8)), with: .color(Palette.plateRule))
+            context.draw(Text(verbatim: "\(index + 1)").font(.system(size: words > 12 ? 7.5 : 9, weight: .semibold).monospacedDigit())
+                            .foregroundColor(Palette.plateMuted), at: CGPoint(x: x + 8, y: baseline - rowHeight * 0.18))
+            // O risco: uma letra a mao inventada, larguras diferentes por linha.
+            let progress = min(max((t - Double(index) * perRow) / perRow, 0), 1)
+            guard progress > 0 else { continue }
+            let length = (columnWidth - 40) * CGFloat(0.55 + 0.4 * Double((index * 37) % 10) / 10)
+            var scribble = Path()
+            let steps = 28
+            let drawn = Int(Double(steps) * progress)
+            var last = CGPoint(x: x + 24, y: baseline - 2)
+            scribble.move(to: last)
+            for step in 0...drawn {
+                let u = CGFloat(step) / CGFloat(steps)
+                let wave = sin(Double(u) * 22 + Double(index)) * 0.5 + sin(Double(u) * 9 + Double(index) * 2) * 0.5
+                last = CGPoint(x: x + 24 + length * u, y: baseline - 2 - CGFloat(wave) * rowHeight * (words > 12 ? 0.16 : 0.2))
+                scribble.addLine(to: last)
+            }
+            context.stroke(scribble, with: .color(Palette.plateInk.opacity(0.85 * (1 - fade))),
+                           style: StrokeStyle(lineWidth: words > 12 ? 1.1 : 1.5, lineCap: .round, lineJoin: .round))
+            if progress < 1 { pencil = last }
+        }
+        // O lapis, com a ponta onde o risco esta.
+        if let pencil, fade == 0 {
+            context.draw(Text(Image(systemName: "pencil")).font(.system(size: 18, weight: .semibold)).foregroundColor(Palette.plateInk),
+                         at: CGPoint(x: pencil.x + 7, y: pencil.y - 8))
+        }
+    }
+}

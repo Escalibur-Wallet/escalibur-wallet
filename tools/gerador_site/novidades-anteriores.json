@@ -1,0 +1,2891 @@
+[
+ {
+  "sha": "5b12e465fb43b32e3543ed3cae74e500abf46a6d",
+  "data": "2026-10-30T04:21:56-03:00",
+  "assunto": "Site: search basics for the brand and the Play release",
+  "corpo": [
+   [
+    "item",
+    "Home title, description and headline say what the app is: a self-custody crypto wallet for Android and iPhone. No superlatives."
+   ],
+   [
+    "item",
+    "Store line comes from the store links: available on Google Play, coming soon to the App Store."
+   ],
+   [
+    "item",
+    "\"Open source\" becomes \"public code\", matching the license."
+   ],
+   [
+    "item",
+    "schema.org data on the home page (site, company, app) so search can tell the brand apart from similar names. The verifier accepts this one data block and nothing else inline."
+   ],
+   [
+    "item",
+    "Distinct titles for every page, sitemap with lastmod, 404 kept out of the index, favicon.ico and 48/96 px icons."
+   ],
+   [
+    "item",
+    "Worker: http goes to https, trailing slash redirects are permanent, versioned CSS and JS cached for a year, fonts and media for a day."
+   ],
+   [
+    "item",
+    "README: self-custody wording and the site address."
+   ]
+  ]
+ },
+ {
+  "sha": "9d685cea51638ebc02db7a783289c00a9eb6b360",
+  "data": "2026-10-28T12:43:50-03:00",
+  "assunto": "Android send: sign only the review the owner accepted",
+  "corpo": [
+   [
+    "p",
+    "The review renews the plan a few seconds before it expires. When that happened while the passphrase sheet or the PIN was on screen, the core signed the new plan, with a fee or a send-all amount the owner had not seen. The screen now sends the review version it showed when the owner slid, and the core signs nothing if the version moved on: the review shows the new plan and asks for the slide again. iOS already signs the plan captured at the slide."
+   ],
+   [
+    "p",
+    "Found in the security review of Android 1008 (28/10/2026)."
+   ]
+  ]
+ },
+ {
+  "sha": "b0068e67116c18c44f9516044fda1ecd6bd42453",
+  "data": "2026-10-28T12:42:09-03:00",
+  "assunto": "Receipt alerts leave passphrase wallets out again",
+  "corpo": [
+   [
+    "p",
+    "This reverts 4b5f68d on iOS and Android. The alert file opens after the first unlock, outside the encrypted wallet data, so with a passphrase wallet in it anyone who extracts the phone's data in that state finds the wallet the owner chose to hide. The wallet list itself needs the PIN; the alert file does not. The privacy policy and the security notes already said these wallets stay out, and now the code agrees. The trade-off is that a passphrase wallet does not notify when funds arrive."
+   ],
+   [
+    "p",
+    "Found in the security review of Android 1008 (28/10/2026)."
+   ]
+  ]
+ },
+ {
+  "sha": "e733b864d54abcd6ef15170fb929c694d137a131",
+  "data": "2026-10-28T09:51:32-03:00",
+  "assunto": "Versions: authorize Android 1.0.1 (1008)",
+  "corpo": []
+ },
+ {
+  "sha": "77744dba9b4b69a3b5782272289ccbde171a697a",
+  "data": "2026-10-28T09:50:54-03:00",
+  "assunto": "Android 1.0.1 (1008)",
+  "corpo": []
+ },
+ {
+  "sha": "1d11b7af13995c9b172154b2f24c6a2331c0a9c2",
+  "data": "2026-10-28T09:50:54-03:00",
+  "assunto": "Say self-custody instead of non-custodial; Play listing in lime",
+  "corpo": [
+   [
+    "p",
+    "\"Sem custodia\" is not a term people know. The app, the site, the Play listing and the launch notes now say self-custody, in Portuguese and in English."
+   ],
+   [
+    "p",
+    "The Play listing takes the lime icon, a feature graphic made from the site's share image without the \"coming soon\" line, and the owner's seven lime campaign screens. play.py gains a production command that sends a bundle straight to review now that the app is published."
+   ],
+   [
+    "p",
+    "The site links the Google Play badge to the live app."
+   ]
+  ]
+ },
+ {
+  "sha": "af201bc0d5eed8825f2ccd026eb6ecb1924b73c3",
+  "data": "2026-10-27T14:04:02-03:00",
+  "assunto": "Price chart follows a sideways slide; address check in character boxes",
+  "corpo": [
+   [
+    "item",
+    "The price chart moves the point as soon as the finger slides sideways, without holding first. A vertical slide still scrolls the page."
+   ],
+   [
+    "item",
+    "Typing the hidden 6 characters of an address now uses one box per character, with the next one marked."
+   ],
+   [
+    "item",
+    "The \"Address check\" note on every send has no card around it, and its icon sits in the middle of the text."
+   ]
+  ]
+ },
+ {
+  "sha": "bd8cc4f5231cbce490902dd3f9539b779ad6381b",
+  "data": "2026-10-27T14:04:01-03:00",
+  "assunto": "Bridge: opens on the stablecoin you hold most, with a centered status",
+  "corpo": [
+   [
+    "item",
+    "The bridge opens on the stablecoin the wallet holds most across networks, from the network with the most of it to the second one (100 USDT on Arbitrum and 80 on BNB open Arbitrum to BNB in USDT). Once per wallet, and never after the user changes a network or coin."
+   ],
+   [
+    "item",
+    "The status after confirming is centered: the coin animation while it is on its way, the coin flip when it arrives, and a still figure with the destination faded when the deposit fails or comes back."
+   ],
+   [
+    "item",
+    "The review no longer shows the \"you will sign 2 transactions\" banner."
+   ]
+  ]
+ },
+ {
+  "sha": "77aef0424c986c087e933fef462ce3891641344f",
+  "data": "2026-10-27T14:04:01-03:00",
+  "assunto": "Gas limit covers the gas spent before the storage refund",
+  "corpo": [
+   [
+    "p",
+    "The bridge and swap plans took the gas limit from eth_simulateV1's gasUsed times 1.2. That value already has the storage refund taken off, but the network only pays the refund back at the end, so the transaction needs more gas while it runs. Clearing an exact allowance is enough to cross the line: an Across USDT deposit on Arbitrum was signed with a 88,640 limit for a 89,500 peak and reverted twice, charging only the fee."
+   ],
+   [
+    "p",
+    "The refund is capped at one fifth of the gross gas (EIP-3529), so the simulated gas now goes up by 5/4 before the usual 1.2 margin. Applies to approvals, the Permit2 grant, swaps and bridge deposits."
+   ]
+  ]
+ },
+ {
+  "sha": "72f858c1eac2a838ba50bd6f815048c8cd50dfa8",
+  "data": "2026-10-27T02:59:57-03:00",
+  "assunto": "Translate the new lock, vault and contact texts in 12 languages",
+  "corpo": []
+ },
+ {
+  "sha": "c1f6db1a98a3845a9ca22f11163efef0f84e8280",
+  "data": "2026-10-27T02:59:56-03:00",
+  "assunto": "Fix bugs found in the app bug hunt",
+  "corpo": [
+   [
+    "item",
+    "iOS send: a pasted \"0.05\" no longer becomes 5 in regions that use the comma as decimal separator. Typing still drops the grouping the screen added. Tests in SendAmountPasteTests."
+   ],
+   [
+    "item",
+    "A secret saved while the app locked, or whose list failed to save, is removed instead of staying in the vault with no wallet (iOS and Android)."
+   ],
+   [
+    "item",
+    "Activity groups by day with the year, so the same day of another year is not merged."
+   ],
+   [
+    "item",
+    "Android contacts check the tag and memo like the send screen does."
+   ],
+   [
+    "item",
+    "Android: going to the system file picker to save or open an envelope no longer locks the app (up to 10 minutes); the envelope is written from its own copy, so leaving the screen cannot zero the bytes being saved."
+   ],
+   [
+    "item",
+    "Android: tapping a notification during a send, trade or bridge under review or broadcasting no longer closes that screen."
+   ]
+  ]
+ },
+ {
+  "sha": "e7edb41349e384ab82421dce448f57be1981b192",
+  "data": "2026-10-27T02:59:43-03:00",
+  "assunto": "Vault: a locked key is not a wrong PIN, and Forgot PIN waits 24 hours",
+  "corpo": [
+   [
+    "item",
+    "A password key that is locked (device not yet unlocked) now reports \"locked\" instead of a failed PIN: the attempt is refunded and the counter does not move. Covers the PIN slot, biometry and Super Security."
+   ],
+   [
+    "item",
+    "Android vault format 2: the PIN key no longer carries the password in the AAD. Legacy items are read as before and migrated on a correct read. Invalidated keys are no longer deleted while probing; confirmation is required on biometric keys."
+   ],
+   [
+    "item",
+    "Forgot PIN asks first and erases only after 24 hours. Unlocking with the PIN or biometry cancels the request. A lost Super Security vault still erases at once. Same flow on iOS and Android."
+   ]
+  ]
+ },
+ {
+  "sha": "fa44c599dd4fa853d7e330ee02f9c1b66244ff97",
+  "data": "2026-10-27T01:41:21-03:00",
+  "assunto": "Voice: the challenge sheet hides from screen capture",
+  "corpo": [
+   [
+    "p",
+    "The live transcript shows the voice phrase, a second secret. Voice is off in this version, but the sheet now gets the same capture guard as the other secret screens."
+   ]
+  ]
+ },
+ {
+  "sha": "8779d4bf511199d8016ac58cfc1a9a12dac8b03c",
+  "data": "2026-10-27T01:41:21-03:00",
+  "assunto": "Passphrase: the wait starts when the attempt is counted",
+  "corpo": [
+   [
+    "p",
+    "The wait used to be armed only when a wrong passphrase was reported, so an attempt counted at the start but never reported (the app killed in between) raised the count without arming the wait. The wait is now armed together with the count, before the check; a correct passphrase clears everything and a refunded attempt takes its wait with it. iOS and Android."
+   ]
+  ]
+ },
+ {
+  "sha": "af6ab8f29e53762b9aeb56fff5f5f1ccfdcccf8d",
+  "data": "2026-10-27T01:41:21-03:00",
+  "assunto": "iOS: an unlock that started before the iPhone locked does not open the app",
+  "corpo": [
+   [
+    "p",
+    "Every lock (and erasing everything) bumps an epoch; the unlock captures it before Argon2 and the Secure Enclave, and only opens if no lock happened in between. Before, the later open undid the lock from protectedDataWillBecomeUnavailable, and within the auto-lock tolerance the app came back unlocked without a PIN."
+   ]
+  ]
+ },
+ {
+  "sha": "a25a7094639df2150014da1b929ee7555aeae76d",
+  "data": "2026-10-27T01:34:29-03:00",
+  "assunto": "Passphrase door: one count per phrase, 10 free attempts, strict when a hidden wallet is here",
+  "corpo": [
+   [
+    "p",
+    "The \"open or create with passphrase\" count lived on the base wallet, and every new passphrase wallet could serve as the next base with a fresh count, so anyone with the PIN could guess without limit; a right guess for a hidden wallet already on the device answered \"already open\". The base is now always the wallet without a passphrase (the row is hidden on passphrase wallets and both cores refuse), so the count is per phrase."
+   ],
+   [
+    "p",
+    "Ten free attempts come before any wait. Without a passphrase wallet on the device, the waits stop at 15 minutes and a day without attempts resets them, for the owner trying to remember. With one on the device, the waits grow to 24 hours and never reset by themselves, like the send door."
+   ],
+   [
+    "p",
+    "The empty-wallet screen now says \"This wallet hasn't been used yet\" and asks whether the passphrase is right. iOS and Android, all 12 languages."
+   ]
+  ]
+ },
+ {
+  "sha": "1f74cfe1705bbeff56e263677b88fec8fbfe9f99",
+  "data": "2026-10-27T01:24:43-03:00",
+  "assunto": "Android: metadata writes reach the disk before returning",
+  "corpo": [
+   [
+    "p",
+    "The metadata (passphrase attempt counts, nonce queue, sent addresses) was written with Foundation's atomic option, which renames without syncing the folder; on f2fs a forced restart could bring the old file back and undo a passphrase attempt. It now writes, syncs the file, renames and syncs the folder, like the vault files."
+   ]
+  ]
+ },
+ {
+  "sha": "2b868ea36aa4b2ff5ba376b1e7c7986f24fe7218",
+  "data": "2026-10-27T01:24:43-03:00",
+  "assunto": "Android: the core enforces the send steps, not only the screen",
+  "corpo": [
+   [
+    "p",
+    "Review needs the destination lookup (tag and activation) and every check of the destination step; signing needs the review step, the destination lookup and the network confirmation of a first EVM, Sui or Aptos send. Going back can no longer jump forward."
+   ]
+  ]
+ },
+ {
+  "sha": "1a5fff4998a1c4355c90dd4ac4ca871bfd875d76",
+  "data": "2026-10-27T01:24:43-03:00",
+  "assunto": "Android: locking always wins, and screen secrets go away with it",
+  "corpo": [
+   [
+    "item",
+    "Every lock bumps an epoch in the core; an unlock that started before a lock (power button pressed during Argon2) no longer finishes with the screen off. The Kotlin side always asks the core to lock, and the trip to the background is recorded synchronously, so a destroyed activity cannot skip it."
+   ],
+   [
+    "item",
+    "Locking and erasing everything now clear the envelope seal, the envelope opening and the Super Security phrases, which only the closing screen used to clear. Words, envelope and phrases are kept only while the session is unlocked, checked under the same lock as locking."
+   ],
+   [
+    "item",
+    "Discarding an empty passphrase wallet without the PIN only accepts a wallet opened by this process, timed on the monotonic clock, on iOS and Android."
+   ]
+  ]
+ },
+ {
+  "sha": "0398bdd875b751a3b2a98ac7a9cbbd66736f61b6",
+  "data": "2026-10-27T01:07:58-03:00",
+  "assunto": "Android: derivation vectors run on the Android binary before every bundle",
+  "corpo": [
+   [
+    "p",
+    "Android replaces CommonCrypto, CryptoKit and Apple's NFKD with BoringSSL, swift-crypto and Foundation's NFKD. The BIP-39, BIP-32, SLIP-10, Icarus and per-network address vectors now run on the device with `testar-nucleo.sh --derivacao`, and `gerar-aab.sh` stops if they fail (ESCALIBUR_SEM_VETORES=1 skips and says so). 49 tests pass on the emulator."
+   ]
+  ]
+ },
+ {
+  "sha": "c023d7db7f4438755240790a0bb28fb8c8654e79",
+  "data": "2026-10-27T01:07:58-03:00",
+  "assunto": "Passphrase wallets: the core refuses an empty passphrase",
+  "corpo": [
+   [
+    "p",
+    "An empty passphrase would mark the regular wallet as a passphrase wallet that could neither send nor stop asking, since the signer refuses an empty one. The screens already prevented it; now both cores refuse it too."
+   ]
+  ]
+ },
+ {
+  "sha": "95d61ebbcd496c0fb5fc9de2beb96e85630ad48c",
+  "data": "2026-10-27T01:07:57-03:00",
+  "assunto": "Sending: refuse your own address from another network with the same format",
+  "corpo": [
+   [
+    "p",
+    "Sui and Aptos write addresses the same way, and a NEAR implicit account is the same hex without 0x, but each network derives the address differently. Pasting your own Aptos address on Sui sent everything to an address no key of yours controls. The send screen now refuses a destination that is the address of a wallet on this device on another of those networks, and a NEAR implicit account must be a valid Ed25519 point, so the hash of another network's address no longer becomes an ownerless account. iOS and Android, all 12 languages."
+   ]
+  ]
+ },
+ {
+  "sha": "3fb0f2796b560097338f8c040f10b36eed9bffce",
+  "data": "2026-10-27T00:57:37-03:00",
+  "assunto": "Passphrase wallets: \"never used\" only when every network was actually read",
+  "corpo": [
+   [
+    "p",
+    "The usage check counted a network it could not read as empty: the indexer that refuses the app (Base, Arbitrum, Polygon), the networks without history (X Layer, Sonic) and suspicious entries. The screen then told the owner who typed the right passphrase that it was a different one."
+   ],
+   [
+    "p",
+    "Now any history entry counts as movement, EVM networks also check the account nonce and native balance from two RPC providers that must agree (and token balances when there is no history), and a network that does not answer goes to the \"did not answer\" list. The text says which networks were read and that other apps may keep balances on paths Escalibur does not read, and the main button is \"Use this wallet\" instead of \"Try another passphrase\". iOS and Android, all 12 languages."
+   ]
+  ]
+ },
+ {
+  "sha": "b28adc6ca02e52a5f1895b8af8d4058debb0af82",
+  "data": "2026-10-25T16:44:57-03:00",
+  "assunto": "Versions: authorize iOS 1.0.1 (15) and Android 1.0.1 (1007)",
+  "corpo": []
+ },
+ {
+  "sha": "db72b52626ac2e317f09c504efb1ccda6333db42",
+  "data": "2026-10-25T16:44:26-03:00",
+  "assunto": "iOS 1.0.1 (15), Android 1.0.1 (1007)",
+  "corpo": []
+ },
+ {
+  "sha": "50750ab507b28d8bae6221f6348cc9beb011dccd",
+  "data": "2026-10-25T16:39:07-03:00",
+  "assunto": "Passphrase wallets: say when a passphrase opens a wallet that was never used",
+  "corpo": [
+   [
+    "p",
+    "Every passphrase opens some wallet, so a typo used to open an empty wallet with no warning. After opening a passphrase wallet that is new on this device, the app now checks each network's history with the same readers as Activity and stops at the first movement. With movement, the wallet opens as before. With none, a new screen says no transfer ever happened on any network and offers to try another passphrase, which drops the empty wallet without asking for the PIN again (only for a passphrase wallet created in the last hour, never the last wallet), or to use it as a new wallet. The creation door's wait text no longer speaks of wrong passphrases. iOS and Android, all 12 languages, and a live network test (ESCALIBUR_REDE=1)."
+   ]
+  ]
+ },
+ {
+  "sha": "61cf3c8d2388cb18d36773a3499f1050ebd00e21",
+  "data": "2026-10-25T16:09:23-03:00",
+  "assunto": "Sending: nothing goes out once the app locks, and records made after sending survive a lock",
+  "corpo": [
+   [
+    "p",
+    "If the app locked between signing and broadcasting, the nonce, the change index and the voice counter could not be saved, so the next send could reuse a nonce or skip the voice limit. Send, swap and bridge now refuse to broadcast when the app is locked; after unlocking, the owner sends again."
+   ],
+   [
+    "p",
+    "Records written after a broadcast (the bridge in progress, limit order renewals, sent addresses, traded tokens) now wait for the next unlock instead of being dropped. Pruning the pending nonce queue removes only what it checked, so an entry recorded meanwhile is no longer lost. iOS and Android."
+   ]
+  ]
+ },
+ {
+  "sha": "9f7f2c4f30b6c0fd0de63f6280a898c53f9acbc6",
+  "data": "2026-10-25T16:09:23-03:00",
+  "assunto": "Vault keys: an unknown answer never replaces a key",
+  "corpo": [
+   [
+    "p",
+    "Android: the key that encrypts the vault files was silently regenerated whenever the Keystore did not return it. From then on no vault file opened, the right PIN looked wrong and the wallets on the phone were lost. It is now created only for an empty vault; otherwise the vault reports unavailable and the key is never replaced. A failed tag on an item without a password is now reported as damage, never as a wrong PIN."
+   ],
+   [
+    "p",
+    "Both apps: creating the device key refused only when the key was reported present, so an unknown answer let it be replaced. Any answer other than absent now refuses."
+   ]
+  ]
+ },
+ {
+  "sha": "a2d1d06f1626df47476cfda578dc8c1122f6de25",
+  "data": "2026-10-25T15:51:25-03:00",
+  "assunto": "PIN: a keychain locked mid-check no longer counts as a wrong PIN",
+  "corpo": [
+   [
+    "p",
+    "The keychain answers \"interaction not allowed\" both when some iOS versions reject the app password and when the iPhone locks during the check. Both were treated as a wrong PIN, so locking the phone mid-check could count toward the wipe. Now a regular item with the same protection is read right after: if it reads, the keychain is open and the answer stays a wrong PIN, wipe included. If it does not, nothing could have been decrypted with any PIN, so nothing was learned; the attempt is returned when possible and never triggers the wipe. Two vault tests cover both causes."
+   ]
+  ]
+ },
+ {
+  "sha": "a53af814cc34ad6857bd808c5b85a1f3cfdb298f",
+  "data": "2026-10-25T15:35:54-03:00",
+  "assunto": "Android secret field: emoji deletion, split surrogate pairs and physical keyboards",
+  "corpo": [
+   [
+    "p",
+    "Deleting around the cursor counted UTF-16 units as characters, so deleting an emoji also took the character before it. A surrogate pair sent in two pieces is now joined, and an unpaired half is dropped instead of crashing the encoder. Keys from a physical keyboard now reach the field, with dead key accents. The on-device proof covers each case."
+   ]
+  ]
+ },
+ {
+  "sha": "30d17732bed123c7d5d47443ce64b772c4cbc059",
+  "data": "2026-10-25T15:35:54-03:00",
+  "assunto": "New wallet: sealing an envelope right after creation is no longer forgotten",
+  "corpo": [
+   [
+    "p",
+    "The created screen saved the wallet name from its own stale copy, which erased the envelope date the seal flow had just written. Both now write on top of the current metadata."
+   ]
+  ]
+ },
+ {
+  "sha": "287093de10e63f5b5df770f6152c476532088e44",
+  "data": "2026-10-25T15:35:54-03:00",
+  "assunto": "Biometry: a key store that cannot answer no longer counts as a lost face",
+  "corpo": [
+   [
+    "p",
+    "Only a biometric key the Secure Enclave or Keystore reports as absent drops the biometric slot and starts the 24 hour wait. An unknown state, such as a transient key store error, now refuses without erasing anything. Covered by a new vault test."
+   ]
+  ]
+ },
+ {
+  "sha": "a3983a7a1d63795b71af9c5ff727936d0d6c68a7",
+  "data": "2026-10-25T15:35:54-03:00",
+  "assunto": "Passphrase: an outcome that lands after the app locks now counts at the next unlock",
+  "corpo": [
+   [
+    "p",
+    "When the app locked between counting an attempt and learning its result, the metadata was already gone, so the refund, the reset after a correct passphrase and the wait after a wrong one were silently dropped. Dropping the wait let someone who locks the app mid-check keep guessing without waiting. The outcome is now kept in memory and applied on the next unlock, on iOS and Android."
+   ]
+  ]
+ },
+ {
+  "sha": "b90958673b50faf3db3eb8b401e5a581bbadcce1",
+  "data": "2026-10-25T15:14:09-03:00",
+  "assunto": "Passphrase: a gentler count for opening or creating a wallet with a passphrase",
+  "corpo": [
+   [
+    "p",
+    "This is where an owner who forgot the passphrase tries to remember it. The creation door now keeps its own count on the base wallet, separate from the base wallet's own doors: 10 free attempts, then a wait that starts at 1 minute and doubles up to 15 minutes, and a full day without attempts resets it. The day is measured on the monotonic clock of the same boot, so moving the device clock forward does not reset it. Sending, revealing and sealing keep the full ladder. Applies to iOS and Android."
+   ]
+  ]
+ },
+ {
+  "sha": "45ec4d0f1f05982f9c872d21e1185398625b31e8",
+  "data": "2026-10-25T15:14:09-03:00",
+  "assunto": "Hardened mode: a face or fingerprint that does not confirm no longer counts toward the wipe",
+  "corpo": [
+   [
+    "p",
+    "Only a wrong PIN counts. When the biometric check fails after the PIN, the vault restores the attempts record and reports biometryNotConfirmed without counting or wiping. Settings, hardened mode and the Android screens now say so in all 12 languages, and two tests cover the rule."
+   ]
+  ]
+ },
+ {
+  "sha": "783dc30b47a9e58fc408efd20f104d8abf30ca5f",
+  "data": "2026-10-25T14:53:35-03:00",
+  "assunto": "Removing a wallet never erases the app because the app locked mid-way",
+  "corpo": [
+   [
+    "p",
+    "iOS: lock() swaps the metadata for an empty one. A removal that was waiting on the PIN or Face ID when the phone locked then saw no wallets left and erased everything: PIN, every other wallet and the settings. remove() now requires the unlocked session and the wallet in the list, and erases the app only after the list without it was saved."
+   ],
+   [
+    "p",
+    "Android: the \"last wallet\" decision is taken inside the save, under the lock, and the wallet must still be in the list there, so a lock between the save and the check cannot trigger the erase either."
+   ],
+   [
+    "p",
+    "Found by the bug hunt of 25/10/2026 (A1, B5)."
+   ]
+  ]
+ },
+ {
+  "sha": "a709cedf32679c76fb38ada4171eec0c022f7bae",
+  "data": "2026-10-25T13:38:24-03:00",
+  "assunto": "Android: passphrase and envelope password never become a String (M4)",
+  "corpo": [
+   [
+    "p",
+    "The Compose TextFieldState kept every keystroke's text as an immutable String, and clearText did not erase those copies. The new field works like the iOS SecureInputField: its own InputConnection writes each key straight into a UTF-8 buffer the app zeroes, the screen shows only dots, and nothing typed is ever read back by the keyboard. Counting is by Unicode scalar, so delete removes a whole \"ç\" or emoji. Used on all 8 screens with a passphrase or envelope password, the send passphrase sheet included."
+   ],
+   [
+    "p",
+    "Checked on the emulator: the debug proof (--es teste segredo) passed, and on Wallet with passphrase the Safe Keyboard opens in the field, typing shows dots, delete works, hold-to-reveal shows the text and the button turns on with both fields filled."
+   ]
+  ]
+ },
+ {
+  "sha": "4f2b923d9796620f28a1d530271b398d56800108",
+  "data": "2026-10-25T00:31:59-03:00",
+  "assunto": "iOS: the last 233 texts in all 11 languages; unsupported languages open in English",
+  "corpo": [
+   [
+    "p",
+    "Every text of the catalog now has all 12 languages (2660 each). An iPhone set to a language the app doesn't have (Italian, Russian...) used to open in Portuguese; it now opens in English, as Android does."
+   ],
+   [
+    "p",
+    "How: the Info.plist development region is English, and the catalogs now emit pt-BR.lproj (one explicit pt-BR entry in Localizable, the permission texts marked translated in InfoPlist), so Portuguese iPhones still get Portuguese, permission prompts included. Checked in the simulator with pt-BR, pt-PT, Italian, Spanish and Japanese."
+   ]
+  ]
+ },
+ {
+  "sha": "fbfbdaedbae81b0b39dfa78099e4967d7346db18",
+  "data": "2026-10-24T23:14:03-03:00",
+  "assunto": "Versions: authorize iOS 1.0.1 (14) and Android 1.0.1 (1006)",
+  "corpo": []
+ },
+ {
+  "sha": "3f46efdadf10e87d5558fa041085d63880997533",
+  "data": "2026-10-24T23:13:36-03:00",
+  "assunto": "iOS 1.0.1 (14), Android 1.0.1 (1006)",
+  "corpo": []
+ },
+ {
+  "sha": "4f8e473908f85e8cd2f1073d268414675f1da5e2",
+  "data": "2026-10-24T22:06:18-03:00",
+  "assunto": "Removing the last wallet resets the app; the next one opens on the Wallet tab",
+  "corpo": [
+   [
+    "p",
+    "With no wallet left, the app erases everything (PIN, settings, contacts, history), the same path as \"Forgot PIN\", and starts over at onboarding. The remove screen says so when it is the only wallet. Navigation also resets, so a new wallet no longer opens on the tab and screen where the previous one was removed. Both apps."
+   ]
+  ]
+ },
+ {
+  "sha": "1133b016c5dac82c47dd992f7e738c8b2d680eb9",
+  "data": "2026-10-24T21:23:36-03:00",
+  "assunto": "Versions: authorize iOS 1.0.1 (13)",
+  "corpo": []
+ },
+ {
+  "sha": "a31d948f638e9941bd678f0aa0b0fa9aec922d3a",
+  "data": "2026-10-24T21:20:02-03:00",
+  "assunto": "Site: share image on a lime background, text lower",
+  "corpo": []
+ },
+ {
+  "sha": "6cca39017ad2a7b5ba9291701f18a38b94df022b",
+  "data": "2026-10-24T17:25:22-03:00",
+  "assunto": "Site: lime accent, new coin render and re-recorded app videos",
+  "corpo": [
+   [
+    "p",
+    "The site follows the app's new lime #E1FF00 accent: color tokens, the 3D Escalibur coin, the share image and every screen recording."
+   ]
+  ]
+ },
+ {
+  "sha": "6f4666303114f3eaea891436927284effc4bb148",
+  "data": "2026-10-24T14:44:34-03:00",
+  "assunto": "Site: pixel padlock at the top of the Audit page",
+  "corpo": [
+   [
+    "p",
+    "The Audit header now opens with the same pixel padlock as the Security page, in place of the commit hash in pixels. The 3D coins stay at the edges."
+   ]
+  ]
+ },
+ {
+  "sha": "a8f20bf0fe9cc18beea5ca4d38968396d455a2d1",
+  "data": "2026-10-24T12:39:46-03:00",
+  "assunto": "Site: smooth send recording, no bridge step, lighter bento tiles on phones",
+  "corpo": [
+   [
+    "item",
+    "The send recording froze the comet mid-flight several times, because the simulator dropped frames while recording. The sending stretch is redrawn frame by frame with the app's own formula (SwapProcessingIndicator) over the recording, and the loop now closes without jumping back in time."
+   ],
+   [
+    "item",
+    "The app screens section loses the bridge step: six steps instead of seven."
+   ],
+   [
+    "item",
+    "On phones the bento tiles use the rail color, so they stand out from the page background."
+   ],
+   [
+    "item",
+    "Share image: the opening without the phone, with the text centered."
+   ]
+  ]
+ },
+ {
+  "sha": "fba4dc15e2b62d72d71d556809d3b968d7436208",
+  "data": "2026-10-24T12:22:22-03:00",
+  "assunto": "Site: opening coins back to the 3D fade-in",
+  "corpo": [
+   [
+    "p",
+    "The still image shown before the 3D looked soft on phones and was then replaced by the sharp 3D, so the opening goes back to how it was: no still image while the 3D loads, and the coins fade in once their faces are ready. The still image shows only when the page runs without 3D."
+   ]
+  ]
+ },
+ {
+  "sha": "4640d286d8d6b5fd156946431860d2a2262608e9",
+  "data": "2026-10-24T09:53:43-03:00",
+  "assunto": "Site: coins above swap, opening coins with the page, key steps on a timer",
+  "corpo": [
+   [
+    "item",
+    "The coins section now sits above the swap section."
+   ],
+   [
+    "item",
+    "The opening coins show from the first paint: a still image rendered from the 3D scene, replaced by the 3D in the same pose, without a fade."
+   ],
+   [
+    "item",
+    "The key steps advance on their own instead of following the scroll."
+   ],
+   [
+    "item",
+    "The receive, limit order, bridge, wallet and alerts recordings lose idle stretches longer than one second; network waits stay as recorded."
+   ],
+   [
+    "item",
+    "The terminal commands on the audit page are white."
+   ],
+   [
+    "item",
+    "New share image: the opening section in English."
+   ]
+  ]
+ },
+ {
+  "sha": "ec2c8d7204a049c6ef0810a395f279d4f1190a34",
+  "data": "2026-10-24T00:39:42-03:00",
+  "assunto": "Site: lighter 3D on phones, lime code keywords, more air in the mobile closing",
+  "corpo": [
+   [
+    "item",
+    "The opening coins were still drawn full screen on every frame after the dive, invisible, all through the manifesto. Only visible coins are drawn now, and an empty scene clears once and stops."
+   ],
+   [
+    "item",
+    "No MSAA on high density screens (the device pixel ratio already smooths the edge), and the two full screen scenes render at 2x; the small market and closing coins keep up to 3x."
+   ],
+   [
+    "item",
+    "The coin logo rows pause while off screen."
+   ],
+   [
+    "item",
+    "Audit code pages: keywords in lime, strings in light gray, no pink left."
+   ],
+   [
+    "item",
+    "Mobile closing: more space above the section, the coin away from the headline, and no store badges in the footer."
+   ]
+  ]
+ },
+ {
+  "sha": "37a2317aa2e725477edff84cabe657d7b6bd61ac",
+  "data": "2026-10-24T00:19:50-03:00",
+  "assunto": "Site: the passphrase receipt alert note shows in the news",
+  "corpo": [
+   [
+    "p",
+    "The news filter took this English commit for Portuguese (it counts \"so\" and the \"com\" in a domain). The entry in novidades-en.json keeps its own text, so it is listed again."
+   ]
+  ]
+ },
+ {
+  "sha": "8c9df5e9c9ec5e6e9888d400b5e3b8dc9704a67e",
+  "data": "2026-10-24T00:16:58-03:00",
+  "assunto": "Site: merge the redesigned landing page",
+  "corpo": [
+   [
+    "p",
+    "The new home page with 3D coins, the live market and swap, the auditable code window, the security, networks, audit and news pages, all generated by tools/gerar-site.py from this repository."
+   ]
+  ]
+ },
+ {
+  "sha": "b78bb56376221eaa3a210cdfb1c7368f41d86617",
+  "data": "2026-10-23T16:33:04-03:00",
+  "assunto": "Site publish: English commit message in the Pages repositories",
+  "corpo": []
+ },
+ {
+  "sha": "3174704c3abab37867e37c45f5d4ca82e49611da",
+  "data": "2026-10-23T16:05:44-03:00",
+  "assunto": "Version list: drop the old name of the Mac signing key",
+  "corpo": [
+   [
+    "p",
+    "The public list on the site carried the same signature twice, once under the key's old name for TestFlight builds 7 to 10. That name is gone: the list keeps only the current key name, with the signed text unchanged, and the test now checks that both lists carry exactly the published key names. Builds 7 to 10 stop checking the site list."
+   ]
+  ]
+ },
+ {
+  "sha": "4b5f68d4c9bca17b2f5442c95ed86c57e9bb0772",
+  "data": "2026-10-23T14:34:51-03:00",
+  "assunto": "Receipt alerts now include passphrase wallets",
+  "corpo": [
+   [
+    "p",
+    "On iOS and Android, wallets with a passphrase were left out of the receipt alert, so an EVM token received in one never notified. The wallet already sits in the wallet list inside the vault, and the alert file holds every watched wallet's addresses, so leaving it out protected almost nothing. It now joins like any other wallet once its words and passphrase are confirmed. The settings note says so in all 12 languages."
+   ]
+  ]
+ },
+ {
+  "sha": "26f38e7bcf8a9d6e8b5e33429f7d0674eed72fe8",
+  "data": "2026-10-23T11:41:55-03:00",
+  "assunto": "Site: redesenho da pagina inicial, com moedas 3D, mercado ao vivo e troca",
+  "corpo": [
+   [
+    "item",
+    "Abertura com moedas 3D em WebGL proprio (site/moedas3d.js, sem biblioteca): seguem o mouse e a rolagem, e as da lista de ativos pousam na tela da Carteira. Imagem parada com \"reduzir movimento\", sem WebGL, em aparelho fraco ou com economia de dados."
+   ],
+   [
+    "item",
+    "Mercado ao vivo pelo /precos.json do proprio site: no dominio, o Worker busca no CoinGecko pelo servidor (60 s de cache) e devolve o retrato da publicacao se falhar; no GitHub Pages, o retrato com a hora. O navegador nao fala com mais ninguem."
+   ],
+   [
+    "item",
+    "Demonstracao da troca e da ponte com as redes, os tokens e as rotas lidos do codigo do app (redes com troca, TokenRegistry, BridgeAllowlist e USDT0Mesh), so com o preco de mercado, sem chamar agregador."
+   ],
+   [
+    "item",
+    "Telas do app num iPhone fixo que troca a cada passo, manifesto que acende com a rolagem, cadeia do PIN, seguranca em bento, privacidade, perguntas e a moeda da Escalibur no fim."
+   ],
+   [
+    "item",
+    "Inter da propria pasta (site/fontes, OFL), CSP com font-src e connect-src 'self', e o verificar.sh conferindo a nova linha. Simple Icons (CC0) e Inter no THIRD_PARTY_NOTICES."
+   ],
+   [
+    "item",
+    "Paginas internas na mesma casca. Texto das politicas e dos termos sem mudanca, nenhuma URL removida, versoes.json intocado."
+   ]
+  ]
+ },
+ {
+  "sha": "47443ea241bce3b95c05cccf2b73d51afb8372eb",
+  "data": "2026-10-23T02:27:31-03:00",
+  "assunto": "Aviso de recebimento: segunda opiniao em todas as redes, conferencia por endereco",
+  "corpo": [
+   [
+    "p",
+    "Segunda revisao de seguranca de 23/10, nos dois apps:"
+   ],
+   [
+    "item",
+    "fora das redes UTXO, o ativo que muda (ou o saldo de partida) e relido num provedor de outro dono. Na subida vale o menor, na queda o maior, e na partida os dois iguais; sem confirmar, fica o visto. Um RPC sozinho nao inventa mais 'Recebeu 10.000 USDT';"
+   ],
+   [
+    "item",
+    "redes UTXO: o saldo visto e por endereco. Fixo e testemunha tem de bater exatamente, inclusive no saldo de partida, e um provedor fora do ar cala so os enderecos dele. Na Litecoin e na Dogecoin, so os donos que nao leem a outra rede na frente;"
+   ],
+   [
+    "item",
+    "preco pelo id so com o reconhecimento ainda valido."
+   ],
+   [
+    "p",
+    "iOS: so as logos da lista e do Mercado ficam no disco; as de tokens fora da lista, so na memoria. A pasta e apagada ao remover a carteira e ao apagar tudo."
+   ]
+  ]
+ },
+ {
+  "sha": "bdb27555003db321e48a34436d2df22bca6ce615",
+  "data": "2026-10-23T02:07:31-03:00",
+  "assunto": "Politicas: conferencia quando o saldo muda, servicos da troca, tokens e logos",
+  "corpo": []
+ },
+ {
+  "sha": "c311b447962372e4754d71604b869850f42df34b",
+  "data": "2026-10-23T02:07:31-03:00",
+  "assunto": "Tokens raros: preco pelo id em um pedido, logos guardadas no aparelho",
+  "corpo": [
+   [
+    "item",
+    "Token ja reconhecido pelo contrato exato tem o preco num pedido so, pelo id do CoinGecko (nos dois apps). O preco por contrato dos outros passa de 5 para 15 minutos."
+   ],
+   [
+    "item",
+    "iOS: cada logo, e cada logo que nao existe, fica guardada no aparelho (Caches, protecao completa). Antes o app perguntava de novo ao GitHub e ao CoinGecko a cada abertura."
+   ]
+  ]
+ },
+ {
+  "sha": "e4f6bffa2d57910564eece775034a53676f426ed",
+  "data": "2026-10-23T02:07:31-03:00",
+  "assunto": "Revisao de seguranca de 23/10: aviso de recebimento, prova de bloco e provedores",
+  "corpo": [
+   [
+    "titulo",
+    "Nos dois apps:"
+   ],
+   [
+    "item",
+    "aviso de recebimento: provedor fixo pela lista inteira (HMAC do sal), sem contingencia. Quando o saldo muda, outro dono confere nos dois sentidos; sem confirmar, o saldo visto fica. Fecha o aviso falso com o provedor fixo fora do ar e o de baixar o saldo para depois devolver;"
+   ],
+   [
+    "item",
+    "aviso: token EVM que nao foi lido nao conta como enviado;"
+   ],
+   [
+    "item",
+    "aviso: carteira normal ganha da de so observar com o mesmo endereco;"
+   ],
+   [
+    "item",
+    "aviso: sal sorteado de novo se faltar;"
+   ],
+   [
+    "item",
+    "prova de bloco: testemunha de outro dono obrigatoria e nada acima do topo;"
+   ],
+   [
+    "item",
+    "status: confirmado so com dois donos ou com a prova, e sem topo fica pendente; status e taxa consultam primeiro os provedores completos;"
+   ],
+   [
+    "item",
+    "uma empresa so na frente de uma familia de redes (EndpointsFamilyTests): Solana pelo RPC dela, Aptos pela Sentio, Litecoin entre litecoinspace e Bitcore, Dogecoin pela Atomic;"
+   ],
+   [
+    "item",
+    "troca: a amostra em partes da CoW vai com o endereco sorteado, e o cache do agregador vale de novo (sem o dono na chave);"
+   ],
+   [
+    "item",
+    "alertas: variacao de 10^21% nao derruba mais a checagem."
+   ],
+   [
+    "p",
+    "iOS: o aviso no fundo no maximo uma vez por hora. Android: quem atualiza troca a agenda de 20 minutos pela de uma hora."
+   ]
+  ]
+ },
+ {
+  "sha": "a5e11b70dd015105634fdbfb39982c5909515667",
+  "data": "2026-10-23T01:19:23-03:00",
+  "assunto": "Versoes: autoriza o Android 1.0.0 (1005); versionCode 1005",
+  "corpo": []
+ },
+ {
+  "sha": "e1ca24e0a7e8a1c17cc79be3cc0ecfd47be23481",
+  "data": "2026-10-23T01:03:57-03:00",
+  "assunto": "Versoes: autoriza o iOS 1.0.0 (12)",
+  "corpo": []
+ },
+ {
+  "sha": "b1d5cb3f675033c8cb2ed261990d92e903edbebf",
+  "data": "2026-10-23T00:57:20-03:00",
+  "assunto": "Lancamento: o rotulo da App Store ja declara Outras informacoes financeiras",
+  "corpo": []
+ },
+ {
+  "sha": "a4524ce8845dc9e5152c87d01e8849d62b2164b3",
+  "data": "2026-10-23T00:52:22-03:00",
+  "assunto": "Politicas de privacidade batendo com o codigo",
+  "corpo": [
+   [
+    "titulo",
+    "iOS e Android, em portugues e ingles:"
+   ],
+   [
+    "item",
+    "o que a Escalibur recebe: a excecao do registro da Alchemy;"
+   ],
+   [
+    "item",
+    "o aviso de recebimento so pelo dono, e o que ele consulta;"
+   ],
+   [
+    "item",
+    "alertas de preco ligados de fabrica com BTC, ETH, XRP e SOL;"
+   ],
+   [
+    "item",
+    "o widget;"
+   ],
+   [
+    "item",
+    "o explorador no navegador;"
+   ],
+   [
+    "item",
+    "o contrato de token que vai ao CoinGecko;"
+   ],
+   [
+    "item",
+    "a cotacao de troca sem o endereco;"
+   ],
+   [
+    "item",
+    "a Alchemy guardando o IP por 90 dias."
+   ],
+   [
+    "titulo",
+    "Android:"
+   ],
+   [
+    "item",
+    "a busca local;"
+   ],
+   [
+    "item",
+    "a tela bloqueada e a area de transferencia como o codigo faz agora."
+   ],
+   [
+    "p",
+    "O rotulo da App Store muda para Outras informacoes financeiras."
+   ]
+  ]
+ },
+ {
+  "sha": "954189e5fd485bc78ca62e756cd7798c03beb35c",
+  "data": "2026-10-23T00:52:22-03:00",
+  "assunto": "Troca: a cotacao vai com um endereco sorteado, nunca o do dono",
+  "corpo": [
+   [
+    "p",
+    "Enquanto o dono cota, cada rodada manda aos agregadores (Velora, KyberSwap, LI.FI, De1, CoW) um endereco sorteado; a calldata e validada contra ele do mesmo jeito. O plano, ao tocar em Revisar, pede a troca de novo so ao provedor escolhido, com o dono. As ordens abertas do dono na CoW ficam guardadas 5 minutos para a cotacao. Conferido ao vivo na Base: cinco provedores cotam com o endereco sorteado. Vale para os dois apps."
+   ]
+  ]
+ },
+ {
+  "sha": "bca1f519bae864a157105f59aa349f1999334992",
+  "data": "2026-10-23T00:52:22-03:00",
+  "assunto": "Privacidade: aviso de recebimento so pelo dono, tela bloqueada e area de transferencia",
+  "corpo": [
+   [
+    "p",
+    "Nos dois apps (auditoria de privacidade, 22/10/2026):"
+   ],
+   [
+    "item",
+    "o aviso de recebimento nao liga mais sozinho; liga em Ajustes;"
+   ],
+   [
+    "item",
+    "carteiras de so observar ficam de fora, a nao ser que o dono ligue;"
+   ],
+   [
+    "item",
+    "nas redes UTXO, so o proximo endereco de recebimento e os dois ultimos usados;"
+   ],
+   [
+    "item",
+    "cada endereco sempre ao mesmo provedor (sal por instalacao), e o segundo provedor so confere quando o saldo sobe;"
+   ],
+   [
+    "item",
+    "redes em ordem sorteada, com atraso proprio; o arquivo guarda a conta por um resumo, nao pelo endereco;"
+   ],
+   [
+    "item",
+    "sorteios pelo SecRandomCopyBytes (SecureRandom)."
+   ],
+   [
+    "titulo",
+    "Android:"
+   ],
+   [
+    "item",
+    "conferencia no fundo a cada hora;"
+   ],
+   [
+    "item",
+    "recebimento com valor nunca na tela bloqueada;"
+   ],
+   [
+    "item",
+    "endereco copiado apagado ao voltar ao app quando o prazo venceu em segundo plano."
+   ]
+  ]
+ },
+ {
+  "sha": "96da6056d56e77dc61cd5ea288a3f0c065544aa6",
+  "data": "2026-10-23T00:22:17-03:00",
+  "assunto": "Android: Enviar sem ativos igual ao iOS",
+  "corpo": [
+   [
+    "p",
+    "A ilustracao logo abaixo do fechar, o texto embaixo e o Receber no rodape, e o Receber abre por cima do Enviar. Teste de interface do iOS para a mesma tela."
+   ]
+  ]
+ },
+ {
+  "sha": "8c49cbaf49a3360ca6ca0fe9a99fc7c4e7f5b7f3",
+  "data": "2026-10-23T00:14:26-03:00",
+  "assunto": "Rosca da carteira: fatia minuscula vai para Outros, sem animar valores",
+  "corpo": [
+   [
+    "p",
+    "O TestFlight (build 11) caiu dentro do Swift Charts ao trocar a moeda para R$, com a BNB Frog Inu (preco perto de 10^-19) como fatia de bilionesimos. Fatia abaixo de 1% entra em Outros, cada fatia desenhada ocupa ao menos 2% da volta (a legenda mostra a porcentagem real) e os valores mudam sem animar. A mesma regra na rosca do Android. Alertas: magnitude de preco zero ou infinito nao derruba mais."
+   ]
+  ]
+ },
+ {
+  "sha": "6b4abbe115b93ae697776c791a4336688825e5cc",
+  "data": "2026-10-23T00:07:39-03:00",
+  "assunto": "Android: Carteiras e Copiar endereco iguais ao iOS",
+  "corpo": [
+   [
+    "p",
+    "Copiar endereco: tres redes EVM sobrepostas, \"BNB Chain, Ethereum e mais N\", grade de duas colunas, visto verde ao copiar e o endereco curto com o prefixo da rede (vem do nucleo). Seletor de carteiras: botao no rodape, medidas e icones do iOS, arrastar com sombra. Ajustes > Carteiras: glifo sem fundo e arrastar para reordenar. Folha na altura media nao encolhe o fundo. Icones visto, copiar, lapis e carteira cheia medidos nos simbolos do iOS."
+   ]
+  ]
+ },
+ {
+  "sha": "fc0b00bb5fbec822ed3f5b9980221e6580d30ae6",
+  "data": "2026-10-22T23:51:06-03:00",
+  "assunto": "Litecoin: prova de inclusao (SPV) com scrypt",
+  "corpo": [
+   [
+    "p",
+    "O trabalho de cada cabecalho e medido pelo scrypt (N=1024, r=1, p=1), com piso 16 vezes o alvo de 22/10/2026. O Blockbook e o segundo dono que confere o bloco na altura. Sem provedor de prova no ar, a Litecoin volta ao consenso de antes; prova que chega e nao fecha sempre recusa. Cache de cabecalhos separado por rede."
+   ]
+  ]
+ },
+ {
+  "sha": "4579f9d68b79e82c0e376be1a41cfeb46afae66c",
+  "data": "2026-10-22T23:40:29-03:00",
+  "assunto": "Android: chapa de aco, baralho das palavras e lendo o historico como no iOS",
+  "corpo": [
+   [
+    "item",
+    "Todas as palavras: a chapa de aco escovado do iOS (os mesmos riscos pela mesma semente, parafusos de fenda, reflexo que corre com a inclinacao, chanfro, borda grossa), palavras em baixo-relevo, inclinacao pelo dedo e pela gravidade do celular, e o giro para o verso quando as palavras se escondem."
+   ],
+   [
+    "item",
+    "Grupos de tres: o baralho do iOS, com os cartoes girando em ciclo (o que sai vai para o fundo), tons e escala pela vaga, o cartao laqueado de canto cortado, e os botoes jogando o cartao para o lado antes de ele voltar para tras."
+   ],
+   [
+    "item",
+    "Lista de palavras: faixa chapada atras dos botoes do Android."
+   ],
+   [
+    "item",
+    "Atividade: o lendo o historico no meio da tela, por cima da lista."
+   ]
+  ]
+ },
+ {
+  "sha": "4ff73446fca7be2797ace1a1b5d7377c1019d52d",
+  "data": "2026-10-22T23:31:47-03:00",
+  "assunto": "UTXOReader: dois inits sem delegacao",
+  "corpo": []
+ },
+ {
+  "sha": "ef86431580beede2fa0e75202d00d2979bbc5037",
+  "data": "2026-10-22T23:27:31-03:00",
+  "assunto": "iOS e Android: Bitcoin confirmado so com prova SPV",
+  "corpo": [
+   [
+    "p",
+    "Moeda para enviar e recebimento confirmado exigem a prova de que a transacao esta num bloco minerado: caminho de Merkle ate a raiz do cabecalho, cabecalho com o trabalho do proprio alvo e alvo nunca mais facil que o piso (16x o do bloco 972.695), ate seis cabecalhos encadeados, e o mesmo bloco naquela altura num provedor de outro dono quando ele responde. Antes, o provedor podia inventar uma transacao de txid certo pagando a carteira e ela aparecia confirmada."
+   ],
+   [
+    "p",
+    "Moeda sem prova vai para as nao conferidas; recebimento sem prova fica pendente. Ligado no Bitcoin com os provedores do app; cabecalhos provados ficam em cache na sessao. Testes com dados reais do bloco 972.600."
+   ]
+  ]
+ },
+ {
+  "sha": "d69f60abdfcb1a817b5f1a367b7eaf7bda563adc",
+  "data": "2026-10-22T23:20:50-03:00",
+  "assunto": "iOS e Android: consenso so entre provedores de donos diferentes",
+  "corpo": [
+   [
+    "p",
+    "Cada provedor ganha o dono (operatorName). Os dois primeiros de qualquer consenso sao de donos diferentes, e dois enderecos do mesmo dono valem uma resposta so (ProviderPool.agreeing e Quorum.gather/agree/collect). Os servidores s1 e s2 da Ripple passam a contar como um dono: se o xrplcluster caisse, o consenso do XRP Ledger era a Ripple concordando com ela mesma."
+   ]
+  ]
+ },
+ {
+  "sha": "326400f456ac44a516421e3e56a29d62d3fef78c",
+  "data": "2026-10-22T23:09:37-03:00",
+  "assunto": "Android: folhas abrem tambem antes da primeira carteira",
+  "corpo": [
+   [
+    "p",
+    "Sem carteira, a Principal mostrava so a tela de adicionar e voltava antes das camadas: a lista de palavras (escolher as proprias palavras) e o Sobre o Safe Keyboard eram empilhados e nunca apareciam."
+   ]
+  ]
+ },
+ {
+  "sha": "2ca1c03b32432730600228d407e1fd88d3e70364",
+  "data": "2026-10-22T23:00:57-03:00",
+  "assunto": "Versoes: autoriza o Android 1.0.0 (1004); versionCode 1004",
+  "corpo": []
+ },
+ {
+  "sha": "28575d8a2f650438046d6dd753ff180bed36658f",
+  "data": "2026-10-22T22:55:43-03:00",
+  "assunto": "iOS e Android: abrir envelope 24 pontos acima do meio; Android: icones do aceite como no iOS",
+  "corpo": [
+   [
+    "item",
+    "Abrir um envelope: o conjunto sobe 24 pontos, o centro otico no espaco acima do botao rosa (os dois apps)."
+   ],
+   [
+    "item",
+    "So voce tem a chave: lock.shield no topo e lock.iphone, eye.slash, key.horizontal e hand.raised nos itens, desenhados pelas medidas dos simbolos do iOS."
+   ]
+  ]
+ },
+ {
+  "sha": "c74ad1035204703463f85bc299fb86be50e361bb",
+  "data": "2026-10-22T22:46:39-03:00",
+  "assunto": "iOS e Android: grafico cinza depois do ponto escolhido; Android: primeira carteira e importar como no iOS",
+  "corpo": [
+   [
+    "item",
+    "Grafico: com o dedo nele, a linha depois do ponto fica cinza apagado e o brilho vai so ate ali (os dois apps)."
+   ],
+   [
+    "item",
+    "Sua primeira carteira: a orbita do WalletOrbit (seis redes dentro, doze fora, aneis cheios, selo de 72 com mola) e o icone de palavras na linha de importar."
+   ],
+   [
+    "item",
+    "Importar: a tela de responsabilidade antes da checagem do aparelho, como no iOS; icones das garantias como os do iOS (cadeado cheio, celular, wi-fi riscado)."
+   ]
+  ]
+ },
+ {
+  "sha": "c8c0ef90271a77e154eba4da87520fcaef07ed83",
+  "data": "2026-10-22T22:07:13-03:00",
+  "assunto": "Versoes: autoriza o Android 1.0.0 (1003)",
+  "corpo": []
+ },
+ {
+  "sha": "9a6f8052d53bc0d74cadf9da43d5e65e777a9bf6",
+  "data": "2026-10-22T22:00:22-03:00",
+  "assunto": "iOS e Android: Politica de privacidade na segunda linha do aceite; teste da tolerancia na escala de 10%",
+  "corpo": [
+   [
+    "p",
+    "O teste da regua ainda esperava o maximo antigo de 3% e derrubava o CI. Android versionCode 1003."
+   ]
+  ]
+ },
+ {
+  "sha": "9ba3da15ec8963f3cf61b73d5338d906e95765a2",
+  "data": "2026-10-22T20:30:25-03:00",
+  "assunto": "iOS e Android: alerta de seguranca sem o trecho de quando as palavras saem do chip",
+  "corpo": []
+ },
+ {
+  "sha": "a716b8edf237aa25eaacda03c6240af55dcbd242",
+  "data": "2026-10-22T20:12:58-03:00",
+  "assunto": "Versoes: autoriza o Android 1.0.0 (1002)",
+  "corpo": []
+ },
+ {
+  "sha": "a958220805f7edf84ce9bbd8d9d315161cb047a1",
+  "data": "2026-10-22T19:42:07-03:00",
+  "assunto": "Android: consertos da auditoria antes da Play, e o piso da CoW nos dois apps",
+  "corpo": [
+   [
+    "p",
+    "Cofre do PIN (formato 2): a senha derivada do PIN passa por uma chave HMAC no Keystore e vira a chave AES do embrulho. No formato 1 ela era so AAD, e o KeyMint entrega o claro antes de conferir a tag: quem rodasse codigo no app levava um verificador offline. O formato 1 so abre (cofres de teste do emulador)."
+   ],
+   [
+    "item",
+    "Android 11: setHideOverlayWindows so da API 31; na 30, toque com janela por cima e recusado (filterTouchesWhenObscured)."
+   ],
+   [
+    "item",
+    "Acessibilidade: a janela marcada como dado sensivel (API 34), e sem autofill."
+   ],
+   [
+    "item",
+    "Bloqueio: trava quando a tela apaga, e a Activity recriada passa pelo bloqueio automatico; uma capa cobre a carteira ate o nucleo responder."
+   ],
+   [
+    "item",
+    "Sem bloqueio de tela no celular, o cofre nao abre e a tela explica."
+   ],
+   [
+    "item",
+    "Safe Keyboard: desligar pede o PIN; campo de senha sem globo e nunca no teclado de terceiros."
+   ],
+   [
+    "item",
+    "Segredos pela ponte com o tamanho na frente (passphrase com quebra de linha chegava cortada); strings do JNI em UTF-16 (emoji)."
+   ],
+   [
+    "item",
+    "Contador de tentativas com fsync da pasta; AAD zerado depois do uso."
+   ],
+   [
+    "item",
+    "Notificacao leva uma ficha do app (intent de fora nao navega); taskAffinity."
+   ],
+   [
+    "item",
+    "Envelope salvo com \"wt\" e conferido por leitura."
+   ],
+   [
+    "item",
+    "Suporte: seis palavras BIP-39 seguidas, como no iOS."
+   ],
+   [
+    "item",
+    "Cotacao de token com quatrilhoes de unidades nao fecha mais o app."
+   ],
+   [
+    "item",
+    "Checagem do hardware olha tambem a chave do PIN e o Android 11."
+   ],
+   [
+    "item",
+    "Build: sem cache de configuracao ao assinar; o release recusa nucleo de depuracao; verificar.sh cobre o Swift do Android."
+   ],
+   [
+    "item",
+    "iOS e Android: sem preco de referencia, a CoW tambem tem piso de 5% contra os agregadores."
+   ],
+   [
+    "p",
+    "versionCode 1002."
+   ]
+  ]
+ },
+ {
+  "sha": "3132e0d052b9d64bb69f209458c39a25b3e360bf",
+  "data": "2026-10-22T15:53:18-03:00",
+  "assunto": "Android: Suporte e Sobre como no iOS",
+  "corpo": [
+   [
+    "item",
+    "Suporte: o titulo na barra e o conteudo rolando por baixo dela; os assuntos num cartao so, com o icone de cada um e o visto verde no escolhido; a rede num menu com o selo de cada uma; campos sem borda; os passos no tamanho do iOS; os avisos num cartao, com a mao levantada, o celular e o documento com lupa."
+   ],
+   [
+    "item",
+    "Sobre: \"Auditar o codigo\" com o icone de codigo, a politica de privacidade com a mao levantada, e a margem de cima do iOS."
+   ],
+   [
+    "item",
+    "Icones novos: codigo, setas para cima e para baixo, lampada, balao com reticencias e documento com lupa."
+   ]
+  ]
+ },
+ {
+  "sha": "8eefa4cba7d062babe1a7858701eeba2b1036e33",
+  "data": "2026-10-22T15:45:56-03:00",
+  "assunto": "iOS e Android: arrastar para apagar uma carteira, com segurar para remover",
+  "corpo": [
+   [
+    "item",
+    "Na lista de Carteiras e na troca de carteira, arrastar a linha para a esquerda mostra o Apagar, como nas listas do iOS (uma linha aberta por vez; tocar fecha)."
+   ],
+   [
+    "item",
+    "O Apagar abre um popup no meio da tela com o aviso do que se perde e um botao que so remove segurado, enchendo de vermelho; soltar antes cancela. Depois vem o PIN e a biometria de sempre (a de so observar nao pede)."
+   ],
+   [
+    "item",
+    "Os ajustes da carteira usam o mesmo popup no lugar do alerta, e a remocao e um caminho so (WalletRemoval no iOS, RemocaoDeCarteira no Android)."
+   ],
+   [
+    "item",
+    "O botao de segurar aceita uma cor de preenchimento no lugar dos pixels."
+   ]
+  ]
+ },
+ {
+  "sha": "108079f5460cd3660103d22733312da928615b7b",
+  "data": "2026-10-22T15:39:17-03:00",
+  "assunto": "iOS: alertas brancos por um modificador so (whiteAlert)",
+  "corpo": [
+   [
+    "p",
+    "Os tres modificadores por alerta deixavam a tela de importar complexa demais para o compilador. O whiteAlert faz o mesmo num so: o alerta pega o branco e a tela continua com o rosa. Compila de novo."
+   ]
+  ]
+ },
+ {
+  "sha": "d11356ba664d68f5668c04bcdb9142cb28a3426c",
+  "data": "2026-10-22T15:38:01-03:00",
+  "assunto": "iOS: botoes dos alertas em branco",
+  "corpo": [
+   [
+    "p",
+    "Os alertas pegavam o rosa da tela que os abre. Agora cada alerta pega o branco, e a tela continua com o rosa. No Android eles ja eram brancos."
+   ]
+  ]
+ },
+ {
+  "sha": "1d449757e5688d2cf2aaa795228127cc901a8ebd",
+  "data": "2026-10-22T15:35:23-03:00",
+  "assunto": "Android e iOS: icones como no iOS, confirmacao da rede em verde e envelope no centro",
+  "corpo": [
+   [
+    "item",
+    "Android: chave (key.horizontal), teclado (keyboard), sino (bell) e sino com ponto (bell.badge) redesenhados pelas medidas dos simbolos do iOS; o aviso de recebimento com a seta no circulo; o cadeado da passphrase um pouco para fora do canto do icone da carteira, como no iOS."
+   ],
+   [
+    "item",
+    "Enviar: a confirmacao de que quem recebe aceita a rede e um interruptor verde nos dois (no Android era uma caixa de marcar)."
+   ],
+   [
+    "item",
+    "Abrir um envelope: o conteudo no meio da pagina, nos dois."
+   ]
+  ]
+ },
+ {
+  "sha": "d3f972d2ce00af580e0f5b2ca797a4f1364ebdb6",
+  "data": "2026-10-22T15:31:19-03:00",
+  "assunto": "iOS e Android: carteira de observar, ocultar animado e passphrase centralizada",
+  "corpo": [
+   [
+    "item",
+    "A carteira de so observar usa o mesmo icone de carteira, sem o olho."
+   ],
+   [
+    "item",
+    "A carteira de so observar nao tem Receber: nem nas acoes da Carteira, nem no vazio dos ativos e da Atividade."
+   ],
+   [
+    "item",
+    "Ocultar o saldo anima: o numero sobe e se desfaz em desfoque e os pontos entram um a um; os valores das linhas trocam sem corte seco."
+   ],
+   [
+    "item",
+    "Digitar a passphrase: o titulo e o texto no centro."
+   ]
+  ]
+ },
+ {
+  "sha": "75a46f3ae8a497fc38db107497d825f2fa8064d9",
+  "data": "2026-10-22T14:33:16-03:00",
+  "assunto": "Android: carteira com passphrase e ilustracoes como no iOS",
+  "corpo": [
+   [
+    "item",
+    "Carteira com passphrase: a parede de pixels com a porta escondida no alto, o \"Como funciona\" com as quatro cenas do iOS (porta escondida, so as palavras, codigos proprios, chave esquecida) e o conteudo rolando por baixo do voltar."
+   ],
+   [
+    "item",
+    "\"Ainda nao ha ativos para enviar\" e \"Grave a senha antes de receber\" com as ilustracoes do iOS no lugar do icone e do papel."
+   ],
+   [
+    "item",
+    "Rota de depuracao copia-primeiro, para ver a tela antes de receber."
+   ],
+   [
+    "item",
+    "Traducoes das frases novas nos 12 idiomas."
+   ]
+  ]
+ },
+ {
+  "sha": "1afad153674128abaf8e178f43edfdc9d0c7d6e7",
+  "data": "2026-10-22T14:17:55-03:00",
+  "assunto": "Android e iOS: ajustes de paridade e o lacre que voltava ao comeco",
+  "corpo": [
+   [
+    "item",
+    "Checagem do aparelho sem o item da area de transferencia, nos dois apps."
+   ],
+   [
+    "item",
+    "Observar um endereco com a orbita de moedas de Adicionar moeda, o olho no centro."
+   ],
+   [
+    "item",
+    "Lacrar o envelope: a espera depois de a biometria mudar recusa ja no Continuar, antes da checagem e do PIN, com o aviso junto do botao (antes ficava escondido embaixo da lista e o fluxo parecia voltar ao comeco). No Android, o nucleo confere a espera antes do teclado do PIN, como o retrying do iOS."
+   ],
+   [
+    "item",
+    "Importar: a outra opcao ao lado da de 24 palavras continua a ultima escolhida, nos dois apps. No Android, o Colar na linha do tamanho, numeracao 01 e as posicoes no tamanho do iOS, e a lista de palavras para escolher tocando."
+   ],
+   [
+    "item",
+    "Android: Receber com o + de moeda pelo contrato, o selo da rede inteiro no QR e o espaco entre os blocos do endereco do tamanho do iOS; a engrenagem de Ajustes com as medidas do iOS; a regua da tolerancia nao reinicia o gesto no meio do arrasto; Enderecos salvos como no iOS."
+   ],
+   [
+    "item",
+    "O nucleo do Android compila sem os caminhos da pasta do usuario."
+   ]
+  ]
+ },
+ {
+  "sha": "f105a32f40910f2f3e7e307b3f475f6878c06e45",
+  "data": "2026-10-21T23:27:16-03:00",
+  "assunto": "Android: Super Security igual ao iOS, com a digital no lugar do Face ID",
+  "corpo": [
+   [
+    "item",
+    "Tela principal no layout do iOS: o conteudo rola por baixo do voltar (sem a faixa preta cortando), o emblema dos dois discos que se juntam no cadeado, \"O que muda\" com os icones do iOS, a linha \"Quando a digital mudar\" com o valor, \"Para ligar\" com o interruptor da digital ali mesmo e a copia"
+   ],
+   [
+    "item",
+    "\"Quando a digital mudar\" virou tela propria, com as tres opcoes, o visto e, ligado, a troca na hora com o PIN e a digital"
+   ],
+   [
+    "item",
+    "\"Bloquear as carteiras\": a animacao em quatro quadros (o PIN e a digital, outra digital sendo cadastrada, o selo de pixels vermelho, o papel das palavras), o aceite e o deslizar \"Ativar o bloqueio\""
+   ],
+   [
+    "item",
+    "\"Antes de ligar\" com o fechar, o resumo e a folha das opcoes do iOS"
+   ],
+   [
+    "item",
+    "TelaComBarra aceita o fechar no canto (telas que cobrem a navegacao)"
+   ],
+   [
+    "item",
+    "Textos da digital e 41 frases do iOS que so tinham ingles, nos 12 idiomas; o textos.py avisa as frases do iOS sem algum idioma"
+   ]
+  ]
+ },
+ {
+  "sha": "c57ccf8a28327e83a5cc8f2515535ef3279d4139",
+  "data": "2026-10-21T22:22:03-03:00",
+  "assunto": "Android: Safe Keyboard em todo campo, como no iOS",
+  "corpo": [
+   [
+    "item",
+    "Seguranca ganha a linha Safe Keyboard e a tela com o teclado digitando sozinho; no Super Security fica sempre ligado (nucleo: ajustes.tecladoProprio)"
+   ],
+   [
+    "item",
+    "Ligado, todo campo abre o teclado do app por cima da tela (letras, numeros, simbolos e acentos; so algarismos nos valores), com o globo para o teclado do celular naquele campo"
+   ],
+   [
+    "item",
+    "Teclado das palavras com a ultima linha do iOS (globo, Safe Keyboard, Seguinte) e a folha que explica e desliga"
+   ],
+   [
+    "item",
+    "Desligado, as palavras vao pelo teclado do celular sem aprendizado e sem sugestao; o globo da importacao serve as frases em japones, chines e coreano"
+   ],
+   [
+    "item",
+    "As telas sobem com o Safe Keyboard como com o teclado do celular; o alerta de renomear mostra o teclado na propria janela"
+   ],
+   [
+    "item",
+    "A conferencia do aparelho avisa quando o Safe Keyboard esta desligado"
+   ],
+   [
+    "item",
+    "Alerta: numero dos passos no circulo, como no iOS"
+   ],
+   [
+    "item",
+    "Frases novas nos 12 idiomas"
+   ]
+  ]
+ },
+ {
+  "sha": "0f6345db25adfe795df54eebf7d4998f3dc5a8a6",
+  "data": "2026-10-21T19:59:00-03:00",
+  "assunto": "Android: Gerenciar ativos e moeda custom, como no iOS",
+  "corpo": [
+   [
+    "p",
+    "O link Gerenciar ao lado de Ativos abre a lista de cada ativo e dos outros tokens com o interruptor de mostrar, as moedas custom com o remover e o Adicionar moeda: a orbita de moedas, o contrato colado (a rede vem dele) ou o codigo e o emissor, a leitura na rede com duas fontes e a previa com o contrato inteiro, os selos e os avisos. No nucleo, os metodos ativos.* e tokens.* e o retrato com todos os outros tokens."
+   ]
+  ]
+ },
+ {
+  "sha": "f7de1f2c8cd9ad009d476959e7d2da7fc0158568",
+  "data": "2026-10-21T19:45:36-03:00",
+  "assunto": "Android: Seguranca na ordem do iOS, folha de adicionar moeda e alivio da linha principal",
+  "corpo": [
+   [
+    "p",
+    "Seguranca com o PIN, o Super Security, a biometria e o bloqueio num grupo, a carteira com passphrase e as notas do iOS (envelope e ordens). Alertas com o sino de aviso, o simbolo do bitcoin e o menos em circulo; a folha de adicionar moeda com o OK de vidro. Enviar com o espaco do iOS no alto e o colar so em texto. Retratos imutaveis e no maximo cinco por segundo, para a carteira nao redesenhar tudo a cada rede que chega."
+   ]
+  ]
+ },
+ {
+  "sha": "f47eb6bcfc4fc780b8a5e2f54d1e890d5fd50de8",
+  "data": "2026-10-21T19:26:27-03:00",
+  "assunto": "Android: selo cifrado, envelope em pixels e ajustes do Receber e dos alertas",
+  "corpo": [
+   [
+    "p",
+    "O selo de pixels que cifram (CipherEmblem) nas telas de segredo, na abertura e no alerta de seguranca; a abertura do sistema com o selo parado, continuado pelo animado. O envelope como no iOS: a cena de pixels, o cartao cifrado, o Como funciona, as etapas do lacre e a barra em pixels. Retratos de saldo e atividade lidos fora da linha principal (ANR digitando o PIN). Cabecalho das telas cheias com o botao a esquerda, folhas com a barra mais baixa, icones redesenhados."
+   ]
+  ]
+ },
+ {
+  "sha": "c6ffd4e860f67ea54736c5dfe9b70be854bfd6e4",
+  "data": "2026-10-21T16:28:41-03:00",
+  "assunto": "Android: Esqueci o PIN numa folha do iOS",
+  "corpo": [
+   [
+    "item",
+    "FolhaSolta: a folha do iOS fora da navegacao (tela de bloqueio), com o subir, o arrastar para baixo e o fundo que escurece."
+   ],
+   [
+    "item",
+    "O icone do celular com cadeado e o cabecalho de folha do iOS."
+   ]
+  ]
+ },
+ {
+  "sha": "fd040a105e7942547117e08e6959d62ddcb73250",
+  "data": "2026-10-21T16:27:34-03:00",
+  "assunto": "Android: alerta do iOS 26 e subtelas dos Ajustes com a barra de vidro",
+  "corpo": [
+   [
+    "item",
+    "Alerta do iOS (AlertaDoIos): cartao escuro de cantos redondos, titulo e mensagem a esquerda, botoes em capsula lado a lado ou empilhados, entrando como no iOS. A Confirmacao e o Nome da carteira passam a usar ele, no lugar do AlertDialog."
+   ],
+   [
+    "item",
+    "Subtela dos Ajustes com a barra do iOS e o conteudo rolando por baixo."
+   ]
+  ]
+ },
+ {
+  "sha": "8515ff6a7655d9708362134752032ea50e2db392",
+  "data": "2026-10-21T16:24:57-03:00",
+  "assunto": "Android: Receber e menus de rede como no iOS",
+  "corpo": [
+   [
+    "item",
+    "Receber: cabecalho de folha do iOS, busca no trilho, as etapas empurrando dentro da folha, a barra de vidro, o titulo com a rede ao lado, o QR na placa de canto cortado e o Copiar endereco animado."
+   ],
+   [
+    "item",
+    "Menu flutuante do iOS para escolher a rede (Trocar, Ponte, Receber), preso a capsula, no lugar da folha e do menu do Material."
+   ],
+   [
+    "item",
+    "Folha com altura media mostra a alca; dentro de folha, a barra de navegacao nao conta a barra de status."
+   ],
+   [
+    "item",
+    "Atalhos de depuracao para abrir telas com o app aberto."
+   ]
+  ]
+ },
+ {
+  "sha": "893b2ed34380b6a4ca549ae7d3afa245ab10a9c0",
+  "data": "2026-10-21T16:03:25-03:00",
+  "assunto": "Android: folhas, interruptor, aviso e icones dos Ajustes como no iOS",
+  "corpo": [
+   [
+    "item",
+    "Folhas abertas de dentro de uma tela (FolhaDoIos) com o subir e o recuo do iOS, a altura media que se puxa para o alto, e o cabecalho do iOS (titulo grande e fechar no circulo pequeno). Sai a folha do Material na lista de carteiras, no copiar endereco e nas folhas da troca."
+   ],
+   [
+    "item",
+    "Interruptor do iOS 26 (63 por 28, botao em capsula) no lugar do Switch do Material."
+   ],
+   [
+    "item",
+    "Aviso curto do iOS: cartao na largura da tela, com o icone do tipo, 2,5 s e arrastar para cima para tirar."
+   ],
+   [
+    "item",
+    "Icones dos Ajustes finos como os do iOS (carteira, livro, rede, recebimento)."
+   ]
+  ]
+ },
+ {
+  "sha": "96f70dbf23e8e25e2ebb0f75a22e24533d1a2aa9",
+  "data": "2026-10-21T15:45:57-03:00",
+  "assunto": "Android: Mercado como o do iOS",
+  "corpo": [
+   [
+    "item",
+    "Pilula de variacao em vidro com o triangulo cheio; chips com a escolha em vidro e apagados sem lista; campo de busca com as medidas do iOS."
+   ],
+   [
+    "item",
+    "Esqueleto com a pilula, a tela sem fonte com a linha do grafico ondulando, o puxar para atualizar e a hora dos dados no formato do iOS."
+   ],
+   [
+    "item",
+    "Digitos do saldo rolando com o desfoque do iOS; a marca do seletor de unidade com o balanco do snappy e a cor das opcoes cruzando."
+   ],
+   [
+    "item",
+    "Selo de situacao do detalhe da transacao: a capsula do Android, a pedido do dono."
+   ]
+  ]
+ },
+ {
+  "sha": "48833c2eaea47dcd6eb4c354ef9ac63c3b52bcb0",
+  "data": "2026-10-21T15:36:37-03:00",
+  "assunto": "Android: telas empurradas com a barra do iOS, detalhe da moeda e da transacao",
+  "corpo": [
+   [
+    "item",
+    "Barra de navegacao do iOS 26 (TelaComBarra): voltar em circulo de vidro, titulo no centro, acoes num vidro so, o conteudo rolando por baixo e o rodape fixo."
+   ],
+   [
+    "item",
+    "Pagina da moeda do Mercado: numeros em duas colunas, faixa de 24 horas com o marcador, maxima historica com a data, oferta, fonte dos dados, coracao e sino."
+   ],
+   [
+    "item",
+    "Detalhe do ativo: a posicao no alto, a secao Atividade com esqueleto e o rodape."
+   ],
+   [
+    "item",
+    "Detalhe da transacao: a moeda girando em 3D, o selo de situacao do iOS e a rolagem ate o fim acima da barra de abas."
+   ],
+   [
+    "item",
+    "Icones da barra de abas medidos nos simbolos do iOS; periodos do grafico sem trilho; maxima e minima do grafico nunca na beira."
+   ],
+   [
+    "item",
+    "Endereco em blocos com o espaco pequeno do iOS (Receber, detalhe, contatos)."
+   ],
+   [
+    "item",
+    "Saldos: o retrato diz em que moeda estao as cotacoes, e a troca de unidade converte na hora em vez de so trocar o simbolo."
+   ]
+  ]
+ },
+ {
+  "sha": "ede0f4df17b6547cca87ef81bb1b4a1ffb15b0b8",
+  "data": "2026-10-21T15:21:44-03:00",
+  "assunto": "Android: Carteira como a do iOS",
+  "corpo": [
+   [
+    "item",
+    "Saldo e variacao com os digitos rolando ao mudar (o numericText do iOS)."
+   ],
+   [
+    "item",
+    "Seletor de unidade com a marca deslizando ate a escolhida."
+   ],
+   [
+    "item",
+    "Outros tokens com a contagem, Mostrar suspeitos e a linha de token fora da lista."
+   ],
+   [
+    "item",
+    "Distribuicao: a rosca com a cor de cada logo e a legenda."
+   ],
+   [
+    "item",
+    "Puxar para atualizar do iOS, com os raios aparecendo e o carregando de raios."
+   ],
+   [
+    "item",
+    "Selos Custom, Nao verificado e Suspeito nas cores do iOS."
+   ]
+  ]
+ },
+ {
+  "sha": "de2891996217ec1d8ddfb779b7260f137b53e2de",
+  "data": "2026-10-21T14:55:57-03:00",
+  "assunto": "Android: animacoes do iOS no grafico, na Atividade e na checagem do aparelho",
+  "corpo": [
+   [
+    "item",
+    "Grafico carregando: a linha fantasma que ondula com o brilho correndo."
+   ],
+   [
+    "item",
+    "Atividade: as redes acendendo em onda enquanto o historico chega, \"Lendo mais N redes\", e a arte da atividade vazia com os tres cartoes."
+   ],
+   [
+    "item",
+    "Checagem do aparelho: o anel de pixels do iOS, a cifra girando por dentro, o verde que se espalha e respira no fim, o escudo e os horarios da conferencia."
+   ],
+   [
+    "item",
+    "Botoes do iOS: deslizar com os pixels cifrando, segurar para confirmar e copiar com o pulo e a faixa clara; o carregando de raios no lugar do circulo do Android."
+   ],
+   [
+    "item",
+    "Faixa da barra de status com o fundo da tela, como no iOS."
+   ]
+  ]
+ },
+ {
+  "sha": "24887195fb9651ff2c249df134d8a3d586a007ef",
+  "data": "2026-10-21T14:45:56-03:00",
+  "assunto": "Android: vidro do iOS 26, barra de abas flutuante e navegacao do iOS",
+  "corpo": [
+   [
+    "item",
+    "Vidro (ui/comp/Vidro.kt): o fundo gravado numa camada, desfocado, com a beirada curvando o fundo como lente (AGSL, Android 13+) e o brilho da borda."
+   ],
+   [
+    "item",
+    "Barra de abas: capsula de vidro flutuando sobre o conteudo, com a marca da aba que desliza e vira gota quando o dedo arrasta; tocar a aba aberta volta ao comeco."
+   ],
+   [
+    "item",
+    "Navegacao: uma pilha por aba (a barra fica por cima), fluxos de tela cheia e folhas por cima de tudo, com o empurrar, o subir e o recuo do iOS e o voltar pelo gesto."
+   ],
+   [
+    "item",
+    "Letra: Inter (OFL), a mais proxima da SF Pro que pode ir no Android."
+   ],
+   [
+    "item",
+    "Botoes do canto em vidro."
+   ]
+  ]
+ },
+ {
+  "sha": "82d1d1d03e8030f7aac264fd39b9b30e0c517e27",
+  "data": "2026-10-21T03:06:58-03:00",
+  "assunto": "Play: telas da App Store em inglês para todos os idiomas, cortadas para 2:1",
+  "corpo": []
+ },
+ {
+  "sha": "0457086e971201b1490225ce1ea4d1d6328ffca2",
+  "data": "2026-10-21T03:06:58-03:00",
+  "assunto": "Play: ficha e envio do AAB pela API (tools/android/play.py)",
+  "corpo": [
+   [
+    "p",
+    "A chave da conta de serviço fica em ~/.escalibur/android/play-api.json, fora do repositório."
+   ]
+  ]
+ },
+ {
+  "sha": "a0dcbbdad436b775e2f1e61347003ecb61611ea0",
+  "data": "2026-10-21T00:44:14-03:00",
+  "assunto": "Idiomas: celular em idioma que o app não tem abre em inglês; 157 frases traduzidas nos 11 idiomas",
+  "corpo": [
+   [
+    "p",
+    "No Android, o idioma é o primeiro da lista do aparelho que o app tem, e sem nenhum é o inglês (antes era o português). Frase ainda sem tradução sai em inglês, nunca em português no meio do resto."
+   ]
+  ]
+ },
+ {
+  "sha": "6b7da7ffb7edc407af48e4a474b55601781abd0f",
+  "data": "2026-10-20T23:32:40-03:00",
+  "assunto": "Versão 1.0.0 (1001) autorizada para o Android",
+  "corpo": []
+ },
+ {
+  "sha": "06048fffc0f76750d7014f453433e1ec97dd8152",
+  "data": "2026-10-20T13:35:24-03:00",
+  "assunto": "Play: site e politica no dominio verificado",
+  "corpo": []
+ },
+ {
+  "sha": "949f3d61f79c3548b2501e03e415a3f4d78f3f9a",
+  "data": "2026-10-20T07:59:33-03:00",
+  "assunto": "Android: Super Security",
+  "corpo": [
+   [
+    "p",
+    "O modo reforcado do cofre, que o Android ja sabia destravar, agora liga, desliga e muda de politica pelos Ajustes, Seguranca, Super Security: o PIN e a biometria juntos para abrir o app, enviar, trocar e ver as palavras, e o que acontece quando a biometria muda (continuar normal, esperar 24 horas ou bloquear as carteiras). Na ida para o bloqueio, as palavras de cada carteira sao digitadas antes e conferidas dentro do cofre, pela entropia, sem virar texto."
+   ],
+   [
+    "titulo",
+    "Correcoes que o teste no emulador achou:"
+   ],
+   [
+    "item",
+    "A chave do bloqueio (kand.bio) aceita a biometria dos ultimos segundos; o Kotlin abria a cifra antes de pedir a biometria e, com o app recem-aberto, o desbloqueio falhava. Agora o pedido vem antes, sem objeto de cifra, e a cifra abre dentro da janela."
+   ],
+   [
+    "item",
+    "Trocar o PIN no modo reforcado usava a troca do modo normal, que o cofre recusa; agora troca dentro do registro do modo."
+   ]
+  ]
+ },
+ {
+  "sha": "1cf9149a2e38e22ed02f90b76d47299227f657c9",
+  "data": "2026-10-20T07:33:07-03:00",
+  "assunto": "Android: ficha da Google Play e o roteiro do Play Console",
+  "corpo": [
+   [
+    "item",
+    "As imagens da loja: o compor.swift ganha o modo Android (9:16, 1080x1920, a tela no formato do Android) sem mudar a saida do iOS, com as legendas do Android em pt-BR e en-US; destaque-android.swift faz o icone de 512 e a imagem de destaque de 1024x500."
+   ],
+   [
+    "item",
+    "A pagina publica /privacidade/android/, gerada do mesmo arquivo que o app mostra (a URL da politica na Play)."
+   ],
+   [
+    "item",
+    "docs/lancamento.md: a ficha, o conteudo do app (IARC, publico, recursos financeiros, permissoes), a Seguranca dos dados e as notas para a revisao, e o que depende do dono antes do envio."
+   ],
+   [
+    "item",
+    "O verificador confere o alinhamento de 16 KB das bibliotecas nativas."
+   ],
+   [
+    "item",
+    "A barra de status com icones claros mesmo com o aparelho no tema claro, e o exemplo dos alertas na moeda escolhida no app."
+   ]
+  ]
+ },
+ {
+  "sha": "9888ba3e0183bedeb1ba4f34c975d36f629788ec",
+  "data": "2026-10-20T07:11:20-03:00",
+  "assunto": "Android: pronto para o pacote da loja",
+  "corpo": [
+   [
+    "item",
+    "O icone do app: o do iOS como icone adaptavel (fundo rosa, a espada saindo pela borda), com a camada monocromatica."
+   ],
+   [
+    "item",
+    "O pacote da Google Play: tools/android/gerar-aab.sh compila o nucleo de release e gera o AAB assinado com a chave de upload (fora do repositorio, senha no Keychain), e so gera se a lista assinada autorizar a versao e o build. Os builds do Android contam de 1001."
+   ],
+   [
+    "item",
+    "O build \"conferencia\" (release com R8, outro id) achou o Eventos.emitir sem regra no ProGuard: no release a ligacao JNI inteira falhava, sem rede e sem cofre. Corrigido, e o verificador confere cada metodo do JNI contra o ProGuard."
+   ],
+   [
+    "item",
+    "As dependencias do Gradle conferidas pelo digesto (verification-metadata.xml, 359 componentes)."
+   ],
+   [
+    "item",
+    "A Politica de privacidade do Android (pt e en), com as permissoes, os avisos, o Keystore e a lista de hosts."
+   ],
+   [
+    "item",
+    "A secao android do verificador: hosts na Politica, permissoes, sem backup e sem texto puro, FLAG_SECURE, nenhuma biblioteca de rastreamento, nenhum endereco no Kotlin alem da auditoria, sem travessao, traducoes completas, JNI no ProGuard e o digesto das dependencias."
+   ],
+   [
+    "item",
+    "docs/android.md: ferramentas, compilar, testar, arquitetura, o que difere do iOS e o release."
+   ]
+  ]
+ },
+ {
+  "sha": "74d3c0322da35c695f2529c18915a340ef6d36d7",
+  "data": "2026-10-20T06:45:56-03:00",
+  "assunto": "Android: traducao dos textos proprios do Android nos 12 idiomas",
+  "corpo": [
+   [
+    "p",
+    "As 150 frases que so o Android diz (celular no lugar de iPhone, biometria no lugar de Face ID, os ajustes do Android, os avisos e o envelope), com a terminologia do catalogo do iOS em cada idioma. O aviso de recebimento na Aptos volta a dizer \"um envio pela Sui\", como no iOS."
+   ]
+  ]
+ },
+ {
+  "sha": "dda97738a6eaed174e1386c240c0022d4d674372",
+  "data": "2026-10-20T06:31:36-03:00",
+  "assunto": "Android: refazer a ordem limite quando vencer",
+  "corpo": [
+   [
+    "p",
+    "O interruptor no formulario da ordem limite (so na CoW e com prazo), o registro nos metadados cifrados, o aviso do fim do prazo (no arquivo dos avisos so um resumo do UID e a hora) e a pergunta ao abrir o app: a ordem vencida com o que falta vender, o mesmo preco e o mesmo prazo, na tela propria e na revisao de sempre. Editar uma ordem leva junto a escolha de refazer."
+   ]
+  ]
+ },
+ {
+  "sha": "610842237ef6751d1d951ec3a7449b65d8e2d912",
+  "data": "2026-10-20T06:24:45-03:00",
+  "assunto": "Android: alertas de preco, aviso de recebimento e avisos da ordem limite",
+  "corpo": [
+   [
+    "p",
+    "Sem servidor e sem push: o proprio celular confere pelo JobScheduler do Android (a cada ~20 min, de volta a agenda depois de reiniciar) e, com o app aberto, a cada 2 minutos. O nucleo (App/Vigias.swift) guarda as moedas, as contas publicas e as ordens da CoW numa pasta sem backup fora dos dados cifrados, aplica as regras do iOS e diz o que aconteceu; o app monta o texto no formato da regiao e publica com a versao publica na tela bloqueada."
+   ],
+   [
+    "p",
+    "Ligados de fabrica na primeira vez que a carteira abre (com o pedido de permissao do Android 13+), telas em Ajustes, o sino na pagina da moeda, o aviso de 24 horas e o de executada da ordem limite, a chegada da ponte, e o toque que leva a moeda, a ordem ou a Atividade depois do PIN."
+   ]
+  ]
+ },
+ {
+  "sha": "3dceb72d7e5e5ec38fb4ec82bf2892d75d09423a",
+  "data": "2026-10-20T05:56:00-03:00",
+  "assunto": "Android: envelope Escalibur, lacrar e abrir",
+  "corpo": [
+   [
+    "p",
+    "Lacrar a senha da carteira num arquivo .esclbr: a checagem do aparelho, PIN e biometria (com a passphrase antes, quando a carteira pede), seis palavras sorteadas ou a senha propria com o medidor de forca e o aviso de risco segurado, a repeticao com o nome cifrado e o arquivo salvo pelo seletor do sistema."
+   ],
+   [
+    "p",
+    "Abrir um envelope: o arquivo escolhido no seletor, a senha, o aviso de conta pesada acima de 10 s, e depois importar (com a mesma conferencia de enderecos da importacao, e o aceite proprio do envelope) ou so ver as palavras. Entradas em Ajustes, Ajustes da carteira e Adicionar carteira."
+   ]
+  ]
+ },
+ {
+  "sha": "7e08c1d31b1708b96a9df7bd1a874d6783a56a2a",
+  "data": "2026-10-20T05:37:42-03:00",
+  "assunto": "Android: abrir ou criar a carteira com passphrase",
+  "corpo": [
+   [
+    "p",
+    "O \"Abrir ou criar com passphrase\" dos ajustes da carteira, como no iOS: o que e, a conferencia do aparelho e os campos (a repeticao aparece quando a primeira comeca, e o nome da carteira nova). O nucleo abre a frase da base no cofre, junta a passphrase em NFKD (a mesma regra da importacao, por causa da chave da Cardano) e guarda a carteira nova, sem a frase aparecer; a mesma frase com a mesma passphrase so passa a ser a escolhida. Toda tentativa conta na espera das passphrases e nunca zera a conta, e a passphrase com caractere que nao se anota no papel e recusada antes do PIN."
+   ]
+  ]
+ },
+ {
+  "sha": "e2446386de1d00713ec1604c5dc2c5d3e3360c62",
+  "data": "2026-10-20T05:32:51-03:00",
+  "assunto": "Android: criar a carteira com as palavras escolhidas",
+  "corpo": [
+   [
+    "p",
+    "\"Prefiro escolher as minhas palavras\", como no iOS: depois do aceite e da conferencia do aparelho, a tela de digitar pede 11 (ou 23) palavras da lista em ingles, com a ultima reservada para o sorteio e o aviso de que palavras escolhidas a dedo sao mais faceis de adivinhar. O nucleo confere antes do PIN (carteira.conferirEscolhidas): cada palavra na lista em ingles e nenhuma das combinacoes que robo testa primeiro (repetida, em sequencia, em bloco). Depois, o app sorteia a ultima, guarda a carteira e mostra a palavra nova para anotar; em seguida, a gravacao e a conferencia de sempre."
+   ]
+  ]
+ },
+ {
+  "sha": "078654b11ad0fa3e64ff7d876250912622d818c6",
+  "data": "2026-10-20T05:25:02-03:00",
+  "assunto": "Android: Ponte, da cotacao ate chegar",
+  "corpo": [
+   [
+    "p",
+    "A terceira opcao da aba Trocar, como no iOS (App/Ponte.swift e ui/trocar/Ponte.kt): De e Para com o inverter (desligado com a Tron), a moeda com o motivo de cada rota que nao serve, o valor com as fracoes do saldo (no ETH nativo, a reserva do gas), a cotacao do CCTP rapida e padrao, do Across e da USDT0 para a Tron, e os detalhes de taxa, tempo e destino. A revisao cota de novo ao montar e confere o plano contra o pedido (PlanIntentCheck.bridge) antes de mostrar e antes de assinar; o deposito incerto so manda os mesmos bytes."
+   ],
+   [
+    "p",
+    "As pontes ficam nos metadados (BridgeRecord) e sao acompanhadas a cada 6 s com a tela aberta, ate a chegada conferida no destino, o reembolso ou a falha do deposito. \"Suas pontes\" lista as em curso e as ultimas."
+   ]
+  ]
+ },
+ {
+  "sha": "344ee48c8d61e7fdd48de16ce63487bd95981b79",
+  "data": "2026-10-20T05:17:10-03:00",
+  "assunto": "Android: ordem limite, ordens abertas, editar e cancelar",
+  "corpo": [
+   [
+    "p",
+    "A aba Trocar ganha o modo Limite do iOS: o preco-alvo com o de agora e os degraus de 5, 10 e 20%, o recebido que puxa o preco ou o valor vendido, a conferencia contra o mercado (abaixo pede confirmacao, muito abaixo bloqueia), os prazos de cada rede e a nota de custodia do motor. O minimo da ordem sai do preco digitado em inteiros, sem passar pelo texto formatado."
+   ],
+   [
+    "p",
+    "As ordens abertas de todas as redes com ordem limite ficam num livro proprio (App/Ordens.swift), lido a cada 6 s com a tela aberta: o anel do preenchimento, o vencimento contando, as que terminaram com o resultado, e o que falta vender descontado do disponivel. Cancelar passa pela mesma revisao, PIN e assinatura; editar abre a ordem com os valores dela e a revisao cancela a atual antes de criar a nova, em duas etapas, como no iOS."
+   ],
+   [
+    "p",
+    "A revisao serve aos tres tipos (troca, ordem, cancelamento), cada tela com a propria troca no nucleo. O campo de numero leva o cursor ao fim quando o texto vem do app."
+   ]
+  ]
+ },
+ {
+  "sha": "b82b996a403b7a1097da1daa17245d8e7cfd9f92",
+  "data": "2026-10-20T04:57:08-03:00",
+  "assunto": "Android: Trocar, com a cotacao viva, a revisao e a assinatura",
+  "corpo": [
+   [
+    "p",
+    "A troca imediata do iOS no nucleo do Android (App/Troca.swift): o pedido, a tolerancia automatica, a cotacao de 15 em 15 s que descarta a resposta de um pedido ja mudado, o \"quanto quero receber\" pelo ExactOutSolver, a escolha de outro provedor na rota, a troca em partes da CoW, o impacto com aceite, o plano conferido contra o pedido (PlanIntentCheck.trade), a passphrase antes da credencial, a transmissao com a fila de nonces e o envio incerto que so manda os mesmos bytes. A cotacao velha fica na tela ate a nova chegar, mas nunca vai para a revisao."
+   ],
+   [
+    "p",
+    "Na interface: o formulario com as duas caixas de valor, inverter, fracoes do saldo, a tolerancia com as marcas do iOS, as linhas da cotacao com o relogio, a rota com as outras cotacoes, a escolha de rede e de token, e a revisao com os enderecos atras de um toque e o andamento da ordem da CoW. \"Trocar\" no detalhe do ativo e \"Vender\"/\"Comprar\" no Mercado abrem a aba com o par."
+   ],
+   [
+    "p",
+    "O botao de receber quando falta saldo passa ao rosa da acao, como no iOS."
+   ]
+  ]
+ },
+ {
+  "sha": "8380157330d480e935a0c0c283848b2b6ab9a6e7",
+  "data": "2026-10-20T04:25:59-03:00",
+  "assunto": "Android: Mercado, grafico de preco e o detalhe do ativo",
+  "corpo": [
+   [
+    "p",
+    "O Mercado com a lista viva (30 s com a aba na tela), ordens, busca, favoritas e a pagina de cada moeda: grafico por periodo com o ponto tocado, capitalizacao, faixa de 24 horas, maxima historica, oferta e o texto da fonte. O detalhe do ativo da carteira mostra a posicao, o grafico, cada rede, o contrato e o historico daquela moeda."
+   ]
+  ]
+ },
+ {
+  "sha": "11a64e39f8bbb7b402c063588ea9b2fe8ac160f8",
+  "data": "2026-10-20T04:20:24-03:00",
+  "assunto": "Android: Atividade, com o historico por rede e a conferencia dos recebimentos",
+  "corpo": [
+   [
+    "p",
+    "O ActivityFeed do iOS no nucleo: abre com o historico guardado (cifrado nos metadados) e troca rede por rede, so lendo a rede que pode ter mudado, 4 por vez, com novas tentativas. A tela agrupa por dia, mostra pendentes, redes sem historico publico com o link do explorador e os suspeitos escondidos. No detalhe, o recebimento EVM so vira conferido depois de dois RPCs."
+   ]
+  ]
+ },
+ {
+  "sha": "35add524b69cbcd6c5575385edccf47a5bcc1d83",
+  "data": "2026-10-20T04:15:47-03:00",
+  "assunto": "Android: Ajustes, ver as palavras, gravar a copia e enderecos salvos",
+  "corpo": [
+   [
+    "p",
+    "Ajustes com Carteiras (copias, ver a senha da carteira, pedir a passphrase para enviar, enderecos e remover), Seguranca (biometria, mudar o PIN, bloquear o app e apagar depois de PINs errados), enderecos salvos com as conferencias do iOS (endereco parecido, trecho escondido conferido na fonte, mesma conta com outro ID e o memo), Redes, Suporte por e-mail e Sobre."
+   ],
+   [
+    "p",
+    "Ver as palavras e o Gravar agora abrem a frase no nucleo com o PIN e a biometria, e a passphrase da carteira e conferida pelo cofre. Alongar o bloqueio do app e mudar o apagar depois de erros agora pedem o PIN no nucleo."
+   ]
+  ]
+ },
+ {
+  "sha": "cf156c0aa3e0a068e6a39b2ef702c58a3e5f31f9",
+  "data": "2026-10-20T04:01:12-03:00",
+  "assunto": "Android: importar pelas palavras, observar endereco e a lista de carteiras",
+  "corpo": [
+   [
+    "p",
+    "Importar com o teclado proprio, as palavras em bytes que o app zera e na tela em pontos (segurar mostra), sem rede enquanto elas estao na tela, a passphrase digitada duas vezes e a conferencia dos enderecos, da impressao digital e de quem controla a conta na Tron antes de guardar. Observar um endereco com a rede reconhecida pelo formato. A lista de carteiras escolhe, renomeia, copia o endereco por rede e reordena arrastando."
+   ],
+   [
+    "p",
+    "O teclado proprio nao perde mais uma tecla tocada antes da resposta das sugestoes, e as telas empilhadas seguram o toque (antes ele passava para a tela de baixo)."
+   ]
+  ]
+ },
+ {
+  "sha": "d7e50ab231613b802460803b192a79f1bc349fb4",
+  "data": "2026-10-20T03:39:39-03:00",
+  "assunto": "Android: enviar, do destino a transmissao, com as conferencias do iOS",
+  "corpo": [
+   [
+    "p",
+    "O motor do envio no nucleo (Envio.swift): o SendModel do iOS sem a interface, com endereco parecido, mesma conta com outro ID, trecho escondido no primeiro envio sem historico, confirmacao da rede EVM, Sui, Aptos e NEAR, tag e memo, plano conferido contra o que foi digitado antes de assinar, fila de nonces EVM, transmissao incerta que so repete os mesmos bytes e acompanhamento."
+   ],
+   [
+    "p",
+    "A passphrase antes da biometria ou do PIN, com a espera depois dos erros e a folga de alguns minutos, como no iOS. Leitor de QR pela camera (CameraX e ZXing, nada gravado). Todo campo do app abre o teclado sem aprendizado."
+   ]
+  ]
+ },
+ {
+  "sha": "d00594d7efd5d2806a992f6d69eb9eeb30b0d069",
+  "data": "2026-10-20T02:57:42-03:00",
+  "assunto": "App Android: camada do app em Swift e a interface em Compose ate a carteira",
+  "corpo": [
+   [
+    "p",
+    "A sessao, os metadados cifrados, a carteira nova e a importacao (validacao e previa) e os saldos do iOS, portados para o nucleo do Android sem a interface. Em Compose: o sistema visual do iOS (paleta, tipos, botoes, icones proprios), a abertura com o video, o tour, o PIN, a biometria, a tela de bloqueio, a checagem do aparelho do Android (bloqueio de tela, chave no hardware, root, injecao, depurador, origem, apps de acessibilidade), o teclado proprio das palavras, a carteira nova inteira e a tela da Carteira. Os textos vem do catalogo do iOS no build; logos, listas de palavras e o video tambem."
+   ]
+  ]
+ },
+ {
+  "sha": "2cfcf427670613fc4775321d72d8005fca1da3e1",
+  "data": "2026-10-20T01:49:24-03:00",
+  "assunto": "App Android: o cofre do iOS sobre o Keystore",
+  "corpo": [
+   [
+    "p",
+    "O modulo de chaves (RootKeyVault, WalletVault, PIN, biometria, modo reforcado) compila no Android sem mudar o caminho do iOS. O chaveiro e o Secure Enclave dao lugar ao Keystore: itens cifrados por chave de hardware, slots do PIN com a senha derivada do PIN conferida pelo hardware, e biometria forte por operacao com chave que morre quando o cadastro de digitais muda. Os 1557 testes do nucleo passam num Android 36; no emulador, uma digital nova nao abre a carteira (biometryChanged)."
+   ]
+  ]
+ },
+ {
+  "sha": "02602c84bfedc064c9d4d12850ac8a28b37f74e2",
+  "data": "2026-10-20T01:21:09-03:00",
+  "assunto": "App Android: ponte com o nucleo e rede pelo TLS do proprio Android",
+  "corpo": [
+   [
+    "p",
+    "O nucleo em Swift vira uma biblioteca do APK (JNI). No Android o HTTPClient nao usa a libcurl do Swift SDK, que aceitava TLS 1.0 e 1.1: a requisicao sai pelo HttpsURLConnection do sistema, so com TLS 1.2 e 1.3, sem cache, cookie nem redirecionamento. Conferido no emulador contra o badssl.com."
+   ]
+  ]
+ },
+ {
+  "sha": "dbafb143f0ec528faa981557d38b26e3302d84b9",
+  "data": "2026-10-20T00:33:14-03:00",
+  "assunto": "Nucleo no Android: compila e passa nos testes num emulador Android 36",
+  "corpo": [
+   [
+    "p",
+    "O nucleo (Core, Chains, Network e Engines) compila para Android pelo Swift SDK oficial (Swift 6.4.1, NDK r30), e os testes de Core, Chains e Network passam num emulador Android 36 arm64: 57, 590 e 451. No iOS e no macOS nada muda."
+   ],
+   [
+    "item",
+    "swift-crypto 5.0.1 da Apple copiada em Kit/Sources/SwiftCrypto, so o modulo Crypto e o que ele usa fora da Apple (BoringSSL, XKCP), travada arquivo a arquivo em swift-crypto.lock e conferida pelo verificar.sh; so compila fora das plataformas Apple."
+   ],
+   [
+    "item",
+    "No Android, o que o nucleo usa da Apple tem o mesmo nome e contrato sobre a BoringSSL (Platform/ForaDaApple.swift): SecRandomCopyBytes (RAND_bytes), CCHmac e CCKeyDerivationPBKDF (HMAC e PKCS5_PBKDF2_HMAC), memset_s (OPENSSL_cleanse), a trava e o registro do os, e o que as redes leem do CoreFoundation. Os imports da Apple ficaram condicionais."
+   ],
+   [
+    "item",
+    "kitText no Android monta a mesma chave do catalogo que a Apple monta."
+   ],
+   [
+    "item",
+    "O modulo de chaves fica fora do build Android (ESCALIBUR_ANDROID=1): o app Android reescreve a guarda das chaves sobre o Keystore."
+   ],
+   [
+    "item",
+    "Pendente no Android: o TLS minimo do URLSession (FoundationNetworking)."
+   ],
+   [
+    "p",
+    "O simbolos.lock contava os cabecalhos do nm como simbolo; sem eles, os mesmos 304 simbolos de antes (correcao registrada na auditoria 6)."
+   ]
+  ]
+ },
+ {
+  "sha": "aa001b698c65b34a32c21bb0956c4baafca5eceb",
+  "data": "2026-10-19T23:15:52-03:00",
+  "assunto": "Publicar o site sempre em nome da Escalibur",
+  "corpo": []
+ },
+ {
+  "sha": "7d9fdd57b9d8111a7bcfa943b5a9995adad14136",
+  "data": "2026-10-19T22:49:57-03:00",
+  "assunto": "Abertura com o video das moedas em espiral se reunindo no punho da espada",
+  "corpo": [
+   [
+    "p",
+    "6,2 s em HEVC, sem audio; o fim dissolve de volta ao pico calmo do comeco em 0,8 s."
+   ]
+  ]
+ },
+ {
+  "sha": "9a101c6058a33f16456bd6fc3c1c446a24b3eae2",
+  "data": "2026-10-19T22:34:44-03:00",
+  "assunto": "Imagem de compartilhamento com versao no endereco, para as previas buscarem a nova",
+  "corpo": []
+ },
+ {
+  "sha": "dd14e8a23883c41efefb4996bd53650765738fd8",
+  "data": "2026-10-19T22:24:32-03:00",
+  "assunto": "Chave da lista de versoes com nome neutro: escalibur-mac-1",
+  "corpo": [
+   [
+    "p",
+    "O mesmo par de chaves do Secure Enclave do Mac do dono, com outro nome a partir do build 11. A assinatura vale so para o texto da lista, entao nada foi assinado de novo: a lista do site leva a mesma assinatura sob os dois nomes (os builds 7 a 10 so conhecem o antigo), e a lista que vai dentro do app, agora num arquivo proprio, so sob o novo. O versoes.swift escreve as duas e confere que tem o mesmo texto; um teste confere as duas como os builds novos e antigos conferem."
+   ]
+  ]
+ },
+ {
+  "sha": "be8d37bc8b894a124b0e6e7c9f33e6db38f2c94b",
+  "data": "2026-10-19T22:14:11-03:00",
+  "assunto": "Lista de versoes assinada: 1.0.0 build 11",
+  "corpo": []
+ },
+ {
+  "sha": "db97fdb562d68bed34dc3ecb4918f775f84d0e05",
+  "data": "2026-10-19T21:57:55-03:00",
+  "assunto": "Checagem sem a frase do jailbreak escondido, e a imagem de compartilhamento com os dois selos",
+  "corpo": [
+   [
+    "p",
+    "A checagem do aparelho terminada diz so que tudo foi checado aqui, sem internet, e que nada sai do aparelho. A imagem de compartilhamento do site: a foto a esquerda, e a direita o icone, o nome, uma linha e os selos da App Store e do Google Play na mesma altura."
+   ]
+  ]
+ },
+ {
+  "sha": "013db36554f835966266e47f1a913b6633990a1d",
+  "data": "2026-10-19T21:53:55-03:00",
+  "assunto": "Abertura com o video novo das moedas em volta da espada",
+  "corpo": [
+   [
+    "p",
+    "O mesmo formato: 7,5 s em HEVC, sem audio, e a emenda do loop misturando o fim com o comeco em meio segundo. O quadro parado sai do inicio do video."
+   ]
+  ]
+ },
+ {
+  "sha": "fcd40a29bfbab86b6a1bf18a3ea9a8fa85c4cdf7",
+  "data": "2026-10-19T21:49:34-03:00",
+  "assunto": "Imagem de compartilhamento limpa: o iPhone no grafico do Bitcoin, o icone e o nome",
+  "corpo": [
+   [
+    "p",
+    "Ate o app estar na loja, \"Em breve na App Store\" no lugar do selo oficial (o script gera a versao com o selo com o argumento selo)."
+   ]
+  ]
+ },
+ {
+  "sha": "25b8feffec804ebdaadb00bf2a5d52322fff17c2",
+  "data": "2026-10-19T20:52:46-03:00",
+  "assunto": "Ignora o cache do wrangler",
+  "corpo": []
+ },
+ {
+  "sha": "b03e70ebd67e53a61ef810253a1a5b8e85c2d69a",
+  "data": "2026-10-19T20:52:34-03:00",
+  "assunto": "Dominio escaliburwallet.com: site na Cloudflare, e-mail de suporte do dominio",
+  "corpo": [
+   [
+    "p",
+    "O site sai tambem em escaliburwallet.com, por um Worker de arquivos estaticos na Cloudflare, com cabecalhos de seguranca e o www levando ao dominio. O app nunca fala com esse servidor: a lista de versoes e a auditoria continuam vindo do GitHub. O contato do app, da Politica, dos Termos, do site e das licencas passa a ser support@escaliburwallet.com (security@ para relato de falha). A imagem de compartilhamento do site e a foto da campanha da mao tirando o iPhone da pedra."
+   ]
+  ]
+ },
+ {
+  "sha": "db5e3ce223602c6482f45c1e5d23749a4ea4e463",
+  "data": "2026-10-19T20:17:40-03:00",
+  "assunto": "Lista de versoes assinada: 1.0.0 build 10",
+  "corpo": []
+ },
+ {
+  "sha": "ec6679a58540715b28b34642119b95dc77a1e190",
+  "data": "2026-10-19T19:57:06-03:00",
+  "assunto": "Checagem volta a so perguntar se ha texto copiado, e tools/loja/encaixar.swift",
+  "corpo": [
+   [
+    "p",
+    "A limpeza da area de transferencia na demonstracao quebrava a regra do verificar.sh de que a checagem nunca mexe no conteudo; sai. encaixar.swift poe imagens de campanha em 9:16 no tamanho de 6,9\" da App Store, cortando as laterais."
+   ]
+  ]
+ },
+ {
+  "sha": "a7dae66210083d8f5911350c2a174295a0453fc5",
+  "data": "2026-10-19T17:44:48-03:00",
+  "assunto": "Checagem: \"Instalado pela App Store\", e -checagem-aparelho para as capturas da loja",
+  "corpo": [
+   [
+    "p",
+    "O item da origem deixa de citar o TestFlight na tela (a mensagem de quando falha continua citando). So na depuracao, -checagem-aparelho mostra o jailbreak e a origem como num iPhone com o app da loja e limpa a area de transferencia do simulador."
+   ]
+  ]
+ },
+ {
+  "sha": "bbfbc91855759177d80aa153842229a76a41f351",
+  "data": "2026-10-19T16:33:21-03:00",
+  "assunto": "Checagem do aparelho no build de depuracao tambem traduzida, e a ilha so sai em fundo liso",
+  "corpo": []
+ },
+ {
+  "sha": "41ce1c2a53375b24073e665c0a8c12d99bd8bc9b",
+  "data": "2026-10-19T15:18:52-03:00",
+  "assunto": "Imagens da loja: de volta a titulo e apoio pequeno, com o apoio no espacamento da fonte",
+  "corpo": []
+ },
+ {
+  "sha": "3f5018170ca4eacf01f1f4bc11a3b7b0e3f6a645",
+  "data": "2026-10-19T15:15:02-03:00",
+  "assunto": "Imagens da loja: texto num paragrafo so, no centro, e a abertura com as redes em orbita",
+  "corpo": []
+ },
+ {
+  "sha": "d34ef072c9f74cf56a87b752050dec4303e97178",
+  "data": "2026-10-19T14:52:35-03:00",
+  "assunto": "XRP Ledger de novo com tres servidores: a 51234 da Ripple liberada, e as imagens da loja",
+  "corpo": [
+   [
+    "p",
+    "A trava de porta da auditoria 6 recusava s1 e s2.ripple.com na 51234, a porta de JSON-RPC deles: a XRP Ledger ficava com um servidor so e a leitura por dois parava (troca, ordem limite e envio, no build 9). A 51234 vale so para os dois, e um teste novo confere todo endereco escrito no codigo contra a regra do HTTPClient."
+   ],
+   [
+    "p",
+    "As capturas da loja saem em portugues e ingles: a revisao com a placa aberta, a troca de XRP que a carteira de teste consegue fazer, o envelope parado no trancado, e a ilha dinamica coberta quando a captura vem do simctl."
+   ]
+  ]
+ },
+ {
+  "sha": "9eedd95ccb83f807b8ebef9b40daa6a247cdf6a1",
+  "data": "2026-10-19T13:03:10-03:00",
+  "assunto": "Build 9: o tour antes do PIN, os textos novos da abertura e a lista de versoes com o build 9",
+  "corpo": [
+   [
+    "p",
+    "A abertura diz que as chaves ficam criptografadas e que a Escalibur nao tem como ajudar a recuperar a senha da carteira; o tour vem antes do PIN e o segundo passo virou \"Voce no controle\"; o rodape do PIN aparece inteiro; o \"Antes de ver as palavras\" fica centralizado, com os textos novos do print e dos 2 minutos; o aceite diz \"criptografada\" e \"A Escalibur nao tem acesso\". As capturas da loja ganham o idioma e a revisao do envio, e tools/loja monta as imagens no aparelho do site."
+   ]
+  ]
+ },
+ {
+  "sha": "45ed4c34092bb94943f50399e46dbf7df49faefd",
+  "data": "2026-10-19T03:35:18-03:00",
+  "assunto": "Auditoria 6: quatro revisores, os achados e os consertos",
+  "corpo": [
+   [
+    "p",
+    "Ligar o Super Security ja em \"Bloquear as carteiras\" volta a pedir as palavras (A6-04); travar fecha as folhas de PIN, passphrase e voz, e gravar travado da erro (A6-05); as cotacoes diretas contam como uma fonte so (A6-06); escolha fraca de palavras recusada (A6-08); palavras coreanas de 33 bytes (A6-09); busca de Receber com cara de frase nao sai do iPhone (A6-11); versoes.swift confere antes de assinar, respeita o limiar e confere a lista dentro do app pronto (A6-12); verificar.sh com qualquer .package(, Package.resolved e a lista de simbolos (A6-14, A6-15); relato de falha por e-mail (A6-16). Os altos esperam a decisao do dono."
+   ]
+  ]
+ },
+ {
+  "sha": "ae152891d377d4a2a51205aaa0cdb64bed1e6248",
+  "data": "2026-10-19T02:07:59-03:00",
+  "assunto": "Auditoria 5: o que mudou desde a auditoria 4, os achados e os consertos",
+  "corpo": [
+   [
+    "item",
+    "docs/auditoria-5.md: o que foi olhado, os achados (medios: a janela de senha do iOS nas chaves do PIN, o build 8 fora do pipeline, uma chave so de assinatura, o texto do codigo auditavel), os consertos e os testes."
+   ],
+   [
+    "item",
+    "A lista de versoes assinada vai dentro do app (recurso do commit): a conferencia da versao instalada nao depende mais de rede."
+   ],
+   [
+    "item",
+    "O teste do nucleo da lista confere tambem o build do projeto: subir o build pede a assinatura antes."
+   ],
+   [
+    "item",
+    "Criar carteira: a escolha de 12 ou 24 palavras sai de tras do rodape."
+   ],
+   [
+    "item",
+    "Checagem do aparelho: o VoiceOver le o horario sem o nome do icone."
+   ],
+   [
+    "item",
+    "Testes de interface desatualizados pelas telas novas, ajustados."
+   ]
+  ]
+ },
+ {
+  "sha": "eba147905a14334cdbc92a94f546ccee8ddde1f8",
+  "data": "2026-10-19T00:18:55-03:00",
+  "assunto": "Super Security sem o pedido de senha do iOS, \"Antes de ligar\" novo, saldo livre na troca e ordens de 10 em 10",
+  "corpo": [
+   [
+    "item",
+    "Chaves do PIN (kpin, kand.pin.a/b): o embrulho buscava a chave do Secure Enclave sem a senha de aplicativo, e no iPhone o iOS abria \"Digite a senha para Escalibur\" ao ligar e ao desligar o Super Security (e podia abrir ao criar ou trocar o PIN). Agora o embrulho dessas chaves leva a senha e proibe interface (`wrap(_:slot:password:)`); o embrulho sem senha recusa os slots do PIN e tambem nao mostra interface. O duble dos testes acusa qualquer embrulho de chave do PIN sem a senha. O simulador nao tem senha de aplicativo: so o proximo build no iPhone confirma."
+   ],
+   [
+    "item",
+    "Folha do PIN no Super Security: o motivo e, na linha de baixo, \"Depois do PIN, o Face ID confirma que é você.\" (sem o vao e sem o \"Super Security:\" de novo)."
+   ],
+   [
+    "item",
+    "\"Antes de ligar\": o emblema do PIN e do rosto, o resumo do que muda, a politica numa linha que abre as tres opcoes, e o deslizar de pixels. \"Continuar normal\" sem o \"redefinir pode fechar\", que vale para as tres e fica na tela da politica."
+   ],
+   [
+    "item",
+    "Troca imediata: o disponivel desconta o que as ordens abertas ainda vao vender, como na ordem limite (\"Livre X, o resto em ordens\")."
+   ],
+   [
+    "item",
+    "Ordens abertas: \"(N)\" no titulo e de 10 em 10, com \"Carregar mais\"."
+   ],
+   [
+    "item",
+    "Testes: o do bloqueio rola ate a linha da politica; o das ordens aceita o contador."
+   ]
+  ]
+ },
+ {
+  "sha": "8c5ff77b9b50c82c0c8c7372dc2a60fafb65a1ab",
+  "data": "2026-10-18T23:50:19-03:00",
+  "assunto": "Ordem criada mais acima, \"Ordem cancelada\", Safe Keyboard com barra, segurar sem lupa e o aviso da passphrase errada",
+  "corpo": [
+   [
+    "item",
+    "Ordem limite criada, troca enviada e cancelamento: o selo e o texto um pouco acima do meio; o cancelamento diz \"Ordem cancelada\" (os textos de baixo continuam dizendo o que ainda pode acontecer)."
+   ],
+   [
+    "item",
+    "Safe Keyboard de texto com a barra do alto, como o das palavras: o nome do teclado e o \"Pronto\", sem sugestao (ela mostraria a senha). A barra de espaco diz \"espaço\"."
+   ],
+   [
+    "item",
+    "Campo de senha: segurar para ver nao abre mais a lupa do iOS (os gestos do campo esperam o segurar falhar)."
+   ],
+   [
+    "item",
+    "Passphrase errada: o aviso aparece no alto da tela, por cima de tudo (o erro de cada tela ficava no fim dela, fora da vista). Criar uma carteira com passphrase conta a tentativa sem o aviso."
+   ],
+   [
+    "item",
+    "A folha da passphrase com o selo menor, para o \"Continuar\" caber acima do teclado."
+   ]
+  ]
+ },
+ {
+  "sha": "a556ad8983574e9eb8a0a3e04d877d692737522b",
+  "data": "2026-10-18T22:47:27-03:00",
+  "assunto": "Lista de versoes assinada: 1.0.0 build 8",
+  "corpo": []
+ },
+ {
+  "sha": "45183a44eceeac9ea39e8704bed12cf2e0daf2ab",
+  "data": "2026-10-18T22:43:14-03:00",
+  "assunto": "Envelope abrindo em pixels, bloqueio com deslizar, auditoria no app e alertas ate 7 moedas",
+  "corpo": [
+   [
+    "item",
+    "Abrir um envelope: a cena de pixels do lacre tocada ao contrario (EnvelopePixelScene opening): o anel apaga, o cadeado se desfaz, a aba abre, os pixels sobem e se montam nas palavras, e o cifrado vira palavra de exemplo. Titulo \"Abrir um envelope criptografado\" e o caminho inteiro no texto."
+   ],
+   [
+    "item",
+    "\"Só a sua senha abre\": as palavras reveladas no mesmo fundo de antes."
+   ],
+   [
+    "item",
+    "Bloquear as carteiras: titulo \"Trancar de vez se o Face ID mudar\", texto reescrito e no meio, e o deslizar de pixels no lugar do botao (volta ao comeco se a ativacao para com aviso). Sair do bloqueio escolhido pede o PIN tambem com o Super Security desligado. O motivo embaixo do PIN: \"Para trocar o que fazer se o Face ID mudar.\""
+   ],
+   [
+    "item",
+    "Auditar o codigo: a pagina de auditoria do site dentro do app, no navegador da Apple (SiteBrowser, SFSafariViewController em outro processo, so https://tmzzjr.github.io). O repositorio esta privado, e a auditoria do site e publica. A regra 21 do verificar.sh e da doc de seguranca: WKWebView e afins continuam proibidos; o Safari da Apple so nesse arquivo."
+   ],
+   [
+    "item",
+    "Alertas de preco: no maximo 7 moedas (eram 30), com \"N de 7\" e o aviso quando enche."
+   ],
+   [
+    "item",
+    "Detalhe da transacao: \"Conferida na rede\" em cinza, sem o fundo do selo."
+   ],
+   [
+    "item",
+    "A lista de carteiras com o fundo de antes."
+   ],
+   [
+    "item",
+    "Teste: a auditoria abre dentro do app; o do bloqueio desliza."
+   ]
+  ]
+ },
+ {
+  "sha": "8cd8c3dcf2c554dd02f0f892787d03b890a9c128",
+  "data": "2026-10-18T22:03:15-03:00",
+  "assunto": "Leva de telas: Super Security, teclado travado, 10 minutos, passphrase, envelope e o bloqueio",
+  "corpo": [
+   [
+    "titulo",
+    "Super Security"
+   ],
+   [
+    "item",
+    "Sem a etiqueta \"Desligado\" (a de ligado fica); o aviso do rosto novo e o do \"esperar 24 horas\" curtos, com o risco de cada opcao na tela da politica."
+   ],
+   [
+    "item",
+    "Com o Super Security ligado, o Safe Keyboard nao desliga: sem o globo no teclado das palavras e nos outros campos, e sem \"Usar o teclado do iPhone nesta tela\"."
+   ],
+   [
+    "item",
+    "\"Bloquear as carteiras\": sem as tres carteiras embaixo; quadro 2 com o Face ID e um anel de pixels acendendo como um cadastro de rosto, e o \"+\" no fim; quadro 3 com o selo de pixels e o cadeado vermelho; quadro 4 com a folha das palavras sendo anotada (PaperScribble). O botao diz \"Ativar o bloqueio\"."
+   ],
+   [
+    "titulo",
+    "Telas"
+   ],
+   [
+    "item",
+    "Bloquear o app: 10 minutos tambem."
+   ],
+   [
+    "item",
+    "Passphrase: a tela de criar com o conteudo mais para cima; o selo de pixels (CipherEmblem) nas telas de digitar, de conferir e na que pede antes de mover saldo."
+   ],
+   [
+    "item",
+    "\"Confira a seed phrase de X\" no lugar de \"Confira a cópia de X\"."
+   ],
+   [
+    "item",
+    "A lista de carteiras com o mesmo fundo da tela de copiar endereco."
+   ],
+   [
+    "titulo",
+    "Envelope"
+   ],
+   [
+    "item",
+    "Pixels de fundo do cartao e do desenho do envelope em cinza escuro, quase preto; as palavras reveladas num fundo mais escuro; abrindo, sem a faixa de varredura."
+   ],
+   [
+    "item",
+    "O selo de pixels nas telas de digitar a senha (criar, repetir e abrir), que agora rolam com o botao preso acima do teclado; titulo e texto no meio; a cena de \"Criptografar a senha da carteira\" sem o alto cortado."
+   ],
+   [
+    "item",
+    "\"Segure para usar mesmo assim\" volta aos pixels, com a frente reta (PixelFill.tilt 0)."
+   ],
+   [
+    "p",
+    "Flags de teste: `-tela bloquear`, `-quadros` (os quadros parados) e `-segure <fracao>`."
+   ]
+  ]
+ },
+ {
+  "sha": "e675b31a0be5669f5d93f41f828c6a3365ebc509",
+  "data": "2026-10-18T20:57:03-03:00",
+  "assunto": "Lista de versoes assinada: 1.0.0 build 7, pela chave do Mac do dono",
+  "corpo": [
+   [
+    "item",
+    "site/versoes.json, assinado no Secure Enclave do Mac do dono, com o Touch ID. O site publica a lista; o app confere com as chaves compiladas."
+   ],
+   [
+    "item",
+    "Teste do nucleo: a lista do site passa pelo mesmo codigo do app (ReleaseManifest.verified, ReleaseKeys) e autoriza a versao do project.yml."
+   ]
+  ]
+ },
+ {
+  "sha": "0ba5f3ee494af9cd8203dd70ed21d6bdb51c6585",
+  "data": "2026-10-18T18:43:16-03:00",
+  "assunto": "Carteira: o copiar endereco vai para a lista de carteiras",
+  "corpo": [
+   [
+    "p",
+    "O botao de copiar sai do alto da Carteira e fica na lista que abre no nome da carteira, em cada carteira, ao lado do lapis (por cima da linha, com o toque proprio, sem escolher a carteira). Abre a mesma tela de copiar, rede por rede. O teste abre a lista pelo nome (`carteira-nome`) e tira a foto dela."
+   ]
+  ]
+ },
+ {
+  "sha": "20afc04939b0603cbcdcefade5d0983e098ba70d",
+  "data": "2026-10-18T18:29:22-03:00",
+  "assunto": "Leva de telas: envelope, segurar em verde, alertas, placa, copiar, receber, adicionar moeda e Carteira",
+  "corpo": [
+   [
+    "titulo",
+    "Envelope"
+   ],
+   [
+    "item",
+    "Sortear com os pixels do \"o app sorteia\" (DrawPixels) no lugar do dado, nos dois botoes."
+   ],
+   [
+    "item",
+    "A tela de criar a senha diz que a proxima pede a senha de novo; a de repetir ganhou o voltar (o fechar vai para a direita), e as palavras sorteadas voltam as mesmas."
+   ],
+   [
+    "item",
+    "Sem a frase do pendrive na folha da senha fraca."
+   ],
+   [
+    "item",
+    "\"Criptografar a senha da carteira\" com o \"Como funciona\" e a cena mais para cima."
+   ],
+   [
+    "titulo",
+    "Telas"
+   ],
+   [
+    "item",
+    "HoldButton: o verde enche da esquerda, com a ponta direita levemente arredondada, e o texto escurece onde o verde passou (no lugar dos pixels). `-segure <fracao>` no teste."
+   ],
+   [
+    "item",
+    "Alertas de preco: o check das moedas escolhidas em verde."
+   ],
+   [
+    "item",
+    "A chapa de aco: a borda de baixo mais fina, com teto ao arrastar para cima."
+   ],
+   [
+    "item",
+    "\"Copiar as palavras\" de fundo branco (PrimaryButton light)."
+   ],
+   [
+    "item",
+    "Receber: \"Contrato da moeda X\", sem o \"quem envia tem de usar este\"."
+   ],
+   [
+    "item",
+    "Adicionar moeda: logos de moedas girando em volta do \"+\" (os que vem no app)."
+   ],
+   [
+    "item",
+    "Carteira: o copiar menor, logo depois da setinha do nome."
+   ],
+   [
+    "p",
+    "\"Abrir em outro app\" saiu dos Ajustes e foi para o site, na pagina Redes e moedas, com as regras e cada rede (os dados que estavam em RecoveryGuideView). O texto de depois das palavras aponta para o site."
+   ],
+   [
+    "p",
+    "Testes: o do envelope segura ate o fim, repete e volta; o dos alertas acompanha as moedas que ja vem ligadas (estava desatualizado: esperava a lista vazia)."
+   ]
+  ]
+ },
+ {
+  "sha": "9b6dcb9a4d7b9c5dd6f2cb6b0ebec850c2ae6f2c",
+  "data": "2026-10-18T13:36:16-03:00",
+  "assunto": "Trava de alerta: passo unico sem numero, Face ID automatico espera a trava sair",
+  "corpo": [
+   [
+    "item",
+    "UpdateAlarmView: com um passo so, o texto vai sem o numero."
+   ],
+   [
+    "item",
+    "UpdateAlarmWindow.covering: alguma trava na tela. O LockView nao abre o Face ID automatico por cima dela."
+   ],
+   [
+    "item",
+    "Conferencia periodica com a sessao."
+   ]
+  ]
+ },
+ {
+  "sha": "90b70a1780ce7b3fc48a1e64fd709dcd532c45b3",
+  "data": "2026-10-18T13:27:23-03:00",
+  "assunto": "Trava de alerta: quadro com os pixels, textos novos e rodape sem deslizar",
+  "corpo": [
+   [
+    "item",
+    "O quadro \"Seus fundos estão seguros\" com o selo de pixels que cifram (CipherEmblem verde) no lugar do cadeado; \"cifradas somente no chip\", sem \"os fundos só se movem com elas\"."
+   ],
+   [
+    "item",
+    "\"Não atualize o app por enquanto, até a Escalibur confirmar a versão nova\"; \"não visualizar as palavras da carteira\" no lugar de \"não usar a carteira\"."
+   ],
+   [
+    "item",
+    "UpdateAlarmView sem `onEmergency` mostra um rodape fixo no lugar do deslizar."
+   ],
+   [
+    "item",
+    "Traducoes em ingles; testes de interface da trava."
+   ]
+  ]
+ },
+ {
+  "sha": "975c3fc703d0fd6c62f7177c818cf4c1741304cc",
+  "data": "2026-10-18T12:53:01-03:00",
+  "assunto": "Trava de alerta: rotulo e titulo no meio, texto novo, some sozinha, e nenhum build sem a lista",
+  "corpo": [
+   [
+    "item",
+    "A trava da versao nao confirmada: \"Alerta de segurança\" e o titulo centralizados e em branco; sem o passo de nao abrir a versao nova; \"a versao possivelmente adulterada nao chegou a rodar aqui\"; e o aviso de que o alerta some sozinho quando a Escalibur confirmar."
+   ],
+   [
+    "item",
+    "Some sozinha depois da conferencia da Escalibur: versao assinada, ou a de fora trocada na loja por uma assinada, e a proxima conferencia tira a trava. Com a trava na tela, a conferencia repete a cada volta para a frente (minimo de 1 minuto) e a cada 5 minutos."
+   ],
+   [
+    "item",
+    "UpdateAlarmView recebe o texto de quem trava; UpdateAlarmWindow com o nivel da janela."
+   ],
+   [
+    "item",
+    "Conferencia periodica (StoreSync) ao voltar para a frente."
+   ],
+   [
+    "item",
+    "release.yml: o job assinatura recusa a tag (testflight-* e v*) se o site/versoes.json do commit nao trouxer a versao com aquele build; docs/release.md com a ordem (autorizar, lista na main, tag)."
+   ]
+  ]
+ },
+ {
+  "sha": "af33ab982033e6e200377f3ad03afb0a0531656a",
+  "data": "2026-10-18T12:35:03-03:00",
+  "assunto": "Versao nao confirmada: trava o app inteiro com o alerta de tentativa de hack",
+  "corpo": [
+   [
+    "item",
+    "No lugar do aviso na Carteira, uma tela numa janela propria, acima de tudo (ate do pedido de PIN): \"Detectamos uma tentativa de hack\", o que aconteceu, que a equipe da Escalibur esta investigando, que as palavras continuam cifradas no chip e a versao adulterada nao rodou ali, e o que fazer. O deslizar de pixels \"Usar em emergência\" tira a trava ate o app fechar."
+   ],
+   [
+    "item",
+    "O alarme fica guardado entre aberturas (Preferences.updateAlarm): sem internet, a trava continua; so uma conferencia que responde a tira."
+   ],
+   [
+    "item",
+    "CipherEmblem com a cor do simbolo; o escudo vermelho na trava."
+   ],
+   [
+    "item",
+    "Teste de interface: a trava aparece, o deslizar tira, a carteira atende. Traducoes em ingles."
+   ],
+   [
+    "item",
+    "docs/seguranca.md §8.6, docs/release.md e a pagina de seguranca falam da trava."
+   ],
+   [
+    "item",
+    "O teste do prazo mole da troca com folga para o runner do CI carregado: a fonte lenta em 3,2 s, entre o prazo mole e o duro, e a parcial antes de 2,9 s (no CI saiu em 2,6 s)."
+   ]
+  ]
+ },
+ {
+  "sha": "632ee7b9596e5891a16357cb227f4991090aba5b",
+  "data": "2026-10-18T12:03:58-03:00",
+  "assunto": "Versao autorizada: lista assinada fora do GitHub e da Apple, e o alarme no app",
+  "corpo": [
+   [
+    "item",
+    "ReleaseKeys (chaves P-256 compiladas no app, com limiar) e ReleaseManifest (o manifesto assinado, conferido byte a byte: chave desconhecida, texto mexido, limiar nao alcancado e lista de outro app recusam)."
+   ],
+   [
+    "item",
+    "ReleaseWatch: a versao instalada pergunta a App Store (itunes.apple.com/lookup) qual e a mais nova e confere na lista do site (tmzzjr.github.io/.../versoes.json). Versao nova fora da lista ou lista sumida: \"Atualizacao nao confirmada pela Escalibur\"; assinatura que nao confere: \"A lista de versoes da Escalibur nao confere\". Sem resposta, nao avisa."
+   ],
+   [
+    "item",
+    "UpdateGuard no app: ao voltar para a frente, no maximo a cada 6 horas; o aviso fica na Carteira, embaixo do saldo. Teste de interface com -alarme-versao."
+   ],
+   [
+    "item",
+    "tools/versoes/versoes.swift: a chave no Secure Enclave do Mac do dono, presa a ele e ao Touch ID a cada assinatura; autorizar e conferir a lista. O verificar.sh confere o versoes.json do site contra as chaves compiladas; o gerador do site publica o arquivo."
+   ],
+   [
+    "item",
+    "Os dois hosts novos no hosts.lock, no AllowedHosts e na Politica de privacidade (pt e en)."
+   ],
+   [
+    "item",
+    "docs/seguranca.md §8.6 com o que fica protegido e o limite (quem controla o sistema do celular troca o app; isso so a comparacao com o build atestado mostra); docs/release.md com o passo de autorizar a versao; item 06 da pagina de seguranca reescrito."
+   ],
+   [
+    "item",
+    "O teste da Stellar que ainda esperava o teto antigo de 5% na tolerancia agora testa 10,01%."
+   ]
+  ]
+ },
+ {
+  "sha": "862c5a107e4ae1f537f0fdb213bf0c8f6b97707d",
+  "data": "2026-10-18T10:34:14-03:00",
+  "assunto": "Copiar as palavras: o relogio vira um anel verde liso e conta o minuto no tempo real",
+  "corpo": [
+   [
+    "p",
+    "O anel de pixels sai; no lugar, um anel verde continuo que esvazia em 60 s, com os segundos de verdade no meio (1:00 ate 0:00). As palavras entram antes e se desfazem no zero, e o ciclo recomeca."
+   ]
+  ]
+ },
+ {
+  "sha": "fcc3b574fb5108b355203c46fc50358bc157cab4",
+  "data": "2026-10-18T10:27:27-03:00",
+  "assunto": "Moeda do saldo sem reler a carteira, dolar primeiro, colar no campo e animacao de copiar calma",
+  "corpo": [
+   [
+    "item",
+    "Trocar a moeda la em cima converte os precos que estao na tela pela cotacao do bitcoin nas duas e busca so os precos novos por baixo; os saldos das redes nao sao lidos de novo. A cotacao do bitcoin nas outras moedas passa a juntar com a anterior: uma busca que falha nao tira mais a unidade do seletor. US$ primeiro, R$ depois. Teste de interface."
+   ],
+   [
+    "item",
+    "Receber: o cartao diz que e o contrato (ou o emissor) da moeda."
+   ],
+   [
+    "item",
+    "Adicionar moeda: botao de colar dentro do campo vazio."
+   ],
+   [
+    "item",
+    "Copiar as palavras: o relogio da animacao conta em 8 s, de 10 em 10 segundos, num ciclo de 12 s (contava o minuto em menos de 3 s)."
+   ]
+  ]
+ },
+ {
+  "sha": "31a5496c99cfa6c380c23dce47d6af9c949484d7",
+  "data": "2026-10-18T10:01:06-03:00",
+  "assunto": "Lista de palavras: a escolhida fica verde, com a posicao, e tocar de novo desmarca",
+  "corpo": [
+   [
+    "p",
+    "A palavra que esta na frase fica marcada em verde, com o numero da posicao no canto, enquanto estiver nela; tocar de novo tira da ultima posicao em que esta, e essa posicao volta a ser a da vez. Com a frase cheia, so as marcadas respondem (para trocar uma). A folha continua atras da guarda de captura. Teste: marcar, desmarcar e marcar de novo."
+   ]
+  ]
+ },
+ {
+  "sha": "00623af007ae8470fd66f2447ec2ffb3c3a9d6a6",
+  "data": "2026-10-17T20:29:49-03:00",
+  "assunto": "Leva de telas: troca, ordem limite, envelope, Super Security e Safe Keyboard em todo campo",
+  "corpo": [
+   [
+    "titulo",
+    "Troca"
+   ],
+   [
+    "item",
+    "Tolerancia ate 10% em todas as redes (Stellar, XRP Ledger e Solana subiram de 5%); acima de 3% o controle fica roxo, no maximo a cor da Escalibur com a passada de luz. Texto do automatico curto e sem amarelo."
+   ],
+   [
+    "item",
+    "Cotacao de um pedido que ja mudou (tolerancia arrastada) nao mostra mais erro piscando."
+   ],
+   [
+    "item",
+    "Preco de token minusculo com a base em mil/mi/bi/tri (\"1 mi BNBFROG = 12,34 USDT\")."
+   ],
+   [
+    "item",
+    "Proxima cotacao num relogio redondo amarelo ao lado do preco."
+   ],
+   [
+    "item",
+    "Escolher outro provedor da rodada na rota (TradeQuote.choosing, com teste): o plano recota, valida e simula esse provedor; o melhor vira alternativa."
+   ],
+   [
+    "item",
+    "Erro ao montar a troca ou a ordem volta para a tela da troca."
+   ],
+   [
+    "item",
+    "Logo oficial da PancakeSwap; verificadas antes das de fora da lista no seletor."
+   ],
+   [
+    "item",
+    "Setinha no valor abre um controle de porcentagem do saldo."
+   ],
+   [
+    "titulo",
+    "Ordem limite"
+   ],
+   [
+    "item",
+    "Tela propria de editar; cancelar pergunta num popup; detalhes com \"Refazer quando vencer\"; prazo padrao de 30 dias; \"Vence em\" contando o tempo real; revisao sem o aviso das duas assinaturas e com \"De\" traduzido (tambem na ponte); ordens na folha de envio no desenho de Ordens abertas, fundo escuro; \"Ver enderecos e contratos\" num cartao escuro."
+   ],
+   [
+    "titulo",
+    "Seguranca e envelope"
+   ],
+   [
+    "item",
+    "Super Security liga com a copia de todas as carteiras conferida, sem digitar as frases de novo (o cofre ainda recusa a passphrase antiga fora de NFKD); titulo centralizado."
+   ],
+   [
+    "item",
+    "Safe Keyboard completo (letras, numeros, simbolos, acentos e numerico) em todo campo quando ligado, passando pelo delegate de cada campo (a senha vai para o buffer seguro)."
+   ],
+   [
+    "item",
+    "A 12a palavra sorteada fora da captura de tela; a lista de palavras nao reabre o teclado."
+   ],
+   [
+    "item",
+    "Envelope: lacrado sem subir e no meio da tela, sem capsula no nome nem passada de luz, cadeado sobre preto; folha da senha fraca na altura do conteudo; segurar para usar com os pixels; segurar para ver na repeticao."
+   ],
+   [
+    "item",
+    "Textos do teclado, tag \"Padrao\" fora, interruptores verdes, carregamentos centralizados, cena dos enderecos com moeda e endereco, palavras centralizadas, \"Auditar o codigo\" no Sobre, contrato no cartao do Receber com o copiar, aviso de moeda custom recolhivel."
+   ]
+  ]
+ },
+ {
+  "sha": "e3fe5fcd94a54f94423c2a3d48e1ad403ae8523a",
+  "data": "2026-10-17T16:22:17-03:00",
+  "assunto": "Build 7",
+  "corpo": []
+ },
+ {
+  "sha": "1bee2a4c2a36ab4cd490f7d0b4167ce878f3e3b7",
+  "data": "2026-10-17T16:21:55-03:00",
+  "assunto": "Telas: escolher palavras, conferir o aparelho e copiar endereco",
+  "corpo": [
+   [
+    "item",
+    "Lista de palavras: a palavra tocada acende no verde da verificacao e apaga sozinha (a lista e publica, quais palavras estao na frase nao), e uma barra de progresso enche."
+   ],
+   [
+    "item",
+    "\"O app sorteia\": posicao reservada com uma matriz de pixels cintilando no lugar do dado, e o aviso das palavras escolhidas reescrito."
+   ],
+   [
+    "item",
+    "Conferir o aparelho: os pixels de fora acendem um a um, suaves e em fila; o fundo do escudo virou aneis concentricos (era um octogono) que respiram, com uma onda do centro."
+   ],
+   [
+    "item",
+    "Copiar endereco: na linha das EVM, tocar abre as redes e copiar fica no botao; o texto mostra duas redes."
+   ],
+   [
+    "item",
+    "Catalogo de textos sincronizado com o codigo e o ingles completo."
+   ]
+  ]
+ },
+ {
+  "sha": "25d7db3e05b433918aa2ccf56690e1293a5758df",
+  "data": "2026-10-17T16:21:55-03:00",
+  "assunto": "Grafico \"Tudo\": a historia inteira pela Kraken e pela OKX, a que comeca mais cedo",
+  "corpo": [
+   [
+    "p",
+    "O CoinGecko e o CoinPaprika sem chave so entregam 365 dias, e o \"Tudo\" saia pela OKX, onde o BTC so existe desde 2017 e as stablecoins nem estao. Agora a Kraken (velas semanais em dolar, sem chave) e a OKX sao lidas em paralelo e fica a serie mais antiga: BTC desde 2013, ETH desde 2015, USDT desde 2017, USDC, DAI e PYUSD com anos de historia; a BNB continua pela OKX. api.kraken.com entra no hosts.lock e na Politica de Privacidade."
+   ]
+  ]
+ },
+ {
+  "sha": "d3030c1d58f5d31c724f45be578f99a0da99048d",
+  "data": "2026-10-17T16:21:54-03:00",
+  "assunto": "Ponte: USDT para a Tron pela USDT0 da propria Tether (Legacy Mesh)",
+  "corpo": [
+   [
+    "p",
+    "Da Ethereum e da Arbitrum para a conta Tron da mesma carteira. Os contratos da Tether (UsdtOFT, verificados no Sourcify com match exato, sem proxy) conferidos na cadeia em duas fontes de cada lado: o token, a taxa, o par na Tron e, na Tron, o USDT TR7NH e os pares de volta. Nada vem de API: o que chega, a liquidez e a taxa de mensagem saem do proprio contrato (quoteOFT, quoteSend). O app monta o send e le de volta pelo decodificador estrito: destino Tron e nenhum outro, a conta Tron da carteira, sem opcoes nem chamada, troco para o dono, o minimo cotado. No plano, o contrato lido de novo, approve exato, simulacao em duas fontes com o OFTSent, e a conta Tron tem de estar sob a chave dela. A chegada e conferida pelo guid da mensagem: o OFTReceived dele e o Transfer do USDT na Tron, lidos no no solidificado de dois provedores."
+   ],
+   [
+    "p",
+    "Testes de unidade para cada recusa e testes ao vivo: plano com simulacao real na Ethereum e na Arbitrum, e uma entrega real na Tron achada pelo guid. Na tela, a Tron aparece no Para."
+   ]
+  ]
+ }
+]

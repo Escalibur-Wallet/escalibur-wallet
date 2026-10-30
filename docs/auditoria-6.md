@@ -1,0 +1,59 @@
+# Auditoria 6 (19/10/2026)
+
+Auditoria de segurança completa pedida pelo dono, com quatro revisores em paralelo sobre a main `ae15289`, só leitura (a bateria de testes tinha rodado no mesmo dia, na auditoria 5): cofre e app; seed e custódia; transações, assinatura e troca, rede por rede; rede, cadeia de suprimentos e release. Os achados abaixo foram conferidos no código antes de entrar aqui. Nenhum crítico. Os consertos saíram no mesmo dia; os altos e o que muda a experiência esperam a decisão do dono.
+
+## Altos
+
+| Item | Achado | Estado |
+|---|---|---|
+| A6-01 | A lista de versões autoriza o número da versão, não o build, e a versão é autorizada (e publicada no site) antes de o binário existir. Quem tiver a conta da App Store Connect ou a chave da API sobe o próprio build daquela versão, e o alarme diz "confirmada". O TestFlight fica fora do alarme. | Aberto: decisão do dono. Proposta: duas declarações assinadas, o build autorizado (vai no app e trava o envio) e a versão liberada (no site, assinada depois de a Apple aprovar, com liberação manual na ASC). O §8.6 de `docs/seguranca.md` já diz o limite. Feito: o archive confere no próprio `.app` que a lista que vai dentro dele autoriza a versão e o build do `Info.plist` (`versoes.swift conferir-app`, no `release.yml` e no `docs/release.md`). |
+| A6-02 | O Mac do dono junta todas as raízes de confiança: a chave da App Store Connect num arquivo legível pelo usuário, a chave da lista de versões (que aceita a senha do Mac no lugar do Touch ID), os tokens do GitHub, o build e o envio. Os builds 2 a 8 saíram do Mac; nenhum pelo `release.yml`, nenhum com atestação. | Aberto: decisão do dono. Proposta: chave da ASC com papel Developer no Mac (a Admin só no environment `release`), conta de usuário do macOS separada para release, a chave da lista só com biometria, uma segunda chave (YubiKey) e limiar 2. |
+| A6-03 | O envelope (`.esclbr`) ficou sem decifrador e sem especificação públicos: o `decifrar.py` e o `FORMATO.md` estão no repositório, que ficou privado, e o link do site dá 404. Quem tiver só o envelope e a senha (um herdeiro, ou depois de o app sair da loja) não abre. | Aberto: decisão do dono (publicar fora). Proposta: publicar o decifrador, o formato, os arquivos que faltam (`VaultFile.swift`, `KeyDerivation.swift`) e um envelope de exemplo no repositório público do site. |
+
+## Médios
+
+| Item | Achado | Estado |
+|---|---|---|
+| A6-04 | Ligar o Super Security já em "Bloquear as carteiras" não pede as palavras (a tela diz que pede). Uma carteira importada com papel errado fica perdida na primeira mudança do Face ID. Regressão de 17/10. | Feito: ligar já em "Bloquear" pede as palavras de cada carteira antes do PIN, e o cofre confere a entropia (`HardenedPhraseCheck.run`), como ir para "Bloquear" com o modo ligado. Teste de interface novo (`testEnableStraightIntoLock`). |
+| A6-05 | Travar o app não fecha as folhas de PIN e de passphrase, que ficam por cima do bloqueio: segurar o campo mostra a passphrase digitada, e um PIN digitado ali leva a operação adiante. `persist()` volta sem erro com o cofre travado. | Feito: travar responde "fechou" às folhas de PIN, de passphrase e de voz abertas, e gravar com o app travado dá erro. |
+| A6-06 | Nas trocas sem preço de referência, as cotações diretas (Uniswap, PancakeSwap, ShibaSwap) vêm de um RPC só e contam como fontes diferentes: um RPC mal-intencionado rebaixa o mínimo assinado. | Feito: as diretas contam como uma fonte só para a âncora; sem preço de referência, só elas recusam. Teste novo. Ler em dois RPCs de operadores diferentes fica para depois. |
+| A6-07 | A cópia da frase é conferida por 3 de 12 palavras (4 de 24); essa conferência libera receber e o "apagar depois de N erros". Uma palavra anotada errada passa 75% das vezes. | Aberto: decisão do dono (conferir a frase inteira pesa na experiência). |
+| A6-08 | "Prefiro escolher as minhas palavras" aceita qualquer coisa: "abandon" onze vezes deixa 128 frases possíveis, que robôs varrem. | Feito: recusa a mesma palavra três vezes, três seguidas na ordem da lista e um bloco que se repete (as frases de teste da BIP-39 caem aqui). Testes novos. |
+| A6-09 | Frase coreana com uma das 7 palavras de 33 bytes não importa nem confere (o campo corta em 32 bytes): o dono conclui que o papel está errado. Um envelope hostil com essas palavras derruba o app (`precondition`). | Feito: 48 bytes por palavra no campo, 34 por palavra na frase montada. Teste com as sete palavras. |
+| A6-10 | A passphrase fica gravada no cofre: quem executa código no aparelho e quebra o PIN leva a frase e a passphrase; sob coação, a carteira com passphrase aparece na lista. | Aberto: decisão do dono (opção "não guardar a passphrase neste iPhone"). |
+| A6-11 | A busca de "Receber" manda o texto digitado ao CoinGecko e ao CoinPaprika: quem digitar a frase ali, por engano ou por golpe, manda até 60 caracteres (cerca de 9 palavras de 12, o resto cai em minutos numa GPU). A política não cita o CoinPaprika. | Feito: texto com três palavras ou mais das listas BIP-39 não sai do iPhone, e a tela diz por quê. A política cita o CoinPaprika na busca. |
+| A6-12 | `versoes.swift autorizar` assina de novo a lista que está no arquivo sem conferi-la: uma versão acrescentada por quem escreve na árvore sai assinada junto. Com limiar 2, apagaria a outra assinatura. | Feito: `autorizar` recusa assinar por cima de uma lista que não confere, mostra a lista inteira antes do Touch ID e avisa quando faltam outras assinaturas. `conferir` respeita o limiar. |
+| A6-13 | Lista de versões: perder a chave, ou mudar o formato, faz o alarme de "tentativa de hack" disparar para todos; 404 ou lista que não confere também viram trava, e a tela manda o dono ao site (que, invadido, é do atacante). | Aberto: entra com o A6-01, na mesma mudança da lista. |
+| A6-14 | A regra "nenhuma dependência de fora" do `verificar.sh` passa com uma quebra de linha no `.package(`, e não procura `Package.resolved`. | Feito: qualquer `.package(` recusa, `Package.resolved` também, e o único pacote local do projeto é o Kit. |
+| A6-15 | A fronteira de rede de Núcleo, Cadeias e Chaves é lista negra incompleta (`XMLParser(contentsOf:)`, `Stream`, reflexão), no grep e no `nm`. | Feito: `simbolos.lock`, a lista de permissão dos 304 símbolos de fora que os três módulos usam; símbolo novo é revisado como host novo (`--atualizar-simbolos`). A lista de proibidos ganhou `XMLParser`, `Stream`, `CFHTTP` e reflexão. |
+| A6-16 | Canal de relato de vulnerabilidade quebrado: 28 páginas e o `SECURITY.md` apontam para o repositório privado. | Feito: o relato vai por e-mail, no site (rodapé e suporte) e no `SECURITY.md`. Os links de código do site esperam a decisão sobre o repositório público. |
+
+## Baixos
+
+Feitos nesta leva: `raw.githubusercontent.com` só no caminho das logos e só na porta 443 (o site da conta, só no caminho da carteira); o navegador da auditoria só abre as páginas da carteira; `versoes.swift conferir` respeita o limiar; `publicar-site.sh` recusa mudança fora do commit e lista que não confere. O resto fica registrado aqui.
+
+Cofre e app: o alarme falha aberto em resposta HTTP que não é 404; a passphrase passa por `String` na conferência; "não sei" vira "não existe" na chave do Face ID; no Super Security, PIN errado pode não contar para o apagar-após-N no iOS 17 e 18 (conferir no aparelho); mudar "Apagar depois de erros" apaga e recria o ajuste; criar carteira com passphrase aceita só o rosto; sair de "Continuar normal" passa a confiar no cadastro de rostos de agora; ver as palavras e lacrar o envelope mostram a passphrase sem pedi-la quando "pedir para enviar" está desligado; erros do chaveiro que não são senha errada contam como PIN errado; a chave do PIN é criada sem `interactionNotAllowed`; o navegador da auditoria aceita qualquer caminho do host; um campo que ganhou o Safe Keyboard antes do Super Security mantém o globo.
+
+Seed e custódia: frase chinesa "ambígua" recusada (e o envelope dela aparece como danificado); a importação usa um caminho por rede e culpa a palavra pela diferença; todo campo de segredo corta em silêncio em 256 bytes; "Mostrar palavras" na importação não volta sozinho; a senha do envelope pode ser a própria passphrase; rede nova sem caminho próprio cai no caminho EVM.
+
+Transações: troca só da tag (XRPL) ou do comentário (TON) passa sem a conferência da Stellar; ponte para a Tron sem preço do ETH perde o bloqueio de 5% da taxa; link de pagamento de token ignora o token pedido; autorização que sobra fica com o router; energia da Tron de um provedor só.
+
+Rede e release: `raw.githubusercontent.com` liberado em qualquer caminho e porta; consenso da XRPL pode fechar com dois nós do mesmo operador; o C de cola fora de lock e de regra; buracos de cobertura do `verificar.sh` (widget, `#if DEBUG || x`, links simbólicos, YAML em fluxo); `versoes.swift conferir` ignora o limiar; `publicar-site.sh` publica a árvore de trabalho sem conferir; política de privacidade e manifesto incompletos (widget, exploradores, a Alchemy como coleta).
+
+## Regressão depois da auditoria
+
+A trava de porta dos baixos (só a 443) recusou os dois servidores da Ripple, que atendem JSON-RPC na 51234, a porta da documentação deles. A XRP Ledger ficou com um servidor só, e a leitura por dois servidores parou: troca, ordem limite e envio na XRP Ledger falhavam com "Menos provedores responderam" no build 9 (TestFlight). Achada na captura da loja, no mesmo dia. Conserto: a 51234 só para `s1.ripple.com` e `s2.ripple.com` (`HTTPClient.extraPorts`), qualquer outra porta segue recusada, e um teste novo confere todo endereço escrito no código do Kit e do app contra a regra do `HTTPClient` (sem a exceção, ele recusa os dois servidores). Sai no build 10.
+
+## Correção posterior (20/10/2026)
+
+O `simbolos.lock` da A6-15 contava 467 linhas, mas 162 eram os cabeçalhos que o `nm` imprime para cada arquivo `.o` e uma estava em branco: os símbolos de fora são 304. A regra ainda funcionava para símbolo novo, mas disparava também quando um arquivo novo entrava em um dos três módulos. O filtro tira os cabeçalhos e as linhas em branco, e o `simbolos.lock` tem os mesmos 304 símbolos de antes.
+
+## Revisado sem problema
+
+O núcleo do cofre (`RootKeyVault`, `Enclave`, `WalletVault`, `Signer`), o contador de tentativas, a troca de PIN, o A1, o Super Security (abertura, cabeçalho autenticado, varredura, commit conferido), o embrulho das chaves do PIN corrigido na auditoria 5; a geração e a derivação BIP-39 e BIP-32 de todas as redes nos caminhos padrão; o envelope (Argon2id, AAD, tamanho fixo); a montagem e a assinatura em todas as redes, o `TradeValidator` com os motores diretos, a CoW, as pontes e as autorizações exatas; o `HTTPClient` (sessão efêmera, TLS, redirecionamento recusado, host exato), os hosts contra a política, as actions fixadas, as dependências travadas e o binário do build 8.
+
+## Testes
+
+- `tools/verificar.sh --testes`: tudo conferido, 1556 testes do núcleo (três novos: as palavras coreanas de 33 bytes, a escolha fraca recusada, as diretas como uma fonte só), e os três módulos só com os 304 símbolos de `simbolos.lock`.
+- Testes de interface, no simulador: os três do Super Security, com o rosto aprovado em laço, incluindo o novo de ligar já em "Bloquear" (frase inteira antes do PIN); criar carteira, importar, teclado da importação, receber, passphrase, Safe Keyboard e envelope, 25 testes, todos passando (os dois da busca de Receber, que pedem rede, rodaram com ela); e o novo da busca com cara de frase, que fica no iPhone.
+- `versoes.swift`: uma lista mexida depois de assinada é recusada antes do Touch ID; `conferir-app` aceita o app de agora (1.0.0 build 8, com a lista dentro) e recusa o build 8 enviado, que ainda não levava a lista.

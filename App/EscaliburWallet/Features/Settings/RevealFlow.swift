@@ -1,0 +1,210 @@
+import EscaliburCore
+import EscaliburKeys
+import SwiftUI
+
+/// X1 e X2: revelar a senha da carteira. Tambem e o caminho de "Gravar agora"
+/// (fazer a copia que faltou), que termina na conferencia digitada.
+struct RevealFlow: View {
+    enum Purpose { case reveal, backup }
+
+    @Environment(AppSession.self) private var session
+    @Environment(AuthCoordinator.self) private var auth
+    let wallet: WalletMeta
+    let purpose: Purpose
+    let onClose: () -> Void
+
+    @State private var draft: PhraseDraft?
+    @State private var passphrase: SecureBytes?
+    @State private var confirming = false
+    @State private var working = false
+    @State private var error: String?
+    @State private var acknowledged: Set<Int> = []
+    /// Depois das palavras conferidas, a passphrase da carteira que tem uma (C7-02).
+    @State private var confirmingPassphrase = false
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let draft, confirming {
+                    ConfirmWordsView(draft: draft, onBack: { confirming = false }) { confirmed() }
+                } else if let draft {
+                    RecordWordsView(draft: draft, walletName: purpose == .reveal ? wallet.name : nil, passphrase: passphrase) {
+                        if purpose == .backup { confirming = true } else { finish() }
+                    }
+                } else if working {
+                    // Do toque em "Ver as palavras" ate elas abrirem (PIN, rosto e o cofre), a
+                    // lista sai da tela: antes ela reaparecia por baixo, e um toque rapido no
+                    // teclado do PIN desmarcava um "estou ciente" (pedido do dono, 16/10/2026).
+                    opening
+                } else {
+                    warning
+                }
+            }
+            .background(Palette.void.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { finish() } label: {
+                        Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.inkSoft)
+                    }
+                    .accessibilityLabel("Fechar")
+                }
+            }
+        }
+        .interactiveDismissDisabled()
+        .guardedAgainstCapture()
+        .fullScreenCover(isPresented: $confirmingPassphrase) {
+            if let passphrase {
+                ConfirmPassphraseView(wallet: wallet, expected: passphrase) {
+                    confirmingPassphrase = false
+                    finish()
+                }
+            }
+        }
+    }
+
+    private var opening: some View {
+        CipherWorking(title: String(localized: "Abrindo as palavras"))
+            .accessibilityIdentifier("revelar-abrindo")
+    }
+
+    private var warning: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Ninguém da Escalibur vai pedir suas palavras")
+                .typeStyle(.title).foregroundStyle(Palette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Suporte, gerente de exchange, recuperação de conta: quem pede a senha da carteira está tentando roubar o saldo.")
+                .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Estou ciente que:")
+                .typeStyle(.row).foregroundStyle(Palette.ink)
+                .padding(.top, Space.lg)
+            VStack(spacing: 0) {
+                ForEach(Array(Self.statements.enumerated()), id: \.offset) { index, statement in
+                    Button {
+                        if acknowledged.contains(index) { acknowledged.remove(index) } else { acknowledged.insert(index) }
+                    } label: {
+                        HStack(spacing: Space.sm) {
+                            ZStack {
+                                Circle().stroke(acknowledged.contains(index) ? Palette.success : Palette.inkMuted, lineWidth: 1.5)
+                                if acknowledged.contains(index) {
+                                    Circle().fill(Palette.success)
+                                    Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.void)
+                                }
+                            }
+                            .frame(width: 22, height: 22)
+                            Text(statement).typeStyle(.body).foregroundStyle(Palette.ink)
+                                .multilineTextAlignment(.leading)
+                            Spacer(minLength: 0)
+                        }
+                        .frame(minHeight: Height.rowCompact)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .sensoryFeedback(.selection, trigger: acknowledged.contains(index))
+                }
+            }
+            .padding(.top, Space.xxs)
+            if let error { Banner(kind: .failure, title: error).padding(.top, Space.md) }
+            Spacer()
+            PrimaryButton(title: String(localized: "Ver as palavras"), enabled: acknowledged.count == Self.statements.count, loading: working) {
+                Task { await open() }
+            }
+        }
+        .padding(.horizontal, Space.gutter)
+        .padding(.top, Space.md)
+        .padding(.bottom, Space.xs)
+    }
+
+    /// Cada item continua a frase "Estou ciente que:", com maiuscula no comeco, como item
+    /// de lista (pedido do dono, 16/10/2026).
+    static let statements = [
+        String(localized: "Quem tem as palavras tem o saldo"),
+        String(localized: "A Escalibur nunca pede as palavras"),
+        String(localized: "Devo ver as palavras sozinho, longe de câmeras"),
+        // O "estou ciente" do Espelhamento do iPhone no Mac saiu a pedido do dono (16/10/2026):
+        // o aviso continua na checagem do aparelho, antes das palavras (auditoria 4, C7-06).
+    ]
+
+    private func open() async {
+        working = true
+        defer { working = false }
+        error = nil
+        let id = wallet.id
+        var counted = false
+        do {
+            // A espera do A1 antes da frase de voz: nada de pedir a voz para ouvir "espere".
+            try AuthCoordinator.checkPINAndBiometry()
+            guard await VoiceGate.shared.confirm(.reveal, session: session) else { return }
+            // Na carteira que pede a passphrase, ela so aparece depois de digitada e conferida
+            // no cofre: sem isso, quem tem o PIN e o rosto lia a passphrase aqui (revisao de
+            // seguranca de 16/10/2026).
+            let current = session.metadata.wallets.first { $0.id == id } ?? wallet
+            var typed: SecureBytes?
+            if PassphraseGate.asks(current) {
+                guard let given = await PassphraseGate.shared.ask(current, reason: String(localized: "\(current.name) mostra as palavras e a passphrase. Digite a passphrase para seguir; depois vem a confirmação de sempre.")) else { return }
+                typed = given
+                if let wait = PassphraseGate.shared.begin(session, wallet: id) {
+                    self.error = wait
+                    given.wipe()
+                    return
+                }
+                counted = true
+            }
+            defer { typed?.wipe() }
+            let check = typed
+            let result: (SecureBytes, SecureBytes?)? = try await auth.perform(session, reason: String(localized: "Ver a senha de \(wallet.name)"), presence: .pinAndBiometry) { rk in
+                let secret = try KeyServices.wallets.open(walletID: id, rk: rk)
+                defer { secret.wipe() }
+                if let check, !PassphraseGate.matches(secret.passphrase, check) { throw Signer.Failure.passphraseMismatch }
+                var pass: SecureBytes?
+                if secret.passphrase.count > 0 {
+                    let copy = SecureBytes(capacity: secret.passphrase.count)
+                    secret.passphrase.withUnsafeBytes { copy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+                    pass = copy
+                }
+                return (try secret.phrase(), pass)
+            }
+            guard let (phrase, pass) = result else {
+                if check != nil { PassphraseGate.shared.refund(session, wallet: id) }
+                return
+            }
+            if check != nil { PassphraseGate.shared.passed(session, wallet: id) }
+            let words = phrase.withUnsafeBytes { raw in raw.filter { $0 == 0x20 }.count + 1 }
+            passphrase = pass
+            draft = PhraseDraft(phrase: phrase, wordCount: words)
+        } catch {
+            if (error as? Signer.Failure) == .passphraseMismatch {
+                PassphraseGate.shared.failed(session, wallet: id)
+                self.error = PassphraseGate.mismatchMessage
+                return
+            }
+            // Parou antes da passphrase: nada foi conferido, a tentativa volta.
+            if counted { PassphraseGate.shared.refund(session, wallet: id) }
+            self.error = AuthCoordinator.refusalMessage(error) ?? String(localized: "Não foi possível abrir a carteira agora.")
+        }
+    }
+
+    private func confirmed() {
+        var updated = session.metadata.wallets.first { $0.id == wallet.id } ?? wallet
+        updated.backupConfirmedAt = .now
+        session.update(updated)
+        if updated.hasPassphrase, updated.passphraseConfirmedAt == nil, passphrase != nil {
+            confirmingPassphrase = true
+        } else {
+            finish()
+        }
+    }
+
+    private func finish() {
+        if draft != nil {
+            var updated = session.metadata.wallets.first { $0.id == wallet.id } ?? wallet
+            updated.lastRevealedAt = .now
+            session.update(updated)
+        }
+        draft?.wipe()
+        draft = nil
+        passphrase?.wipe()
+        passphrase = nil
+        onClose()
+    }
+}

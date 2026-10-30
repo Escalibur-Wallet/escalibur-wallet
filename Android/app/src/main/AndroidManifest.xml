@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Rede, a biometria do sistema e a camera do leitor de QR (pedida so ao tocar em Ler QR).
+         Nenhuma outra permissao: sem contatos, sem localizacao, sem armazenamento. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <!-- Esconder janelas de outros apps por cima da Escalibur (o golpe da sobreposicao). -->
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
+    <!-- Os avisos locais (alertas de preco, moeda recebida, ordem limite), pedidos so ao ligar, e a
+         checagem de fundo de volta a agenda depois de reiniciar o aparelho. Nenhum push. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Sem backup (nem do Google nem de aparelho para aparelho): as chaves ficam so neste
+         aparelho, como no iOS. Sem trafego em texto puro. -->
+    <application
+        android:enableOnBackInvokedCallback="true"
+        android:name=".EscaliburApp"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/sem_backup"
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/rede"
+        android:label="Escalibur Wallet"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Tema.Escalibur">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <service
+            android:name=".vigias.ConferenciaDoFundo"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+    </application>
+</manifest>

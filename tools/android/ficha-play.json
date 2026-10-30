@@ -1,0 +1,37 @@
+{
+  "_comentario": "Ficha da Google Play, publicada por tools/android/play.py ficha. Sem preço, sem promessa de ganho e sem nome de outra carteira. Telas: as 7 de campanha em verde-lima que o dono fez em 23/10/2026 (cortadas para o limite de 2:1 da Play). Destaque: a imagem de compartilhar do site, sem a linha de \"em breve\". Idioma sem destaque nem telas usa os do idioma padrão. \"Self-custody\" nos dois idiomas: \"sem custódia\" não é um termo conhecido (pedido do dono, 28/10/2026).",
+  "idiomaPadrao": "en-US",
+  "contato": {
+    "email": "support@escaliburwallet.com",
+    "site": "https://escaliburwallet.com"
+  },
+  "fichas": {
+    "en-US": {
+      "titulo": "Escalibur Wallet",
+      "curta": "Self-custody crypto wallet. Only you hold the keys.",
+      "completa": "Escalibur Wallet is a self-custody crypto wallet. Your keys stay on your phone, protected by the Android Keystore and your PIN, outside the Google backup. There is no account, no sign-up and no Escalibur server.\n\nSend and receive on Bitcoin, Ethereum, Solana, XRP Ledger, Stellar, TON, Tron and 19 more networks. Swap coins through each network's public protocols, place limit orders, move USDC, ETH and USDT between networks with the bridge, and get price and incoming-payment alerts computed on the phone itself.\n\nBefore you sign, the app shows the destination, amount and fee, and checks what will be signed. Keep your recovery phrase in an envelope encrypted with its own password.\n\nThe code is published for audit.",
+      "destaque": "build/loja-android/grafico/destaque-lima.png",
+      "telas": [
+        "build/loja-android/telas-lima/01.png",
+        "build/loja-android/telas-lima/02.png",
+        "build/loja-android/telas-lima/03.png",
+        "build/loja-android/telas-lima/04.png",
+        "build/loja-android/telas-lima/05.png",
+        "build/loja-android/telas-lima/06.png",
+        "build/loja-android/telas-lima/07.png"
+      ]
+    },
+    "pt-BR": {
+      "titulo": "Escalibur Wallet",
+      "curta": "Carteira cripto self-custody. Só você tem as chaves.",
+      "completa": "Escalibur Wallet é uma carteira de criptoativos self-custody. As chaves ficam no seu celular, protegidas pelo Android Keystore e pelo seu PIN, fora do backup do Google. Não existe conta, cadastro nem servidor da Escalibur.\n\nEnvie e receba em Bitcoin, Ethereum, Solana, XRP Ledger, Stellar, TON, Tron e mais 19 redes. Troque moedas pelos protocolos públicos de cada rede, crie ordens limite, leve USDC, ETH e USDT entre redes pela ponte e receba alertas de preço e de recebimento gerados no próprio celular.\n\nAntes de assinar, o app mostra destino, valor e taxa, e confere o que será assinado. Guarde a senha da carteira num envelope cifrado com senha própria.\n\nO código é publicado para auditoria.",
+      "destaque": null,
+      "telas": []
+    }
+  },
+  "notasDaVersao": {
+    "en-US": "Bridge transfers no longer fail for lack of network fee, and the bridge opens on the stablecoin you hold most. The lock screen tells a locked phone apart from a wrong PIN, and \"Forgot PIN\" now waits 24 hours before erasing. Plus the address check in character boxes and other fixes.",
+    "pt-BR": "A ponte entre redes não falha mais por falta de taxa de rede e já abre na stablecoin que você mais tem. A tela de bloqueio separa celular travado de PIN errado, e \"Esqueci o PIN\" agora espera 24 horas antes de apagar. E mais: conferência do endereço em caixas e outras correções."
+  },
+  "icone": "build/loja-android/grafico/icone-512-lima.png"
+}

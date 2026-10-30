@@ -1,0 +1,23 @@
+[
+  {"captura": "1-carteira", "saida": "1-redes", "tipo": "redes",
+   "pt-BR": ["Só você tem as chaves", "Bitcoin, Ethereum, Solana e mais 23 redes, numa carteira criptografada só neste iPhone."],
+   "en-US": ["Only you hold the keys", "Bitcoin, Ethereum, Solana and 23 more networks, in a wallet encrypted only on this iPhone."]},
+  {"captura": "2-revisao",
+   "pt-BR": ["Conferido antes de assinar", "Destino, valor e taxa na tela, e o app confere o que vai ser assinado."],
+   "en-US": ["Checked before you sign", "Destination, amount and fee on screen, and the app checks what will be signed."]},
+  {"captura": "3-trocar",
+   "pt-BR": ["Troque sem sair da carteira", "Pelos protocolos públicos de cada rede, com o mínimo conferido antes de assinar."],
+   "en-US": ["Swap from your wallet", "Through public protocols, with the minimum checked before you sign."]},
+  {"captura": "4-receber",
+   "pt-BR": ["Receba em qualquer rede", "O endereço e o QR de cada rede, com o aviso do que pode ser enviado."],
+   "en-US": ["Receive on any network", "The address and QR code for each network, with a note on what can be sent."]},
+  {"captura": "5-mercado",
+   "pt-BR": ["O mercado à mão", "Preços ao vivo, e os alertas saem do próprio iPhone."],
+   "en-US": ["The market at hand", "Live prices, with alerts that come from the iPhone itself."]},
+  {"captura": "6-moeda",
+   "pt-BR": ["Cada moeda por inteiro", "Gráfico, dados do mercado e alerta de preço de cada moeda."],
+   "en-US": ["Every coin in full", "Chart, market data and a price alert for each coin."]},
+  {"captura": "7-envelope",
+   "pt-BR": ["Um envelope só seu", "A senha da carteira num arquivo criptografado, com outra senha que só você conhece."],
+   "en-US": ["A backup only you open", "Your recovery phrase in an encrypted file, with a password only you know."]}
+]

@@ -1,0 +1,69 @@
+# Toda mudanca passa por aqui antes de entrar na main: o verificador inteiro, todos
+# os testes do nucleo, o app compilado em Release e a interoperabilidade do envelope
+# com o decifrador aberto. O release.yml chama este mesmo arquivo (workflow_call) no
+# commit da tag, antes de montar o build que vai para a Apple.
+name: verificar
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verificar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      # Acoes fixadas por commit, nunca por tag movel.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Xcode do .xcode-version
+        run: |
+          versao=$(sed 's/^Xcode //' .xcode-version)
+          sudo xcode-select -s "/Applications/Xcode_${versao}.app"
+          xcodebuild -version
+
+      # Com --testes: os testes do nucleo e a fronteira conferida no binario (nm).
+      - name: Verificador e testes do nucleo
+        run: ./tools/verificar.sh --testes
+
+      # O app no build que o usuario recebe. So compila em Release o que nao depende do
+      # modo demo, e o binario nao pode carregar nada dele (frase publica, telas diretas).
+      - name: App em Release para o simulador, sem nada do modo demo no binario
+        run: |
+          xcodebuild -project EscaliburWallet.xcodeproj -scheme EscaliburWallet -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ci \
+            CODE_SIGNING_ALLOWED=NO build -quiet
+          app=build/ci/Build/Products/Release-iphonesimulator/EscaliburWallet.app
+          binario="$app/EscaliburWallet"
+          test -f "$app/PrivacyInfo.xcprivacy" || { echo "manifesto de privacidade fora do app"; exit 1; }
+          if strings "$binario" | grep -E "abandon abandon abandon|DebugDemo|envio-incerto|enviar-eth"; then
+            echo "o binario de distribuicao carrega codigo do modo demo"
+            exit 1
+          fi
+
+      # Testes de unidade do app no simulador (hoje: os metadados gravados pela 1.0
+      # tem de abrir em toda versao seguinte). O primeiro iPhone disponivel no runner.
+      - name: Testes de unidade do app
+        run: |
+          destino=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          xcodebuild -project EscaliburWallet.xcodeproj -scheme EscaliburWallet -sdk iphonesimulator \
+            -destination "id=$destino" -derivedDataPath build/ci-testes -only-testing:EscaliburWalletTests \
+            CODE_SIGNING_ALLOWED=NO test -quiet
+
+      # Dependencias fixadas por versao e por hash: um pacote trocado no PyPI nao entra.
+      - name: Envelope da carteira aberto pelo decifrar.py embarcado
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --disable-pip-version-check --require-hashes -r tools/requisitos-ci.txt
+          PATH="$RUNNER_TEMP/venv/bin:$PATH" ./tools/conferir-envelope.sh
