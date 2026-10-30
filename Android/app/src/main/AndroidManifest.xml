@@ -40,7 +40,39 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- O envelope .esclbr aberto ou compartilhado de outro app (arquivos, e-mail, WhatsApp), como o tipo de
+                 documento do iOS. Sem extensao conhecida, ele chega como application/octet-stream; o app confere o
+                 tamanho e o formato antes de pedir a senha (EnvelopeRecebido). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.esclbr" />
+                <data android:pathPattern=".*\\..*\\.esclbr" />
+                <data android:pathPattern=".*\\..*\\..*\\.esclbr" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
         </activity>
+        <!-- O envelope lacrado na folha de compartilhar: so a pasta dele, e so leitura para o app escolhido. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.arquivos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/arquivos" />
+        </provider>
         <service
             android:name=".vigias.ConferenciaDoFundo"
             android:exported="false"

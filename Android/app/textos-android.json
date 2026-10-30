@@ -4431,5 +4431,19 @@
   "zh-Hans": "这看起来像钱包单词的开头，所以搜索没有离开手机。单词只在导入钱包时输入。",
   "vi": "Đây có vẻ là phần đầu các từ của một ví, nên việc tìm kiếm không rời khỏi điện thoại. Các từ chỉ được gõ khi nhập ví.",
   "ar": "يبدو هذا كبداية كلمات محفظة، لذا لم يغادر البحث الهاتف. تُكتب الكلمات فقط عند استيراد محفظة."
+ },
+ "Salvar neste celular": {
+  "en": "Save on this phone",
+  "es": "Guardar en este teléfono",
+  "fr": "Enregistrer sur ce téléphone",
+  "de": "Auf diesem Handy speichern",
+  "hi": "इस फ़ोन पर सेव करें",
+  "id": "Simpan di ponsel ini",
+  "ja": "このスマートフォンに保存",
+  "ko": "이 휴대폰에 저장",
+  "tr": "Bu telefona kaydet",
+  "zh-Hans": "保存到这部手机",
+  "vi": "Lưu trên điện thoại này",
+  "ar": "حفظ على هذا الهاتف"
  }
 }

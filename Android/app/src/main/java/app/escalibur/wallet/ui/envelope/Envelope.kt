@@ -1,5 +1,12 @@
 package app.escalibur.wallet.ui.envelope
 
+import app.escalibur.wallet.ui.comp.BotaoTerciario
+import java.io.File
+import androidx.core.content.IntentCompat
+import androidx.core.content.FileProvider
+import android.content.Intent
+import android.content.Context
+import android.content.ClipData
 import app.escalibur.wallet.ui.comp.EmblemaCifrado
 import app.escalibur.wallet.ui.comp.Girando
 import android.net.Uri
@@ -218,6 +225,7 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
             senha.clearText()
             repeticao.clearText()
             arquivo?.fill(0)
+            EnvelopeCompartilhado.apagar(contexto)
             CoroutineScope(Dispatchers.IO).launch { runCatching { Api.objeto("envelope.encerrar") } }
         }
     }
@@ -432,7 +440,11 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
             // se monta, sem o envelope sair do lugar.
             "lacrando", "feito" -> {
                 CabecalhoDeFolha("", { fechar() })
-                LacreEmCena(passo == "feito", parte, inicioDoLacre, segundos, nomeDoArquivo, fraca) { Ciclo.abrindoSeletor(); salvar.launch(nomeDoArquivo) }
+                LacreEmCena(passo == "feito", parte, inicioDoLacre, segundos, nomeDoArquivo, fraca,
+                            aoEnviar = { arquivo?.let { Ciclo.abrindoSeletor(); EnvelopeCompartilhado.enviar(contexto, it, nomeDoArquivo) } }) {
+                    Ciclo.abrindoSeletor()
+                    salvar.launch(nomeDoArquivo)
+                }
             }
         }
     }
@@ -588,7 +600,9 @@ private fun BotaoDeSegurar(titulo: String, segundos: Int, modifier: Modifier = M
  * anel acende. A cena e os textos ficam no mesmo lugar nas duas etapas; o rodape troca embaixo.
  */
 @Composable
-private fun ColumnScope.LacreEmCena(feito: Boolean, parte: Int, inicio: Long, segundos: Double, nomeDoArquivo: String, fraca: Boolean, aoSalvar: () -> Unit) {
+private fun ColumnScope.LacreEmCena(
+    feito: Boolean, parte: Int, inicio: Long, segundos: Double, nomeDoArquivo: String, fraca: Boolean, aoEnviar: () -> Unit, aoSalvar: () -> Unit,
+) {
     val f by androidx.compose.animation.core.animateFloatAsState(if (feito) 1f else 0f, tween(250), label = "lacrado")
     val etapa = when {
         feito -> EtapaDoLacre.lacrado
@@ -633,7 +647,9 @@ private fun ColumnScope.LacreEmCena(feito: Boolean, parte: Int, inicio: Long, se
         // Os dois rodapes ocupam a mesma altura: o meio de cima nao muda ao lacrar.
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
             Column(Modifier.fillMaxWidth().alpha(f)) {
-                BotaoPrimario(t("Salvar ou enviar o arquivo"), ligado = feito, acao = aoSalvar)
+                // A folha de compartilhar do Android, como o `ShareLink` do iOS; ela nao tem o "salvar em Arquivos", que fica embaixo.
+                BotaoPrimario(t("Salvar ou enviar o arquivo"), ligado = feito, acao = aoEnviar)
+                BotaoTerciario(t("Salvar neste celular"), Modifier.fillMaxWidth(), acao = aoSalvar)
                 Text(t("Para abrir: Ajustes, Abrir um envelope, neste ou em outro celular com o app."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
                      textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.sm))
             }
@@ -702,7 +718,7 @@ private fun nomeDoIdioma(idioma: String): String {
  * so ver as palavras.
  */
 @Composable
-fun FluxoDeAbrirEnvelope(aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerminar: () -> Unit = aoCancelar) {
+fun FluxoDeAbrirEnvelope(inicial: Uri? = null, aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerminar: () -> Unit = aoCancelar) {
     val escopo = rememberCoroutineScope()
     val contexto = LocalContext.current
     var passo by remember { mutableStateOf("escolher") }
@@ -730,8 +746,7 @@ fun FluxoDeAbrirEnvelope(aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerm
 
     fun mensagemDeMemoria(mib: Int) = t("Este envelope exige %lld MiB por tentativa, e este celular não consegue reservar tanto agora. Feche outros apps e tente de novo. A senha não chegou a ser testada.", mib)
 
-    val escolher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    fun receber(uri: Uri) {
         erro = null
         escopo.launch {
             val dados = withContext(Dispatchers.IO) {
@@ -773,6 +788,9 @@ fun FluxoDeAbrirEnvelope(aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerm
             }
         }
     }
+    val escolher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? -> uri?.let(::receber) }
+    // O arquivo aberto em outro app (o `initialURL` do iOS): lido na hora, direto para a senha.
+    LaunchedEffect(inicial) { inicial?.let(::receber) }
 
     fun abrir() {
         if (senha.text.isEmpty() || passo == "abrindo") return
@@ -932,5 +950,48 @@ fun FluxoDeAbrirEnvelope(aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerm
             },
             aoCancelar = { pesado = false }, destrutiva = false,
         )
+    }
+}
+
+/**
+ * O envelope lacrado na folha de compartilhar do Android (o `ShareLink` do iOS): uma copia na pasta de cache do app, que nunca
+ * entra no backup, entregue por um link de leitura so para o app escolhido. Sai quando a tela do lacre fecha e a cada abertura do
+ * app, como a pasta temporaria do iOS. O envelope ja e cifrado.
+ */
+object EnvelopeCompartilhado {
+    private fun pasta(contexto: Context) = File(contexto.cacheDir, "envelopes")
+
+    fun enviar(contexto: Context, dados: ByteArray, nome: String) {
+        val arquivo = runCatching { File(pasta(contexto).apply { mkdirs() }, File(nome).name).apply { writeBytes(dados) } }.getOrNull()
+        if (arquivo == null) {
+            Avisos.mostrar(t("Não foi possível salvar o arquivo. Tente de novo."))
+            return
+        }
+        val uri = FileProvider.getUriForFile(contexto, "${contexto.packageName}.arquivos", arquivo)
+        val envio = Intent(Intent.ACTION_SEND).setType("application/octet-stream").putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        envio.clipData = ClipData.newRawUri(arquivo.name, uri)
+        runCatching { contexto.startActivity(Intent.createChooser(envio, null)) }
+    }
+
+    fun apagar(contexto: Context) {
+        runCatching { pasta(contexto).deleteRecursively() }
+    }
+}
+
+/**
+ * Um envelope aberto em outro app (o gerenciador de arquivos, o e-mail, o WhatsApp), como o `incomingEnvelope` do iOS: a tela de
+ * abrir envelope vem com ele, depois de destravar e com carteira. O arquivo so e lido ali, e qualquer outro e recusado pelo tamanho.
+ */
+object EnvelopeRecebido {
+    var uri by mutableStateOf<Uri?>(null)
+
+    fun receber(intent: Intent?) {
+        val recebido = when (intent?.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+            else -> null
+        } ?: return
+        if (recebido.scheme == "content") uri = recebido
     }
 }

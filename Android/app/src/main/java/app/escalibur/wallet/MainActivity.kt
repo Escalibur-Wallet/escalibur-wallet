@@ -14,6 +14,8 @@ import app.escalibur.wallet.nucleo.Nucleo
 import app.escalibur.wallet.ui.Ciclo
 import app.escalibur.wallet.ui.Raiz
 import app.escalibur.wallet.ui.comp.TecladoSeguro
+import app.escalibur.wallet.ui.envelope.EnvelopeCompartilhado
+import app.escalibur.wallet.ui.envelope.EnvelopeRecebido
 import app.escalibur.wallet.ui.Textos
 import app.escalibur.wallet.ui.principal.Navegacao
 import app.escalibur.wallet.ui.tema.TemaEscalibur
@@ -50,6 +52,12 @@ class MainActivity : ComponentActivity() {
         window.decorView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
         Textos.carregar(this)
         Vigia.receber(this, intent)
+        // So na primeira criacao: recriada (tema, idioma), a Activity recebe o mesmo pedido de novo.
+        if (savedInstanceState == null) {
+            EnvelopeRecebido.receber(intent)
+            // A copia do envelope lacrado que foi para a folha de compartilhar, se ficou de outra vez.
+            EnvelopeCompartilhado.apagar(this)
+        }
         // O app e escuro sempre: a barra de status e a de navegacao com icones claros, mesmo com o
         // aparelho no tema claro (o padrao seguia o tema do sistema e os icones sumiam no fundo).
         enableEdgeToEdge(
@@ -65,11 +73,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** O toque numa notificacao com o app ja aberto. */
+    /** O toque numa notificacao, ou um envelope aberto em outro app, com o app ja aberto. */
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         if (BuildConfig.DEBUG) intent.getStringExtra("tela")?.let { Navegacao.telaDeDepuracao = it }
         Vigia.receber(this, intent)
+        EnvelopeRecebido.receber(intent)
     }
 
     override fun onStart() {
