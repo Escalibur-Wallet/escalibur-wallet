@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.trocar
 
+import kotlin.math.roundToInt
+import androidx.compose.ui.draw.rotate
 import app.escalibur.wallet.ui.principal.Navegacao
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.layout.fillMaxSize
@@ -116,6 +118,9 @@ internal fun CaixaDeValor(
     recalculando: Boolean = false,
 ) {
     var focado by remember { mutableStateOf(false) }
+    // A porcentagem do saldo, de 0 a 100, na regua que abre na seta ao lado do "Máx" (como no iOS).
+    var reguaAberta by remember { mutableStateOf(false) }
+    var porcento by remember { mutableIntStateOf(0) }
     // O pulso da estimativa: a opacidade vai e volta devagar. Com as animacoes desligadas, so apagado.
     val parado = movimentoReduzido()
     val pulso = rememberInfiniteTransition(label = "recalculando").animateFloat(
@@ -170,13 +175,62 @@ internal fun CaixaDeValor(
                 if (aoFracao != null) {
                     for ((rotulo, fracao) in listOf("25%" to 0.25, "50%" to 0.5, t("Máx") to 1.0)) {
                         Box(
-                            Modifier.height(26.dp).clip(CircleShape).background(Paleta.trilho).clickable { aoFracao(fracao) }.padding(horizontal = Espaco.sm),
+                            Modifier.height(26.dp).clip(CircleShape).background(Paleta.trilho).clickable {
+                                porcento = (fracao * 100).toInt()
+                                aoFracao(fracao)
+                            }.padding(horizontal = Espaco.sm),
                             contentAlignment = Alignment.Center,
                         ) { Text(rotulo, style = estilo(Tipo.rotulo), color = Paleta.tinta) }
                     }
+                    Box(
+                        Modifier.size(26.dp).clip(CircleShape).background(Paleta.trilho)
+                            .clickable(onClickLabel = if (reguaAberta) t("Fechar a porcentagem do saldo") else t("Escolher a porcentagem do saldo")) {
+                                reguaAberta = !reguaAberta
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) { Icone(Icones.abaixo, Paleta.tintaSuave, tamanho = 11.dp, modifier = Modifier.rotate(if (reguaAberta) 180f else 0f)) }
                 }
             }
         }
+        if (aoFracao != null && reguaAberta) {
+            ReguaDePorcento(porcento) { novo ->
+                porcento = novo
+                aoFracao(novo / 100.0)
+            }
+        }
+    }
+}
+
+/** A regua de 0 a 100% do saldo, de um em um: so chama quando o numero inteiro muda. Trilho e bolinha proprios, como no Enviar. */
+@Composable
+private fun ReguaDePorcento(porcento: Int, aoMudar: (Int) -> Unit) {
+    val toque = toqueDeSelecao()
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+        BoxWithConstraints(
+            Modifier.weight(1f).height(Altura.toque)
+                .pointerInput(porcento) {
+                    detectTapGestures { ponto ->
+                        val novo = (ponto.x / size.width * 100).roundToInt().coerceIn(0, 100)
+                        if (novo != porcento) { toque(); aoMudar(novo) }
+                    }
+                }
+                .pointerInput(Unit) {
+                    var ultimo = -1
+                    detectHorizontalDragGestures(onDragEnd = { ultimo = -1 }) { mudanca, _ ->
+                        val novo = (mudanca.position.x / size.width * 100).roundToInt().coerceIn(0, 100)
+                        if (novo != ultimo) { ultimo = novo; aoMudar(novo) }
+                    }
+                },
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            val bolinha = 24.dp
+            val fracao = porcento / 100f
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(Paleta.trilho))
+            Box(Modifier.fillMaxWidth(fracao).height(4.dp).clip(CircleShape).background(Paleta.tinta))
+            Box(Modifier.offset(x = (maxWidth - bolinha) * fracao).size(bolinha).clip(CircleShape).background(Paleta.tinta))
+        }
+        Text("$porcento%", style = estilo(Tipo.rotulo).copy(fontFeatureSettings = "tnum"), color = Paleta.tinta, textAlign = TextAlign.End,
+             modifier = Modifier.width(44.dp))
     }
 }
 
