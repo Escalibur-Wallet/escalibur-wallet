@@ -4445,5 +4445,19 @@
   "zh-Hans": "保存到这部手机",
   "vi": "Lưu trên điện thoại này",
   "ar": "حفظ على هذا الهاتف"
+ },
+ "A cópia some sozinha em 1 minuto, e o Android não mostra o que ela tem na prévia. Anotar no papel continua sendo o mais seguro.": {
+  "en": "The copy disappears on its own in 1 minute, and Android doesn’t show what it holds in the preview. Writing on paper is still the safest.",
+  "es": "La copia desaparece sola en 1 minuto, y Android no muestra lo que contiene en la vista previa. Anotarlo en papel sigue siendo lo más seguro.",
+  "fr": "La copie disparaît d’elle-même en 1 minute, et Android n’affiche pas son contenu dans l’aperçu. Noter sur papier reste le plus sûr.",
+  "de": "Die Kopie verschwindet nach 1 Minute von selbst, und Android zeigt ihren Inhalt nicht in der Vorschau. Auf Papier notieren bleibt am sichersten.",
+  "hi": "कॉपी 1 मिनट में अपने आप मिट जाती है, और Android प्रीव्यू में नहीं दिखाता कि उसमें क्या है. कागज़ पर लिखना अब भी सबसे सुरक्षित है.",
+  "id": "Salinan hilang sendiri dalam 1 menit, dan Android tidak menampilkan isinya di pratinjau. Mencatat di kertas tetap yang paling aman.",
+  "ja": "コピーは1分で自動的に消え、Androidのプレビューには中身が表示されません。紙に書き留めるのが今でも最も安全です。",
+  "ko": "복사본은 1분 후 저절로 사라지고, Android 미리보기에는 내용이 표시되지 않습니다. 종이에 적어 두는 것이 여전히 가장 안전합니다.",
+  "tr": "Kopya 1 dakika içinde kendiliğinden silinir ve Android önizlemede içeriğini göstermez. Kâğıda yazmak hâlâ en güvenlisidir.",
+  "zh-Hans": "副本会在 1 分钟后自动消失，Android 的预览也不会显示其内容。写在纸上仍然是最安全的。",
+  "vi": "Bản sao tự biến mất sau 1 phút, và Android không hiển thị nội dung của nó trong bản xem trước. Ghi ra giấy vẫn là an toàn nhất.",
+  "ar": "تختفي النسخة تلقائيًا خلال دقيقة واحدة، ولا يعرض Android محتواها في المعاينة. تبقى الكتابة على الورق هي الأكثر أمانًا."
  }
 }

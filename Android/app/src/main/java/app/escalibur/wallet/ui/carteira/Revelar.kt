@@ -166,22 +166,7 @@ private fun AvisoAntesDasPalavras(erro: String?, abrindo: Boolean, aoAbrir: () -
         Text(t("Suporte, gerente de exchange, recuperação de conta: quem pede a senha da carteira está tentando roubar o saldo."),
              style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
         Text(t("Estou ciente que:"), style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.lg))
-        Column(Modifier.padding(top = Espaco.xxs)) {
-            declaracoes.forEachIndexed { indice, declaracao ->
-                val marcada = indice in cientes
-                Row(
-                    Modifier.fillMaxWidth().heightIn(min = Altura.linhaCompacta).clickable { if (marcada) cientes.remove(indice) else cientes.add(indice) },
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
-                ) {
-                    Box(
-                        Modifier.size(22.dp).clip(CircleShape).background(if (marcada) Paleta.sucesso else Paleta.vazio)
-                            .border(1.5.dp, if (marcada) Paleta.sucesso else Paleta.tintaApagada, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) { if (marcada) Icone(Icones.visto, Paleta.vazio, tamanho = 12.dp) }
-                    Text(declaracao, style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
-                }
-            }
-        }
+        app.escalibur.wallet.ui.novacarteira.DeclaracoesDeCiente(declaracoes, cientes, Modifier.padding(top = Espaco.xxs))
         erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
         Spacer(Modifier.weight(1f))
         BotaoPrimario(t("Ver as palavras"), ligado = cientes.size == declaracoes.size, carregando = abrindo, acao = aoAbrir)

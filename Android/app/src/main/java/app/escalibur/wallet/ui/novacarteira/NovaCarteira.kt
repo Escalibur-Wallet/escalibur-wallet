@@ -1,5 +1,8 @@
 package app.escalibur.wallet.ui.novacarteira
 
+import androidx.compose.foundation.layout.widthIn
+import app.escalibur.wallet.ui.comp.Avisos
+import app.escalibur.wallet.ui.comp.Transferencia
 import app.escalibur.wallet.ui.comp.PlacaLaqueada
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.key
@@ -477,6 +480,8 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
     var grupo by remember { mutableIntStateOf(0) }
     var escondidas by remember { mutableStateOf(false) }
     var todas by remember { mutableStateOf(false) }
+    var copiando by remember { mutableStateOf(false) }
+    val contexto = androidx.compose.ui.platform.LocalContext.current
     val mostradas = remember { mutableStateMapOf<Int, List<String>>() }
     val arrasto = remember { Animatable(0f) }
     val escopo = rememberCoroutineScope()
@@ -549,8 +554,11 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
             style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xxs),
         )
         if (todas) {
-            Box(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = Espaco.md)) {
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = Espaco.md), horizontalAlignment = Alignment.CenterHorizontally) {
                 ChapaDeTodas(palavras, mostradas, escondidas, mostradas[grupoDaPassphrase]?.firstOrNull()) { escondidas = false }
+                if (!escondidas) {
+                    BotaoSecundario(t("Copiar"), Modifier.padding(top = Espaco.md).widthIn(max = 200.dp).fillMaxWidth(), icone = Icones.copiar) { copiando = true }
+                }
             }
         } else {
             val altura = 84.dp * porGrupo + 16.dp
@@ -626,6 +634,19 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
                 Modifier.weight(1f),
             ) { if (ultimo) aoTerminar() else mover(1) }
         }
+    }
+    if (copiando) {
+        FolhaDaCopia(aoCopiar = {
+            // Direto do nucleo: as da tela podem ter sido soltas se o app saiu da frente.
+            escopo.launch {
+                val frase = runCatching {
+                    Api.lista("carteira.palavras", JSONObject().put("de", 0).put("ate", palavras)).let { lista -> (0 until lista.length()).map { lista.getString(it) } }
+                }.getOrDefault(emptyList())
+                if (frase.size != palavras) return@launch
+                Transferencia.copiar(contexto, frase.joinToString(" "), segundos = 60)
+                Avisos.mostrar(t("Palavras copiadas. Elas somem em 1 minuto."))
+            }
+        }) { copiando = false }
     }
 }
 
