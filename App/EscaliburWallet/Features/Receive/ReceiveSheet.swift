@@ -264,11 +264,7 @@ struct ReceiveSheet: View {
             }
         case .phrase?:
             searchNote(String(localized: "Isto parece o começo das palavras de uma carteira, e a busca não saiu do iPhone. As palavras só se digitam ao importar uma carteira."))
-        case .retrying?:
-            sectionTitle(String(localized: "Mais moedas, fora da lista verificada"))
-            ForEach(0..<3, id: \.self) { _ in placeholderRow }
-            searchNote(String(localized: "O CoinGecko pediu uma pausa. Tentando de novo."))
-        case .loading?, nil:
+        case .loading?, .retrying?, nil:
             sectionTitle(String(localized: "Mais moedas, fora da lista verificada"))
             ForEach(0..<3, id: \.self) { _ in placeholderRow }
         }
@@ -336,9 +332,7 @@ struct ReceiveSheet: View {
                 VStack(spacing: Space.md) {
                     Spacer()
                     ProgressView().tint(Palette.inkSoft)
-                    Text(search.coinRetrying.contains(result.id)
-                         ? "O CoinGecko pediu uma pausa. Esperando liberar para ler as redes de \(result.symbol)."
-                         : "Buscando as redes de \(result.symbol)")
+                    Text("Buscando as redes de \(result.symbol)")
                         .typeStyle(.note).foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center)
                         .padding(.horizontal, Space.gutter)
                     Spacer()

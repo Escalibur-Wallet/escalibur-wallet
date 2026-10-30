@@ -5,6 +5,10 @@ import Foundation
 /// A busca de Receber no CoinGecko (`CoinCatalog`): so o que o dono digitou, e as redes
 /// de uma moeda quando ele toca nela. Guarda as respostas na memoria enquanto o app esta
 /// aberto: voltar a uma busca ou a uma moeda nao pergunta de novo.
+///
+/// A lista embarcada (`CoinList`, catalogo-moedas.json) responde quando o CoinGecko pede
+/// pausa: as redes de uma moeda saem dela na hora, e a busca cai nela quando as duas fontes
+/// nao respondem (pedido do dono, 30/10/2026: a pausa nunca deve aparecer).
 @MainActor
 @Observable
 final class CoinSearchStore {
@@ -12,7 +16,7 @@ final class CoinSearchStore {
 
     enum Status: Equatable {
         case loading
-        /// O CoinGecko limitou (429) ou nao respondeu: tentando de novo.
+        /// As fontes e a lista nao responderam: tentando de novo, sem dizer por que.
         case retrying
         case loaded([CoinSearchResult])
         case failed
@@ -23,8 +27,11 @@ final class CoinSearchStore {
     private(set) var searches: [String: Status] = [:]
     private(set) var coins: [String: CatalogCoin] = [:]
     private(set) var coinFailures: Set<String> = []
-    /// Moedas cujas redes estao esperando o CoinGecko liberar (429).
-    private(set) var coinRetrying: Set<String> = []
+    /// A lista embarcada, lida uma vez, fora da linha principal (2,7 MB).
+    private var list: Task<CoinList?, Never>?
+    /// Quanto a tela espera a leitura na rede, que traz o aviso do CoinGecko, antes de
+    /// mostrar a moeda pela lista.
+    static let onlineWait: Duration = .seconds(2)
 
     /// Espera antes de cada tentativa, em segundos: a primeira na hora. O limite por IP do
     /// CoinGecko sem chave dura por volta de um minuto, e as tentativas cobrem esse tempo.
@@ -63,15 +70,48 @@ final class CoinSearchStore {
                 }
             }
             if let found = try? await CoinCatalog.search(key) {
-                searches[key] = .loaded(found)
+                // Resposta do CoinPaprika (o CoinGecko em pausa) ou nada achado: a lista
+                // embarcada primeiro, que tem as moedas pequenas que o CoinPaprika nao tem.
+                let reserve = found.isEmpty || found.contains { $0.id.hasPrefix(CoinCatalog.paprikaPrefix) }
+                let local = reserve ? await localSearch(key) : []
+                guard !local.isEmpty else {
+                    searches[key] = .loaded(found)
+                    return
+                }
+                let extra = found.filter { result in !local.contains { $0.symbol == result.symbol && $0.name == result.name } }
+                searches[key] = .loaded(local + extra)
                 return
             }
             guard !Task.isCancelled else {
                 searches[key] = nil
                 return
             }
+            // As duas fontes fora: a lista embarcada, sem logo, com as mesmas conferencias.
+            let local = await localSearch(key)
+            if !local.isEmpty {
+                searches[key] = .loaded(local)
+                return
+            }
         }
         searches[key] = .failed
+    }
+
+    /// A busca na lista embarcada, fora da linha principal (sao 22 mil moedas).
+    private func localSearch(_ key: String) async -> [CoinSearchResult] {
+        guard let list = await coinList() else { return [] }
+        return await Task.detached(priority: .userInitiated) { list.search(key) }.value
+    }
+
+    /// A lista embarcada, ou nil se o arquivo faltar ou nao abrir.
+    private func coinList() async -> CoinList? {
+        if list == nil {
+            list = Task.detached(priority: .userInitiated) {
+                guard let url = Bundle.main.url(forResource: "catalogo-moedas", withExtension: "json"),
+                      let data = try? Data(contentsOf: url) else { return nil }
+                return try? CoinList(data: data)
+            }
+        }
+        return await list?.value
     }
 
     func retry(_ query: String) { searches[Self.key(query)] = nil }
@@ -92,10 +132,12 @@ final class CoinSearchStore {
     func coin(_ id: String, symbol: String? = nil, name: String? = nil) async {
         guard coins[id] == nil else { return }
         coinFailures.remove(id)
-        defer { coinRetrying.remove(id) }
+        if let local = await coinList()?.coin(id: id) {
+            await coin(id, local: local, symbol: symbol, name: name)
+            return
+        }
         for (attempt, delay) in Self.retryDelays.enumerated() {
             if attempt > 0 {
-                coinRetrying.insert(id)
                 try? await Task.sleep(for: .seconds(delay))
                 guard !Task.isCancelled else { return }
             }
@@ -106,5 +148,35 @@ final class CoinSearchStore {
             guard !Task.isCancelled else { return }
         }
         coinFailures.insert(id)
+    }
+
+    /// A moeda esta na lista embarcada. A leitura na rede ainda vale (o aviso de golpe e as
+    /// redes do CoinPaprika), mas a tela so espera por ela `onlineWait`: com o CoinGecko em
+    /// pausa, a moeda aparece pela lista. Se a leitura chegar depois, so o aviso entra, para a
+    /// tela nao trocar de rede debaixo do dedo.
+    private func coin(_ id: String, local: CatalogCoin, symbol: String?, name: String?) async {
+        let online = Task { try? await CoinCatalog.coinAllNetworks(id: id, symbol: symbol, name: name) }
+        enum First { case online(CatalogCoin?), late }
+        let first = await withTaskGroup(of: First.self) { group -> First in
+            group.addTask { .online(await online.value) }
+            group.addTask {
+                try? await Task.sleep(for: CoinSearchStore.onlineWait)
+                return .late
+            }
+            let first = await group.next() ?? .late
+            group.cancelAll()
+            return first
+        }
+        switch first {
+        case .online(let fresh?):
+            coins[id] = local.merged(with: fresh, addingNetworks: true)
+        case .online(nil):
+            coins[id] = local
+        case .late:
+            coins[id] = local
+            if let fresh = await online.value, fresh.hasNotice, let shown = coins[id] {
+                coins[id] = shown.merged(with: fresh, addingNetworks: false)
+            }
+        }
     }
 }

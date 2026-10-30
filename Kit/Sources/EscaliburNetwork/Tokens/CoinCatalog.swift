@@ -39,6 +39,117 @@ public struct CatalogCoin: Codable, Sendable, Hashable, Identifiable {
     public let hasNotice: Bool
 
     public var isReceivable: Bool { !networks.isEmpty }
+
+    /// A mesma moeda com o que a outra leitura sabe a mais: o aviso, e as redes que faltam
+    /// quando `addingNetworks`. Nome, simbolo e id ficam os desta.
+    public func merged(with other: CatalogCoin, addingNetworks: Bool) -> CatalogCoin {
+        var joined = networks
+        if addingNetworks {
+            for network in other.networks where !joined.contains(where: { $0.chainID == network.chainID }) {
+                joined.append(network)
+            }
+            let order = Dictionary(Chain.all.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+            joined.sort { (order[$0.chainID] ?? .max) < (order[$1.chainID] ?? .max) }
+        }
+        return CatalogCoin(id: id, symbol: symbol, name: name, networks: joined, hasNotice: hasNotice || other.hasNotice)
+    }
+}
+
+/// A lista de moedas com as redes, embarcada no app do iPhone (`tools/catalogo/gerar-catalogo.py`,
+/// da lista do CoinGecko com os contratos). As redes de uma moeda saem dela sem perguntar
+/// nada na hora, e a busca cai nela quando o CoinGecko e o CoinPaprika nao respondem (pedido
+/// do dono, 30/10/2026: a pausa do CoinGecko nunca deve aparecer). Tudo passa pelas mesmas
+/// conferencias da leitura na rede: nome e simbolo limpos, simbolo protegido so com o id da
+/// lista, contrato no formato da rede e fora da lista verificada. A lista nao traz o aviso
+/// do CoinGecko (ataque, migracao, golpe): ele vem da leitura na rede, quando ela responde.
+public struct CoinList: Sendable {
+    struct Entry: Decodable, Sendable {
+        let id: String
+        let symbol: String
+        let name: String
+        let rank: Int?
+        let contracts: [String: String]
+        /// Simbolo e nome sem acento e sem caixa, para a busca.
+        let foldedSymbol: String
+        let foldedName: String
+
+        init(from decoder: Decoder) throws {
+            var item = try decoder.unkeyedContainer()
+            id = try item.decode(String.self)
+            symbol = try item.decode(String.self)
+            name = try item.decode(String.self)
+            rank = try item.decodeIfPresent(Int.self)
+            contracts = try item.decode([String: String].self)
+            foldedSymbol = CoinList.fold(symbol)
+            foldedName = CoinList.fold(name)
+        }
+    }
+
+    let entries: [Entry]
+    let byID: [String: Int]
+
+    public init(data: Data) throws {
+        do { entries = try JSONDecoder().decode([Entry].self, from: data) } catch { throw HTTPClient.Failure.decoding("lista de moedas") }
+        byID = Dictionary(entries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    public var count: Int { entries.count }
+
+    /// A moeda com as redes em que a carteira recebe ela, ou nil se nao esta na lista (moeda
+    /// listada depois do build) ou nao passa nas conferencias.
+    public func coin(id: String) -> CatalogCoin? {
+        guard let index = byID[id], CoinCatalog.isValidID(id) else { return nil }
+        let entry = entries[index]
+        guard let (symbol, name) = CoinCatalog.acceptable(id: id, symbol: entry.symbol, name: entry.name) else { return nil }
+        var networks: [CatalogCoin.Network] = []
+        for (chainID, contract) in entry.contracts.sorted(by: { $0.key < $1.key }) {
+            guard let chain = Chain.find(chainID), CustomToken.supports(chain), !CustomToken.usesIssuer(chain),
+                  let shaped = CoinCatalog.shape(contract, chain: chain),
+                  !CoinCatalog.listedContracts.contains("\(chain.id):\(shaped)"), !networks.contains(where: { $0.chainID == chain.id })
+            else { continue }
+            networks.append(.init(chainID: chain.id, contract: shaped))
+        }
+        let order = Dictionary(Chain.all.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+        networks.sort { (order[$0.chainID] ?? .max) < (order[$1.chainID] ?? .max) }
+        return CatalogCoin(id: id, symbol: symbol, name: name, networks: networks, hasNotice: false)
+    }
+
+    /// A busca sem rede: simbolo igual primeiro, depois simbolo ou nome que comeca com o
+    /// texto, depois nome com uma palavra que comeca com ele. Em cada grupo, a maior no
+    /// mercado primeiro (a copia com o mesmo simbolo quase nunca tem posicao).
+    public func search(_ query: String, limit: Int = 30) -> [CoinSearchResult] {
+        let text = Self.fold(query.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard text.count >= 2, text.count <= 60 else { return [] }
+        var found: [(score: Int, entry: Entry)] = []
+        for entry in entries {
+            let score: Int
+            if entry.foldedSymbol == text || entry.foldedName == text {
+                score = 0
+            } else if entry.foldedSymbol.hasPrefix(text) || entry.foldedName.hasPrefix(text) {
+                score = 1
+            } else if entry.foldedName.split(separator: " ").contains(where: { $0.hasPrefix(text) }) {
+                score = 2
+            } else {
+                continue
+            }
+            found.append((score, entry))
+        }
+        found.sort { a, b in
+            if a.score != b.score { return a.score < b.score }
+            if (a.entry.rank ?? .max) != (b.entry.rank ?? .max) { return (a.entry.rank ?? .max) < (b.entry.rank ?? .max) }
+            return a.entry.name.count < b.entry.name.count
+        }
+        var results: [CoinSearchResult] = []
+        for (_, entry) in found where results.count < limit {
+            guard CoinCatalog.isValidID(entry.id), let (symbol, name) = CoinCatalog.acceptable(id: entry.id, symbol: entry.symbol, name: entry.name) else { continue }
+            results.append(CoinSearchResult(id: entry.id, symbol: symbol, name: name, rank: entry.rank, image: nil))
+        }
+        return results
+    }
+
+    static func fold(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+    }
 }
 
 /// A busca de Receber no CoinGecko, sem chave: so o que o dono digitou, e as redes de uma
@@ -115,13 +226,8 @@ public enum CoinCatalog {
         }
         let base = await geckoCoin
         guard let first = base ?? reserve else { throw HTTPClient.Failure.offline }
-        var networks = base?.networks ?? []
-        for network in reserve?.networks ?? [] where !networks.contains(where: { $0.chainID == network.chainID }) {
-            networks.append(network)
-        }
-        let order = Dictionary(Chain.all.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
-        networks.sort { (order[$0.chainID] ?? .max) < (order[$1.chainID] ?? .max) }
-        return CatalogCoin(id: id, symbol: first.symbol, name: first.name, networks: networks, hasNotice: base?.hasNotice ?? false)
+        let joined = reserve.map { first.merged(with: $0, addingNetworks: true) } ?? first
+        return CatalogCoin(id: id, symbol: joined.symbol, name: joined.name, networks: joined.networks, hasNotice: base?.hasNotice ?? false)
     }
 
     /// O id do CoinPaprika da moeda de mesmo simbolo e mesmo nome (sem acento e sem caixa).

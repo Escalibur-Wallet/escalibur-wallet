@@ -158,6 +158,7 @@
 		C41087E8F51835B0D0A5D9A8 /* AddCustomTokenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B27CDCE8102705833E021C /* AddCustomTokenView.swift */; };
 		C9C99BCB70E1AFF3536D3968 /* AppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A98E0FCFFA466C4A03F3490A /* AppSession.swift */; };
 		CAD13384839F93E753254042 /* PortfolioRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F352D06E63D2F53DBF60BC3B /* PortfolioRowTests.swift */; };
+		CAFAD72CA6744BB40B7DB2A6 /* catalogo-moedas.json in Resources */ = {isa = PBXBuildFile; fileRef = 6D617C492A3C4BE1F041C725 /* catalogo-moedas.json */; };
 		CD011942A3167E144FDF902C /* PriceAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44AE65BCC609869DC729178D /* PriceAlerts.swift */; };
 		CE34177F5471125A34DBC61F /* UpdateWarningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0442E8FDD9DA4CAFD74D718C /* UpdateWarningTests.swift */; };
 		CE372781780EEF980A965AD3 /* CustomTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7A7441A95891CC1A307A355 /* CustomTokenTests.swift */; };
@@ -324,6 +325,7 @@
 		64EDC4BD05696FA0BB3FB2BA /* OrderProgressViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrderProgressViews.swift; sourceTree = "<group>"; };
 		676F5C1C45D103AD6705CD95 /* ReceiptWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptWatchView.swift; sourceTree = "<group>"; };
 		6945FCBC3A685B0E6536BD02 /* LegalDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalDocumentView.swift; sourceTree = "<group>"; };
+		6D617C492A3C4BE1F041C725 /* catalogo-moedas.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catalogo-moedas.json"; sourceTree = "<group>"; };
 		70EDC973CC393015723C0488 /* HardenedModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardenedModeView.swift; sourceTree = "<group>"; };
 		71977F38FE1026DDFD0C189A /* DebugDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugDemo.swift; sourceTree = "<group>"; };
 		722DAC955BA5CAEA3DEB5274 /* PriceWidgetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriceWidgetViews.swift; sourceTree = "<group>"; };
@@ -590,6 +592,7 @@
 			isa = PBXGroup;
 			children = (
 				2D484651018FF5D48FD37087 /* Assets.xcassets */,
+				6D617C492A3C4BE1F041C725 /* catalogo-moedas.json */,
 				78634956566339609C141332 /* InfoPlist.xcstrings */,
 				C9F5E370893F7BFBA8F492FE /* Localizable.xcstrings */,
 				8C9605AF6B0175CB6F7E648C /* PrivacyInfo.xcprivacy */,
@@ -1073,6 +1076,7 @@
 				A186200068ABCC557A40DACB /* bitcoin-borda.jpg in Resources */,
 				3405A96A2DEA2E8D1F08AF62 /* bitcoin-frente.jpg in Resources */,
 				9E5F56153C55B17721F1C2BB /* bitcoin-verso.jpg in Resources */,
+				CAFAD72CA6744BB40B7DB2A6 /* catalogo-moedas.json in Resources */,
 				F943B88B292229D96240CB44 /* privacidade-en.md in Resources */,
 				1854C15FE3CC0403A4179218 /* privacidade.md in Resources */,
 				2091D572899897FFAD4DC90A /* termos-en.md in Resources */,

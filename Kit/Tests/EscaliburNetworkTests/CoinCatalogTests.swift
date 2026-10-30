@@ -96,6 +96,80 @@ struct CoinCatalogTests {
         #expect(pepe.networks.map(\.chainID) == ["bnb"])
         #expect(!pepe.hasNotice)
     }
+
+    /// A lista embarcada (`CoinList`), no formato do tools/catalogo/gerar-catalogo.py:
+    /// [id, simbolo, nome, posicao, {rede: contrato}].
+    static let list = Data("""
+    [
+    ["bnb-tiger-inu","bnbtiger","BNB Tiger Inu",null,{"bnb":"0xF8584516B7D2C156C763C874D6813E06B57E4CB5"}],
+    ["bnbtiger","bnbtigerog","BNB Tiger OG",null,{"bnb":"0xac68931b666e086e9de380cfdb0fb5704a35dc2d"}],
+    ["tether","usdt","Tether",3,{"ethereum":"0xdac17f958d2ee523a2206206994597c13d831ec7","bnb":"0x55d398326f99059ff775485246999027b3197955"}],
+    ["usdt-copia","usdt","Tether",null,{"base":"0x1111111111111111111111111111111111111111"}],
+    ["bonk","bonk","Bonk",60,{"solana":"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263","ethereum":"0x1151cb3d861920e07a38e03eead12c32178567f6"}],
+    ["formato-errado","ruim","Ruim",null,{"ethereum":"0x123","solana":"0OIl"}],
+    ["so-cardano","ada2","Ada Dois",null,{}],
+    ["link-na-isca","free","Visite https://x.y",null,{"ethereum":"0x2222222222222222222222222222222222222222"}]
+    ]
+    """.utf8)
+
+    @Test("Lista embarcada: as redes de uma moeda sem perguntar nada, com as mesmas conferencias")
+    func embeddedListCoin() throws {
+        let list = try CoinList(data: Self.list)
+        #expect(list.count == 8)
+        let tiger = try #require(list.coin(id: "bnb-tiger-inu"))
+        #expect(tiger.symbol == "BNBTIGER" && tiger.name == "BNB Tiger Inu" && !tiger.hasNotice)
+        // EVM em minusculo, como a leitura na rede.
+        #expect(tiger.networks.map(\.chainID) == ["bnb"] && tiger.networks.first?.contract == "0xf8584516b7d2c156c763c874d6813e06b57e4cb5")
+        // Na ordem das redes do app, a de Chain.all.
+        let bonk = try #require(list.coin(id: "bonk"))
+        let order = Chain.all.map(\.id)
+        #expect(bonk.networks.map(\.chainID) == ["ethereum", "solana"].sorted { order.firstIndex(of: $0)! < order.firstIndex(of: $1)! })
+        // Contrato fora do formato da rede: a rede sai, a moeda fica sem endereco.
+        #expect(list.coin(id: "formato-errado")?.networks.isEmpty == true)
+        #expect(list.coin(id: "so-cardano")?.isReceivable == false)
+        // Simbolo protegido so com o id da lista; isca no nome nunca.
+        #expect(list.coin(id: "usdt-copia") == nil)
+        #expect(list.coin(id: "link-na-isca") == nil)
+        // O contrato da lista verificada fica de fora: aparece pela lista, com o selo.
+        #expect(list.coin(id: "tether")?.networks.isEmpty == true)
+        #expect(list.coin(id: "nao-esta-na-lista") == nil)
+    }
+
+    @Test("Lista embarcada: a busca acha a moeda pequena e poe a de verdade antes da copia")
+    func embeddedListSearch() throws {
+        let list = try CoinList(data: Self.list)
+        #expect(Set(list.search("bnb tiger").map(\.id)) == ["bnb-tiger-inu", "bnbtiger"])
+        #expect(list.search("BNBTIGER").first?.id == "bnb-tiger-inu")
+        // A copia com o simbolo protegido nem aparece; a Tether, com posicao, sim.
+        #expect(list.search("usdt").map(\.id) == ["tether"])
+        #expect(list.search("tiger").count == 2)
+        #expect(list.search("b").isEmpty)
+        #expect(list.search("visite").isEmpty)
+    }
+
+    @Test("Juntar duas leituras: o aviso sempre, as redes so quando pedido")
+    func mergeReadings() throws {
+        let list = try CoinList(data: Self.list)
+        let local = try #require(list.coin(id: "bonk"))
+        let online = CatalogCoin(id: "bonk", symbol: "BONK", name: "Bonk", networks: [.init(chainID: "bnb", contract: "0x3333333333333333333333333333333333333333")], hasNotice: true)
+        let all = local.merged(with: online, addingNetworks: true)
+        #expect(all.hasNotice && all.networks.count == 3)
+        let noticeOnly = local.merged(with: online, addingNetworks: false)
+        #expect(noticeOnly.hasNotice && noticeOnly.networks == local.networks)
+    }
+
+    @Test("A lista do app abre e tem a BNB Tiger e a Bonk com rede")
+    func appList() throws {
+        let url = URL(fileURLWithPath: caminhoNoAparelho(#filePath))
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("App/EscaliburWallet/Resources/catalogo-moedas.json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let list = try CoinList(data: try Data(contentsOf: url))
+        #expect(list.count > 15_000)
+        #expect(list.coin(id: "bnb-tiger-inu")?.networks.first?.chainID == "bnb")
+        #expect(list.coin(id: "bonk")?.isReceivable == true)
+        #expect(list.search("bnb tiger").contains { $0.id == "bnb-tiger-inu" })
+    }
 }
 
 @Suite("Busca de moedas ao vivo", .enabled(if: ProcessInfo.processInfo.environment["ESCALIBUR_REDE"] == "1"))
