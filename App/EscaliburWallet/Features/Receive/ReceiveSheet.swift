@@ -96,12 +96,12 @@ struct ReceiveSheet: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: ReceiveCoin.self) { coin in
                 Group {
-                    // Direto para o QR so a moeda custom (ou sem id de preco) de uma rede: a moeda
-                    // conhecida passa pela escolha de rede, que busca as redes das duas fontes (o
-                    // SHIB da BNB so aparece no CoinPaprika; pedido do dono, 17/10/2026).
-                    if coin.assets.count == 1, coin.coingeckoID == nil || coin.isCustom, extraNetworks(coin).isEmpty, otherForms(coin).isEmpty,
-                       let only = coin.assets.first, let chain = only.chain {
-                        addressView(asset: only, chain: chain)
+                    // Uma rede so (a linha nao diz "N redes"): direto para o QR (pedido do dono,
+                    // 30/10/2026). As redes fora da lista verificada que o CoinGecko e o
+                    // CoinPaprika conhecem (o SHIB da BNB, pedido de 17/10/2026) ficam num link
+                    // embaixo do endereco.
+                    if coin.assets.count == 1, otherForms(coin).isEmpty, let only = coin.assets.first, let chain = only.chain {
+                        addressView(asset: only, chain: chain, moreNetworks: coin)
                     } else {
                         networkPicker(coin)
                     }
@@ -569,7 +569,7 @@ struct ReceiveSheet: View {
 
     /// A tela do endereco, com a rede que o seletor escolheu (a da lista, de inicio).
     @ViewBuilder
-    private func addressView(asset: Asset, chain: Chain) -> some View {
+    private func addressView(asset: Asset, chain: Chain, moreNetworks: ReceiveCoin? = nil) -> some View {
         let siblings = forms(of: asset)
         // A escolha vale para a moeda por onde se entrou: voltar e tocar noutra rede abre
         // a rede tocada, e nao a escolhida antes no seletor.
@@ -579,7 +579,7 @@ struct ReceiveSheet: View {
         if network.family == .tron, wallet?.tronForeignControl == true {
             tronForeignBlocked
         } else {
-            addressContent(asset: shown, chain: network, siblings: siblings, key: key)
+            addressContent(asset: shown, chain: network, siblings: siblings, key: key, moreNetworks: moreNetworks)
         }
     }
 
@@ -637,8 +637,11 @@ struct ReceiveSheet: View {
 
     /// `catalog`: moeda achada na busca, fora da lista verificada. A tela mostra o
     /// contrato que quem envia tem de usar e oferece adicionar a moeda ao saldo.
+    /// `moreNetworks`: a moeda de uma rede so que abriu direto no QR; as redes dela fora da
+    /// lista verificada aparecem num link no fim.
     private func addressContent(asset: Asset, chain: Chain, siblings: [Asset], key: String,
-                                catalog: (coin: CatalogCoin, network: CatalogCoin.Network)? = nil) -> some View {
+                                catalog: (coin: CatalogCoin, network: CatalogCoin.Network)? = nil,
+                                moreNetworks: ReceiveCoin? = nil) -> some View {
         let address = wallet?.account(chain)?.address ?? ""
         let balance = portfolio.balance(chain)
         return ScrollView {
@@ -713,12 +716,32 @@ struct ReceiveSheet: View {
                 }
                 .buttonStyle(SecondaryStyle())
                 .padding(.top, Space.sm)
+                if let coin = moreNetworks { moreNetworksLink(coin).padding(.top, Space.sm) }
             }
             .padding(.horizontal, Space.gutter)
             .padding(.top, Space.xs)
             .padding(.bottom, Space.lg)
         }
         .sensoryFeedback(.impact(weight: .light), trigger: toasts.current?.id)
+        .task(id: moreNetworks?.id) {
+            if let coin = moreNetworks, let id = coin.coingeckoID, !coin.isCustom { await search.coin(id, symbol: coin.symbol, name: coin.name) }
+        }
+    }
+
+    /// As redes fora da lista verificada da moeda que abriu direto no QR, quando a lista
+    /// embarcada ou a leitura na rede conhece alguma.
+    @ViewBuilder
+    private func moreNetworksLink(_ coin: ReceiveCoin) -> some View {
+        if !extraNetworks(coin).isEmpty, let id = coin.coingeckoID, let entry = search.coins[id] {
+            NavigationLink(value: CatalogPick(coin: entry, network: nil)) {
+                Text("\(coin.symbol) em outras redes, fora da lista verificada")
+                    .typeStyle(.body)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, minHeight: Height.touch)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(TertiaryStyle())
+        }
     }
 
     private func receiveTitle(_ asset: Asset) -> some View {
@@ -1052,8 +1075,14 @@ struct ReceiveCoin: Identifiable, Hashable {
         }
         let natives = coins.filter { coin in coin.assets.contains { $0.kind == .native } }
         let tokens = coins.filter { coin in !coin.assets.contains { $0.kind == .native } }
-        return natives + tokens.sorted { (rank[$0.id] ?? .max, $0.id) < (rank[$1.id] ?? .max, $1.id) }
+        let all = natives + tokens.sorted { (rank[$0.id] ?? .max, $0.id) < (rank[$1.id] ?? .max, $1.id) }
+        let pinned = all.filter { first.contains($0.id) }.sorted { first.firstIndex(of: $0.id)! < first.firstIndex(of: $1.id)! }
+        return pinned + all.filter { !first.contains($0.id) }
     }
+
+    /// As primeiras da lista, nesta ordem, e depois as outras como antes (pedido do dono,
+    /// 30/10/2026): BTC, XRP, ETH, USDT, USDC, XLM, BNB e TRX.
+    static let first = ["bitcoin", "ripple", "ethereum", "tether", "usd-coin", "stellar", "binancecoin", "tron"]
 
     /// Tokens que representam outra moeda, pelo id de preco: aparecem tambem dentro dela no
     /// Receber, como "Outras formas". So agrupamento de tela; saldo, preco e envio de cada

@@ -122,8 +122,14 @@ enum Receber {
         let grupos = ordem.compactMap { chave in porChave[chave].map { (chave, $0) } }
         let nativas = grupos.filter { $0.1.contains { $0.kind == .native } }
         let tokens = grupos.filter { !$0.1.contains { $0.kind == .native } }
-        return nativas + tokens.sorted { (posicao[$0.0] ?? .max, $0.0) < (posicao[$1.0] ?? .max, $1.0) }
+        let todas = nativas + tokens.sorted { (posicao[$0.0] ?? .max, $0.0) < (posicao[$1.0] ?? .max, $1.0) }
+        let fixas = todas.filter { primeiras.contains($0.0) }.sorted { primeiras.firstIndex(of: $0.0)! < primeiras.firstIndex(of: $1.0)! }
+        return fixas + todas.filter { !primeiras.contains($0.0) }
     }
+
+    /// As primeiras da lista, nesta ordem, e depois as outras como antes (pedido do dono,
+    /// 30/10/2026): BTC, XRP, ETH, USDT, USDC, XLM, BNB e TRX. A mesma do iOS.
+    static let primeiras = ["bitcoin", "ripple", "ethereum", "tether", "usd-coin", "stellar", "binancecoin", "tron"]
 
     static func moedas() -> [Moeda] {
         let metadata = Sessao.shared.metadata
