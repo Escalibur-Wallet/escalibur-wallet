@@ -105,6 +105,7 @@
 		7C50A38C1B47EECC201A7925 /* ActivityDetailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC3D353EB5D825C3E1AE9273 /* ActivityDetailTests.swift */; };
 		7D2DB36B42D12E24ACBC4DFB /* OwnKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DDBB5924E1B23491D8B56CA /* OwnKeyboardView.swift */; };
 		7E1A69CBC8BDCE4F37921E6E /* SendFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09754506E0869351661279D1 /* SendFlow.swift */; };
+		7FD9F4CFEA5D1BAE55B4C83E /* WalletSwitcherSwipeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8125C354FDE5B3C00BF47FCD /* WalletSwitcherSwipeTests.swift */; };
 		817277CABD8D71CD9F08ADE3 /* TodayLookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D23FDC02F7097259FB45F7A /* TodayLookTests.swift */; };
 		8209971855BF1B93A25ADB15 /* MarketFacts.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE7F2431E841450CA0BCE4D /* MarketFacts.swift */; };
 		88CD26394B5179DE5B332364 /* ForgotPINTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99E3B6E8E96F664B813E15B7 /* ForgotPINTests.swift */; };
@@ -348,6 +349,7 @@
 		7E67A652A823737F6EAC7745 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		80598DF1B8B49EF8C6EA3EB3 /* bitcoin-borda.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = "bitcoin-borda.jpg"; sourceTree = "<group>"; };
 		811D8AF3EF3BDDB831240B3A /* LimitOrderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitOrderTests.swift; sourceTree = "<group>"; };
+		8125C354FDE5B3C00BF47FCD /* WalletSwitcherSwipeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletSwitcherSwipeTests.swift; sourceTree = "<group>"; };
 		819BEE3A0CD63184F9209C22 /* WelcomeTour.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeTour.swift; sourceTree = "<group>"; };
 		839F9C92169FD1A8C5C69A3B /* ImportPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportPreview.swift; sourceTree = "<group>"; };
 		85AD68422B44E0DD96545710 /* ContactsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsView.swift; sourceTree = "<group>"; };
@@ -675,6 +677,7 @@
 				0442E8FDD9DA4CAFD74D718C /* UpdateWarningTests.swift */,
 				6095C38283534AF48C451BC4 /* VoiceFlowTests.swift */,
 				40FC23D6A843128C62D62231 /* WalletCurrencyTests.swift */,
+				8125C354FDE5B3C00BF47FCD /* WalletSwitcherSwipeTests.swift */,
 				8FCA9CA066F75BD38C39BE52 /* Fixtures */,
 			);
 			path = EscaliburWalletUITests;
@@ -1161,6 +1164,7 @@
 				CE34177F5471125A34DBC61F /* UpdateWarningTests.swift in Sources */,
 				0EA6EDD44AB204C413E8EDC3 /* VoiceFlowTests.swift in Sources */,
 				9947EC477FB97E2AEC3933AF /* WalletCurrencyTests.swift in Sources */,
+				7FD9F4CFEA5D1BAE55B4C83E /* WalletSwitcherSwipeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -660,7 +660,12 @@ struct WalletSwitcherSheet: View {
                     let wallets = session.metadata.wallets
                     ForEach(Array(wallets.enumerated()), id: \.element.id) { index, wallet in
                         Button {
-                            guard !reorder.justDropped else { return }
+                            guard !reorder.justDropped, !SwipeToDelete.recentlySwiped else { return }
+                            // Com uma linha aberta no apagar, tocar noutra so fecha, como no iOS.
+                            if swiped != nil {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { swiped = nil }
+                                return
+                            }
                             session.select(wallet)
                             dismiss()
                         } label: {

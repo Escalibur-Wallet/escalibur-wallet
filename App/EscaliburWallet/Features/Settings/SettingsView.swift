@@ -1266,13 +1266,23 @@ struct PixelTrashScene: View {
 /// Arrastar a linha para a esquerda mostra o apagar, como nas listas do iOS (pedido do dono,
 /// 22/10/2026). Uma linha aberta por vez; tocar nela fecha. O arrasto so conta na horizontal: a
 /// lista continua rolando e o segurar-e-arrastar da ordem continua igual.
+///
+/// 30/10/2026 (pedido do dono, no seletor de carteiras): o soltar do dedo no fim do arrasto
+/// nao vale como toque na linha (escolhia a carteira em vez de deixar o apagar aberto); o
+/// toque que fecha a linha aberta anda junto com ela e nao cobre mais o apagar; e o vermelho
+/// so ocupa a parte descoberta, sem ficar por baixo da linha e aparecer nas bordas.
 struct SwipeToDelete: ViewModifier {
     let id: UUID
     @Binding var open: UUID?
     var surface: Color = Palette.body
     let onDelete: () -> Void
     @State private var drag: CGFloat = 0
+    /// O dedo esta arrastando a linha de lado, ou acabou de soltar.
+    @State private var moving = false
     private static let width: CGFloat = 84
+    /// Para a linha que e um botao com acao propria (o seletor de carteiras): um arrasto de
+    /// lado acabou de acontecer, e o toque de agora nao conta.
+    @MainActor static var recentlySwiped = false
 
     func body(content: Content) -> some View {
         let shown = open == id
@@ -1288,27 +1298,33 @@ struct SwipeToDelete: ViewModifier {
                         Text("Apagar").font(.system(size: 12, weight: .semibold))
                     }
                     .foregroundStyle(.white)
-                    .frame(width: max(Self.width, -offset)).frame(maxHeight: .infinity)
+                    .frame(width: Self.width)
+                    .frame(width: -offset).frame(maxHeight: .infinity)
                     .background(Palette.down)
+                    .clipped()
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Apagar")
             }
             content
                 .background(surface)
-                .offset(x: offset)
+                .disabled(moving)
                 .overlay {
                     if shown {
                         Color.clear.contentShape(Rectangle())
                             .onTapGesture { withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { open = nil } }
                     }
                 }
+                .offset(x: offset)
         }
         .clipped()
         .simultaneousGesture(
             DragGesture(minimumDistance: 14)
                 .onChanged { value in
                     guard abs(value.translation.width) > abs(value.translation.height) * 1.3 else { return }
+                    moving = true
+                    Self.recentlySwiped = true
                     if open != id, open != nil { withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { open = nil } }
                     drag = value.translation.width
                 }
@@ -1319,6 +1335,12 @@ struct SwipeToDelete: ViewModifier {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) {
                         open = opens ? id : (open == id ? nil : open)
                         drag = 0
+                    }
+                    guard moving else { return }
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(300))
+                        moving = false
+                        Self.recentlySwiped = false
                     }
                 }
         )
