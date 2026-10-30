@@ -68,6 +68,7 @@ enum AllowedHosts {
         "iris-api.circle.com",
         "itunes.apple.com",
         "li.quest",
+        "linea-mainnet.g.alchemy.com",
         "linea-rpc.publicnode.com",
         "linea.drpc.org",
         "litecoin.atomicwallet.io",

@@ -33,10 +33,15 @@ struct EVMSecondWaveReaderTests {
         #expect(Endpoints.evmHistory["plasma"]?.map(\.name) == ["routescan"])
         #expect(Endpoints.evmHistory["plasma"]?.first?.baseURL.absoluteString
             == "https://api.routescan.io/v2/network/mainnet/evm/9745/etherscan/api")
-        for id in ["linea", "unichain", "celo"] {
+        for id in ["unichain", "celo"] {
             #expect(Endpoints.evmHistory[id]?.map(\.name) == ["blockscout"], "\(id)")
             #expect(Endpoints.evmHistory[id]?.first?.baseURL.path == "/api/v2", "\(id)")
         }
+        // Linea: o Blockscout primeiro, a Alchemy so de reserva (o Blockscout ficou em 503
+        // em 30/10/2026).
+        #expect(Endpoints.evmHistory["linea"]?.map(\.name) == ["blockscout", "alchemy"])
+        #expect(Endpoints.evmHistory["linea"]?.first?.baseURL.path == "/api/v2")
+        #expect(Endpoints.evmHistory["linea"]?.last?.baseURL.host == "linea-mainnet.g.alchemy.com")
         #expect(Endpoints.evmHistory["xlayer"] == nil)
         #expect(Endpoints.evmHistory["sonic"] == nil)
     }

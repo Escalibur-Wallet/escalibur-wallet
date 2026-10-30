@@ -363,13 +363,19 @@ public enum Endpoints {
         ],
         "avalanche": [.init(name: "routescan", baseURL: url("https://api.routescan.io/v2/network/mainnet/evm/43114/etherscan/api"))],
         "plasma": [.init(name: "routescan", baseURL: url("https://api.routescan.io/v2/network/mainnet/evm/9745/etherscan/api"))],
-        "linea": [.init(name: "blockscout", baseURL: url("https://api-explorer.linea.build/api/v2"))],
+        // Linea: o Blockscout primeiro, sem chave; a Alchemy so quando ele nao responde (a API
+        // dele ficou em 503 em 30/10/2026, e a Atividade dizia "Linea nao atualizou").
+        "linea": [
+            .init(name: "blockscout", baseURL: url("https://api-explorer.linea.build/api/v2")),
+            .init(name: "alchemy", baseURL: alchemy["linea"]!),
+        ],
         "unichain": [.init(name: "blockscout", baseURL: url("https://unichain.blockscout.com/api/v2"))],
         "celo": [.init(name: "blockscout", baseURL: url("https://celo.blockscout.com/api/v2"))],
         "bnb": [.init(name: "alchemy", baseURL: alchemy["bnb"]!)],
     ]
 
-    /// Historico e tokens de Base, Arbitrum, Polygon e BNB Chain pela Alchemy
+    /// Historico e tokens de Base, Arbitrum, Polygon e BNB Chain pela Alchemy, e o historico da
+    /// Linea quando o Blockscout dela nao responde
     /// (transferencias: `alchemy_getAssetTransfers`; tokens: `alchemy_getTokenBalances` e
     /// `alchemy_getTokenMetadata`; JSON-RPC por POST, o endereco vai no corpo). E a unica
     /// chave do app, gratuita, em nome da Escalibur, e por isso publica neste codigo:
@@ -385,6 +391,8 @@ public enum Endpoints {
         "arbitrum": url("https://arb-mainnet.g.alchemy.com/v2/alch_JAF82S_Y81DG5Rbi-zW5X"),
         "polygon": url("https://polygon-mainnet.g.alchemy.com/v2/alch_JAF82S_Y81DG5Rbi-zW5X"),
         "bnb": url("https://bnb-mainnet.g.alchemy.com/v2/alch_JAF82S_Y81DG5Rbi-zW5X"),
+        // So de reserva do historico da Linea, quando o Blockscout dela cai (503 em 30/10/2026).
+        "linea": url("https://linea-mainnet.g.alchemy.com/v2/alch_JAF82S_Y81DG5Rbi-zW5X"),
     ]
 
     /// Quais ERC-20 uma conta tem (`TokenIndex`). As mesmas instancias do Blockscout do
