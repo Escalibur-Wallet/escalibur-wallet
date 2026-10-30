@@ -4459,5 +4459,47 @@
   "zh-Hans": "副本会在 1 分钟后自动消失，Android 的预览也不会显示其内容。写在纸上仍然是最安全的。",
   "vi": "Bản sao tự biến mất sau 1 phút, và Android không hiển thị nội dung của nó trong bản xem trước. Ghi ra giấy vẫn là an toàn nhất.",
   "ar": "تختفي النسخة تلقائيًا خلال دقيقة واحدة، ولا يعرض Android محتواها في المعاينة. تبقى الكتابة على الورق هي الأكثر أمانًا."
+ },
+ "Este celular parece ter root": {
+  "en": "This phone seems to be rooted",
+  "es": "Este teléfono parece tener root",
+  "fr": "Ce téléphone semble rooté",
+  "de": "Dieses Handy scheint gerootet zu sein",
+  "hi": "लगता है इस फ़ोन में रूट है",
+  "id": "Ponsel ini tampaknya di-root",
+  "ja": "このスマートフォンはroot化されているようです",
+  "ko": "이 휴대폰은 루팅된 것 같습니다",
+  "tr": "Bu telefon root’lu görünüyor",
+  "zh-Hans": "这部手机似乎已 root",
+  "vi": "Điện thoại này có vẻ đã bị root",
+  "ar": "يبدو أن هذا الهاتف مُروَّت (root)"
+ },
+ "Com root, outros apps podem ler o que este app guarda.": {
+  "en": "With root, other apps can read what this app keeps.",
+  "es": "Con root, otras apps pueden leer lo que esta app guarda.",
+  "fr": "Avec le root, d’autres apps peuvent lire ce que cette app garde.",
+  "de": "Mit Root können andere Apps lesen, was diese App speichert.",
+  "hi": "रूट होने पर दूसरे ऐप वह पढ़ सकते हैं जो यह ऐप रखता है.",
+  "id": "Dengan root, aplikasi lain bisa membaca apa yang disimpan aplikasi ini.",
+  "ja": "root化されていると、ほかのアプリがこのアプリの保存内容を読み取れます。",
+  "ko": "루팅되어 있으면 다른 앱이 이 앱이 보관하는 내용을 읽을 수 있습니다.",
+  "tr": "Root varken diğer uygulamalar bu uygulamanın sakladıklarını okuyabilir.",
+  "zh-Hans": "在 root 环境下，其他应用可以读取本应用保存的内容。",
+  "vi": "Khi bị root, các ứng dụng khác có thể đọc những gì ứng dụng này lưu.",
+  "ar": "مع الروت، يمكن لتطبيقات أخرى قراءة ما يحفظه هذا التطبيق."
+ },
+ "Com root, outros apps podem ler o que este app guarda. Para valor alto, prefira uma carteira de hardware.": {
+  "en": "With root, other apps can read what this app keeps. For large amounts, prefer a hardware wallet.",
+  "es": "Con root, otras apps pueden leer lo que esta app guarda. Para montos altos, prefiere una billetera de hardware.",
+  "fr": "Avec le root, d’autres apps peuvent lire ce que cette app garde. Pour de gros montants, préférez un portefeuille matériel.",
+  "de": "Mit Root können andere Apps lesen, was diese App speichert. Für hohe Beträge nimm lieber ein Hardware-Wallet.",
+  "hi": "रूट होने पर दूसरे ऐप वह पढ़ सकते हैं जो यह ऐप रखता है. बड़ी रकम के लिए हार्डवेयर वॉलेट बेहतर है.",
+  "id": "Dengan root, aplikasi lain bisa membaca apa yang disimpan aplikasi ini. Untuk nilai besar, lebih baik pakai dompet perangkat keras.",
+  "ja": "root化されていると、ほかのアプリがこのアプリの保存内容を読み取れます。高額の場合はハードウェアウォレットをおすすめします。",
+  "ko": "루팅되어 있으면 다른 앱이 이 앱이 보관하는 내용을 읽을 수 있습니다. 큰 금액은 하드웨어 지갑을 권장합니다.",
+  "tr": "Root varken diğer uygulamalar bu uygulamanın sakladıklarını okuyabilir. Yüksek tutarlar için donanım cüzdanı tercih edin.",
+  "zh-Hans": "在 root 环境下，其他应用可以读取本应用保存的内容。大额资产请优先使用硬件钱包。",
+  "vi": "Khi bị root, các ứng dụng khác có thể đọc những gì ứng dụng này lưu. Với số tiền lớn, nên dùng ví phần cứng.",
+  "ar": "مع الروت، يمكن لتطبيقات أخرى قراءة ما يحفظه هذا التطبيق. للمبالغ الكبيرة، يُفضَّل استخدام محفظة أجهزة."
  }
 }

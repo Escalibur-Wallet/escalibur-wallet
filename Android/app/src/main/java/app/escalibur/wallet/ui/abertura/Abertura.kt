@@ -214,12 +214,18 @@ private fun BoasVindas(aparelhoComBloqueio: Boolean, aoComecar: () -> Unit, aoAb
                     }
             )
         }
+        val contextoDoRoot = androidx.compose.ui.platform.LocalContext.current
+        val comRoot = remember { app.escalibur.wallet.ui.novacarteira.Checagem.pareceTerRoot(contextoDoRoot) }
         Column(Modifier.padding(horizontal = Espaco.margem), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(t("Só você pode"), style = estilo(Tipo.heroi), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.lg))
             Text(
                 t("As chaves ficam criptografadas só neste celular. Se você perder a senha da carteira, a Escalibur não tem como ajudar a recuperá-la."),
                 style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm),
             )
+            if (comRoot) {
+                Faixa(TipoDeFaixa.cautela, t("Este celular parece ter root"), mensagem = t("Com root, outros apps podem ler o que este app guarda."),
+                      modifier = Modifier.padding(top = Espaco.md))
+            }
             if (!aparelhoComBloqueio) {
                 Faixa(
                     TipoDeFaixa.falha, t("Este celular não tem bloqueio de tela"),

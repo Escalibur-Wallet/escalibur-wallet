@@ -132,6 +132,8 @@ object Redes {
 @Composable
 fun TelaDaCarteira() {
     val estado = App.estado
+    val contextoDoRoot = LocalContext.current
+    val comRoot = remember { app.escalibur.wallet.ui.novacarteira.Checagem.pareceTerRoot(contextoDoRoot) }
     val carteira = estado.carteira ?: return
     val retrato = Saldos.retrato
     val ocultar = App.ocultarSaldos
@@ -238,6 +240,11 @@ fun TelaDaCarteira() {
                 )
             }
             AvisosDeEstado(retrato)
+            if (comRoot) {
+                Faixa(TipoDeFaixa.cautela, t("Este celular parece ter root"),
+                      Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg),
+                      mensagem = t("Com root, outros apps podem ler o que este app guarda. Para valor alto, prefira uma carteira de hardware."))
+            }
 
             Ativos(retrato, ocultar, unidade, taxa)
         }
