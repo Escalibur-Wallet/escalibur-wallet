@@ -405,6 +405,19 @@ private fun Ativos(retrato: Retrato, oculto: Boolean, unidade: String, taxa: Dou
         if (retrato.outros.isNotEmpty() || retrato.suspeitos.isNotEmpty()) {
             OutrosTokens(retrato.outros, retrato.suspeitos, oculto, retrato.moeda, Modifier.padding(top = if (retrato.linhas.isEmpty()) Espaco.md else Espaco.lg))
         }
+        // Os tokens que a rede contou e nao leu: o caminho para o Gerenciar ativos, que diz o porque.
+        val desconhecidos = retrato.tokensDesconhecidos
+        if (desconhecidos > 0) {
+            Row(
+                Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.xs).heightIn(min = Altura.toque)
+                    .clickable { Navegacao.abrir { TelaDeGerenciarAtivos() } },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(if (desconhecidos == 1) t("1 token sem leitura escondido") else t("%lld tokens sem leitura escondidos", desconhecidos),
+                     style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+                Icone(Icones.avancar, Paleta.tintaApagada, tamanho = 11.dp)
+            }
+        }
     }
     // A distribuicao vem depois da lista: primeiro o que a carteira tem, depois como isso se divide.
     if (retrato.linhas.size >= 2) {

@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.carteira
 
+import app.escalibur.wallet.ui.textos
+import androidx.compose.runtime.mutableIntStateOf
 import org.json.JSONObject
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
 import app.escalibur.wallet.ui.comp.Faixa
@@ -87,12 +89,42 @@ fun DetalheDoAtivo(id: String) {
     val oculto = App.ocultarSaldos
     val moeda = App.estado.moeda
     var historico by remember { mutableStateOf<List<Movimento>?>(null) }
-    LaunchedEffect(id) {
+    // Sem nenhuma rede do ativo respondendo, o aviso com o tentar de novo; com todas sem historico nesta versao, o porque. Antes,
+    // os dois viravam "Nenhum movimento", o que enganava.
+    var falhou by remember(id) { mutableStateOf(false) }
+    var semHistorico by remember(id) { mutableStateOf<String?>(null) }
+    var tentativa by remember(id) { mutableIntStateOf(0) }
+    LaunchedEffect(id, tentativa) {
+        historico = null
+        falhou = false
+        semHistorico = null
         val ids = linha?.posicoes?.map { it.ativo }.orEmpty()
-        historico = runCatching {
-            Api.objeto("atividade.mostrar").optJSONArray("itens").objetos().map(::Movimento)
-                .filter { m -> linha != null && (m.coingecko == linha.coingecko && linha.coingecko != null || ids.any { it.startsWith(m.rede) && m.simbolo == linha.simbolo }) }
-        }.getOrDefault(emptyList())
+        val redes = linha?.posicoes?.map { it.rede }?.toSet().orEmpty()
+        val nomes = linha?.posicoes?.map { it.redeNome }?.toSet().orEmpty()
+        val lido = runCatching {
+            val guardado = Api.objeto("atividade.mostrar")
+            if (guardado.optBoolean("lidaUmaVez") && tentativa == 0) guardado
+            else Api.objeto("atividade.atualizar", JSONObject().put("forcar", tentativa > 0))
+        }.getOrNull()
+        if (lido == null) {
+            falhou = true
+            historico = emptyList()
+            return@LaunchedEffect
+        }
+        val itens = lido.optJSONArray("itens").objetos().map(::Movimento)
+            .filter { m -> linha != null && (m.coingecko == linha.coingecko && linha.coingecko != null || ids.any { it.startsWith(m.rede) && m.simbolo == linha.simbolo }) }
+        if (itens.isEmpty() && redes.isNotEmpty()) {
+            val sem = lido.optJSONArray("semHistorico").objetos().filter { it.optString("rede") in redes }
+            val falhas = lido.optJSONArray("falhas").textos().toSet()
+            when {
+                sem.size == redes.size -> semHistorico = t(
+                    "O histórico de %@ não aparece aqui: nenhum serviço gratuito publica o histórico dessas redes sem cadastro. O saldo aparece na Carteira, e o histórico completo, no explorador da rede.",
+                    juntar(sem.map { it.optString("nome") }),
+                )
+                nomes.all { it in falhas } -> falhou = true
+            }
+        }
+        historico = itens
     }
     if (linha == null) {
         TelaComBarra(aoVoltar = { Navegacao.fechar() }) {}
@@ -178,14 +210,17 @@ fun DetalheDoAtivo(id: String) {
                     primeira?.let { LinhaDoContrato(it, Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg)) }
                 }
             }
-            AtividadeDoAtivo(historico, linha.simbolo, oculto, Modifier.padding(top = Espaco.xl))
+            AtividadeDoAtivo(historico, linha.simbolo, oculto, falhou, semHistorico, Modifier.padding(top = Espaco.xl)) { tentativa++ }
         }
     }
 }
 
 /** A secao "Atividade" da pagina do ativo: as ultimas oito, e o caminho para a lista inteira na aba Atividade. */
 @Composable
-private fun AtividadeDoAtivo(historico: List<Movimento>?, simbolo: String, oculto: Boolean, modifier: Modifier = Modifier) {
+private fun AtividadeDoAtivo(
+    historico: List<Movimento>?, simbolo: String, oculto: Boolean, falhou: Boolean, semHistorico: String?, modifier: Modifier = Modifier,
+    aoTentarDeNovo: () -> Unit,
+) {
     Column(modifier) {
         Text(t("Atividade"), style = estilo(Tipo.cabecalho), color = Paleta.tinta, modifier = Modifier.padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs))
         when {
@@ -197,6 +232,10 @@ private fun AtividadeDoAtivo(historico: List<Movimento>?, simbolo: String, ocult
                     Esqueleto(72.dp, 16.dp)
                 }
             }
+            historico.isEmpty() && semHistorico != null -> Text(semHistorico, style = estilo(Tipo.nota), color = Paleta.tintaSuave,
+                                                                modifier = Modifier.padding(horizontal = Espaco.margem))
+            historico.isEmpty() && falhou -> Faixa(TipoDeFaixa.neutra, t("Não foi possível ler os movimentos agora."), Modifier.padding(horizontal = Espaco.margem),
+                                                   tituloDaAcao = t("Tentar de novo"), acao = aoTentarDeNovo)
             historico.isEmpty() -> Text(t("Nenhum movimento de %@ ainda. Envios, recebimentos e trocas aparecem aqui.", simbolo), style = estilo(Tipo.nota),
                                         color = Paleta.tintaSuave, modifier = Modifier.padding(horizontal = Espaco.margem))
             else -> {
@@ -298,4 +337,11 @@ private fun DetalhesDaCustom(linha: Linha, posicao: Posicao, moeda: String, modi
             aoCancelar = { removendo = false },
         )
     }
+}
+
+/** "Stellar", "Stellar e Dogecoin", "Stellar, Dogecoin e Sui": a lista com o "e" do idioma. */
+private fun juntar(itens: List<String>): String = when (itens.size) {
+    0 -> ""
+    1 -> itens[0]
+    else -> t("%@ e %@", itens.dropLast(1).joinToString(", "), itens.last())
 }
