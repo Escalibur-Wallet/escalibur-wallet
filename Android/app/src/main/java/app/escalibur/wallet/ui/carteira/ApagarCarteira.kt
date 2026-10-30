@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -175,15 +176,17 @@ fun LinhaQueApaga(
             .semantics { customActions = listOf(CustomAccessibilityAction(t("Apagar")) { aoApagar(); true }) },
     ) {
         if (deslocamento.value < 0f) {
+            // O vermelho so na parte descoberta, nunca por baixo da linha: por baixo, ele aparecia nas
+            // bordas durante o arrasto (pedido do dono, 30/10/2026, como no iOS).
             Box(
-                Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(maxOf(largura, with(densidade) { (-deslocamento.value).toDp() }))
-                    .background(Paleta.baixa).clickable {
+                Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(with(densidade) { (-deslocamento.value).toDp() })
+                    .clipToBounds().background(Paleta.baixa).clickable {
                         mudar(null)
                         aoApagar()
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Column(Modifier.requiredWidth(largura), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Icone(Icones.lixeira, Color.White, tamanho = 18.dp)
                     Text(t("Apagar"), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                 }
