@@ -231,8 +231,15 @@ enum Nucleo {
             return try json(esperar { try await Mercado.lista(moeda: moeda) })
         case "mercado.grafico":
             let id = pedido["id"]?.stringValue ?? "", moeda = pedido["moeda"]?.stringValue ?? Sessao.shared.metadata.settings.currency
+            let intervalo = pedido["intervalo"]?.stringValue ?? "day", reserva = pedido["reserva"]?.stringValue
+            return try json(esperar { try await Mercado.grafico(id: id, moeda: moeda, intervalo: intervalo, reserva: reserva) })
+        case "mercado.graficoDoContrato":
+            let id = pedido["id"]?.stringValue ?? "", moeda = pedido["moeda"]?.stringValue ?? Sessao.shared.metadata.settings.currency
             let intervalo = pedido["intervalo"]?.stringValue ?? "day"
-            return try json(esperar { try await Mercado.grafico(id: id, moeda: moeda, intervalo: intervalo) })
+            return try json(esperar { try await Mercado.graficoDoContrato(id: id, moeda: moeda, intervalo: intervalo) })
+        case "mercado.avisoDoContrato":
+            let id = pedido["id"]?.stringValue ?? ""
+            return try json(["aviso": try esperar { try await Mercado.avisoDoContrato(id: id) }])
         case "mercado.detalhes":
             let id = pedido["id"]?.stringValue ?? "", moeda = pedido["moeda"]?.stringValue ?? Sessao.shared.metadata.settings.currency
             return try json(esperar { try await Mercado.detalhes(id: id, moeda: moeda) })

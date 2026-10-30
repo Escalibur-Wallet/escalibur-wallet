@@ -568,11 +568,11 @@ private fun OutrosTokens(outros: List<Outro>, suspeitos: List<Outro>, oculto: Bo
     }
 }
 
-/** Uma linha de token fora da lista: logo neutro, simbolo limpo, selo, rede e valor so com preco por contrato. */
+/** Uma linha de token fora da lista: logo neutro, simbolo limpo, selo, rede e valor so com preco por contrato. O toque abre a pagina dele. */
 @Composable
 private fun LinhaDeOutroToken(outro: Outro, oculto: Boolean, moeda: String) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = Altura.linha).padding(horizontal = Espaco.margem),
+        Modifier.fillMaxWidth().clickable { Navegacao.abrir { DetalheDoOutroToken(outro.id) } }.heightIn(min = Altura.linha).padding(horizontal = Espaco.margem),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
     ) {
         LogoDaMoeda(null, outro.simbolo, 40.dp, naoConferido = true, rede = outro.rede, redeCoingecko = Redes.rede(outro.rede)?.coingecko)

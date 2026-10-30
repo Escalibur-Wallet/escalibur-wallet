@@ -51,6 +51,7 @@ final class Saldos: @unchecked Sendable {
         let quantidade: String
         let casas: Int
         let preco: Double?
+        let variacao24h: Double?
         let valor: Double?
         let suspeito: Bool
         let logo: String?
@@ -367,6 +368,16 @@ final class Saldos: @unchecked Sendable {
         trava.withLock { carteiraID == id ? saldos[rede.id] : nil }
     }
 
+    /// Um token fora da lista da carteira em uso, como a rede leu (suspeito ou nao): a pagina dele.
+    func foraDaLista(_ id: String) -> UnlistedHolding? {
+        trava.withLock {
+            for rede in Chain.all {
+                if let achado = saldos[rede.id]?.unlisted?.first(where: { $0.asset.id == id }) { return achado }
+            }
+            return nil
+        }
+    }
+
     /// As posicoes com saldo da carteira `id`, em todas as redes, menos as moedas custom que o
     /// dono tirou da lista.
     func posicoes(carteira id: UUID) -> [Holding] {
@@ -502,7 +513,7 @@ final class Saldos: @unchecked Sendable {
     private func outro(_ item: UnlistedHolding, _ cotacao: Quote?) -> Outro {
         Outro(
             id: item.asset.id, simbolo: item.asset.symbol, nome: item.asset.name, rede: item.asset.chainID,
-            quantidade: item.amount.decimalString, casas: item.asset.decimals, preco: cotacao?.price,
+            quantidade: item.amount.decimalString, casas: item.asset.decimals, preco: cotacao?.price, variacao24h: cotacao?.change24h,
             valor: cotacao.map { Self.decimal(item.amount, casas: item.asset.decimals) * $0.price }, suspeito: item.isSuspicious,
             logo: item.logo?.absoluteString
         )

@@ -41,7 +41,7 @@ data class Linha(
 @Immutable
 data class Outro(
     val id: String, val simbolo: String, val nome: String, val rede: String, val quantidade: String, val casas: Int,
-    val preco: Double?, val valor: Double?, val suspeito: Boolean,
+    val preco: Double?, val valor: Double?, val suspeito: Boolean, val variacao24h: Double? = null,
 )
 
 @Immutable
@@ -84,7 +84,7 @@ data class Retrato(
             id = json.getString("id"), simbolo = json.getString("simbolo"), nome = json.getString("nome"), rede = json.getString("rede"),
             quantidade = json.getString("quantidade"), casas = json.getInt("casas"),
             preco = if (json.has("preco")) json.getDouble("preco") else null, valor = if (json.has("valor")) json.getDouble("valor") else null,
-            suspeito = json.optBoolean("suspeito"),
+            suspeito = json.optBoolean("suspeito"), variacao24h = if (json.has("variacao24h")) json.getDouble("variacao24h") else null,
         )
 
         fun de(json: JSONObject): Retrato {

@@ -57,6 +57,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.escalibur.wallet.nucleo.Api
 import app.escalibur.wallet.ui.Formato
+import app.escalibur.wallet.ui.App
+import app.escalibur.wallet.ui.carteira.Saldos
 import app.escalibur.wallet.ui.data
 import app.escalibur.wallet.ui.objetos
 import app.escalibur.wallet.ui.t
@@ -93,50 +95,102 @@ enum class Periodo(val chave: String) {
     }
 }
 
+/** Pelo contrato, CoinGecko e GeckoTerminal limitam por IP: de novo enquanto a tela esta aberta, como no iOS. */
+val esperasDoContrato = listOf(0L, 6_000L, 15_000L, 30_000L, 60_000L)
+
 /**
  * Preco com grafico e periodos, no detalhe do ativo e no Mercado. O dedo segurado no grafico
- * troca o preco pelo do ponto tocado. Linha em lima na alta e vermelho na queda.
+ * troca o preco pelo do ponto tocado. Linha em lima na alta e vermelho na queda. Tocar no preco
+ * mostra a outra moeda (real e dolar), com o grafico junto.
+ *
+ * Sem `coingecko`, o grafico vem pelo `contrato` (o id do ativo: token fora da lista ou moeda
+ * custom), do CoinGecko ou da pool de DEX com mais liquidez, e a nota embaixo diz de onde.
+ * `reserva`: o token da lista com contrato, para a pool de DEX quando o CoinGecko e a OKX nao respondem.
  */
 @Composable
-fun SecaoDoGrafico(coingecko: String, precoAoVivo: Double?, variacaoAoVivo: Double?, moeda: String, estavel: Boolean = false, precoGrande: Boolean = true) {
+fun SecaoDoGrafico(
+    coingecko: String?, precoAoVivo: Double?, variacaoAoVivo: Double?, moeda: String, estavel: Boolean = false, precoGrande: Boolean = true,
+    contrato: String? = null, reserva: String? = null,
+) {
     var periodo by remember { mutableStateOf(Periodo.dia) }
-    var pontos by remember(coingecko) { mutableStateOf<List<PontoDePreco>>(emptyList()) }
+    var pontos by remember(coingecko, contrato) { mutableStateOf<List<PontoDePreco>>(emptyList()) }
     var carregando by remember { mutableStateOf(false) }
     var falhou by remember { mutableStateOf(false) }
     var velhoDesde by remember { mutableStateOf<Date?>(null) }
     var escolhido by remember { mutableStateOf<PontoDePreco?>(null) }
-    LaunchedEffect(coingecko, periodo, moeda) {
+    // Pelo contrato: "coingecko", "dex" (com a pool) ou "nenhuma" (nenhuma das duas fontes tem o token).
+    var origem by remember(contrato) { mutableStateOf<String?>(null) }
+    var pool by remember(contrato) { mutableStateOf<JSONObject?>(null) }
+    fun lidos(r: JSONObject) = r.optJSONArray("pontos").objetos().map { PontoDePreco(it.data("t") ?: Date(), it.getDouble("p")) }
+    LaunchedEffect(coingecko, contrato, periodo, moeda) {
+        if (coingecko == null) {
+            if (contrato == null) return@LaunchedEffect
+            carregando = true
+            for (espera in esperasDoContrato) {
+                if (espera > 0) delay(espera)
+                val r = runCatching {
+                    Api.objeto("mercado.graficoDoContrato", JSONObject().put("id", contrato).put("moeda", moeda).put("intervalo", periodo.chave))
+                }.getOrNull()
+                if (r == null) { falhou = true; continue }
+                falhou = false
+                pontos = lidos(r)
+                velhoDesde = if (r.optBoolean("velho")) r.data("atualizado") else null
+                origem = r.optString("fonte")
+                pool = r.optJSONObject("pool")
+                break
+            }
+            carregando = false
+            return@LaunchedEffect
+        }
         carregando = true
-        val resposta = runCatching { Api.objeto("mercado.grafico", JSONObject().put("id", coingecko).put("moeda", moeda).put("intervalo", periodo.chave)) }.getOrNull()
+        val pedido = JSONObject().put("id", coingecko).put("moeda", moeda).put("intervalo", periodo.chave)
+        reserva?.let { pedido.put("reserva", it) }
+        val resposta = runCatching { Api.objeto("mercado.grafico", pedido) }.getOrNull()
         carregando = false
         if (resposta == null) {
             falhou = true
             return@LaunchedEffect
         }
         falhou = false
-        pontos = resposta.optJSONArray("pontos").objetos().map { PontoDePreco(it.data("t") ?: Date(), it.getDouble("p")) }
+        pontos = lidos(resposta)
         velhoDesde = if (resposta.optBoolean("velho")) resposta.data("atualizado") else null
     }
     // Sem a lista do Mercado aberta, o 24h se atualiza sozinho de tempos em tempos.
     LaunchedEffect(coingecko, periodo) {
-        while (periodo == Periodo.dia) {
+        while (coingecko != null && periodo == Periodo.dia) {
             delay(60_000)
             runCatching { Api.objeto("mercado.grafico", JSONObject().put("id", coingecko).put("moeda", moeda).put("intervalo", "day")) }.getOrNull()?.let { r ->
-                pontos = r.optJSONArray("pontos").objetos().map { PontoDePreco(it.data("t") ?: Date(), it.getDouble("p")) }
+                pontos = lidos(r)
             }
         }
     }
-    val preco = escolhido?.preco ?: precoAoVivo ?: pontos.lastOrNull()?.preco
-    val primeiro = pontos.firstOrNull()?.preco
+    // A unidade mostrada: a escolhida em Ativos (real, dolar, euro ou bitcoin), ou, ao tocar no preco, a outra (o dolar, ou o
+    // real para quem nao usa real). Sem cotacao para a unidade, a moeda dos precos.
+    var outra by remember { mutableStateOf(false) }
+    val retrato = Saldos.retrato
+    val escolhida = App.estado.unidade.takeIf { retrato.converter(1.0, it) != null } ?: moeda
+    val alternativa = if (escolhida == "brl") "usd" else "brl"
+    val unidade = if (outra) alternativa else escolhida
+    val fator = if (unidade == moeda) 1.0 else retrato.converter(1.0, unidade) ?: 1.0
+    val mostrados = remember(pontos, fator) { if (fator == 1.0) pontos else pontos.map { PontoDePreco(it.tempo, it.preco * fator) } }
+    val toque = toqueDeSelecao()
+    // O ponto escolhido no grafico ja vem na unidade mostrada; o preco vivo, nao.
+    val preco = escolhido?.preco ?: (precoAoVivo ?: pontos.lastOrNull()?.preco)?.let { it * fator }
+    val primeiro = mostrados.firstOrNull()?.preco
     val variacao = when {
         escolhido != null && primeiro != null && primeiro > 0 -> (escolhido!!.preco - primeiro) / primeiro * 100
         periodo == Periodo.dia && variacaoAoVivo != null -> variacaoAoVivo
-        primeiro != null && primeiro > 0 && pontos.size > 1 -> (pontos.last().preco - primeiro) / primeiro * 100
+        primeiro != null && primeiro > 0 && mostrados.size > 1 -> (mostrados.last().preco - primeiro) / primeiro * 100
         else -> variacaoAoVivo
     }
     Column {
-        Text(preco?.let { Formato.preco(it, moeda) } ?: " ", style = estilo(if (precoGrande) Tipo.numero else Tipo.linha), color = Paleta.tinta,
-             modifier = Modifier.padding(horizontal = Espaco.margem))
+        Text(preco?.let { Formato.preco(it, unidade) } ?: " ", style = estilo(if (precoGrande) Tipo.numero else Tipo.linha), color = Paleta.tinta,
+             modifier = Modifier.padding(horizontal = Espaco.margem).clickable(
+                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null,
+                 onClickLabel = if (alternativa == "brl") t("Toque para ver em reais") else t("Toque para ver em dólar"),
+             ) {
+                 if (outra || retrato.converter(1.0, alternativa) != null) { outra = !outra; toque() }
+             })
         Row(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.xxs), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             variacao?.let {
                 Text(Formato.percentual(it), style = estilo(Tipo.nota), color = if (it > 0.004) Paleta.alta else if (it < -0.004) Paleta.baixa else Paleta.tintaSuave)
@@ -145,8 +199,10 @@ fun SecaoDoGrafico(coingecko: String, precoAoVivo: Double?, variacaoAoVivo: Doub
                 t("desde %@", java.text.SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(Formato.locale, "MMMyyyy"), Formato.locale).format(pontos.first().tempo))
             } else periodo.legenda, style = estilo(Tipo.nota), color = Paleta.tintaApagada)
         }
-        GraficoDePreco(pontos, carregando && pontos.isEmpty(), estavel, moeda, Modifier.padding(top = Espaco.sm), falhou = falhou) { escolhido = it }
+        GraficoDePreco(mostrados, carregando && pontos.isEmpty(), estavel, unidade, Modifier.padding(top = Espaco.sm), falhou = falhou) { escolhido = it }
         when {
+            origem == "nenhuma" -> Text(t("Sem gráfico: o CoinGecko não lista este contrato e o GeckoTerminal não tem pool com liquidez para ele."),
+                                        style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(horizontal = Espaco.margem))
             falhou && pontos.isEmpty() -> Text(t("Não foi possível carregar o gráfico agora."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
                                                modifier = Modifier.padding(horizontal = Espaco.margem))
             velhoDesde != null -> Text(t("Gráfico de %@. As fontes de preço não responderam agora; o app tenta de novo sozinho.", Formato.carimbo(velhoDesde!!)),
@@ -155,6 +211,19 @@ fun SecaoDoGrafico(coingecko: String, precoAoVivo: Double?, variacaoAoVivo: Doub
         SeletorDePeriodo(periodo, Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm)) {
             escolhido = null
             periodo = it
+        }
+        // De onde vem o grafico de um token fora da lista, dito embaixo dele.
+        val nota = when {
+            contrato == null || coingecko != null -> null
+            origem == "coingecko" -> t("Gráfico do CoinGecko, pelo contrato. O token não está na lista conferida da Escalibur.")
+            origem == "dex" && pool != null -> t(
+                "Preço da pool %@ na %@, com %@ de liquidez, pelo GeckoTerminal. É preço de DEX: qualquer um cria uma pool, e por isso ele não entra no saldo total.",
+                pool!!.optString("nome"), pool!!.optString("dex"), "US$\u00A0" + Formato.compacto(pool!!.optDouble("liquidez")),
+            )
+            else -> null
+        }
+        nota?.let {
+            Text(it, style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.sm))
         }
     }
 }

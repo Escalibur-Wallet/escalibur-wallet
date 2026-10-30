@@ -1,5 +1,11 @@
 package app.escalibur.wallet.ui.carteira
 
+import org.json.JSONObject
+import app.escalibur.wallet.ui.comp.TipoDeFaixa
+import app.escalibur.wallet.ui.comp.Faixa
+import app.escalibur.wallet.ui.comp.Confirmacao
+import android.net.Uri
+import android.content.Intent
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
@@ -134,39 +140,42 @@ fun DetalheDoAtivo(id: String) {
                 }
                 Text(if (oculto) "••••" else Formato.cripto(linha.total, linha.casas, linha.simbolo, Formato.EstiloCripto.cheio), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
             }
-            // O reconhecido pelo CoinGecko tambem tem grafico, pelo id que o CoinGecko deu ao contrato
-            // (como no iOS); sem CoinGecko e sem OKX, o nucleo desenha pela pool de DEX do contrato.
-            (linha.coingecko ?: linha.grafico)?.let { coingecko ->
-                Box(Modifier.padding(top = Espaco.lg)) {
-                    SecaoDoGrafico(coingecko, linha.preco, linha.variacao24h, moeda, estavel = linha.estavel, precoGrande = false)
+            val primeira = linha.posicoes.firstOrNull()
+            when {
+                linha.custom && primeira != null -> {
+                    // Moeda custom: o dono conferiu e adicionou o contrato; o grafico vem dele (CoinGecko ou, sem listagem, a pool de DEX).
+                    Box(Modifier.padding(top = Espaco.lg)) {
+                        SecaoDoGrafico(null, linha.preco, linha.variacao24h, moeda, precoGrande = false, contrato = primeira.ativo)
+                    }
+                    DetalhesDaCustom(linha, primeira, moeda, Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg))
                 }
-            }
-            if (linha.posicoes.size > 1) {
-                Column(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.xl), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                    Text(t("Por rede"), style = estilo(Tipo.cabecalho), color = Paleta.tinta)
-                    for (posicao in linha.posicoes) {
-                        val rede = Redes.rede(posicao.rede)
-                        Row(Modifier.fillMaxWidth().height(36.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                            SeloDaRede(posicao.rede, rede?.coingecko ?: posicao.rede, 20.dp, Paleta.vazio)
-                            Text(posicao.redeNome, style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
-                            Text(if (oculto) "•••" else Formato.cripto(posicao.quantidade, posicao.casas, linha.simbolo, Formato.EstiloCripto.cheio),
-                                 style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+                linha.reconhecido -> {
+                    // Reconhecida pelo CoinGecko: o grafico de la, o aviso de que nao e da lista conferida e o contrato inteiro de cada rede.
+                    linha.grafico?.let { id ->
+                        Box(Modifier.padding(top = Espaco.lg)) {
+                            SecaoDoGrafico(id, linha.preco, linha.variacao24h, moeda, precoGrande = false)
                         }
                     }
-                }
-            }
-            linha.posicoes.firstOrNull()?.let { posicao ->
-                val contrato = posicao.contrato ?: return@let
-                if (contrato.contains(":")) return@let
-                Row(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(if (posicao.rede == "xrpl") t("Contrato no %@", posicao.redeNome) else t("Contrato na %@", posicao.redeNome), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
-                        Text(Formato.endereco(contrato), style = estilo(Tipo.monoPequeno), color = Paleta.tintaSuave)
+                    Column(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg), verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
+                        Faixa(TipoDeFaixa.neutra, t("Listada no CoinGecko, não conferida pela Escalibur"),
+                              mensagem = t("O nome, o símbolo e a logo vêm do CoinGecko, que lista este contrato. A troca fica só para as moedas da lista conferida. Ao enviar, confira o contrato inteiro."))
+                        for (posicao in linha.posicoes) PainelDoAtivo(posicao.ativo)
                     }
-                    Box(Modifier.size(Altura.toque).clickable {
-                        Transferencia.copiar(contexto, contrato)
-                        Avisos.mostrar(t("Contrato copiado."))
-                    }, contentAlignment = Alignment.Center) { Icone(Icones.copiar, Paleta.tintaSuave, tamanho = 15.dp, descricao = t("Copiar contrato")) }
+                }
+                else -> {
+                    // Da lista: o grafico pelo id, com a pool de DEX do contrato de reserva. Sem id, pelo contrato, so se ele ja tem
+                    // preco (token suspeito nunca tem preco, entao nunca ganha grafico).
+                    val pelaPool = linha.posicoes.firstOrNull { it.contrato != null && !it.contrato.contains(":") }?.ativo
+                    val peloContrato = if (linha.coingecko == null && linha.preco != null) primeira?.ativo else null
+                    if (linha.coingecko != null || peloContrato != null) {
+                        Box(Modifier.padding(top = Espaco.lg)) {
+                            SecaoDoGrafico(linha.coingecko, linha.preco, linha.variacao24h, moeda, estavel = linha.estavel, precoGrande = false,
+                                           contrato = peloContrato, reserva = if (linha.coingecko != null) pelaPool else null)
+                        }
+                    }
+                    peloContrato?.let { AvisoDoContrato(it, Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg)) }
+                    if (linha.posicoes.size > 1) PorRede(linha, oculto, Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.xl))
+                    primeira?.let { LinhaDoContrato(it, Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.lg)) }
                 }
             }
             AtividadeDoAtivo(historico, linha.simbolo, oculto, Modifier.padding(top = Espaco.xl))
@@ -200,5 +209,93 @@ private fun AtividadeDoAtivo(historico: List<Movimento>?, simbolo: String, ocult
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PorRede(linha: Linha, oculto: Boolean, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+        Text(t("Por rede"), style = estilo(Tipo.cabecalho), color = Paleta.tinta)
+        for (posicao in linha.posicoes) {
+            val rede = Redes.rede(posicao.rede)
+            Row(Modifier.fillMaxWidth().height(36.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                SeloDaRede(posicao.rede, rede?.coingecko ?: posicao.rede, 20.dp, Paleta.vazio)
+                Text(posicao.redeNome, style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
+                Text(if (oculto) "•••" else Formato.cripto(posicao.quantidade, posicao.casas, linha.simbolo, Formato.EstiloCripto.cheio),
+                     style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+            }
+        }
+    }
+}
+
+/** O contrato de um token da lista, curto, com copiar e ver no explorador. */
+@Composable
+private fun LinhaDoContrato(posicao: Posicao, modifier: Modifier = Modifier) {
+    val contexto = LocalContext.current
+    val contrato = posicao.contrato ?: return
+    if (contrato.contains(":")) return
+    val detalhe = detalheDoToken(posicao.ativo)
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(if (posicao.rede == "xrpl") t("Contrato no %@", posicao.redeNome) else t("Contrato na %@", posicao.redeNome), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+            Text(Formato.endereco(contrato), style = estilo(Tipo.monoPequeno), color = Paleta.tintaSuave)
+        }
+        Box(Modifier.size(Altura.toque).clickable {
+            Transferencia.copiar(contexto, contrato)
+            Avisos.mostrar(t("Contrato copiado."))
+        }, contentAlignment = Alignment.Center) { Icone(Icones.copiar, Paleta.tintaSuave, tamanho = 15.dp, descricao = t("Copiar contrato")) }
+        detalhe?.optJSONObject("token")?.optString("explorador")?.takeIf { it.startsWith("https://") }?.let { url ->
+            val nome = detalhe.optJSONObject("token")?.optString("exploradorNome").orEmpty()
+            Box(Modifier.size(Altura.toque).clickable {
+                runCatching { contexto.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+            }, contentAlignment = Alignment.Center) { Icone(Icones.setaDiagonal, Paleta.tintaSuave, tamanho = 15.dp, descricao = t("Ver no %@", nome)) }
+        }
+    }
+}
+
+/** O que o nucleo sabe do contrato deste ativo ("tokens.detalhe"), lido uma vez por tela. */
+@Composable
+private fun detalheDoToken(ativo: String): JSONObject? {
+    var detalhe by remember(ativo) { mutableStateOf<JSONObject?>(null) }
+    LaunchedEffect(ativo) { detalhe = runCatching { Api.objeto("tokens.detalhe", JSONObject().put("id", ativo)) }.getOrNull() }
+    return detalhe
+}
+
+/** O contrato inteiro de uma rede do ativo, no painel com copiar e explorador. */
+@Composable
+private fun PainelDoAtivo(ativo: String) {
+    detalheDoToken(ativo)?.optJSONObject("token")?.let { PainelDoContrato(it) }
+}
+
+/** Moeda custom: preco so por contrato, o aviso recolhido, o contrato inteiro, o envio indisponivel e remover. */
+@Composable
+private fun DetalhesDaCustom(linha: Linha, posicao: Posicao, moeda: String, modifier: Modifier = Modifier) {
+    val escopo = rememberCoroutineScope()
+    val token = detalheDoToken(posicao.ativo)?.optJSONObject("token")
+    var removendo by remember { mutableStateOf(false) }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
+        Text(linha.preco?.let { t("Preço por contrato: %@ cada.", Formato.preco(it, moeda)) } ?: t("Sem preço confiável por contrato. Fica fora do saldo total."),
+             style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+        // Recolhido numa linha; o porque abre num toque, como no iOS.
+        CautelaQueAbre(t("Moeda custom, não verificada"), qualquerUmCriaToken)
+        token?.let { PainelDoContrato(it) }
+        token?.optString("envioIndisponivel")?.takeIf { it.isNotEmpty() && it != "null" }?.let {
+            Faixa(TipoDeFaixa.neutra, t("Envio indisponível nesta rede"), mensagem = it)
+        }
+        BotaoTerciario(t("Remover moeda custom")) { removendo = true }
+    }
+    if (removendo) {
+        Confirmacao(
+            t("Remover %@?", linha.simbolo), t("A moeda some da Carteira, de Receber e de Enviar. O saldo continua na rede, e você pode adicionar de novo."),
+            t("Remover"),
+            aoConfirmar = {
+                removendo = false
+                escopo.launch {
+                    runCatching { for (p in linha.posicoes) Api.objeto("tokens.remover", JSONObject().put("id", p.ativo)) }
+                    Navegacao.fechar()
+                }
+            },
+            aoCancelar = { removendo = false },
+        )
     }
 }

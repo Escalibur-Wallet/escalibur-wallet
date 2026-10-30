@@ -49,6 +49,17 @@ enum Ativos {
         var mensagem: String?
     }
 
+    /// A pagina de um token fora da lista, de uma moeda custom ou o contrato de um da lista (o `OtherTokenDetailView` e o
+    /// `ContractPanel` do iOS): o contrato inteiro, o explorador, os sinais de golpe e o que da
+    /// para fazer com ele.
+    struct Detalhe: Encodable {
+        let token: Token
+        let suspeito: Bool
+        let custom: Bool
+        /// A rede aceita moeda custom e ela ainda nao e uma: "Adicionar como moeda custom".
+        let podeAdicionar: Bool
+    }
+
     struct Custom: Encodable {
         let id: String
         let simbolo: String
@@ -84,6 +95,9 @@ enum Ativos {
             return try Nucleo.json(try esperar { await ler(rede: rede, endereco: endereco, codigo: codigo, emissor: emissor) })
         case "tokens.adicionar":
             return try Nucleo.json(["simbolo": try adicionar(pedido["id"]?.stringValue ?? "")])
+        case "tokens.detalhe":
+            guard let detalhe = detalhe(pedido["id"]?.stringValue ?? "") else { throw Nucleo.Falha(erro: "tokens.semToken") }
+            return try Nucleo.json(detalhe)
         case "tokens.remover":
             try remover(pedido["id"]?.stringValue ?? "")
             return try Nucleo.json(lista())
@@ -151,14 +165,40 @@ enum Ativos {
     }
 
     private static func guardar(_ facts: TokenFacts) -> Token {
-        let asset = facts.asset
-        trava.withLock { lidas[asset.id] = asset }
+        trava.withLock { lidas[facts.asset.id] = facts.asset }
+        return token(facts.asset, fontes: facts.sources, notaDasCasas: facts.decimalsNote, motivos: facts.reasons, notas: facts.notes)
+    }
+
+    // MARK: A pagina do token
+
+    /// Um ativo da carteira em uso pelo id: nativa, da lista, custom ou fora da lista.
+    static func ativo(_ id: String) -> Asset? {
+        if let rede = Chain.all.first(where: { Asset.native($0).id == id }) { return .native(rede) }
+        if let listado = TokenRegistry.tokens.first(where: { $0.id == id }) { return listado }
+        if let custom = Sessao.shared.metadata.customTokens.first(where: { $0.id == id }) { return custom }
+        return Saldos.shared.foraDaLista(id)?.asset
+    }
+
+    static func detalhe(_ id: String) -> Detalhe? {
+        let custom = Sessao.shared.metadata.customTokens.first { $0.id == id }
+        let fora = custom == nil ? Saldos.shared.foraDaLista(id) : nil
+        // Tambem o token da lista: o contrato dele, com o explorador, na pagina do ativo.
+        guard let asset = custom ?? fora?.asset ?? ativo(id), CustomToken.reference(asset.kind) != nil else { return nil }
+        let suspeito = fora?.isSuspicious == true
+        return Detalhe(
+            token: token(asset, fontes: [], notaDasCasas: nil, motivos: suspeito ? fora?.reasons ?? [] : [], notas: []),
+            suspeito: suspeito, custom: custom != nil,
+            podeAdicionar: custom == nil && !suspeito && asset.chain.map(CustomToken.supports) == true
+        )
+    }
+
+    private static func token(_ asset: Asset, fontes: [String], notaDasCasas: String?, motivos: [TokenSafety.Reason], notas: [String]) -> Token {
         var codigo: String?
         if case .issued(let code, _) = asset.kind { codigo = code }
         return Token(
             id: asset.id, simbolo: asset.symbol, nome: asset.name, rede: asset.chainID, redeNome: asset.chain?.name ?? asset.chainID,
-            casas: asset.decimals, fontes: facts.sources, notaDasCasas: facts.decimalsNote, motivos: facts.reasons.map(\.rawValue),
-            notas: facts.notes, envioIndisponivel: asset.chain.flatMap(CustomToken.sendUnavailableReason),
+            casas: asset.decimals, fontes: fontes, notaDasCasas: notaDasCasas, motivos: motivos.map(\.rawValue),
+            notas: notas, envioIndisponivel: asset.chain.flatMap(CustomToken.sendUnavailableReason),
             referencia: CustomToken.reference(asset.kind), codigo: codigo,
             rotulo: asset.chain.map(CustomToken.addressLabel) ?? "",
             explorador: asset.chain.flatMap { rede in

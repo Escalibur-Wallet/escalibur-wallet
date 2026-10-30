@@ -1,7 +1,5 @@
 package app.escalibur.wallet.ui.carteira
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,7 +56,6 @@ import app.escalibur.wallet.ui.comp.BotaoPrimario
 import app.escalibur.wallet.ui.comp.BotaoSecundario
 import app.escalibur.wallet.ui.comp.BotaoTerciario
 import app.escalibur.wallet.ui.comp.Confirmacao
-import app.escalibur.wallet.ui.comp.EnderecoEmBlocos
 import app.escalibur.wallet.ui.comp.Faixa
 import app.escalibur.wallet.ui.comp.Icone
 import app.escalibur.wallet.ui.comp.Icones
@@ -66,7 +63,6 @@ import app.escalibur.wallet.ui.comp.LogoDaMoeda
 import app.escalibur.wallet.ui.comp.TelaComBarra
 import app.escalibur.wallet.ui.comp.acimaDoTeclado
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
-import app.escalibur.wallet.ui.comp.Transferencia
 import app.escalibur.wallet.ui.comp.movimentoReduzido
 import app.escalibur.wallet.ui.comp.relogio
 import app.escalibur.wallet.ui.objetos
@@ -201,13 +197,14 @@ fun TelaDeGerenciarAtivos() {
  * so entao guardar.
  */
 @Composable
-fun AdicionarMoedaCustom(inicial: String? = null, aoTerminar: () -> Unit) {
+fun AdicionarMoedaCustom(inicial: String? = null, rede: String? = null, codigoInicial: String? = null, aoTerminar: () -> Unit) {
     val escopo = rememberCoroutineScope()
-    // `inicial`: o contrato de uma moeda achada na busca do Receber, ja lido na rede ao abrir.
-    var endereco by remember { mutableStateOf(inicial ?: "") }
-    var codigo by remember { mutableStateOf("") }
-    var emissor by remember { mutableStateOf("") }
-    var emitida by remember { mutableStateOf(false) }
+    // `inicial`: o contrato de uma moeda achada na busca do Receber, ja lido na rede ao abrir. Com a `rede` (um token de "Outros
+    // tokens"), le direto nela; com o `codigoInicial`, `inicial` e o emissor da moeda emitida.
+    var endereco by remember { mutableStateOf(if (codigoInicial == null) inicial ?: "" else "") }
+    var codigo by remember { mutableStateOf(codigoInicial ?: "") }
+    var emissor by remember { mutableStateOf(if (codigoInicial != null) inicial ?: "" else "") }
+    var emitida by remember { mutableStateOf(codigoInicial != null) }
     var lendo by remember { mutableStateOf(false) }
     var erro by remember { mutableStateOf<String?>(null) }
     var token by remember { mutableStateOf<JSONObject?>(null) }
@@ -241,6 +238,7 @@ fun AdicionarMoedaCustom(inicial: String? = null, aoTerminar: () -> Unit) {
         escopo.launch {
             runCatching {
                 if (emitida) Api.objeto("tokens.ler", JSONObject().put("codigo", codigo.trim()).put("emissor", emissor.trim()))
+                else if (rede != null && endereco.trim() == inicial) Api.objeto("tokens.ler", JSONObject().put("rede", rede).put("endereco", endereco.trim()))
                 else Api.objeto("tokens.encontrar", JSONObject().put("texto", endereco.trim()))
             }.onSuccess { resposta(it) }.onFailure { erro = t("Não foi possível ler a moeda na rede agora.") }
             lendo = false
@@ -347,7 +345,6 @@ private fun EscolhaDeRede(rede: String, nome: String, acao: () -> Unit) {
 /** A previa da moeda lida: o nome e os selos, a rede, as casas, o contrato inteiro e os avisos. */
 @Composable
 private fun PreviaDaMoeda(token: JSONObject, aoAdicionar: () -> Unit, aoVoltar: () -> Unit) {
-    val contexto = LocalContext.current
     val rede = token.optString("rede")
     val redeNome = token.optString("redeNome")
     val motivos = token.optJSONArray("motivos").textos()
@@ -373,49 +370,24 @@ private fun PreviaDaMoeda(token: JSONObject, aoAdicionar: () -> Unit, aoVoltar: 
          style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.xs))
 
     // O contrato inteiro, como o dono confere com a fonte.
-    val referencia = token.optString("referencia").takeIf { it.isNotEmpty() && it != "null" }
-    if (referencia != null) {
-        Column(Modifier.padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-            val no = rede == "xrpl"
-            token.optString("codigo").takeIf { it.isNotEmpty() && it != "null" }?.let { codigo ->
-                Text(t("Código da moeda"), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
-                Text(codigo, style = estilo(Tipo.monoPequeno), color = Paleta.tinta)
-                Text(if (no) t("Emissor no %@", redeNome) else t("Emissor na %@", redeNome), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
-                     modifier = Modifier.padding(top = Espaco.xxs))
-            } ?: Text(if (no) t("%@ no %@", token.optString("rotulo"), redeNome) else t("%@ na %@", token.optString("rotulo"), redeNome),
-                      style = estilo(Tipo.nota), color = Paleta.tintaApagada)
-            if (referencia.length >= 26 && referencia.all { it.isLetterOrDigit() && it.code < 128 }) EnderecoEmBlocos(referencia)
-            else Text(referencia, style = estilo(Tipo.mono), color = Paleta.tinta)
-            Row(horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                AcaoDoContrato(t("Copiar"), Icones.copiar) {
-                    Transferencia.copiar(contexto, referencia)
-                    Avisos.mostrar(t("Copiado. Confira o endereço inteiro com a fonte oficial do token."))
-                }
-                token.optString("explorador").takeIf { it.startsWith("https://") }?.let { url ->
-                    AcaoDoContrato(t("Ver no %@", token.optString("exploradorNome")), Icones.setaDiagonal) {
-                        runCatching { contexto.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-                    }
-                }
-            }
-        }
-    }
+    PainelDoContrato(token, Modifier.padding(top = Espaco.md))
 
     Faixa(TipoDeFaixa.cautela, t("Não verificado pela Escalibur"), Modifier.padding(top = Espaco.md),
-          mensagem = t("Qualquer pessoa cria um token com qualquer nome e qualquer símbolo. Este não está na lista conferida da Escalibur: o nome e o símbolo foram escritos por quem criou o contrato. Não abra sites que aparecem no nome e não conecte esta carteira a nada que o token peça."))
+          mensagem = qualquerUmCriaToken)
     if (motivos.isNotEmpty()) {
         Column(Modifier.padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
             Text(t("Sinais de golpe neste token"), style = estilo(Tipo.cabecalho), color = Paleta.tinta)
-            for (motivo in motivos) Ponto(textoDoMotivo(motivo), Icones.alertaContorno, Paleta.cautela)
+            for (motivo in motivos) PontoDoToken(textoDoMotivo(motivo), Icones.alertaContorno, Paleta.cautela)
         }
     }
     val notas = token.optJSONArray("notas").textos()
     if (notas.isNotEmpty()) {
         Column(Modifier.padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-            for (nota in notas) Ponto(nota, Icones.info, Paleta.tinta)
+            for (nota in notas) PontoDoToken(nota, Icones.info, Paleta.tinta)
         }
     }
     token.optString("envioIndisponivel").takeIf { it.isNotEmpty() && it != "null" }?.let {
-        Ponto(it, Icones.enviar, Paleta.tinta, Modifier.padding(top = Espaco.md))
+        PontoDoToken(it, Icones.enviar, Paleta.tinta, Modifier.padding(top = Espaco.md))
     }
     BotaoPrimario(t("Adicionar à carteira"), Modifier.padding(top = Espaco.lg), acao = aoAdicionar)
     BotaoTerciario(t("Voltar e corrigir"), Modifier.fillMaxWidth().padding(top = Espaco.xs), acao = aoVoltar)
@@ -428,38 +400,12 @@ private fun lista(itens: List<String>): String = when (itens.size) {
     else -> t("%@ e %@", itens.dropLast(1).joinToString(", "), itens.last())
 }
 
-private fun textoDoMotivo(motivo: String): String = when (motivo) {
-    "link" -> t("O nome ou o símbolo traz um site ou um @. É o jeito mais comum de levar alguém a uma página que pede a senha da carteira.")
-    "bait" -> t("O nome usa isca: resgate, prêmio, bônus, airdrop, visite.")
-    "imitation" -> t("O símbolo imita o de uma moeda conhecida, com outro contrato.")
-    "dust" -> t("Chegou uma quantia mínima sem você pedir. Serve para o endereço de quem mandou aparecer no seu histórico.")
-    "flaggedBySource" -> t("A própria fonte da rede marca este token como golpe.")
-    else -> t("O nome tem caracteres invisíveis ou que invertem o texto.")
-}
-
 @Composable
 private fun LinhaDeInformacao(rotulo: String, valor: String) {
     Row(Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(rotulo, style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
         Spacer(Modifier.weight(1f).widthIn(min = Espaco.sm))
         Text(valor, style = estilo(Tipo.corpo), color = Paleta.tinta, textAlign = TextAlign.End)
-    }
-}
-
-@Composable
-private fun Ponto(texto: String, icone: ImageVector, cor: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-        Box(Modifier.width(18.dp).padding(top = 1.dp), contentAlignment = Alignment.TopCenter) { Icone(icone, cor, tamanho = 15.dp) }
-        Text(texto, style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun AcaoDoContrato(titulo: String, icone: ImageVector, acao: () -> Unit) {
-    Row(Modifier.heightIn(min = Altura.toque).clickable(onClick = acao), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Icone(icone, Paleta.tinta, tamanho = 15.dp)
-        Text(titulo, style = estilo(Tipo.nota), color = Paleta.tinta)
     }
 }
 
