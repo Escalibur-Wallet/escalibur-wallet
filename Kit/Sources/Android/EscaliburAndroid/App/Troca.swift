@@ -1273,7 +1273,17 @@ final class Troca: @unchecked Sendable {
     // MARK: O retrato
 
     struct Estado: Encodable {
-        struct Rede: Encodable { let id: String; let nome: String; let coingecko: String }
+        /// `aceitaFora`: a troca aceita token fora da lista nesta rede (EVM e Solana), e a escolha do token oferece adicionar
+        /// pelo contrato.
+        struct Rede: Encodable {
+            let id: String; let nome: String; let coingecko: String; var aceitaFora = false
+            init(_ rede: Chain) {
+                id = rede.id
+                nome = rede.name
+                coingecko = rede.coingeckoID
+                aceitaFora = (rede.family == .evm || rede.family == .solana) && TradeEngines.engine(for: rede) != nil
+            }
+        }
         struct Ativo: Encodable {
             let id: String, simbolo: String, nome: String, rede: String, redeCoingecko: String, coingecko: String?, casas: Int
             let conferido: Bool, custom: Bool, preco: Double?
@@ -1427,7 +1437,7 @@ final class Troca: @unchecked Sendable {
         let metadata = Sessao.shared.metadata
         let atualCotada = cotacaoAtual
         let (titulo, ligado) = botao
-        let rede = chain.map { Estado.Rede(id: $0.id, nome: $0.name, coingecko: $0.coingeckoID) }
+        let rede = chain.map { Estado.Rede($0) }
         let semVerificar = [sell, buy].compactMap { $0 }.first { $0.origin != nil }
         let abaixo: String? = {
             guard modo == .agora, recebeExato, abaixoDoAlvo, let buy, let minimo = minimoMostrado else { return nil }
@@ -1437,7 +1447,7 @@ final class Troca: @unchecked Sendable {
         return Estado(
             alvo: alvo, carteira: carteira?.id.uuidString, observa: carteira?.isWatchOnly == true, modo: modo,
             temLimite: motor?.supportsLimitOrders == true,
-            redes: TradeEngines.chains.map { Estado.Rede(id: $0.id, nome: $0.name, coingecko: $0.coingeckoID) }, rede: rede,
+            redes: TradeEngines.chains.map { Estado.Rede($0) }, rede: rede,
             vende: sell.map(Self.dto), compra: buy.map(Self.dto), valor: textoDoValor, versaoDoValor: versaoDoValor, entrada: quantidade?.decimalString,
             recebeExato: recebeExato, recebido: textoDoRecebido, versaoDoRecebido: versaoDoRecebido, resolvendo: resolvendo, abaixoDoAlvo: abaixo,
             saldo: textoDoSaldo(sell), saldoDaCompra: textoDoSaldo(buy), temSaldo: !(posicao(sell)?.quantidade.isZero ?? true), passou: passou,

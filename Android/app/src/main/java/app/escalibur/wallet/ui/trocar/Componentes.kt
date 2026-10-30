@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.trocar
 
+import app.escalibur.wallet.ui.principal.Navegacao
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.layout.fillMaxSize
 import app.escalibur.wallet.ui.principal.FolhaDoIos
 import app.escalibur.wallet.ui.comp.ControleDaFolha
@@ -509,7 +511,9 @@ internal fun Folha(titulo: String, aoFechar: () -> Unit, conteudo: @Composable (
 internal fun FolhaDeTokens(controle: ControleDaTroca, vende: Boolean, r: RetratoDaTroca, aoFechar: () -> Unit, aoEscolher: (String) -> Unit) {
     var opcoes by remember { mutableStateOf<List<OpcaoDeToken>?>(null) }
     var busca by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) { opcoes = controle.opcoes(vende) }
+    // Sobe a cada moeda adicionada pelo contrato: a lista le de novo e ja traz a nova.
+    var adicionadas by remember { mutableIntStateOf(0) }
+    LaunchedEffect(adicionadas) { opcoes = controle.opcoes(vende) }
     Folha(t("Escolher token"), aoFechar) { fechar ->
         CampoDeBusca(busca, t("Buscar por nome"), Modifier.padding(horizontal = Espaco.margem)) { busca = it }
         val termo = busca.trim()
@@ -532,6 +536,24 @@ internal fun FolhaDeTokens(controle: ControleDaTroca, vende: Boolean, r: Retrato
                 Text(if (termo.isEmpty()) t("Nada para vender na %@ ainda. Receba ou troque em outra rede primeiro.", rede)
                      else t("Nada com este nome entre o que você tem na %@.", rede),
                      style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md))
+            }
+            // Qualquer token que os provedores trocam nesta rede, pelo contrato: lido na rede antes de entrar na lista.
+            val rede = r.rede
+            if (rede != null && rede.aceitaFora) item {
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = Altura.linha).clickable {
+                        Navegacao.folha { app.escalibur.wallet.ui.carteira.AdicionarMoedaCustom(rede = rede.id) { Navegacao.fechar(); adicionadas++ } }
+                    }.padding(horizontal = Espaco.margem),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
+                ) {
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
+                        Icone(Icones.mais, Paleta.tinta, tamanho = 15.dp)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(t("Adicionar moeda pelo contrato"), style = estilo(Tipo.linha), color = Paleta.tinta)
+                        Text(t("Qualquer token que os provedores trocam na %@", rede.nome), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+                    }
+                }
             }
         }
     }

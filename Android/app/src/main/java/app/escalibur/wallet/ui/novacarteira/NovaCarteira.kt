@@ -1,5 +1,6 @@
 package app.escalibur.wallet.ui.novacarteira
 
+import app.escalibur.wallet.ui.principal.Navegacao
 import androidx.compose.foundation.layout.widthIn
 import app.escalibur.wallet.ui.comp.Avisos
 import app.escalibur.wallet.ui.comp.Transferencia
@@ -864,7 +865,7 @@ fun ConferirPalavras(palavras: Int, aoVoltar: () -> Unit, aoDepois: (() -> Unit)
     }
 }
 
-/** Carteira criada, com nome editavel: o selo com as redes em volta, o check verde, o nome. */
+/** Carteira criada, com nome editavel: o selo com as redes em volta, o check verde, o nome, e o envelope como segunda copia. */
 @Composable
 fun CarteiraCriada(carteira: Carteira, primeira: Boolean, aoTerminar: () -> Unit) {
     var nome by remember { mutableStateOf(carteira.nome) }
@@ -901,6 +902,13 @@ fun CarteiraCriada(carteira: Carteira, primeira: Boolean, aoTerminar: () -> Unit
         )
         Spacer(Modifier.weight(1f))
         BotaoPrimario(t("Ir para a carteira")) { salvar(aoTerminar) }
+        // Com o nome ja salvo: o envelope leva o nome da carteira de agora.
+        BotaoTerciario(t("Guardar também num envelope Escalibur"), Modifier.fillMaxWidth().padding(top = Espaco.xs)) {
+            salvar {
+                val atual = App.estado.carteiras.firstOrNull { it.id == carteira.id } ?: carteira
+                Navegacao.cobrir { app.escalibur.wallet.ui.envelope.FluxoDeLacrar(atual) }
+            }
+        }
     }
 }
 

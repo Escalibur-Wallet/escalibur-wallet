@@ -200,7 +200,7 @@ fun TelaDeGerenciarAtivos() {
 fun AdicionarMoedaCustom(inicial: String? = null, rede: String? = null, codigoInicial: String? = null, aoTerminar: () -> Unit) {
     val escopo = rememberCoroutineScope()
     // `inicial`: o contrato de uma moeda achada na busca do Receber, ja lido na rede ao abrir. Com a `rede` (um token de "Outros
-    // tokens"), le direto nela; com o `codigoInicial`, `inicial` e o emissor da moeda emitida.
+    // tokens", a escolha do token da troca), le direto nela; com o `codigoInicial`, `inicial` e o emissor da moeda emitida.
     var endereco by remember { mutableStateOf(if (codigoInicial == null) inicial ?: "" else "") }
     var codigo by remember { mutableStateOf(codigoInicial ?: "") }
     var emissor by remember { mutableStateOf(if (codigoInicial != null) inicial ?: "" else "") }
@@ -238,7 +238,7 @@ fun AdicionarMoedaCustom(inicial: String? = null, rede: String? = null, codigoIn
         escopo.launch {
             runCatching {
                 if (emitida) Api.objeto("tokens.ler", JSONObject().put("codigo", codigo.trim()).put("emissor", emissor.trim()))
-                else if (rede != null && endereco.trim() == inicial) Api.objeto("tokens.ler", JSONObject().put("rede", rede).put("endereco", endereco.trim()))
+                else if (rede != null && (inicial == null || endereco.trim() == inicial)) Api.objeto("tokens.ler", JSONObject().put("rede", rede).put("endereco", endereco.trim()))
                 else Api.objeto("tokens.encontrar", JSONObject().put("texto", endereco.trim()))
             }.onSuccess { resposta(it) }.onFailure { erro = t("Não foi possível ler a moeda na rede agora.") }
             lendo = false

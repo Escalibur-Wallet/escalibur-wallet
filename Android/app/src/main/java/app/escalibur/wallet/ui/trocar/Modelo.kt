@@ -44,9 +44,10 @@ class RetratoDaTroca(json: JSONObject) {
     val nomeDaCarteira: String = json.getString("nomeDaCarteira")
     private val e = json.getJSONObject("troca")
 
-    class Rede(val id: String, val nome: String, val coingecko: String)
+    /** `aceitaFora`: a troca aceita token fora da lista nesta rede (EVM e Solana). */
+    class Rede(val id: String, val nome: String, val coingecko: String, val aceitaFora: Boolean = false)
 
-    private fun rede(j: JSONObject) = Rede(j.getString("id"), j.getString("nome"), j.getString("coingecko"))
+    private fun rede(j: JSONObject) = Rede(j.getString("id"), j.getString("nome"), j.getString("coingecko"), j.optBoolean("aceitaFora"))
 
     val alvo: String = e.getString("alvo")
     val carteira: String? = e.opcional("carteira")
