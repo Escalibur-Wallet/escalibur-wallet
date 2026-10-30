@@ -301,6 +301,55 @@ struct CopyButton: View {
     }
 }
 
+/// O Colar do app. Primeiro o PasteButton do sistema, que cola sem o pedido de permissao do
+/// iOS. Depois de um tempo com o app aberto, o iOS as vezes encolhe esse botao a nada, e ele
+/// some da tela: o Colar da frase sumiu assim num iPhone com iOS 26.3.1 (30/10/2026), e o forum
+/// da Apple tem o mesmo relato desde o iOS 17. Encolhido, entra no lugar um botao do app, com o
+/// mesmo rotulo e o mesmo estilo de quem chama (`tint`, `labelStyle`, `buttonBorderShape`,
+/// `controlSize`), que le a area de transferencia direto; ai o iOS pergunta antes de colar.
+struct AppPasteButton: View {
+    let onPaste: @MainActor (String) -> Void
+
+    @State private var width: CGFloat = 0
+    @State private var collapsed = false
+
+    var body: some View {
+        if collapsed {
+            Button {
+                Task {
+                    // Fora da fila principal: a leitura espera a resposta do iOS ("Permitir
+                    // Colar"), e a tela nao trava enquanto isso.
+                    guard let text = await Task.detached(operation: { UIPasteboard.general.string }).value else { return }
+                    onPaste(text)
+                }
+            } label: {
+                Label(String(localized: "Colar"), systemImage: "doc.on.clipboard")
+            }
+            .buttonStyle(.borderedProminent)
+        } else {
+            PasteButton(payloadType: String.self) { strings in
+                guard let text = strings.first else { return }
+                Task { @MainActor in onPaste(text) }
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { value in
+                width = value
+                guard value < 8 else { return }
+                Task { @MainActor in
+                    // Na primeira medida o tamanho pode vir zero: so conta se continuar assim.
+                    try? await Task.sleep(for: .milliseconds(600))
+                    if width < 8 { collapsed = true }
+                }
+            }
+            .task {
+                #if DEBUG
+                // `-colar-do-app`: o botao do app desde o inicio, para o teste e para ver no simulador.
+                if DebugDemo.arguments.contains("-colar-do-app") { collapsed = true }
+                #endif
+            }
+        }
+    }
+}
+
 /// Um botao que so dispara depois de segurado por `holdSeconds`: os pixels enchem o fundo
 /// enquanto o dedo esta em cima, e soltar antes cancela. Para o "usar mesmo assim" de um risco
 /// grande, que nao pode sair de um toque sem querer. Com 0 segundos, e um toque comum.

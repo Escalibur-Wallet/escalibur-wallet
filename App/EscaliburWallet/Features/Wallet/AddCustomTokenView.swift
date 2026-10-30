@@ -158,9 +158,8 @@ struct AddCustomTokenView: View {
                 // Colar dentro do campo (pedido do dono, 18/10/2026). O do sistema: cola sem o
                 // pedido de permissao do iOS.
                 if text.wrappedValue.isEmpty {
-                    PasteButton(payloadType: String.self) { strings in
-                        guard let first = strings.first else { return }
-                        text.wrappedValue = first.trimmingCharacters(in: .whitespacesAndNewlines)
+                    AppPasteButton { pasted in
+                        text.wrappedValue = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
                     }
                     .labelStyle(.titleAndIcon)
                     .buttonBorderShape(.capsule)

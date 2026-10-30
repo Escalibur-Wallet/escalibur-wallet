@@ -92,14 +92,12 @@ struct WatchAddressView: View {
                 .onSubmit { focus = .name }
                 .accessibilityIdentifier("campo-endereco")
             if address.isEmpty {
-                PasteButton(payloadType: String.self) { strings in
-                    Task { @MainActor in
-                        let text = strings.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                        // A senha de uma carteira colada aqui nunca vira campo de endereco.
-                        address = PhraseGuard.looksLikePhrase(text) ? "" : text
-                        if address.isEmpty, !text.isEmpty { error = PhraseGuard.message }
-                        focus = nil
-                    }
+                AppPasteButton { pasted in
+                    let text = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+                    // A senha de uma carteira colada aqui nunca vira campo de endereco.
+                    address = PhraseGuard.looksLikePhrase(text) ? "" : text
+                    if address.isEmpty, !text.isEmpty { error = PhraseGuard.message }
+                    focus = nil
                 }
                 .labelStyle(.titleAndIcon)
                 .buttonBorderShape(.capsule)

@@ -224,14 +224,11 @@ struct ImportPhraseView: View {
                         } else {
                             Spacer()
                         }
-                        // O PasteButton do sistema le a area de transferencia sem o pedido de
-                        // permissao do iOS. Conferindo uma copia, nada de colar: a conferencia e
-                        // do papel (segunda revisao do modo reforcado, N6).
+                        // O Colar le a area de transferencia sem o pedido de permissao do iOS
+                        // (`AppPasteButton`). Conferindo uma copia, nada de colar: a conferencia
+                        // e do papel (segunda revisao do modo reforcado, N6).
                         if verify == nil, choose == nil {
-                            PasteButton(payloadType: String.self) { strings in
-                                guard let text = strings.first else { return }
-                                Task { @MainActor in fill(with: text) }
-                            }
+                            AppPasteButton { text in fill(with: text) }
                             .labelStyle(.titleAndIcon)
                             .buttonBorderShape(.capsule)
                             .controlSize(.large)

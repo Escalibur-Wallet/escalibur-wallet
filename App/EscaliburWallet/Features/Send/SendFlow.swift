@@ -562,9 +562,7 @@ struct SendStages: View {
                             .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).stroke(Palette.edge, lineWidth: 1)))
                         .padding(.top, Space.xs)
                     HStack(spacing: Space.xs) {
-                        PasteButton(payloadType: String.self) { strings in
-                            Task { @MainActor in apply(PaymentURI.read(strings.first ?? "")) }
-                        }
+                        AppPasteButton { text in apply(PaymentURI.read(text)) }
                         .labelStyle(.titleOnly).tint(Palette.rail).buttonBorderShape(.capsule)
                         Button { scanning = true } label: {
                             Label("Ler QR", systemImage: "qrcode.viewfinder").typeStyle(.label)

@@ -278,15 +278,13 @@ struct AddContactSheet: View {
                                         .font(TypeStyle.mono.font).foregroundStyle(Palette.ink)
                                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                                         .lineLimit(1...3)
-                                    PasteButton(payloadType: String.self) { strings in
-                                        Task { @MainActor in
-                                            let text = strings.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                                            if PhraseGuard.looksLikePhrase(text) {
-                                                address = ""
-                                                qrProblem = PhraseGuard.message
-                                            } else {
-                                                address = text
-                                            }
+                                    AppPasteButton { pasted in
+                                        let text = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+                                        if PhraseGuard.looksLikePhrase(text) {
+                                            address = ""
+                                            qrProblem = PhraseGuard.message
+                                        } else {
+                                            address = text
                                         }
                                     }
                                     .labelStyle(.iconOnly)

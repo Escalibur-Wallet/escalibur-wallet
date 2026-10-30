@@ -401,8 +401,11 @@ grupos=$(/usr/libexec/PlistBuddy -c "Print :com.apple.security.application-group
     && ok "entitlements: a protecao de dados e um App Group so (o do widget)" || aviso "entitlements inesperados: $chaves"
 achados=$(grep -oE 'NS[A-Za-z]+UsageDescription' "$APP/Resources/Info.plist" | sort -u | grep -vE 'NSFaceIDUsageDescription|NSCameraUsageDescription|NSMicrophoneUsageDescription|NSSpeechRecognitionUsageDescription')
 [ -n "$achados" ] && { aviso "permissao fora da lista"; echo "$achados"; } || ok "permissoes: Face ID, camera, microfone e fala, nada mais"
-achados=$(swift_em "$APP" | xargs grep -lE 'UIPasteboard' 2>/dev/null | grep -vE 'Receive/ReceiveSheet\.swift|NewWallet/ImportPhraseView\.swift|NewWallet/SecurityScreens\.swift')
-[ -n "$achados" ] && { aviso "area de transferencia fora dos pontos conhecidos"; echo "$achados"; } || ok "area de transferencia so em tres pontos"
+achados=$(swift_em "$APP" | xargs grep -lE 'UIPasteboard' 2>/dev/null | grep -vE 'Receive/ReceiveSheet\.swift|NewWallet/ImportPhraseView\.swift|NewWallet/SecurityScreens\.swift|Design/Buttons\.swift')
+[ -n "$achados" ] && { aviso "area de transferencia fora dos pontos conhecidos"; echo "$achados"; } || ok "area de transferencia so em quatro pontos"
+# O Colar reserva (AppPasteButton) so le, e so quando o do sistema encolheu (30/10/2026).
+achados=$(grep -n 'UIPasteboard' "$APP/Design/Buttons.swift" | grep -v 'UIPasteboard\.general\.string }')
+[ -n "$achados" ] && { aviso "o Colar reserva faz mais que ler"; echo "$achados"; } || ok "o Colar reserva so le a area de transferencia"
 # A checagem do aparelho nao olha a area de transferencia (tirada a pedido do dono, 22/10/2026).
 achados=$(grep -nE 'UIPasteboard' "$APP/Features/NewWallet/SecurityScreens.swift")
 [ -n "$achados" ] && { aviso "a checagem do aparelho mexe na area de transferencia"; echo "$achados"; } || ok "a checagem do aparelho nao olha a area de transferencia"

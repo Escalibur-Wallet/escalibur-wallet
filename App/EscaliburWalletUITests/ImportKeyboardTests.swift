@@ -35,6 +35,28 @@ final class ImportKeyboardTests: XCTestCase {
         XCTAssertEqual(app.otherElements["palavra-12"].label, "Palavra 12, preenchida")
     }
 
+    /// Quando o iOS encolhe o Colar do sistema, o do app entra no lugar (`AppPasteButton`): o
+    /// iOS pergunta antes de colar, e a frase entra igual.
+    func testAppPasteButtonFills() {
+        UIPasteboard.general.string = Array(repeating: "abandon", count: 11).joined(separator: " ") + " about"
+        let app = XCUIApplication()
+        app.launchArguments = ["-reset", "-demo", "-tela", "frase", "-frase-topo", "-colar-do-app"]
+        app.launch()
+        let paste = app.buttons.matching(NSPredicate(format: "label == 'Colar' OR label == 'Paste'")).firstMatch
+        XCTAssertTrue(paste.waitForExistence(timeout: 30))
+        shot("k0-colar-do-app", app)
+        paste.tap()
+        // O pedido do iOS vem do sistema, por cima do app (que fica coberto pela capa lima).
+        let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons
+            .matching(NSPredicate(format: "label == 'Allow Paste' OR label == 'Permitir Colar'")).firstMatch
+        XCTAssertTrue(allow.waitForExistence(timeout: 10), "o iOS nao perguntou antes de colar")
+        allow.tap()
+        let first = app.otherElements["palavra-1"]
+        let filled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == 'Palavra 1, preenchida'"), object: first)
+        XCTAssertEqual(XCTWaiter.wait(for: [filled], timeout: 10), .completed, "o Colar do app nao colou")
+        XCTAssertEqual(app.otherElements["palavra-12"].label, "Palavra 12, preenchida")
+    }
+
     /// A frase numerada, como outras carteiras e o Notas mostram (pedido do dono, 30/10/2026):
     /// os numeros nao viram palavras, e o aviso de colado nao fala em sincronizar.
     func testNumberedPasteFills() {

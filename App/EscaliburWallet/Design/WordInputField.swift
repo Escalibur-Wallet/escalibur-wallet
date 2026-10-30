@@ -159,7 +159,7 @@ struct WordInputField: UIViewRepresentable {
 }
 
 /// O campo da palavra: com o teclado proprio, o menu dele nao cola, nem le texto pela
-/// camera, que entrariam sem passar pelo filtro das letras. O Colar da tela (o PasteButton)
+/// camera, que entrariam sem passar pelo filtro das letras. O Colar da tela (`AppPasteButton`)
 /// continua sendo o caminho de colar a frase.
 final class WordTextField: UITextField {
     var ownKeyboard = false
