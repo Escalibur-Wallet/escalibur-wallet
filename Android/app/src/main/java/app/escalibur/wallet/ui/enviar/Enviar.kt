@@ -1,5 +1,8 @@
 package app.escalibur.wallet.ui.enviar
 
+import app.escalibur.wallet.ui.comp.MoedaQueVira
+import app.escalibur.wallet.ui.comp.DestinoDoEnvio
+import app.escalibur.wallet.ui.comp.IndicadorDaTroca
 import app.escalibur.wallet.ui.trocar.RevisaoDoCancelamento
 import app.escalibur.wallet.ui.trocar.LinhaDaOrdemQueCancela
 import app.escalibur.wallet.ui.trocar.Folha
@@ -1065,7 +1068,9 @@ private fun ColumnScope.EtapaDoStatus(controle: ControleDoEnvio, r: RetratoDoEnv
     Spacer(Modifier.weight(1f))
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         if (r.etapa == "enviando") {
-            Girando(Paleta.acento, 56.dp)
+            // A moeda indo para a carteira de destino, como na troca.
+            IndicadorDaTroca({ LogoDaMoeda(r.coingecko, r.simbolo, 56.dp, rede = r.rede, redeCoingecko = r.redeCoingecko, naoConferido = !r.conferido) },
+                             { DestinoDoEnvio() })
             Text(t("Enviando"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.lg))
             Text(r.linhaDoEnvio, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
         } else if (resultado?.situacao == "falhou") {
@@ -1073,8 +1078,8 @@ private fun ColumnScope.EtapaDoStatus(controle: ControleDoEnvio, r: RetratoDoEnv
             Text(t("A rede recusou o envio"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.md))
             Text(resultado.detalhe ?: "", style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
         } else {
-            // So a moeda, sem o selo da rede por cima (pedido do dono, 23/10/2026).
-            LogoDaMoeda(r.coingecko, r.simbolo, 72.dp, naoConferido = !r.conferido)
+            // So a moeda, sem o selo da rede por cima (pedido do dono, 23/10/2026), girando com o visto.
+            MoedaQueVira({ LogoDaMoeda(r.coingecko, r.simbolo, 80.dp, anel = Paleta.corpo, naoConferido = !r.conferido) })
             Text(t("Enviado"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.lg))
             Text(r.linhaDoEnvio, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
             // Confirmado, nada: a linha "confirmado na rede, com X confirmacoes" saiu (pedido do dono,

@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.trocar
 
+import app.escalibur.wallet.ui.comp.MoedaQueVira
+import app.escalibur.wallet.ui.comp.IndicadorDaTroca
 import androidx.compose.ui.graphics.Color
 import app.escalibur.wallet.ui.comp.OpcaoDoMenu
 import app.escalibur.wallet.ui.comp.PilulaComMenu
@@ -351,21 +353,19 @@ private fun PainelDaPonte(ponte: RetratoDaPonte.LinhaDaPonte) {
     }
 }
 
-/** Em curso, girando entre as moedas; chegou, o visto; sem entrega, a moeda de destino apagada. */
+/** Em curso, o cometa entre as moedas; chegou, a moeda de destino virando com o visto; sem entrega, o arco parado e o destino apagado. */
 @Composable
 private fun FiguraDaPonte(ponte: RetratoDaPonte.LinhaDaPonte) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        LogoDaMoeda(ponte.vende?.coingecko, ponte.vende?.simbolo ?: "", 56.dp, rede = ponte.vende?.rede, redeCoingecko = ponte.vende?.redeCoingecko)
-        Box(Modifier.width(64.dp), contentAlignment = Alignment.Center) {
-            when {
-                !ponte.feito -> Girando(Paleta.acento, 22.dp)
-                ponte.chegou -> Icone(Icones.vistoCheio, Paleta.alta, tamanho = 24.dp)
-                else -> Icone(Icones.avancar, Paleta.tintaApagada, tamanho = 18.dp)
-            }
-        }
-        LogoDaMoeda(ponte.chega?.coingecko, ponte.chega?.simbolo ?: "", 56.dp, Modifier.alpha(if (ponte.feito && !ponte.chegou) 0.35f else 1f),
-                    rede = ponte.chega?.rede, redeCoingecko = ponte.chega?.redeCoingecko)
+    when {
+        ponte.chegou -> MoedaQueVira({ LogoDaMoeda(ponte.chega?.coingecko, ponte.chega?.simbolo ?: "", 80.dp, rede = ponte.chega?.rede,
+                                                   redeCoingecko = ponte.chega?.redeCoingecko, anel = Paleta.corpo) })
+        else -> IndicadorDaTroca({ LogoDaPonte(ponte.vende) }, { LogoDaPonte(ponte.chega) }, cancelando = ponte.feito, parado = ponte.feito)
     }
+}
+
+@Composable
+private fun LogoDaPonte(ativo: AtivoDaTroca?) {
+    LogoDaMoeda(ativo?.coingecko, ativo?.simbolo ?: "", 56.dp, rede = ativo?.rede, redeCoingecko = ativo?.redeCoingecko)
 }
 
 @Composable
@@ -514,7 +514,9 @@ fun RevisaoDaPonte() {
 @Composable
 private fun ColumnScope.EsperaDaPonte(r: RetratoDaPonte, titulo: String?, texto: String) {
     Spacer(Modifier.weight(1f))
-    DirecaoDaPonte(r, null, null)
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        IndicadorDaTroca({ LogoDaPonte(r.vende) }, { LogoDaPonte(r.chega) })
+    }
     if (titulo != null) Text(titulo, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.lg))
     Text(texto, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
          modifier = Modifier.fillMaxWidth().padding(top = if (titulo == null) Espaco.lg else Espaco.xs))

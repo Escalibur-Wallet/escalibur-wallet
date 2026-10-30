@@ -1,5 +1,7 @@
 package app.escalibur.wallet.ui.trocar
 
+import app.escalibur.wallet.ui.comp.MoedaQueVira
+import app.escalibur.wallet.ui.comp.IndicadorDaTroca
 import app.escalibur.wallet.ui.comp.Girando
 import android.content.Intent
 import android.net.Uri
@@ -137,7 +139,10 @@ private fun ColumnScope.Espera(r: RetratoDaTroca, passo: String?, texto: String,
     Spacer(Modifier.weight(1f))
     passo?.let { Text(it, style = estilo(Tipo.nota), fontWeight = FontWeight.SemiBold, color = Paleta.tintaSuave, textAlign = TextAlign.Center,
                       modifier = Modifier.fillMaxWidth().padding(bottom = Espaco.md)) }
-    Direcao(r, null, null)
+    // As duas moedas no arco, com o cometa: no cancelamento, ele volta para a vendida.
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        IndicadorDaTroca({ LogoDaTroca(r.revisaoVende) }, { LogoDaTroca(r.revisaoCompra) }, cancelando = r.alvo == "cancelamento")
+    }
     if (titulo != null) Text(titulo, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
                              modifier = Modifier.fillMaxWidth().padding(top = Espaco.lg))
     Text(texto, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
@@ -316,13 +321,11 @@ private fun ColumnScope.Enviada(controle: ControleDaTroca, r: RetratoDaTroca, fr
             Text(t("A rede recusou o envio"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.md))
             Text(resultado.detalhe ?: "", style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
         } else {
-            Box(contentAlignment = Alignment.BottomEnd) {
-                LogoDaMoeda(r.revisaoVende?.coingecko, r.revisaoVende?.simbolo ?: "", 72.dp, rede = r.revisaoVende?.rede,
-                            redeCoingecko = r.revisaoVende?.redeCoingecko, naoConferido = r.revisaoVende?.conferido == false)
-                Box(Modifier.size(28.dp).clip(RoundedCornerShape(14.dp)).background(Paleta.vazio), contentAlignment = Alignment.Center) {
-                    Icone(Icones.vistoCheio, Paleta.alta, tamanho = 24.dp)
-                }
-            }
+            // A moeda da troca e o visto, girando como uma moeda jogada.
+            MoedaQueVira({
+                LogoDaMoeda(r.revisaoVende?.coingecko, r.revisaoVende?.simbolo ?: "", 80.dp, rede = r.revisaoVende?.rede,
+                            redeCoingecko = r.revisaoVende?.redeCoingecko, anel = Paleta.corpo, naoConferido = r.revisaoVende?.conferido == false)
+            })
             Text(frases.feito, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.lg))
             Text(frases.mensagemDoFeito, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
                  modifier = Modifier.padding(top = Espaco.xs))
@@ -412,4 +415,10 @@ private fun ColumnScope.Incerta(controle: ControleDaTroca, r: RetratoDaTroca, fr
         escopo.launch { controle.trabalhar("troca.retransmitir") }
     }
     BotaoTerciario(t("Fechar e acompanhar na Atividade"), Modifier.fillMaxWidth(), acao = aoFechar)
+}
+
+/** A moeda de um lado do arco do cometa, no tamanho dele. */
+@Composable
+private fun LogoDaTroca(ativo: AtivoDaTroca?) {
+    LogoDaMoeda(ativo?.coingecko, ativo?.simbolo ?: "", 56.dp, rede = ativo?.rede, redeCoingecko = ativo?.redeCoingecko, naoConferido = ativo?.conferido == false)
 }
