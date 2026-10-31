@@ -653,9 +653,9 @@ ABAS_DO_CODIGO = ["Kit/Sources/EscaliburKeys/Signer.swift", "Kit/Sources/Escalib
 def trecho_do_assinador(ctx, base):
     """"Codigo auditavel" (refeito pelo dono, 23/10/2026): um trecho real do assinador do app,
     lido do repositorio a cada publicacao, numa janela de editor com abas de outros arquivos
-    reais (o codigo do app inteiro e publico, nao so este trecho). As duas linhas que travam a
-    assinatura ficam marcadas, sem animacao de scanner (pedido do dono, 23/10/2026). Linha longa
-    quebra com recuo, sem cortar nem rolar. O link leva as mesmas linhas no GitHub."""
+    reais (o codigo do app inteiro e publico, nao so este trecho). Nenhuma linha fica marcada
+    (pedido do dono, 30/10/2026). Linha longa quebra com recuo, sem cortar nem rolar. O link
+    leva as mesmas linhas no GitHub."""
     caminho = ABAS_DO_CODIGO[0]
     fonte = (dados.RAIZ / caminho).read_text(encoding="utf-8")
     linhas = fonte.split("\n")
@@ -665,12 +665,8 @@ def trecho_do_assinador(ctx, base):
     recuo = min(len(l) - len(l.lstrip(" ")) for l in trecho if l.strip())
     trecho = [l[recuo:] for l in trecho]
     html_linhas = codigo.destacar(caminho, "\n".join(trecho))
-    # As linhas que travam a assinatura: a chave tem de ser a esperada, e a assinatura e conferida.
-    travas = ["Hash.constantTimeEqual(publicKey, request.expectedPublicKey)", "Secp256k1.verifyDER(signature: der"]
-    itens = []
-    for k, (cru, feito) in enumerate(zip(trecho, html_linhas)):
-        classe = ' class="trava conferida"' if any(t in cru for t in travas) else ""
-        itens.append(f'<li{classe}><span class="n">{inicio + 1 + k}</span><code>{feito or " "}</code></li>')
+    itens = [f'<li><span class="n">{inicio + 1 + k}</span><code>{feito or " "}</code></li>'
+             for k, feito in enumerate(html_linhas)]
     fim = inicio + len(trecho)
     abas = []
     for n, arquivo in enumerate(ABAS_DO_CODIGO):

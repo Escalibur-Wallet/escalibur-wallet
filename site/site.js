@@ -428,9 +428,6 @@
     }
   }
 
-  // MARK: A janela do assinador: quando aparece, uma faixa de luz desce pelo codigo e as travas
-  // ganham o selo quando ela passa (pedido do dono, 23/10/2026). Uma vez por visita; com
-  // movimento reduzido, tudo conferido de saida.
   // MARK: A cadeia do PIN acende degrau por degrau.
   if (movimento) {
     var degraus = document.querySelectorAll(".cadeia-acende li");

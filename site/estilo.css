@@ -1726,8 +1726,7 @@ html:not(.js) .nota::before, html:not(.js) .nota::after { display: none; }
 html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16px; }
 
 /* MARK: "Seguranca que da para conferir" com o codigo do assinador (redesenho do dono, 23/10/2026):
-   o texto a esquerda e, a direita, o trecho real numa janela; uma faixa de luz confere de cima
-   para baixo e as duas travas ganham um selo. Destaque monocromatico, como o resto do site. */
+   o texto a esquerda e, a direita, o trecho real numa janela, sem linha marcada (30/10/2026). */
 .conferir-grade { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr); gap: clamp(32px, 5vw, 80px); align-items: center; }
 .conferir-texto .lead { margin-top: 18px; }
 .conferir-pontos { list-style: none; padding: 0; margin: 26px 0 24px; display: grid; gap: 12px; }
@@ -1754,8 +1753,6 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
 .janela-corpo .s { color: #B9B9C1; }
 .janela-corpo .c { color: #66666E; }
 .janela-corpo .a { color: #DADADF; }
-.janela-corpo li.conferida { background: rgba(255, 255, 255, 0.06); }
-.janela-corpo li.conferida .n { color: var(--ink); }
 .janela-corpo li { position: relative; }
 .janela-pe { display: flex; align-items: center; gap: 10px; margin: 0; padding: 12px 16px; border-top: 1px solid var(--edge); font-size: 13.5px; color: var(--ink-muted); transition: color 0.4s ease; }
 .janela-pe .visto { stroke: var(--ink-muted); transition: stroke 0.4s ease; }
@@ -1861,14 +1858,10 @@ html:not(.js) .notas-titulo { position: static; transform: none; margin-top: 16p
 .janela-caminho b { color: var(--ink-soft); font-weight: 600; }
 .janela-corpo .n { padding-top: 0; }
 .janela-corpo code { display: block; flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; padding-left: 4ch; text-indent: -4ch; }
-.janela-corpo li.trava { box-shadow: inset 2px 0 0 transparent; transition: background 0.4s ease, box-shadow 0.4s ease; }
-.janela-corpo li.trava.conferida { box-shadow: inset 2px 0 0 var(--ink); }
 .janela-pe { background: #121215; }
 @media (max-width: 899px) {
   .janela-aba:nth-child(n+3) { display: none; }
   .janela-linhas { display: none; }
-  /* Sem a barra branca na lateral das linhas 90 e 95 no celular (pedido do dono, 23/10/2026). */
-  .janela-corpo li.trava.conferida { box-shadow: none; }
 }
 
 /* As moedas da pagina Redes giram no clique e no arrasto (pedido do dono, 23/10/2026). */
