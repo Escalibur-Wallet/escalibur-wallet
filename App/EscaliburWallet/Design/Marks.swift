@@ -1,0 +1,113 @@
+import SwiftUI
+
+/// A espada do Escalibur, como geometria. Proporcoes medidas no icone de 1024 do
+/// app irmao; a carteira usa a mesma forma para a familia se ler sem peca nova.
+struct EscaliburMark: Shape {
+    var closed: Bool = false
+
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        let x = { (t: CGFloat) in rect.minX + t * w }
+        let shift: CGFloat = closed ? -0.088 : 0
+        let y = { (t: CGFloat) in rect.minY + (t + shift) * h }
+        var path = Path()
+        path.addRect(CGRect(x: x(0.4297), y: y(0.2900), width: w * 0.1396, height: h * 0.0616))  // pomo
+        path.addRect(CGRect(x: x(0.4639), y: y(0.3516), width: w * 0.0713, height: h * 0.1435))  // punho
+        path.addRect(CGRect(x: x(0.2041), y: y(0.4951), width: w * 0.5908, height: h * 0.0488))  // travessao
+        let bladeBottom: CGFloat = closed ? 0.94 : 1.0
+        path.addRect(CGRect(x: x(0.4375), y: y(0.5439), width: w * 0.1240, height: h * (bladeBottom - 0.5439)))  // lamina
+        return path
+    }
+}
+
+/// O selo da carteira: o icone do app em miniatura. Lima vivo e a espada quase preta
+/// (24/10/2026, antes rosa com a espada branca).
+struct WalletBadge: View {
+    var size: CGFloat = 44
+    /// O fundo do icone: o lima da marca.
+    var background: Color = Palette.brand
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.2237, style: .continuous)
+        Canvas { context, canvas in
+            let w = canvas.width
+            let h = canvas.height
+            let rect = { (x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) in
+                Path(CGRect(x: x * w, y: y * h, width: width * w, height: height * h))
+            }
+            context.fill(Path(CGRect(origin: .zero, size: canvas)), with: .color(background))
+            // A espada do Escalibur, em proporcao com o icone de 1024 pontos.
+            let steel = Palette.onBrand
+            context.fill(rect(0.4297, 0.2900, 0.1406, 0.0615), with: .color(steel))  // pomo
+            context.fill(rect(0.4639, 0.3516, 0.0723, 0.1436), with: .color(steel))  // punho
+            context.fill(rect(0.2041, 0.4951, 0.5918, 0.0498), with: .color(steel))  // travessao
+            context.fill(rect(0.4375, 0.5449, 0.1250, 0.4551), with: .color(steel))  // lamina
+        }
+        .frame(width: size, height: size)
+        .clipShape(shape)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A marca de uma carteira: o icone de carteira, branco na selecionada; carteira so
+/// de observar mostra um olho, para nao parecer que dela se pode enviar.
+struct WalletGlyph: View {
+    let id: UUID
+    var size: CGFloat = 36
+    var selected: Bool = false
+    /// So o icone, sem o fundo, um pouco maior e um pouco acima do centro (a lista de
+    /// Carteiras nos Ajustes, pedido do dono, 16/10/2026).
+    var plain: Bool = false
+    /// Carteira com passphrase: um cadeado no canto, em toda lista de carteiras (pedido do
+    /// dono, 16/10/2026).
+    var passphrase: Bool = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: size <= 24 ? 6 : Radius.card, style: .continuous)
+            .fill(plain ? Color.clear : Palette.rail)
+            .frame(width: size, height: size)
+            .overlay {
+                // A de so observar tambem e uma carteira: o mesmo icone (pedido do dono, 22/10/2026).
+                Image(systemName: "wallet.bifold.fill")
+                    .font(.system(size: size * (plain ? 0.52 : 0.42), weight: .semibold))
+                    .foregroundStyle(selected ? Palette.ink : Palette.inkMuted)
+                    .offset(y: plain ? -1 : 0)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if passphrase {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: size * 0.22, weight: .bold))
+                        .foregroundStyle(Palette.ink)
+                        .frame(width: size * 0.44, height: size * 0.44)
+                        .background(Circle().fill(Palette.control).overlay(Circle().stroke(Palette.void, lineWidth: 2)))
+                        .offset(x: size * 0.12, y: size * 0.12)
+                }
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+/// A placa clara, com o canto superior direito chanfrado a 45 graus. Aparece so no
+/// que se confere caractere por caractere: palavras da frase, QR de receber, destino
+/// na revisao de envio.
+struct LacquerPlate: Shape {
+    var cut: CGFloat = 24
+    var radius: CGFloat = Radius.button
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let r = radius
+        path.move(to: CGPoint(x: rect.minX + r, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - cut, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + cut))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
+        path.addArc(center: CGPoint(x: rect.maxX - r, y: rect.maxY - r), radius: r, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
+        path.addArc(center: CGPoint(x: rect.minX + r, y: rect.maxY - r), radius: r, startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + r))
+        path.addArc(center: CGPoint(x: rect.minX + r, y: rect.minY + r), radius: r, startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
+        path.closeSubpath()
+        return path
+    }
+}

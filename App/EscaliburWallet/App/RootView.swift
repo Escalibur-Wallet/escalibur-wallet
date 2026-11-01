@@ -1,0 +1,227 @@
+import StoreKit
+import SwiftUI
+
+struct RootView: View {
+    @Environment(AppSession.self) private var session
+    @Environment(ToastCenter.self) private var toasts
+    @Environment(AuthCoordinator.self) private var auth
+    @Environment(Router.self) private var router
+    @Environment(Portfolio.self) private var portfolio
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var offeredBiometry = false
+    /// A primeira carteira e guardada antes de as palavras aparecerem. Sem esta
+    /// marca, a raiz trocava para a tela principal no instante do guardar e derrubava
+    /// o fluxo em tela cheia: o dono caia na carteira sem ver as palavras.
+    @State private var firstRun = false
+    /// A abertura: o cadeado de pixels da tela de abertura do iOS (`LaunchEmblem`), agora
+    /// animado, ate o app assentar. Antes a abertura era uma tela preta (pedido do dono,
+    /// 16/10/2026).
+    @State private var launching = true
+    private let inbox = NotificationInbox.shared
+
+    /// O modo demo (so em DEBUG) importa a carteira de teste sozinho: nao ha primeira
+    /// carteira para acompanhar.
+    private static var isDemo: Bool {
+        #if DEBUG
+        return DebugDemo.enabled
+        #else
+        return false
+        #endif
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Palette.void.ignoresSafeArea()
+            content
+            if launching {
+                LaunchCover().transition(.opacity).allowsHitTesting(false)
+            }
+        }
+        .task {
+            try? await Task.sleep(for: .milliseconds(650))
+            withAnimation(.easeOut(duration: 0.3)) { launching = false }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            session.scenePhaseChanged(phase)
+            switch phase {
+            case .active:
+                Task { await PriceAlertCenter.shared.check() }
+                Task { await ReceiptWatchCenter.shared.check() }
+                Task { await LimitOrderWatch.shared.check() }
+                Task { await LimitRenewalCenter.shared.refresh(session: session) }
+                Task { await UpdateGuard.shared.check() }
+                Task { await StoreSync.shared.run(session: session) }
+            case .background: Task { await PriceAlertCenter.shared.reschedule() }
+            default: break
+            }
+        }
+        // O toque num alerta espera o app destravar e entao abre a moeda no Mercado.
+        .onChange(of: inbox.request) { routeNotification() }
+        .onChange(of: session.phase) { routeNotification() }
+        // O aviso de recebimento confere as contas de agora (carteira nova, rede ligada ou
+        // desligada, endereco UTXO novo).
+        .task(id: session.phase == .unlocked ? ReceiptAccounts.signature(session) : nil) {
+            guard session.phase == .unlocked else { return }
+            await ReceiptWatchCenter.shared.sync(accounts: ReceiptAccounts.all(session))
+        }
+        // Pontes em curso: ao destravar, confere se chegaram (entrega conferida no destino).
+        .task(id: session.phase == .unlocked ? session.selectedWallet?.id : nil) {
+            guard session.phase == .unlocked else { return }
+            await BridgeCenter.shared.refresh(session: session)
+        }
+        // Os alertas falam na moeda escolhida em Ativos (com bitcoin, em dolar); trocar
+        // a moeda zera a base de cada um.
+        .task(id: session.phase == .unlocked ? session.metadata.settings.alertCurrency : nil) {
+            guard session.phase == .unlocked else { return }
+            await PriceAlertCenter.shared.syncCurrency(session.metadata.settings.alertCurrency)
+        }
+        // Travar no meio da primeira carteira derruba o fluxo em tela cheia, mas a
+        // carteira ja foi guardada antes das palavras. Ao destravar com carteira, a
+        // primeira vez acabou: vai para a Carteira, onde o aviso de copia pendente leva a
+        // gravar as palavras. Sem isto, a marca ficava ligada e o dono caia de novo na
+        // oferta do Face ID e em "Sua primeira carteira" (visto no iPhone).
+        .onChange(of: session.phase) { _, phase in
+            if phase == .unlocked, !session.metadata.wallets.isEmpty { firstRun = false }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataWillBecomeUnavailableNotification)) { _ in
+            session.deviceWillLock()
+        }
+        .onOpenURL { url in
+            if url.pathExtension.lowercased() == "esclbr" { router.incomingEnvelope = url }
+        }
+        .onAppear {
+            EnvelopeFile.sweepInbox()
+            // O Safe Keyboard em todo campo, enquanto ligado (pedido do dono, 17/10/2026).
+            let session = session
+            SafeKeyboardInstaller.shared.isOn = { session.ownKeyboardOn }
+            SafeKeyboardInstaller.shared.isLocked = { session.hardenedModeOn }
+            PassphraseGate.shared.toasts = toasts
+            session.onLock = { [auth] in auth.cancel() }
+            SafeKeyboardInstaller.shared.start()
+        }
+        #if DEBUG
+        .task { await DebugDemo.prepare(session: session, router: router, portfolio: portfolio) }
+        #endif
+    }
+
+    private func routeNotification() {
+        guard session.phase == .unlocked, let request = inbox.request else { return }
+        inbox.request = nil
+        if request.receipt {
+            router.tab = .activity
+            return
+        }
+        if request.orderID != nil {
+            router.tradeMode = .limit
+            router.tab = .trade
+            Task { await LimitRenewalCenter.shared.refresh(session: session) }
+            return
+        }
+        router.tab = .market
+        router.pendingCoinID = request.coinID
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch session.phase {
+        case .onboarding:
+            OnboardingFlow().transition(.opacity)
+        case .locked:
+            LockView().transition(.opacity)
+        case .unlocked:
+            if session.metadata.wallets.isEmpty || firstRun {
+                Group {
+                    if !offeredBiometry, KeyServices.biometryAvailable, !session.biometryEnabled, !session.hardenedModeOn {
+                        BiometryOfferView { offeredBiometry = true }
+                    } else {
+                        AddWalletView(isFirst: true) { firstRun = false }
+                    }
+                }
+                .onAppear {
+                    if session.metadata.wallets.isEmpty, !Self.isDemo {
+                        firstRun = true
+                        router.restart()
+                    }
+                }
+            } else {
+                MainTabs()
+                    .fullScreenCover(item: Binding(
+                        get: { router.incomingEnvelope.map { IncomingEnvelope(url: $0) } },
+                        set: { if $0 == nil { router.incomingEnvelope = nil } }
+                    )) { incoming in
+                        OpenEnvelopeFlow(initialURL: incoming.url) { router.incomingEnvelope = nil }
+                    }
+            }
+        }
+    }
+
+    struct IncomingEnvelope: Identifiable {
+        let url: URL
+        var id: String { url.absoluteString }
+    }
+}
+
+struct MainTabs: View {
+    @Environment(Router.self) private var router
+    @Environment(AppSession.self) private var session
+    @Environment(\.requestReview) private var requestReview
+
+    /// `wallet.bifold` existe a partir do iOS 18; antes, a prancheta do `wallet.pass`.
+    static var walletSymbol: String {
+        if #available(iOS 18.0, *) { return "wallet.bifold" }
+        return "wallet.pass"
+    }
+
+    var body: some View {
+        TabView(selection: Bindable(router).tab) {
+            WalletHomeView()
+                .tabItem { Label("Carteira", systemImage: Self.walletSymbol) }
+                .tag(Router.Tab.wallet)
+            MarketView()
+                .tabItem { Label("Mercado", systemImage: "chart.line.uptrend.xyaxis") }
+                .tag(Router.Tab.market)
+            TradeView()
+                .tabItem { Label("Trocar", systemImage: "arrow.left.arrow.right") }
+                .tag(Router.Tab.trade)
+            ActivityView()
+                .tabItem { Label("Atividade", systemImage: "clock.arrow.circlepath") }
+                .tag(Router.Tab.activity)
+            SettingsView()
+                .tabItem { Label("Ajustes", systemImage: "gearshape") }
+                .tag(Router.Tab.settings)
+        }
+        .tint(Palette.accent)
+        .modifier(LimitRenewalPrompts())
+        .fullScreenCover(item: Bindable(router).flow, onDismiss: askForReview) { flow in
+            switch flow {
+            case .send(let asset): SendFlow(initialAsset: asset)
+            }
+        }
+    }
+
+    /// Fechado o segundo envio que a rede aceitou, a Apple pede a nota do app, uma vez so:
+    /// e a pausa natural depois de a carteira ter servido (pedido do dono, 16/10/2026).
+    private func askForReview() {
+        let settings = session.metadata.settings
+        guard (settings.completedSends ?? 0) >= 2, settings.reviewAsked != true else { return }
+        session.metadata.settings.reviewAsked = true
+        try? session.persist()
+        Task {
+            try? await Task.sleep(for: .seconds(0.6))
+            requestReview()
+        }
+    }
+}
+
+/// A continuacao da tela de abertura do iOS: o mesmo cadeado, no mesmo lugar (centro da
+/// tela inteira), com os pixels cifrando, como em "Abrindo as palavras".
+private struct LaunchCover: View {
+    var body: some View {
+        ZStack {
+            Palette.void
+            CipherEmblem(size: 88)
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
+}

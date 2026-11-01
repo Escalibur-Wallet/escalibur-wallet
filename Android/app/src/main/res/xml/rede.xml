@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- So HTTPS, e so as autoridades do sistema: um certificado instalado pelo usuario (o que um
+     proxy de interceptacao pede para instalar) nao vale para o app. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

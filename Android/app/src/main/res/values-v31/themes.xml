@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- A abertura do Android 12 em diante: o fundo do app e o selo cifrado parado no centro, no lugar
+         do icone (a mesma abertura do iOS). O selo animado continua dele quando o app desenha. -->
+    <style name="Tema.Escalibur" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/vazio</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowSplashScreenBackground">@color/vazio</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/abertura</item>
+    </style>
+</resources>

@@ -1,0 +1,26 @@
+[
+ {
+  "versao": "1.0.1",
+  "data": "2026-11-01",
+  "itens": [
+   "Colar a frase com um toque, mesmo quando o iPhone esconde o botão do sistema.",
+   "Ver as palavras mostra só as palavras: a passphrase nunca aparece.",
+   "No Android, a carteira fica fechada enquanto um app de fora estiver lendo a tela.",
+   "Enviar para outra carteira sua não pede a conferência do endereço.",
+   "Ordens limite da mais nova para a mais antiga.",
+   "Proteções novas no acompanhamento dos envios e contra golpes com contas da Tron."
+  ]
+ },
+ {
+  "versao": "1.0.0",
+  "data": "2026-10-20",
+  "itens": [
+   "Primeira versão, para iPhone e Android.",
+   "Self-custody: as palavras nascem e ficam no seu celular, presas ao chip de segurança e ao PIN.",
+   "Bitcoin, Ethereum, Solana, XRP Ledger, Stellar, Tron, TON e outras redes, com os tokens conferidos um a um.",
+   "Troca, ordem limite e ponte sem taxa da Escalibur.",
+   "Envelope Escalibur: uma cópia cifrada das palavras, para guardar longe do celular.",
+   "Sem conta, sem e-mail e sem rastreamento."
+  ]
+ }
+]

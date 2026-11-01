@@ -1,0 +1,6 @@
+.gradle/
+build/
+app/build/
+local.properties
+# O nucleo compilado (tools/android/compilar-nucleo.sh): sai do codigo, nao vai no git.
+app/src/main/jniLibs/

@@ -1,0 +1,390 @@
+import EscaliburCore
+import Foundation
+
+/// Derivacao e validacao de endereco, por familia de rede.
+///
+/// Validar endereco e defesa de dinheiro, nao conveniencia: cada funcao aqui confere
+/// o checksum da rede e diz **por que** recusou, para a interface poder dizer "este e
+/// um endereco Ethereum, para enviar XRP use um que comeca com r" em vez de
+/// "endereco invalido".
+public enum Address {
+
+    public enum Problem: Error, Equatable, Sendable {
+        case empty
+        /// O texto e um endereco valido, mas de outra rede. Para EVM, a rede
+        /// representante e a Ethereum: o mesmo endereco vale em todas.
+        case otherNetwork(Chain)
+        /// O checksum nao fecha: letra trocada ou endereco truncado.
+        case badChecksum
+        case malformed
+        /// SegWit v1+ ou tipo de script que a carteira ainda nao envia.
+        case unsupportedType
+    }
+
+    /// Um destino validado. `tag` vem preenchida quando o endereco carrega a tag
+    /// junto (X-address do XRP Ledger). A conta muxed da Stellar continua o `M` inteiro,
+    /// sem tag (auditoria 4, M1).
+    public struct Destination: Equatable, Sendable {
+        public let address: String
+        public let tag: UInt64?
+
+        public init(address: String, tag: UInt64?) {
+            self.address = address
+            self.tag = tag
+        }
+    }
+
+    // MARK: Derivacao a partir da chave publica
+
+    /// O endereco da chave publica. `publicKey` e a comprimida (33 bytes) nas redes
+    /// secp256k1 e a Ed25519 (32 bytes) nas outras.
+    public static func from(publicKey: [UInt8], chain: Chain) throws -> String {
+        switch chain.family {
+        case .utxo:
+            let params = UTXOParams.for(chain)
+            let hash = Hash.hash160(publicKey)
+            if let hrp = params.bech32HRP {
+                guard let text = Bech32.segwitEncode(hrp: hrp, version: 0, program: hash) else { throw Problem.malformed }
+                return text
+            }
+            return Base58.bitcoin.encodeCheck([params.p2pkhVersion] + hash)
+        case .evm:
+            return eip55(try evmAccount(publicKey))
+        case .tron:
+            return Base58.bitcoin.encodeCheck([0x41] + (try evmAccount(publicKey)))
+        case .solana:
+            guard publicKey.count == 32 else { throw Problem.malformed }
+            return Base58.bitcoin.encode(publicKey)
+        case .xrpl:
+            guard publicKey.count == 33 else { throw Problem.malformed }
+            return Base58.ripple.encodeCheck([0x00] + Hash.hash160(publicKey))
+        case .stellar:
+            return try StellarKey.accountID(publicKey)
+        case .ton:
+            return try TONAddress.walletAddress(publicKey: publicKey)
+        case .sui:
+            return try SuiAddress(ed25519PublicKey: publicKey).hex
+        case .cardano:
+            return try CardanoAddress.base(publicKeys: publicKey)
+        case .polkadot:
+            guard let address = PolkadotAddress(accountID: publicKey) else { throw Problem.malformed }
+            return address.ss58
+        case .near:
+            guard let account = NEARAccountID(implicitPublicKey: publicKey) else { throw Problem.malformed }
+            return account.text
+        case .aptos:
+            return try AptosAddress(ed25519PublicKey: publicKey).hex
+        }
+    }
+
+    /// Os 20 bytes da conta EVM (e Tron): keccak da chave expandida sem o prefixo 04.
+    static func evmAccount(_ publicKey: [UInt8]) throws -> [UInt8] {
+        let expanded = try Secp256k1.reformat(publicKey: publicKey, compressed: false)
+        return Array(Hash.keccak256(Array(expanded.dropFirst())).suffix(20))
+    }
+
+    /// Checksum EIP-55 por caixa das letras.
+    public static func eip55(_ account: [UInt8]) -> String {
+        let lower = Hex.encode(account)
+        let hash = Hash.keccak256(Array(lower.utf8))
+        var out = "0x"
+        for (index, c) in lower.enumerated() {
+            let nibble = (hash[index / 2] >> (index % 2 == 0 ? 4 : 0)) & 0x0F
+            out.append(c.isLetter && nibble >= 8 ? Character(c.uppercased()) : c)
+        }
+        return out
+    }
+
+    // MARK: Validacao
+
+    /// Valida um endereco digitado ou colado para a rede dada.
+    public static func validate(_ raw: String, for chain: Chain) -> Result<Destination, Problem> {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return .failure(.empty) }
+
+        let result: Result<Destination, Problem>
+        switch chain.family {
+        case .utxo: result = validateUTXO(text, chain: chain)
+        case .evm: result = validateEVM(text)
+        case .tron: result = validateTron(text)
+        case .solana: result = validateSolana(text)
+        case .xrpl: result = XRPLAddress.validate(text)
+        case .stellar: result = StellarKey.validateDestination(text)
+        case .ton: result = TONAddress.validate(text)
+        case .sui: result = SuiAddress.validateDestination(text)
+        case .cardano: result = CardanoAddress.validateDestination(text)
+        case .polkadot: result = PolkadotAddress.validateDestination(text)
+        case .near: result = NEARAccountID.validateDestination(text)
+        case .aptos: result = AptosAddress.validateDestination(text)
+        }
+        if case .failure(let problem) = result, problem == .malformed || problem == .badChecksum,
+           let other = guessChain(text), other.id != chain.id, !(other.family == .evm && chain.family == .evm) {
+            return .failure(.otherNetwork(other))
+        }
+        return result
+    }
+
+    /// A identidade de um destino para comparacao: a mesma conta escrita de formas
+    /// diferentes (caixa do EIP-55 e do bech32, endereco X do XRP Ledger, forma
+    /// amigavel ou crua da TON) vira o mesmo texto. Nil se nao for endereco valido.
+    public static func canonicalRecipient(_ text: String, chain: Chain) -> String? {
+        guard case .success(let destination) = validate(text, for: chain) else { return nil }
+        switch chain.family {
+        case .evm: return destination.address.lowercased()
+        case .utxo:
+            let lower = destination.address.lowercased()
+            if let hrp = UTXOParams.for(chain).bech32HRP, lower.hasPrefix(hrp + "1") { return lower }
+            return destination.address
+        case .ton:
+            guard case .success(let parsed) = TONAddress.parse(text) else { return nil }
+            return parsed.address.raw.lowercased()
+        case .stellar: return destination.address.uppercased()
+        case .tron, .solana, .xrpl: return destination.address
+        case .sui: return destination.address
+        case .cardano: return destination.address
+        case .polkadot: return destination.address
+        case .near: return destination.address
+        case .aptos: return destination.address
+        }
+    }
+
+    /// O destino que entrou no plano e o que o dono digitou sao a mesma conta?
+    public static func sameRecipient(_ planned: String?, _ typed: String, chain: Chain) -> Bool {
+        guard let planned, let a = canonicalRecipient(planned, chain: chain), let b = canonicalRecipient(typed, chain: chain) else {
+            return false
+        }
+        return a == b
+    }
+
+    /// Adivinha a rede de um texto que parece endereco. So para a mensagem de erro
+    /// e para detectar a rede ao observar um endereco: nunca decide sozinho para
+    /// onde o dinheiro vai.
+    ///
+    /// Sui fica de fora de proposito: "0x" + 64 hex e tambem o formato da Aptos, e nada
+    /// no texto diz de qual das duas ele e. Dizer "este endereco e da Sui" seria chute. A
+    /// Aptos fica de fora pelo mesmo motivo.
+    public static func guessChain(_ text: String) -> Chain? {
+        if case .success = validateEVM(text) { return .ethereum }
+        if case .success = validateTron(text) { return .tron }
+        if case .success = XRPLAddress.validate(text) { return .xrpl }
+        if case .success = StellarKey.validateDestination(text) { return .stellar }
+        for chain in [Chain.bitcoin, .litecoin, .dogecoin] {
+            if case .success = validateUTXO(text, chain: chain) { return chain }
+        }
+        if case .success = TONAddress.validate(text) { return .ton }
+        if CardanoAddress.isCardano(text) { return .cardano }
+        // SS58 com o prefixo 0 so existe na Polkadot: nao e ambiguo.
+        if PolkadotAddress.isPolkadot(text) { return .polkadot }
+        // Nomes NEAR sob .near e .tg: nenhuma outra rede tem esse formato. A conta implicita
+        // (64 hex) fica sem palpite, pelo mesmo motivo da Sui: e tambem um endereco da Sui
+        // ou da Aptos sem o 0x.
+        if NEARAccountID.isNEAR(text) { return .near }
+        if case .success = validateSolana(text) { return .solana }
+        return nil
+    }
+
+    static func validateEVM(_ text: String) -> Result<Destination, Problem> {
+        guard text.hasPrefix("0x") || text.hasPrefix("0X"), text.count == 42,
+              let bytes = Hex.decode(text), bytes.count == 20
+        else { return .failure(.malformed) }
+        let body = text.dropFirst(2)
+        let mixed = body.contains { $0.isUppercase } && body.contains { $0.isLowercase }
+        let checksummed = eip55(bytes)
+        // Caixa mista precisa bater com o EIP-55. Tudo minusculo ou tudo maiusculo
+        // nao carrega checksum e e aceito, como em toda carteira.
+        if mixed, checksummed != text { return .failure(.badChecksum) }
+        return .success(Destination(address: checksummed, tag: nil))
+    }
+
+    static func validateTron(_ text: String) -> Result<Destination, Problem> {
+        guard text.hasPrefix("T"), text.count == 34 else { return .failure(.malformed) }
+        guard let payload = Base58.bitcoin.decodeCheck(text) else { return .failure(.badChecksum) }
+        guard payload.count == 21, payload[0] == 0x41 else { return .failure(.malformed) }
+        return .success(Destination(address: text, tag: nil))
+    }
+
+    static func validateSolana(_ text: String) -> Result<Destination, Problem> {
+        guard (32...44).contains(text.count), let bytes = Base58.bitcoin.decode(text), bytes.count == 32 else {
+            return .failure(.malformed)
+        }
+        return .success(Destination(address: text, tag: nil))
+    }
+
+    static func validateUTXO(_ text: String, chain: Chain) -> Result<Destination, Problem> {
+        let params = UTXOParams.for(chain)
+        if let hrp = params.bech32HRP, text.lowercased().hasPrefix(hrp + "1") {
+            guard let decoded = Bech32.segwitDecode(hrp: hrp, address: text) else { return .failure(.badChecksum) }
+            switch (decoded.version, decoded.program.count) {
+            case (0, 20), (0, 32), (1, 32):
+                return .success(Destination(address: text.lowercased(), tag: nil))
+            default:
+                return .failure(.unsupportedType)
+            }
+        }
+        guard let payload = Base58.bitcoin.decodeCheck(text) else {
+            return Base58.bitcoin.decode(text) == nil ? .failure(.malformed) : .failure(.badChecksum)
+        }
+        guard payload.count == 21, params.base58Versions.contains(payload[0]) else { return .failure(.malformed) }
+        return .success(Destination(address: text, tag: nil))
+    }
+}
+
+/// Parametros de endereco das redes UTXO.
+public struct UTXOParams: Sendable {
+    public let bech32HRP: String?
+    public let p2pkhVersion: UInt8
+    public let p2shVersion: UInt8
+    /// Versoes de P2SH aceitas no envio (o Litecoin tem a antiga 0x05 e a nova 0x32).
+    public let extraP2SHVersions: [UInt8]
+    /// Menor saida que o no aceita como padrao, em satoshis, por tipo de script.
+    public let dustP2WPKH: UInt64
+    public let dustP2PKH: UInt64
+
+    var base58Versions: [UInt8] { [p2pkhVersion, p2shVersion] + extraP2SHVersions }
+
+    public static func `for`(_ chain: Chain) -> UTXOParams {
+        switch chain.id {
+        case "litecoin":
+            // O P2SH antigo do Litecoin (0x05, "3...") e identico ao do Bitcoin: um
+            // endereco de Bitcoin colado na tela de LTC passaria sem aviso. So o
+            // formato atual (0x32, "M...") e aceito.
+            return UTXOParams(bech32HRP: "ltc", p2pkhVersion: 0x30, p2shVersion: 0x32, extraP2SHVersions: [], dustP2WPKH: 294, dustP2PKH: 546)
+        case "dogecoin":
+            return UTXOParams(bech32HRP: nil, p2pkhVersion: 0x1E, p2shVersion: 0x16, extraP2SHVersions: [], dustP2WPKH: 1_000_000, dustP2PKH: 1_000_000)
+        default:
+            return UTXOParams(bech32HRP: "bc", p2pkhVersion: 0x00, p2shVersion: 0x05, extraP2SHVersions: [], dustP2WPKH: 294, dustP2PKH: 546)
+        }
+    }
+}
+
+/// Enderecos do XRP Ledger: classico (r...) e X-address (X...), que carrega a tag.
+public enum XRPLAddress {
+    public static func accountID(_ address: String) -> [UInt8]? {
+        guard address.hasPrefix("r"), let payload = Base58.ripple.decodeCheck(address), payload.count == 21, payload[0] == 0 else {
+            return nil
+        }
+        return Array(payload.dropFirst())
+    }
+
+    /// Codifica um X-address da rede principal (XLS-5d): a conta e a tag juntas.
+    public static func xAddress(classic: String, tag: UInt32?) -> String? {
+        guard let account = accountID(classic) else { return nil }
+        var payload: [UInt8] = [0x05, 0x44] + account
+        payload.append(tag == nil ? 0 : 1)
+        payload += (tag ?? 0).littleEndianByteArray + [0, 0, 0, 0]
+        return Base58.ripple.encodeCheck(payload)
+    }
+
+    static func validate(_ text: String) -> Result<Address.Destination, Address.Problem> {
+        if text.hasPrefix("r") {
+            guard (25...35).contains(text.count) else { return .failure(.malformed) }
+            guard accountID(text) != nil else {
+                return Base58.ripple.decode(text) == nil ? .failure(.malformed) : .failure(.badChecksum)
+            }
+            return .success(Address.Destination(address: text, tag: nil))
+        }
+        if text.hasPrefix("X") {
+            // X-address: 0x05 0x44 (rede principal), 20 bytes de conta, flag, tag de
+            // 64 bits em little-endian (so os 32 de baixo valem).
+            guard let payload = Base58.ripple.decodeCheck(text), payload.count == 31 else { return .failure(.badChecksum) }
+            guard payload[0] == 0x05, payload[1] == 0x44 else { return .failure(.malformed) }
+            let account = Array(payload[2..<22])
+            let flag = payload[22]
+            let tagBytes = Array(payload[23..<31])
+            let tag = tagBytes.enumerated().reduce(UInt64(0)) { $0 | UInt64($1.element) << (8 * UInt64($1.offset)) }
+            guard flag <= 1, tag <= UInt64(UInt32.max), flag == 1 || tag == 0 else { return .failure(.malformed) }
+            let classic = Base58.ripple.encodeCheck([0x00] + account)
+            return .success(Address.Destination(address: classic, tag: flag == 1 ? tag : nil))
+        }
+        return .failure(.malformed)
+    }
+}
+
+/// StrKey da Stellar: conta G..., conta muxed M..., semente S... (nunca exibida).
+public enum StellarKey {
+    static let accountVersion: UInt8 = 6 << 3      // G
+    static let muxedVersion: UInt8 = 12 << 3       // M
+
+    public static func accountID(_ publicKey: [UInt8]) throws -> String {
+        guard publicKey.count == 32 else { throw Address.Problem.malformed }
+        return encode(version: accountVersion, payload: publicKey)
+    }
+
+    static func encode(version: UInt8, payload: [UInt8]) -> String {
+        let body = [version] + payload
+        let crc = CRC16.xmodem(body)
+        return Base32.encode(body + [UInt8(crc & 0xFF), UInt8(crc >> 8)])
+    }
+
+    public static func decode(_ text: String, version: UInt8) -> [UInt8]? {
+        guard let raw = Base32.decode(text), raw.count >= 3, raw[0] == version else { return nil }
+        let body = Array(raw.dropLast(2))
+        let crc = CRC16.xmodem(body)
+        guard raw[raw.count - 2] == UInt8(crc & 0xFF), raw[raw.count - 1] == UInt8(crc >> 8) else { return nil }
+        return Array(body.dropFirst())
+    }
+
+    public static func publicKey(of account: String) -> [UInt8]? {
+        guard let key = decode(account, version: accountVersion), key.count == 32 else { return nil }
+        return key
+    }
+
+    static func validateDestination(_ text: String) -> Result<Address.Destination, Address.Problem> {
+        if text.hasPrefix("G") {
+            guard text.count == 56 else { return .failure(.malformed) }
+            guard publicKey(of: text) != nil else { return .failure(.badChecksum) }
+            return .success(Address.Destination(address: text, tag: nil))
+        }
+        if text.hasPrefix("M") {
+            // Conta muxed: chave de 32 bytes seguida do id de 64 bits em big-endian. O
+            // destino continua o M inteiro: antes ele virava a conta base G mais o id como
+            // memo, e a transacao saia com outra semantica que a do endereco colado, sem
+            // passar pelo caminho muxed do planejador (auditoria 4, M1).
+            guard text.count == 69, let raw = decode(text, version: muxedVersion), raw.count == 40 else {
+                return .failure(.badChecksum)
+            }
+            return .success(Address.Destination(address: text, tag: nil))
+        }
+        return .failure(.malformed)
+    }
+}
+
+/// Caminhos de derivacao padrao de cada rede, conta por conta.
+public enum DefaultPaths {
+    public static func path(for chain: Chain, account: UInt32 = 0) -> DerivationPath {
+        let h = DerivationPath.hardened
+        switch chain.id {
+        case "bitcoin": return DerivationPath(components: [h(84), h(0), h(account), 0, 0])
+        case "litecoin": return DerivationPath(components: [h(84), h(2), h(account), 0, 0])
+        case "dogecoin": return DerivationPath(components: [h(44), h(3), h(account), 0, 0])
+        case "solana": return DerivationPath(components: [h(44), h(501), h(account), h(0)])
+        case "xrpl": return DerivationPath(components: [h(44), h(144), h(account), 0, 0])
+        case "stellar": return DerivationPath(components: [h(44), h(148), h(account)])
+        case "tron": return DerivationPath(components: [h(44), h(195), h(account), 0, 0])
+        case "ton": return DerivationPath(components: [h(44), h(607), h(account)])
+        // Sui: SLIP-10 Ed25519, tudo endurecido, a conta no terceiro nivel. E o caminho da
+        // Slush (antiga Sui Wallet), do SDK oficial e do wallet-core da Trust Wallet.
+        case "sui": return DerivationPath(components: [h(44), h(784), h(account), h(0), h(0)])
+        // Cardano: CIP-1852, endereco externo 0 da conta; a chave de stake e a do papel 2
+        // (m/1852'/1815'/i'/2/0) e entra no endereco base. E o que Eternl, Yoroi, Lace e
+        // Trust Wallet abrem com a mesma frase (chave mestra Icarus, CIP-3).
+        case "cardano": return DerivationPath(components: [h(1852), h(1815), h(account), 0, 0])
+        // Polkadot: SLIP-10 Ed25519, tudo endurecido, a conta no terceiro nivel. E o caminho
+        // e a derivacao da Trust Wallet (wallet-core, registry.json). A Ledger usa o mesmo
+        // caminho com outra derivacao (BIP32-Ed25519), e a Polkadot.js, a Nova e a Talisman
+        // usam sr25519 a partir da entropia: nas tres a mesma frase abre outra conta.
+        case "polkadot": return DerivationPath(components: [h(44), h(354), h(account), h(0), h(0)])
+        // NEAR: SLIP-10 Ed25519 em m/44'/397'/i', a conta implicita e a chave publica. E o
+        // caminho da MyNearWallet e do near-cli (near-seed-phrase) e da Trust Wallet
+        // (wallet-core, registry.json). A Ledger usa m/44'/397'/0'/0'/1' e abre outra conta.
+        case "near": return DerivationPath(components: [h(44), h(397), h(account)])
+        // Aptos: SLIP-10 Ed25519, tudo endurecido, a conta no terceiro nivel. E o caminho da
+        // Petra, do SDK oficial em TypeScript (`Account.fromDerivationPath`) e do wallet-core
+        // da Trust Wallet.
+        case "aptos": return DerivationPath(components: [h(44), h(637), h(account), h(0), h(0)])
+        default:
+            // EVM: todas as redes compartilham a mesma conta, m/44'/60'/0'/0/i.
+            return DerivationPath(components: [h(44), h(60), h(0), 0, account])
+        }
+    }
+}

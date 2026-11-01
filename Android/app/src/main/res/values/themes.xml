@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- O fundo quase preto do app (Palette.void, #0B0B0C), ja na abertura. -->
+    <style name="Tema.Escalibur" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/vazio</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

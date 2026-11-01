@@ -1,0 +1,214 @@
+import Foundation
+
+/// A porta de entrada da carteira para o envelope Escalibur (`.esclbr`).
+///
+/// O formato e o do app Escalibur, sem extensao nenhuma: um envelope lacrado aqui
+/// abre no cofre e no decifrador de referencia em Python, e um envelope do cofre
+/// abre aqui. Os testes de interoperabilidade conferem os dois sentidos.
+///
+/// Diferenca deliberada em relacao ao Escalibur: a abertura decodifica o bloco
+/// direto para `SecureBytes` (frase e 25a palavra), sem passar por `String`. No
+/// cofre a frase e exibida; na carteira ela e importada, e importar nao pode deixar
+/// a frase no heap pela vida inteira do processo.
+public enum Envelope {
+    public static let fileLength = VaultFormat.fileLength
+
+    public enum Failure: Error, Equatable, Sendable {
+        /// Tamanho, assinatura ou cabecalho fora do formato. Nada foi derivado.
+        case notAnEnvelope
+        /// O cabecalho pede mais memoria do que este aparelho tem agora.
+        case tooExpensiveForThisDevice(memoryMiB: Int)
+        /// Envelope vinculado a outro aparelho (formato previsto, nao implementado).
+        case boundToDevice
+        /// Senha errada ou arquivo adulterado. Uma mensagem so, de proposito.
+        case cannotOpen
+        /// Abriu, mas guarda uma parte SLIP-39, que sozinha nao e uma carteira.
+        case slip39Share
+        /// Abriu, mas o idioma gravado nao e nenhum dos dez conhecidos.
+        case unknownLanguage
+        /// Abriu, mas a frase dentro nao fecha o checksum BIP-39.
+        case invalidPhrase
+        /// Lacrar: o aparelho nao tem memoria livre agora para o piso de 256 MiB.
+        case notEnoughMemory
+        /// Lacrar: senha abaixo do piso de `PasswordStrength`.
+        case weakPassword
+    }
+
+    /// O que um envelope aberto entrega a carteira.
+    public struct Contents: Sendable {
+        /// A frase, na forma canonica, em buffer seguro.
+        public let phrase: SecureBytes
+        /// A 25a palavra, em buffer seguro. Vazia quase sempre, e **nunca ignorada**:
+        /// sem ela, a carteira importada seria outra, valida e vazia.
+        public let passphrase: SecureBytes
+        /// Nome e anotacoes sao texto nao confiavel, ja higienizados.
+        public let label: String
+        public let notes: String
+        public let language: BIP39Language
+
+        public func wipe() {
+            phrase.wipe()
+            passphrase.wipe()
+        }
+    }
+
+    /// Informacao publica do cabecalho, para a interface decidir antes de derivar.
+    public struct Inspection: Sendable {
+        public let kdf: KDFParameters
+        /// Segundos estimados para abrir, pela taxa medida neste aparelho.
+        public let estimatedSeconds: Double
+    }
+
+    // MARK: Lacrar
+
+    /// Lacra uma frase num envelope novo, com Argon2id calibrado para este aparelho e
+    /// nunca abaixo do piso de lacre. Reabre o resultado antes de devolver.
+    public static func seal(
+        phrase: SecureBytes,
+        passphrase: SecureBytes? = nil,
+        label: String,
+        notes: String = "",
+        password: SecureBytes,
+        parameters: KDFParameters? = nil,
+        generatedBits: Double? = nil,
+        acceptedRisk: Bool = false
+    ) throws -> Data {
+        // A senha e do dono, com no minimo 4 caracteres (pedido de 14/10/2026). Abaixo do
+        // piso de forca, so com o "sim" explicito que a tela de confirmacao entrega:
+        // nenhum caminho de codigo lacra senha fraca por acidente. A senha sorteada pelo
+        // app vale a entropia do sorteio (`generatedBits`), nao a estimativa.
+        guard PasswordStrength.scalarCount(password) >= PasswordStrength.minimumLength else { throw Failure.weakPassword }
+        let strength = generatedBits ?? PasswordStrength.bits(password)
+        guard strength >= PasswordStrength.minimumBits || acceptedRisk else { throw Failure.weakPassword }
+        guard KDFCalibration.canSeal() else { throw Failure.notEnoughMemory }
+        let chosen = parameters ?? KDFCalibration.calibrate()
+        let language: BIP39Language
+        if case .valid(let detected) = BIP39.validate(phrase) { language = detected } else { throw Failure.invalidPhrase }
+        let emptyPassphrase = SecureBytes(capacity: 1)
+        let sealing = SealingContents(
+            mnemonic: phrase, passphrase: passphrase ?? emptyPassphrase, label: label, notes: notes,
+            language: language, kind: .bip39
+        )
+        let data = try VaultFile.create(sealing: sealing, password: password, parameters: chosen)
+
+        // Condicao posterior: um envelope que nao abre com a senha que o dono acabou
+        // de digitar, ou que abre com outra frase, nao sai daqui.
+        let check = try open(data, password: password)
+        defer { check.wipe() }
+        let samePhrase = Hash.constantTimeEqual(phrase, check.phrase)
+        let samePassphrase = Hash.constantTimeEqual(passphrase ?? emptyPassphrase, check.passphrase)
+        guard samePhrase, samePassphrase else { throw CryptoError.malformedVault("o envelope gravado não confere com a frase") }
+        return data
+    }
+
+    // MARK: Abrir
+
+    /// Confere forma e custo antes de qualquer derivacao. O arquivo veio de fora
+    /// (AirDrop, Arquivos) e e tratado como hostil: um cabecalho com m = 1 GiB
+    /// derrubaria o app pelo jetsam no meio do Argon2.
+    public static func inspect(_ data: Data) throws -> Inspection {
+        guard looksLikeEnvelope(data) else { throw Failure.notAnEnvelope }
+        let header: VaultFormat.Header_
+        do { header = try VaultFormat.Header_.decode([UInt8](data)) } catch { throw Failure.notAnEnvelope }
+        guard header.binding == .passwordOnly else { throw Failure.boundToDevice }
+        let available = KDFCalibration.availableMemoryBytes()
+        let needed = UInt64(header.kdf.memoryKiB) * 1024
+        guard needed + 300 * 1024 * 1024 <= available else {
+            throw Failure.tooExpensiveForThisDevice(memoryMiB: Int(header.kdf.memoryKiB / 1024))
+        }
+        let seconds = KDFCalibration.estimatedSeconds(for: header.kdf)
+        return Inspection(kdf: header.kdf, estimatedSeconds: seconds)
+    }
+
+    /// Abre um envelope. Chamar fora do MainActor: o Argon2 leva segundos.
+    public static func open(_ data: Data, password: SecureBytes) throws -> Contents {
+        _ = try inspect(data)
+        let raw: (block: SecureBytes, slotIndex: Int, header: VaultFormat.Header_)
+        do {
+            raw = try VaultFile.openBlock(data, password: password)
+        } catch CryptoError.cannotOpen {
+            throw Failure.cannotOpen
+        }
+        defer { raw.block.wipe() }
+        return try decode(raw.block)
+    }
+
+    /// Um arquivo parece um envelope? Tamanho e assinatura, sem senha.
+    public static func looksLikeEnvelope(_ data: Data) -> Bool {
+        data.count == VaultFormat.fileLength && data.prefix(6) == Data(VaultFormat.magic)
+    }
+
+    // MARK: Conteudo
+
+    /// Decodifica o bloco de 3936 bytes direto para buffers seguros.
+    ///
+    /// Os erros daqui so existem depois que as duas tags AEAD fecharam, entao nao
+    /// servem de oraculo de senha.
+    static func decode(_ block: SecureBytes) throws -> Contents {
+        try block.withUnsafeBytes { raw -> Contents in
+            let bytes = raw.bindMemory(to: UInt8.self)
+            guard bytes.count == VaultFormat.plaintextLength, bytes[0] == 0x01 else { throw Failure.cannotOpen }
+            guard let kind = VaultContentKind(rawValue: bytes[1]) else { throw Failure.cannotOpen }
+            guard kind == .bip39 else { throw Failure.slip39Share }
+            guard let language = BIP39Language(storageCode: bytes[2]) else { throw Failure.unknownLanguage }
+
+            var lengths: [Int] = []
+            for field in 0..<4 {
+                let at = 4 + field * 2
+                lengths.append(Int(bytes[at]) << 8 | Int(bytes[at + 1]))
+            }
+            var cursor = 12
+            func take(_ length: Int) throws -> UnsafeBufferPointer<UInt8> {
+                guard cursor + length <= bytes.count else { throw Failure.cannotOpen }
+                defer { cursor += length }
+                return UnsafeBufferPointer(rebasing: bytes[cursor..<(cursor + length)])
+            }
+
+            let phraseSlice = try take(lengths[0])
+            let phrase = SecureBytes(capacity: max(phraseSlice.count, 1))
+            phrase.append(contentsOf: phraseSlice)
+
+            let passphraseSlice = try take(lengths[1])
+            let passphrase = SecureBytes(capacity: max(passphraseSlice.count, 1))
+            passphrase.append(contentsOf: passphraseSlice)
+
+            let label = sanitize(String(decoding: try take(lengths[2]), as: UTF8.self), limit: 64)
+            let notes = sanitize(String(decoding: try take(lengths[3]), as: UTF8.self), limit: 500)
+
+            guard case .valid = BIP39.validate(phrase) else {
+                phrase.wipe()
+                passphrase.wipe()
+                throw Failure.invalidPhrase
+            }
+            return Contents(phrase: phrase, passphrase: passphrase, label: label, notes: notes, language: language)
+        }
+    }
+
+    /// Texto vindo de arquivo alheio: sem controles bidirecionais (que reordenam o
+    /// que a tela mostra), sem largura zero, sem controle, com tamanho limitado.
+    public static func sanitize(_ text: String, limit: Int) -> String {
+        var scalars = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars {
+            switch scalar.properties.generalCategory {
+            // Formato (bidirecional, largura zero, hifen suave, tags), controle,
+            // separador de linha e de paragrafo, uso privado e nao atribuido: nada
+            // disso tem lugar no nome de uma carteira, e tudo isso serve para um
+            // arquivo alheio mostrar uma coisa e ser outra.
+            case .format, .control, .lineSeparator, .paragraphSeparator, .privateUse, .surrogate, .unassigned:
+                continue
+            case .spaceSeparator:
+                // Qualquer espaco vira espaco comum, e dois seguidos viram um.
+                if scalars.last != " ", !scalars.isEmpty { scalars.append(" ") }
+            default:
+                // Marcas combinantes empilhadas (texto "zalgo") ficam limitadas a duas.
+                if scalar.properties.generalCategory == .nonspacingMark {
+                    let trailing = scalars.reversed().prefix { $0.properties.generalCategory == .nonspacingMark }.count
+                    if trailing >= 2 { continue }
+                }
+                scalars.append(scalar)
+            }
+        }
+        let clean = String(scalars).trimmingCharacters(in: .whitespaces)
+        return String(clean.prefix(limit))
+    }
+}
