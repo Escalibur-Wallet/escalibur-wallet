@@ -485,6 +485,8 @@ public struct EVMTradeEngine: TradeEngine {
             case .cancelOrder: return try await submitCancellation(signed, plan: plan)
             default: throw EVMEngineFailure.batchMismatch
             }
+        } catch CoWClientError.rejected(let type) {
+            throw TradeRefusedForSure(reason: EVMEngineMessages.cowRejection(type))
         } catch {
             throw EVMEngineMessages.userFacing(error, .submit, chain: chain)
         }

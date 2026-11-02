@@ -23,6 +23,15 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
         case decoding(String)
     }
 
+    /// Uma recusa 4xx com o corpo, para quem precisa do motivo exato: a CoW diz por que nao aceitou
+    /// a ordem (`postKeepingRefusal`). O corpo vem limitado a 16 KB.
+    public struct Refusal: Error, Equatable, Sendable {
+        public let status: Int
+        public let body: Data
+    }
+
+    static let maxRefusalBytes = 16 * 1024
+
     public static let shared = HTTPClient()
 
     static let maxResponseBytes = 4 * 1024 * 1024
@@ -102,6 +111,16 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
         return try await perform(request)
     }
 
+    /// O `post`, mas uma recusa 4xx vem como `Refusal`, com o corpo dela: o motivo que o servidor deu
+    /// (01/11/2026, a ordem limite que a CoW recusou mostrava so "a transmissao nao foi concluida").
+    public func postKeepingRefusal(_ url: URL, json body: Data, timeout: TimeInterval = 10) async throws -> Data {
+        var request = URLRequest(url: url, timeoutInterval: timeout)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return try await perform(request, keepsRefusal: true)
+    }
+
     /// PUT e DELETE com corpo JSON, pelas mesmas regras de `get`/`post`. A CoW so aceita
     /// cancelamento em `DELETE /api/v1/orders` e registro de appData em `PUT`.
     public func send(_ method: String, _ url: URL, json body: Data?, headers: [String: String] = [:], timeout: TimeInterval = 10) async throws -> Data {
@@ -155,7 +174,7 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
     /// Uma tarefa de dados com o delegado da sessao, e nao `bytes(for:)`: em algumas
     /// versoes do macOS (a do runner do CI) o fluxo de `bytes(for:)` parava de entregar
     /// o corpo, e o delegado classico mede cada pedaco igual em todas.
-    private func perform(_ request: URLRequest, limit: Int = HTTPClient.maxResponseBytes) async throws -> Data {
+    private func perform(_ request: URLRequest, limit: Int = HTTPClient.maxResponseBytes, keepsRefusal: Bool = false) async throws -> Data {
         guard let url = request.url, Self.permits(url, allowedHosts: allowedHosts) else { throw Failure.hostNotAllowed }
         guard !isQuiet else { throw Failure.offline }
         let task = session.dataTask(with: request)
@@ -166,7 +185,7 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
                     // segredo que abre agora cancela esta tarefa, ou ela nem comeca.
                     let paused = lock.withLock { () -> Bool in
                         guard quietHolds == 0 else { return true }
-                        transfers[ObjectIdentifier(task)] = Transfer(continuation, task: task, limit: limit)
+                        transfers[ObjectIdentifier(task)] = Transfer(continuation, task: task, limit: limit, keepsRefusal: keepsRefusal)
                         return false
                     }
                     if paused {
@@ -190,12 +209,18 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
         let continuation: CheckedContinuation<Data, Error>
         let task: URLSessionTask
         let limit: Int
+        /// Uma recusa 4xx traz o corpo (`postKeepingRefusal`): o status fica aqui, e o corpo e lido.
+        let keepsRefusal: Bool
+        var refusedStatus: Int?
 
-        init(_ continuation: CheckedContinuation<Data, Error>, task: URLSessionTask, limit: Int) {
+        init(_ continuation: CheckedContinuation<Data, Error>, task: URLSessionTask, limit: Int, keepsRefusal: Bool = false) {
             self.continuation = continuation
             self.task = task
             self.limit = limit
+            self.keepsRefusal = keepsRefusal
         }
+
+        var currentLimit: Int { refusedStatus == nil ? limit : HTTPClient.maxRefusalBytes }
     }
 
     // MARK: Silencio
@@ -259,6 +284,11 @@ extension HTTPClient: URLSessionDataDelegate {
         let refusal: Failure?
         if let http = response as? HTTPURLResponse {
             if (300..<400).contains(http.statusCode) { refusal = .redirectRefused }
+            else if transfer.keepsRefusal, (400..<500).contains(http.statusCode) {
+                // O corpo da recusa e lido, ate 16 KB, para quem pediu o motivo.
+                lock.withLock { transfer.refusedStatus = http.statusCode }
+                refusal = nil
+            }
             else if !(200..<300).contains(http.statusCode) { refusal = .status(http.statusCode) }
             else if http.expectedContentLength > Int64(transfer.limit) { refusal = .tooLarge }
             else { refusal = nil }
@@ -279,7 +309,7 @@ extension HTTPClient: URLSessionDataDelegate {
         let over = lock.withLock { () -> Bool in
             guard transfer.failure == nil else { return false }
             transfer.data.append(data)
-            guard transfer.data.count > transfer.limit else { return false }
+            guard transfer.data.count > transfer.currentLimit else { return false }
             transfer.failure = .tooLarge
             transfer.data = Data()
             return true
@@ -294,6 +324,8 @@ extension HTTPClient: URLSessionDataDelegate {
         #endif
         if let failure = transfer.failure {
             transfer.continuation.resume(throwing: failure)
+        } else if error == nil, let status = transfer.refusedStatus {
+            transfer.continuation.resume(throwing: Refusal(status: status, body: transfer.data))
         } else if let error {
             transfer.continuation.resume(throwing: Self.failure(for: error))
         } else {

@@ -236,6 +236,31 @@ enum EVMEngineMessages {
         case .malformedSignature: return "A assinatura da ordem não confere. Nada foi enviado à CoW."
         case .uidMismatch, .orderMismatch: return kitText("A CoW devolveu uma ordem diferente da assinada. Confira a Atividade.")
         case .badResponse: return kitText("A CoW respondeu fora do esperado. Confira a Atividade antes de tentar de novo.")
+        case .rejected(let type): return cowRejection(type)
+        }
+    }
+
+    /// O motivo exato de a CoW recusar a ordem, pelo `errorType` dela (a lista da API do orderbook).
+    static func cowRejection(_ type: String) -> String {
+        switch type {
+        case "TooManyLimitOrders":
+            return kitText("A CoW recusou: esta carteira já tem o máximo de ordens limite com preço fora do mercado nesta rede. Cancele uma, ou crie a ordem mais perto do preço atual.")
+        case "InsufficientBalance":
+            return kitText("A CoW recusou: o saldo do token não cobre o valor da venda.")
+        case "InsufficientAllowance":
+            return kitText("A CoW recusou: a autorização do token não cobre o valor da venda. Monte a ordem de novo para o app autorizar.")
+        case "DuplicatedOrder":
+            return kitText("Esta ordem já está na CoW. Confira em Ordens abertas.")
+        case "UnsupportedToken", "UnsupportedBuyTokenDestination", "UnsupportedSellTokenSource", "InvalidNativeSellToken", "SameBuyAndSellToken", "TransferSimulationFailed":
+            return kitText("A CoW recusou: ela não negocia um dos tokens desta ordem.")
+        case "InsufficientValidTo", "ExcessiveValidTo":
+            return kitText("A CoW recusou: o prazo da ordem está fora do que ela aceita.")
+        case "SellAmountOverflow", "ZeroAmount", "TooMuchGas":
+            return kitText("A CoW recusou: o valor da ordem está fora do que ela aceita.")
+        case "InvalidSignature", "WrongOwner", "InvalidEip1271Signature", "IncompatibleSigningScheme", "MissingFrom":
+            return kitText("A CoW recusou a assinatura da ordem.")
+        default:
+            return kitText("A CoW recusou a ordem. Motivo informado por ela: \(type).")
         }
     }
 

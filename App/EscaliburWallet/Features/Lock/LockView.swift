@@ -17,6 +17,8 @@ struct LockView: View {
     /// Modo reforcado com o cadastro de rostos trocado: o cofre nao abre mais aqui.
     @State private var vaultLost = false
     @State private var throttleTask: Task<Void, Never>?
+    /// Super Security: o rosto ja confirmado, a espera do PIN (pedido do dono, 01/11/2026). Vale um PIN.
+    @State private var facePass: RootKeyVault.HardenedFacePass?
 
     /// Depois de reiniciar (ou de a bateria acabar), o Face ID so vale depois do PIN.
     private var restartNeedsPIN: Bool { session.biometryEnabled && !KeyServices.root.pinEnteredThisBoot }
@@ -26,7 +28,8 @@ struct LockView: View {
     private var hardenedSubtitle: String {
         let hold = KeyServices.root.hardenedHoldRemaining
         if hold > 0 { return AuthCoordinator.hardenedHoldMessage(hold) }
-        return String(localized: "Super Security: depois do PIN, o \(KeyServices.biometryName) confirma que é você.")
+        if facePass != nil { return String(localized: "O \(KeyServices.biometryName) confirmou. Agora o PIN.") }
+        return String(localized: "Super Security: primeiro o \(KeyServices.biometryName), depois o PIN.")
     }
 
     var body: some View {
@@ -39,8 +42,10 @@ struct LockView: View {
                     : nil),
             entry: entry,
             showsBadge: true,
-            biometryIcon: session.biometryEnabled && !restartNeedsPIN ? KeyServices.biometryIcon : nil,
-            onBiometry: { Task { await tryBiometry() } },
+            biometryIcon: session.hardenedModeOn
+                ? (facePass == nil ? KeyServices.biometryIcon : nil)
+                : (session.biometryEnabled && !restartNeedsPIN ? KeyServices.biometryIcon : nil),
+            onBiometry: { Task { session.hardenedModeOn ? await tryHardenedFace() : await tryBiometry() } },
             working: working,
             onComplete: { Task { await submit() } }
         ) {
@@ -56,24 +61,61 @@ struct LockView: View {
             triedBiometry = true
             showThrottleIfNeeded()
             // Com a trava de alerta na tela, o Face ID automatico nao abre por cima dela.
-            if session.biometryEnabled, !restartNeedsPIN, !UpdateAlarmWindow.covering { await tryBiometry() }
+            guard !UpdateAlarmWindow.covering else { return }
+            if session.hardenedModeOn {
+                await tryHardenedFace()
+            } else if session.biometryEnabled, !restartNeedsPIN {
+                await tryBiometry()
+            }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { triedBiometry = false }
+            if phase == .background {
+                triedBiometry = false
+                // O rosto confirmado nao fica para a volta: na proxima vinda, o rosto de novo.
+                if facePass != nil { KeyServices.root.discardHardenedFace(); facePass = nil }
+            }
         }
         .sheet(isPresented: $forgotPIN) { forgotSheet }
+        #if DEBUG
+        // `-tela esqueci`: a folha de Esqueci o PIN aberta, para conferir o desenho no simulador.
+        .onAppear { if DebugDemo.screen == "esqueci" { forgotPIN = true } }
+        #endif
     }
 
     private func submit() async {
         working = true
         defer { working = false }
         let pin = entry.take()
+        // O rosto confirmado vale este PIN so, certo ou errado. Sem ele (o rosto foi cancelado), o
+        // cofre pede o rosto depois do PIN, como antes.
+        let pass = facePass
+        facePass = nil
         do {
-            try await session.unlock(pin: pin)
+            if let pass {
+                try await session.unlock(pin: pin, face: pass)
+            } else {
+                try await session.unlock(pin: pin)
+            }
+        } catch let failure as RootKeyVault.Failure {
+            handle(failure)
+            if pass != nil, session.hardenedModeOn, !vaultLost { await tryHardenedFace() }
+        } catch {
+            entry.fail(String(localized: "Não foi possível destravar. Tente de novo."))
+        }
+    }
+
+    /// Super Security: o rosto primeiro (pedido do dono, 01/11/2026). Cancelado ou nao reconhecido,
+    /// o teclado continua, e o PIN pede o rosto depois.
+    private func tryHardenedFace() async {
+        guard session.hardenedModeOn, facePass == nil, KeyServices.root.throttleRemaining() <= 0 else { return }
+        do {
+            facePass = try await session.hardenedFace(reason: String(localized: "Destravar a Escalibur"))
+        } catch RootKeyVault.Failure.biometryNotConfirmed {
+            // Cancelado ou nao reconhecido: nada mudou, o teclado continua ali.
         } catch let failure as RootKeyVault.Failure {
             handle(failure)
         } catch {
-            entry.fail(String(localized: "Não foi possível destravar. Tente de novo."))
+            // O teclado continua ali.
         }
     }
 
@@ -145,14 +187,15 @@ struct LockView: View {
         VStack(spacing: 0) {
             SheetHeader(title: "") { forgotPIN = false }
             ScrollView {
-                VStack(spacing: 0) {
-                    Image(systemName: "lock.iphone")
-                        .font(.system(size: 30, weight: .semibold))
-                        .foregroundStyle(Palette.ink)
-                        .frame(width: 72, height: 72)
-                        .background(Circle().fill(Palette.control))
+                // Redesenho do dono (01/11/2026): sem o icone num circulo nem o cartao de passos
+                // numerados, que tinham cara de template. Uma cena de pixels conta a saida: o PIN se
+                // desfaz, as palavras anotadas aparecem e viram um PIN novo. Texto alinhado a esquerda.
+                VStack(alignment: .leading, spacing: 0) {
+                    ForgotPINScene()
+                        .padding(.top, -Space.xs)
                     Text(vaultLost ? String(localized: "O \(KeyServices.biometryName) mudou") : String(localized: "Não existe redefinir o PIN"))
                         .typeStyle(.title).foregroundStyle(Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, Space.md)
                     Text(vaultLost
                          ? (KeyServices.root.hardenedFaceChange == .lock
@@ -163,17 +206,14 @@ struct LockView: View {
                         .typeStyle(.body).foregroundStyle(Palette.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, Space.xs)
-                    VStack(alignment: .leading, spacing: Space.md) {
+                    VStack(alignment: .leading, spacing: Space.base) {
                         ForgotStep(number: 1, text: String(localized: "Tenha em mãos a senha de cada carteira (as 12 ou 24 palavras) ou o envelope Escalibur, e a passphrase de cada carteira que usa passphrase."))
                         ForgotStep(number: 2, text: String(localized: "Apague as carteiras deste iPhone."))
                         ForgotStep(number: 3, text: String(localized: "Crie um PIN novo e importe cada carteira de novo."))
                     }
-                    .padding(Space.base)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.rail))
                     .padding(.top, Space.lg)
                 }
-                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Space.gutter)
                 .padding(.top, Space.xs)
             }
@@ -247,22 +287,139 @@ struct LockView: View {
     }
 }
 
-/// Um passo numerado de como voltar a usar o app sem o PIN.
+/// Um passo de como voltar a usar o app sem o PIN: o numero no mesmo tipo do texto, mais apagado,
+/// sem circulo nem cartao.
 private struct ForgotStep: View {
     let number: Int
     let text: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: Space.sm) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.sm) {
             Text("\(number)")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Palette.ink)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(Palette.control))
+                .typeStyle(.row).foregroundStyle(Palette.inkMuted)
+                .monospacedDigit()
+                .frame(width: 16, alignment: .leading)
             Text(text).typeStyle(.body).foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 3)
         }
+    }
+}
+
+/// A saida de quem esqueceu o PIN, em pixels que cifram, como as cenas da passphrase: os seis
+/// pontos do PIN se desfazem em ruido, as palavras anotadas aparecem uma a uma e sobem para
+/// virar um PIN novo, em lima. Nada aqui e de verdade: pontos e palavras sao desenho.
+struct ForgotPINScene: View {
+    var height: CGFloat = 176
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var start = Date()
+
+    private enum G {
+        static let width: CGFloat = 300
+        static let height: CGFloat = 176
+        static let pitch: CGFloat = 6
+        static let cell: CGFloat = 4.6
+        static let period = 7.2
+        /// Os seis pontos do PIN: 3 por 3 pixels cada, com 4 pixels entre eles.
+        static let dotsY: CGFloat = 40
+        static let dotSize = 3
+        static let dotGap = 4
+        /// As palavras: 2 fileiras de 6 pastilhas de 5 por 2 pixels.
+        static let tilesY: CGFloat = 104
+    }
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
+            let elapsed = timeline.date.timeIntervalSince(start)
+            let t = reduceMotion ? 5.6 : elapsed.truncatingRemainder(dividingBy: G.period)
+            let clock = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
+            Canvas { context, size in
+                let scale = min(size.width / G.width, size.height / G.height)
+                context.translateBy(x: (size.width - G.width * scale) / 2, y: (size.height - G.height * scale) / 2)
+                context.scaleBy(x: scale, y: scale)
+                context.opacity = reduceMotion ? 1 : min(Self.smooth(t / 0.3), 1 - Self.smooth((t - (G.period - 0.45)) / 0.45))
+                draw(context, t: t, clock: clock)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .onAppear { start = Date() }
+        .accessibilityHidden(true)
+    }
+
+    private func draw(_ context: GraphicsContext, t: Double, clock: Double) {
+        func tone(_ id: Int, _ layer: Int) -> Double {
+            let phase = PixelFill.noise(id, layer, 0x5F1)
+            let beat = clock * 4 * (0.6 + 0.8 * phase) + phase * 8
+            let step = beat.rounded(.down)
+            let s = beat - step
+            let a = PixelFill.noise(id, layer, Int(step)), b = PixelFill.noise(id, layer, Int(step) + 1)
+            return a + (b - a) * s * s * (3 - 2 * s)
+        }
+        func dot(_ center: CGPoint, _ color: Color, _ alpha: Double) {
+            guard alpha > 0.01 else { return }
+            let rect = CGRect(x: center.x - G.cell / 2, y: center.y - G.cell / 2, width: G.cell, height: G.cell)
+            context.fill(Path(roundedRect: rect, cornerRadius: G.cell * 0.24), with: .color(color.opacity(alpha)))
+        }
+        // Onde fica cada pixel dos seis pontos do PIN.
+        let dotsWidth = CGFloat(6 * G.dotSize + 5 * G.dotGap) * G.pitch
+        let dotsX = (G.width - dotsWidth) / 2
+        func pinPixel(_ index: Int) -> CGPoint {
+            let dot = index / (G.dotSize * G.dotSize), inner = index % (G.dotSize * G.dotSize)
+            let column = dot * (G.dotSize + G.dotGap) + inner % G.dotSize
+            return CGPoint(x: dotsX + (CGFloat(column) + 0.5) * G.pitch, y: G.dotsY + (CGFloat(inner / G.dotSize) + 0.5) * G.pitch)
+        }
+        let pinPixels = 6 * G.dotSize * G.dotSize
+
+        // 1. O PIN de antes: aceso, e depois se desfaz em ruido, de cada pixel para um lado.
+        let dissolve = Self.smooth((t - 0.9) / 1.5)
+        for index in 0..<pinPixels {
+            let home = pinPixel(index)
+            let spread = CGFloat(dissolve) * 30
+            let dx = (CGFloat(PixelFill.noise(index, 3, 1)) - 0.5) * spread * 2
+            let dy = (CGFloat(PixelFill.noise(index, 3, 2)) - 0.5) * spread * 2 - CGFloat(dissolve) * 8
+            let value = dissolve > 0 ? 0.3 + 0.45 * tone(index, 2) : 0.9
+            dot(CGPoint(x: home.x + dx, y: home.y + dy), PixelFill.gray(value), 1 - Self.smooth((dissolve - 0.45) / 0.55))
+        }
+
+        // 2. As palavras anotadas aparecem, uma pastilha de cada vez.
+        let tilesWidth = CGFloat(6 * 5 + 5) * G.pitch
+        let tilesX = (G.width - tilesWidth) / 2
+        var tilePixels: [(home: CGPoint, id: Int, appear: Double)] = []
+        for tile in 0..<12 {
+            let appear = Self.smooth((t - 2.3 - Double(tile) * 0.09) / 0.35)
+            for px in 0..<5 {
+                for py in 0..<2 {
+                    let home = CGPoint(x: tilesX + (CGFloat((tile % 6) * 6 + px) + 0.5) * G.pitch,
+                                       y: G.tilesY + (CGFloat((tile / 6) * 3 + py) + 0.5) * G.pitch)
+                    tilePixels.append((home, tile * 10 + px * 2 + py, appear))
+                }
+            }
+        }
+        // 3. As palavras sobem e viram o PIN novo, em lima: so quem tem as palavras volta.
+        let rise = Self.smooth((t - 4.0) / 1.3)
+        for (index, pixel) in tilePixels.enumerated() {
+            let delay = PixelFill.noise(pixel.id, 9, 0x2C) * 0.4
+            let f = Self.smooth((rise - delay) / (1 - delay + 0.0001))
+            let target = pinPixel(index % pinPixels)
+            let x = pixel.home.x + (target.x - pixel.home.x) * CGFloat(f)
+            let y = pixel.home.y + (target.y - pixel.home.y) * CGFloat(f) - CGFloat(sin(f * .pi)) * 14
+            let resting = PixelFill.gray(0.42 + 0.36 * tone(pixel.id, 5))
+            // Os que chegam somem dentro do ponto novo; o ponto e desenhado inteiro abaixo.
+            dot(CGPoint(x: x, y: y), resting, pixel.appear * (1 - Self.smooth((f - 0.8) / 0.2)))
+        }
+        let settled = Self.smooth((t - 5.0) / 0.5)
+        for index in 0..<pinPixels {
+            dot(pinPixel(index), Palette.lime, settled)
+        }
+        // As palavras ficam, apagadas, depois de virar o PIN: elas continuam sendo a saida.
+        for pixel in tilePixels {
+            dot(pixel.home, PixelFill.gray(0.2 + 0.12 * tone(pixel.id, 6)), settled * 0.9)
+        }
+    }
+
+    static func smooth(_ x: Double) -> Double {
+        let t = min(max(x, 0), 1)
+        return t * t * (3 - 2 * t)
     }
 }

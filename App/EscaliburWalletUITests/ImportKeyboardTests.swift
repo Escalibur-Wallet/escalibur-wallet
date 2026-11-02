@@ -57,6 +57,33 @@ final class ImportKeyboardTests: XCTestCase {
         XCTAssertEqual(app.otherElements["palavra-12"].label, "Palavra 12, preenchida")
     }
 
+    /// O Colar de observar um endereco (relato do dono, 01/11/2026: nao colava), com o botao do
+    /// sistema e com o do app.
+    func testWatchAddressPasteFills() {
+        for appButton in [true, false] {
+            let address = "0x4B1c0000000000000000000000000000000007e09"
+            UIPasteboard.general.string = address
+            let app = XCUIApplication()
+            app.launchArguments = ["-reset", "-demo", "-tela", "observar"] + (appButton ? ["-colar-do-app"] : [])
+            app.launch()
+            let paste = app.buttons.matching(NSPredicate(format: "label == 'Colar' OR label == 'Paste'")).firstMatch
+            XCTAssertTrue(paste.waitForExistence(timeout: 30))
+            shot(appButton ? "w1-colar-do-app" : "w1-colar", app)
+            paste.tap()
+            if appButton {
+                let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons
+                    .matching(NSPredicate(format: "label == 'Allow Paste' OR label == 'Permitir Colar'")).firstMatch
+                if allow.waitForExistence(timeout: 5) { allow.tap() }
+            }
+            let field = app.textFields["campo-endereco"].exists ? app.textFields["campo-endereco"] : app.textViews["campo-endereco"]
+            let filled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", address), object: field)
+            XCTAssertEqual(XCTWaiter.wait(for: [filled], timeout: 10), .completed,
+                           "o Colar de observar endereco nao colou (botao do app: \(appButton)); campo: \(String(describing: field.value)), existe: \(field.exists), botao: \(paste.frame)")
+            shot(appButton ? "w2-colado-do-app" : "w2-colado", app)
+            app.terminate()
+        }
+    }
+
     /// A frase numerada, como outras carteiras e o Notas mostram (pedido do dono, 30/10/2026):
     /// os numeros nao viram palavras, e o aviso de colado nao fala em sincronizar.
     func testNumberedPasteFills() {

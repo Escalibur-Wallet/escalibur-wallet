@@ -162,12 +162,18 @@ public actor XRPLReader {
     public func history(address: String) async throws -> ActivityPage {
         guard XRPLAddress.accountID(address) != nil else { throw ReaderError.invalidInput("endereco") }
         let transport = self.transport
-        return try await Quorum.first(await pool.available(), pool: pool) { provider in
-            let result = try Self.checked(try await Self.call(transport, provider.baseURL, "account_tx", [
-                "account": .string(address), "limit": .int(ActivityRules.pageSize), "api_version": .int(2),
-                "ledger_index_min": .number("-1"), "ledger_index_max": .number("-1"), "forward": .bool(false),
-            ]), "account_tx")
-            return try Self.parseHistory(result, owner: address)
+        do {
+            return try await Quorum.first(await pool.available(), pool: pool) { provider in
+                let result = try Self.checked(try await Self.call(transport, provider.baseURL, "account_tx", [
+                    "account": .string(address), "limit": .int(ActivityRules.pageSize), "api_version": .int(2),
+                    "ledger_index_min": .number("-1"), "ledger_index_max": .number("-1"), "forward": .bool(false),
+                ]), "account_tx")
+                return try Self.parseHistory(result, owner: address)
+            }
+        } catch ReaderError.providerError(code: "actNotFound") {
+            // A conta ainda nao existe no ledger (nunca recebeu a reserva): sem historico, e nao
+            // "o XRP Ledger nao atualizou" (01/11/2026).
+            return ActivityPage(chainID: Chain.xrpl.id, items: [], suspicious: SuspiciousSummary())
         }
     }
 

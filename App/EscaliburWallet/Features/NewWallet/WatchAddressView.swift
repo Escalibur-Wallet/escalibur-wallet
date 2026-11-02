@@ -91,6 +91,11 @@ struct WatchAddressView: View {
                 .submitLabel(.next)
                 .onSubmit { focus = .name }
                 .accessibilityIdentifier("campo-endereco")
+                // O toque que foca o campo fica so na area do texto: na linha inteira, ele tomava
+                // o toque do Colar do sistema, que entao nao colava (relato do dono, 01/11/2026).
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { focus = .address }
             if address.isEmpty {
                 AppPasteButton { pasted in
                     let text = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -120,8 +125,6 @@ struct WatchAddressView: View {
         .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.body)
             .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                 .stroke(focus == .address ? Palette.edgeStrong : Palette.edge, lineWidth: 1)))
-        .contentShape(Rectangle())
-        .onTapGesture { focus = .address }
     }
 
     /// A rede reconhecida, com o logo; endereco EVM mostra as redes onde vale.

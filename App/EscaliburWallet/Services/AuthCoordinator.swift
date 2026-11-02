@@ -35,15 +35,35 @@ final class AuthCoordinator {
 
     /// A credencial para uma operacao. `reason` aparece no Face ID e na folha do PIN
     /// ("Enviar 50 XRP"). Nil quando o dono cancela.
-    func credential(reason: String, forcePIN: Bool = false, notice: String? = nil, error: String? = nil) async -> Credential? {
-        // Modo reforcado: toda operacao e o PIN e depois o rosto, pela criptografia.
+    func credential(reason: String, forcePIN: Bool = false, notice: String? = nil, error: String? = nil, faceFirst: Bool = false) async -> Credential? {
+        // Modo reforcado: toda operacao e o PIN e o rosto, pela criptografia. Nas operacoes
+        // (`faceFirst`: enviar, trocar, ver as palavras), o rosto vem antes do PIN (pedido do dono,
+        // 01/11/2026); o cofre guarda o rosto confirmado para um PIN so. Rosto que nao confirmou: o
+        // teclado aparece com o aviso, e depois do PIN o rosto e pedido de novo.
         if KeyServices.root.securityMode == .hardened {
+            var pass: RootKeyVault.HardenedFacePass?
+            var shownNotice = notice ?? Self.hardenedNotice
+            var shownError = error
+            if faceFirst {
+                do {
+                    pass = try await Offload.run { try KeyServices.root.hardenedFace(reason: reason) }
+                    shownNotice = Self.hardenedFaceDoneNotice
+                } catch RootKeyVault.Failure.biometryNotConfirmed(let remaining) {
+                    shownError = shownError ?? Self.faceNotConfirmedMessage(remaining)
+                } catch {
+                    shownError = Self.refusalMessage(error) ?? shownError
+                }
+            }
             let pin: Credential? = await withCheckedContinuation { continuation in
-                let request = PINRequest(reason: reason, notice: notice ?? Self.hardenedNotice, error: error, continuation: continuation)
+                let request = PINRequest(reason: reason, notice: shownNotice, error: shownError, continuation: continuation)
                 pinRequest = request
                 OverlayWindow.shared.show(PINRequestSheet(request: request, coordinator: self))
             }
-            guard case .pin(let digits)? = pin else { return nil }
+            guard case .pin(let digits)? = pin else {
+                if pass != nil { KeyServices.root.discardHardenedFace() }
+                return nil
+            }
+            if let pass { return .hardenedFace(digits, face: pass) }
             return .hardened(digits, reason: reason)
         }
         let afterRestart = KeyServices.root.isBiometryEnabled && !KeyServices.root.pinEnteredThisBoot
@@ -84,7 +104,7 @@ final class AuthCoordinator {
             try Self.checkPINAndBiometry()
         }
         let both = presence == .pinAndBiometry
-        guard var attempt = await credential(reason: reason, forcePIN: presence != .either, notice: both ? Self.bothNotice : nil) else { return nil }
+        guard var attempt = await credential(reason: reason, forcePIN: presence != .either, notice: both ? Self.bothNotice : nil, faceFirst: true) else { return nil }
         while true {
             if both, case .pin(let pin) = attempt { attempt = .pinAndBiometry(pin, reason: reason) }
             var notice: String?
@@ -107,7 +127,7 @@ final class AuthCoordinator {
             } catch RootKeyVault.Failure.biometryNotConfirmed(let remaining) {
                 error = Self.faceNotConfirmedMessage(remaining)
             }
-            guard let next = await credential(reason: reason, forcePIN: true, notice: notice ?? (both ? Self.bothNotice : nil), error: error) else { return nil }
+            guard let next = await credential(reason: reason, forcePIN: true, notice: notice ?? (both ? Self.bothNotice : nil), error: error, faceFirst: true) else { return nil }
             attempt = next
         }
     }
@@ -117,6 +137,11 @@ final class AuthCoordinator {
     /// novo liam mal).
     private static var hardenedNotice: String {
         String(localized: "Depois do PIN, o \(KeyServices.biometryName) confirma que é você.")
+    }
+
+    /// O rosto ja confirmou, antes do PIN.
+    private static var hardenedFaceDoneNotice: String {
+        String(localized: "O \(KeyServices.biometryName) confirmou. Agora o PIN.")
     }
 
     /// O rosto que nao confirmou no modo reforcado: nao conta tentativa nem leva ao apagar

@@ -369,11 +369,18 @@ public struct StellarReader: Sendable {
         _ id: StellarAccountID, limit: Int = 30, listedAssets: [StellarAsset] = [], knownCounterparties: Set<String> = []
     ) async throws -> [ChainActivity] {
         let count = String(min(max(limit, 1), 200))
-        let operations = try await first { provider in
-            try await self.get(HorizonPage<HorizonOperation>.self, provider, "accounts/\(id.address)/operations", [
-                URLQueryItem(name: "order", value: "desc"), URLQueryItem(name: "limit", value: count),
-                URLQueryItem(name: "include_failed", value: "false"),
-            ])
+        let operations: HorizonPage<HorizonOperation>
+        do {
+            operations = try await first { provider in
+                try await self.get(HorizonPage<HorizonOperation>.self, provider, "accounts/\(id.address)/operations", [
+                    URLQueryItem(name: "order", value: "desc"), URLQueryItem(name: "limit", value: count),
+                    URLQueryItem(name: "include_failed", value: "false"),
+                ])
+            }
+        } catch HTTPClient.Failure.status(404) {
+            // A conta ainda nao existe na rede (nunca recebeu os XLM minimos): sem historico, e
+            // nao "a Stellar nao atualizou" (visto no iPhone do dono, 01/11/2026).
+            return []
         }
         let trades = try await first { provider in
             try await self.get(HorizonPage<HorizonTrade>.self, provider, "accounts/\(id.address)/trades", [

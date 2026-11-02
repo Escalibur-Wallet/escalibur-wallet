@@ -22,13 +22,13 @@ enum QRCode {
     }
 }
 
-/// Area de transferencia: local (nao sincroniza com outros aparelhos) e com validade.
-/// O endereco vale 2 minutos. A frase so passa por aqui depois da tela de aviso
-/// (`CopyPhraseSheet`, pedido do dono de 15/10/2026), e vale 1 minuto.
+/// Area de transferencia: com validade, e local (nao sincroniza com outros aparelhos), menos o
+/// endereco. O endereco vale 2 minutos e vai tambem para o Mac pela area de transferencia da Apple
+/// (pedido do dono, 01/11/2026: ele e publico). A frase so passa por aqui depois da tela de aviso
+/// (`CopyPhraseSheet`, pedido do dono de 15/10/2026), vale 1 minuto e nunca sai do iPhone.
 enum Pasteboard {
     static func copyAddress(_ address: String) {
         UIPasteboard.general.setItems([[UTType.utf8PlainText.identifier: address]], options: [
-            .localOnly: true,
             .expirationDate: Date().addingTimeInterval(120),
         ])
     }

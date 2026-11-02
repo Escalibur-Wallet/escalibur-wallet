@@ -76,8 +76,9 @@ struct OpenEnvelopeFlow: View {
                     ImportPreviewView(preview: pending.preview, hasPassphrase: pending.secret.passphrase.count > 0, source: .envelope, saving: importing,
                                       onSave: { foreign in Task { await save(tronForeign: foreign) } }, onBack: discardPending)
                 } else if let revealDraft, let opened {
-                    RecordWordsView(draft: revealDraft, walletName: opened.label.isEmpty ? String(localized: "Envelope") : opened.label,
-                                    passphrase: opened.passphrase.count > 0 ? opened.passphrase : nil) {
+                    // So as palavras: a passphrase do envelope nunca aparece (pedido do dono, 01/11/2026).
+                    // Importar o envelope continua levando a passphrase junto, sem mostrar.
+                    RecordWordsView(draft: revealDraft, walletName: opened.label.isEmpty ? String(localized: "Envelope") : opened.label) {
                         close()
                     }
                 } else if opening || opened != nil {

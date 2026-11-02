@@ -165,6 +165,8 @@ public final class RootKeyVault: @unchecked Sendable {
     /// Custo fixo do PIN, so para os testes nao pagarem 256 MiB por chamada.
     private let fixedPINParameters: KDFParameters?
     private let lock = NSLock()
+    /// O rosto do Super Security ja confirmado, a espera do PIN (`hardenedFace`). Sob `lock`.
+    private var pendingFace: PendingFace?
 
     public convenience init(store: any SecretStore, wrapper: any KeyWrapper) {
         self.init(store: store, wrapper: wrapper, pinParameters: nil)
@@ -858,6 +860,7 @@ public final class RootKeyVault: @unchecked Sendable {
     }
 
     private func wipeAllLocked() {
+        discardFaceLocked()
         WrapSlot.allCases.forEach(wrapper.deleteKey)
         try? store.delete(Account.rootHardened)
         try? store.delete(Account.rootByPIN)
@@ -1433,10 +1436,93 @@ extension RootKeyVault {
         return try openHardenedLocked(pin: pin, reason: reason, use: use).rk
     }
 
-    /// A RK aberta e se o cadastro de rostos e o que o reforcado conhece: na `.lock`, a
-    /// `kand.bio` abriu; na `.wait`, a vigia disse "o mesmo" (ou a espera foi cumprida e a
-    /// vigia realinhada); na `.continue`, o hash e o gravado quando a politica passou a valer.
-    private func openHardenedLocked(pin: SecureBytes, reason: String, use: HardenedUse) throws -> (rk: SecureBytes, sameEnrollment: Bool) {
+    // MARK: O rosto antes do PIN
+
+    /// O Face ID ja confirmado, a espera do PIN (pedido do dono, 01/11/2026: no Super Security o
+    /// rosto vem antes do PIN, ao abrir o app, enviar e ver as palavras). So este identificador sai
+    /// do cofre: o miolo fica aqui dentro, vale para uma tentativa de PIN e vence em 2 minutos ou
+    /// quando o app trava. Cada PIN avaliado continua pedindo um rosto novo.
+    public struct HardenedFacePass: Sendable, Equatable {
+        let id: UUID
+    }
+
+    private struct PendingFace {
+        let id: UUID
+        let record: HardenedRecord
+        let middle: SecureBytes
+        let watch: WatchVerdict?
+        let hold: HardenedHold?
+        let use: HardenedUse
+        /// O cadastro de rostos na hora do rosto: mudou ate o PIN, o rosto nao vale.
+        let state: Data?
+        /// Em `PINPolicy.uptime`, que conta o tempo com o aparelho dormindo.
+        let expires: TimeInterval
+    }
+
+    static let facePassLifetime: TimeInterval = 120
+
+    /// O primeiro passo: o Face ID agora. Recusa antes do rosto o que o PIN tambem recusaria sem
+    /// contar (a espera do `.wait`, as tentativas erradas em espera, o rosto indisponivel). O
+    /// rosto que nao confirma nao conta tentativa, como na abertura de uma chamada so.
+    public func hardenedFace(reason: String, use: HardenedUse = .operation) throws -> HardenedFacePass {
+        lock.lock(); defer { lock.unlock() }
+        discardFaceLocked()
+        let (record, hold) = try hardenedPrepareLocked(use: use)
+        let waiting = try rebasedAttemptsLocked().remaining()
+        guard waiting <= 0 else { throw Failure.throttled(seconds: waiting) }
+        let state = hardenedDomainState()
+        let (middle, watch) = try openHardenedFaceLocked(record, reason: reason)
+        let id = UUID()
+        pendingFace = PendingFace(id: id, record: record, middle: middle, watch: watch, hold: hold, use: use, state: state,
+                                  expires: PINPolicy.uptime + Self.facePassLifetime)
+        // Vencido, o miolo sai da memoria sozinho, sem esperar alguem tentar usar o rosto
+        // (revisao de seguranca de 01/11/2026).
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Self.facePassLifetime) { [weak self] in
+            guard let self else { return }
+            self.lock.lock(); defer { self.lock.unlock() }
+            if self.pendingFace?.id == id { self.discardFaceLocked() }
+        }
+        return HardenedFacePass(id: id)
+    }
+
+    /// O segundo passo: o PIN, com o rosto de `pass`. Conta a tentativa como a abertura de uma
+    /// chamada so. O rosto vale para este PIN, certo ou errado: o proximo pede outro. Vencido, de
+    /// outra vez ou ja usado, pede o rosto de novo (`biometryNotConfirmed`), sem contar.
+    public func unlockHardened(pin: SecureBytes, face pass: HardenedFacePass, use: HardenedUse) throws -> SecureBytes {
+        lock.lock(); defer { lock.unlock() }
+        guard let face = pendingFace, face.id == pass.id else { throw Failure.biometryNotConfirmed(remainingBeforeWipe: nil) }
+        pendingFace = nil
+        // Vencido, para outro uso (o rosto de abrir o app nao assina) ou com o cadastro de rostos
+        // trocado depois do rosto: pede o rosto de novo, sem contar (revisao de seguranca de 01/11/2026).
+        guard PINPolicy.uptime <= face.expires, face.use == use, hardenedDomainState() == face.state else {
+            face.middle.wipe()
+            throw Failure.biometryNotConfirmed(remainingBeforeWipe: nil)
+        }
+        do {
+            return try finishHardenedLocked(record: face.record, hold: face.hold, use: face.use, pin: pin) {
+                HardenedOpening(rk: try self.openHardenedMiddle(face.middle, header: face.record.header, pin: pin),
+                                middle: face.middle, watch: face.watch)
+            }.rk
+        } catch {
+            face.middle.wipe()
+            throw error
+        }
+    }
+
+    /// O app travou, foi para o fundo ou o dono desistiu do PIN: o rosto ja confirmado nao vale mais.
+    public func discardHardenedFace() {
+        lock.lock(); defer { lock.unlock() }
+        discardFaceLocked()
+    }
+
+    private func discardFaceLocked() {
+        pendingFace?.middle.wipe()
+        pendingFace = nil
+    }
+
+    /// O que vem antes do rosto e do PIN, e nao conta nada: o modo, o registro, a espera do `.wait`
+    /// (que so deixa abrir o app) e o rosto e as chaves utilizaveis agora.
+    private func hardenedPrepareLocked(use: HardenedUse) throws -> (HardenedRecord, HardenedHold?) {
         switch securityMode {
         case .unknown: throw Failure.storage
         case .normal: throw Failure.notHardened
@@ -1444,14 +1530,33 @@ extension RootKeyVault {
         }
         sweepHardenedLocked()
         let record = try readHardened()
-        let policy = record.header.faceChange
-        // Tamanho nao e segredo; PIN fora de forma nunca gasta tentativa.
-        guard Self.isWellFormed(pin), pin.count == Int(record.header.pinLength) else { throw Failure.malformedPIN }
         var hold: HardenedHold?
-        if policy == .wait { hold = try hardenedHoldLocked() }
+        if record.header.faceChange == .wait { hold = try hardenedHoldLocked() }
         if let hold, hold.remaining > 0, use == .operation { throw Failure.biometryHold(seconds: hold.remaining) }
         try hardenedPreflight(record)
+        return (record, hold)
+    }
 
+    /// A RK aberta e se o cadastro de rostos e o que o reforcado conhece: na `.lock`, a
+    /// `kand.bio` abriu; na `.wait`, a vigia disse "o mesmo" (ou a espera foi cumprida e a
+    /// vigia realinhada); na `.continue`, o hash e o gravado quando a politica passou a valer.
+    private func openHardenedLocked(pin: SecureBytes, reason: String, use: HardenedUse) throws -> (rk: SecureBytes, sameEnrollment: Bool) {
+        discardFaceLocked()
+        let (record, hold) = try hardenedPrepareLocked(use: use)
+        // Tamanho nao e segredo; PIN fora de forma nunca gasta tentativa nem pede o rosto.
+        guard Self.isWellFormed(pin), pin.count == Int(record.header.pinLength) else { throw Failure.malformedPIN }
+        return try finishHardenedLocked(record: record, hold: hold, use: use, pin: pin) {
+            try self.openHardenedRecord(record, pin: pin, reason: reason)
+        }
+    }
+
+    /// A tentativa: conta antes de abrir, devolve o que nao chegou a avaliar o PIN, e com a RK
+    /// aberta zera o contador e acerta a vigia. `open` faz o rosto e o PIN (uma chamada so) ou
+    /// so o PIN (o rosto ja passou em `hardenedFace`).
+    private func finishHardenedLocked(record: HardenedRecord, hold: HardenedHold?, use: HardenedUse, pin: SecureBytes,
+                                      open: () throws -> HardenedOpening) throws -> (rk: SecureBytes, sameEnrollment: Bool) {
+        let policy = record.header.faceChange
+        guard Self.isWellFormed(pin), pin.count == Int(record.header.pinLength) else { throw Failure.malformedPIN }
         let attempts = try rebasedAttemptsLocked()
         let waiting = attempts.remaining()
         guard waiting <= 0 else { throw Failure.throttled(seconds: waiting) }
@@ -1460,7 +1565,7 @@ extension RootKeyVault {
 
         let opened: HardenedOpening
         do {
-            opened = try openHardenedRecord(record, pin: pin, reason: reason)
+            opened = try open()
         } catch let failure as Failure {
             switch failure {
             case .wrongPIN:
@@ -1550,6 +1655,18 @@ extension RootKeyVault {
     /// registro que nao e o gravado. Nao conta nem grava: quem chama decide. Privado: nada
     /// fora do cofre abre "o rosto ja passou".
     private func openHardenedRecord(_ record: HardenedRecord, pin: SecureBytes, reason: String) throws -> HardenedOpening {
+        let (middle, watch) = try openHardenedFaceLocked(record, reason: reason)
+        do {
+            return HardenedOpening(rk: try openHardenedMiddle(middle, header: record.header, pin: pin), middle: middle, watch: watch)
+        } catch {
+            middle.wipe()
+            throw error
+        }
+    }
+
+    /// So o rosto: a camada de fora aberta pelo Face ID e, na `.wait`, a vigia na mesma sessao.
+    /// Devolve o miolo, que so a chave do PIN abre, e o que a vigia viu.
+    private func openHardenedFaceLocked(_ record: HardenedRecord, reason: String) throws -> (SecureBytes, WatchVerdict?) {
         let header = record.header
         let face = header.faceChange.faceKey
         guard let outer = record.layers[face] else { throw Failure.storage }
@@ -1575,7 +1692,6 @@ extension RootKeyVault {
             if wrapper.probeKey(face) == .absent { throw Failure.hardenedSlotLost }
             throw Failure.biometryNotConfirmed(remainingBeforeWipe: nil)
         }
-        let watch: WatchVerdict?
         switch seen {
         case .opened(let other)?:
             let equal = Hash.constantTimeEqual(other, middle)
@@ -1584,16 +1700,10 @@ extension RootKeyVault {
                 middle.wipe()
                 throw Failure.storage
             }
-            watch = .same
-        case .gone?: watch = .gone
-        case .unknown?: watch = .unknown
-        case nil: watch = nil
-        }
-        do {
-            return HardenedOpening(rk: try openHardenedMiddle(middle, header: header, pin: pin), middle: middle, watch: watch)
-        } catch {
-            middle.wipe()
-            throw error
+            return (middle, .same)
+        case .gone?: return (middle, .gone)
+        case .unknown?: return (middle, .unknown)
+        case nil: return (middle, nil)
         }
     }
 

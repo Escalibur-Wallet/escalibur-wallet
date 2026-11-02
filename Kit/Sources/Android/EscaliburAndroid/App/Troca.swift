@@ -13,7 +13,7 @@ import Foundation
 /// A aba tem a sua troca (`aba`). Editar uma ordem e cancelar uma ordem abrem outras, com o proprio
 /// formulario e a propria revisao, como as telas separadas do iOS: o formulario da aba nao muda.
 final class Troca: @unchecked Sendable {
-    enum Etapa: String, Encodable { case formulario, montando, revisao, enviando, enviada, incerta }
+    enum Etapa: String, Encodable { case formulario, montando, revisao, enviando, enviada, incerta, recusada }
     enum Modo: String, Encodable { case agora, limite }
 
     /// O que a revisao assina.
@@ -146,6 +146,8 @@ final class Troca: @unchecked Sendable {
     private var ids: [String] = []
     private var assinadoIncerto: [SignedTransaction]?
     private var detalheIncerto: String?
+    /// A CoW recusou com certeza e disse por que: nada foi criado (01/11/2026).
+    private var motivoDaRecusa: String?
     private var situacao: TransferStatus = .pending
     private var andamento: OrderProgress?
     private var semAndamento = false
@@ -737,6 +739,7 @@ final class Troca: @unchecked Sendable {
         ids = []
         assinadoIncerto = nil
         detalheIncerto = nil
+        motivoDaRecusa = nil
         situacao = .pending
         andamento = nil
         semAndamento = false
@@ -956,6 +959,15 @@ final class Troca: @unchecked Sendable {
             if segue {
                 avisar()
                 await montar(numero)
+            }
+        } catch let recusa as TradeRefusedForSure {
+            // Recusa certa, com o motivo: nada foi criado, e enviar de novo nao muda nada.
+            trava.withLock {
+                ids = []
+                assinadoIncerto = nil
+                detalheIncerto = nil
+                motivoDaRecusa = recusa.reason
+                etapa = .recusada
             }
         } catch {
             trava.withLock {
@@ -1412,6 +1424,7 @@ final class Troca: @unchecked Sendable {
         let andamento: Andamento?
         let semAndamento: Bool
         let detalheIncerto: String?
+        let motivoDaRecusa: String?
         let valorEmMoeda: Double?
     }
 
@@ -1460,7 +1473,7 @@ final class Troca: @unchecked Sendable {
             protecao: chain == .ethereum && metadata.settings.mevProtection,
             etapa: etapa, frases: atual.map(frases), revisaoVende: ativosDaRevisao.vende.map(Self.dto), revisaoCompra: ativosDaRevisao.compra.map(Self.dto),
             falhaDaMontagem: falhaDaMontagem, cancelou: cancelou, revisao: plano.map(revisaoDTO), resultado: resultadoDTO(), andamento: andamentoDTO(),
-            semAndamento: semAndamento, detalheIncerto: detalheIncerto, valorEmMoeda: valorEmMoeda
+            semAndamento: semAndamento, detalheIncerto: detalheIncerto, motivoDaRecusa: motivoDaRecusa, valorEmMoeda: valorEmMoeda
         )
     }
 

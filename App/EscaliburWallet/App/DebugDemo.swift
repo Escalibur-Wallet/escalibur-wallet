@@ -163,6 +163,8 @@ enum DebugDemo {
             }
             try enrollVoice(session)
             switch screen {
+            // `-tela esqueci`: o app travado, com a folha de Esqueci o PIN aberta (a LockView abre).
+            case "esqueci": session.lock()
             // `-tela voz-conferir` (com `-voz-frase`): a folha de voz, como antes de
             // ver a senha da carteira.
             case "voz-conferir": Task { _ = await VoiceGate.shared.confirm(.reveal, session: session) }

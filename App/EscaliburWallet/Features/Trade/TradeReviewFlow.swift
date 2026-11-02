@@ -52,7 +52,7 @@ struct TradeReviewFlow: View {
     #endif
 
     /// `unsure`: assinado e enviado sem resposta certa (auditoria 2, M3).
-    enum Stage { case planning, review, sending, done, unsure }
+    enum Stage { case planning, review, sending, done, unsure, refused }
     @State private var stage: Stage = .planning
     @State private var plan: SigningPlan?
     @State private var error: String?
@@ -60,6 +60,8 @@ struct TradeReviewFlow: View {
     /// O que foi assinado e enviado sem resposta certa: so isto pode ir de novo.
     @State private var unsureSigned: [SignedTransaction]?
     @State private var unsureDetail: String?
+    /// A CoW recusou com certeza e disse por que: nada foi criado (01/11/2026).
+    @State private var refusedReason: String?
     /// Edicao: a etapa 1 (cancelar a atual) ja saiu, e a etapa da vez e a ordem nova.
     @State private var cancelled = false
 
@@ -108,6 +110,7 @@ struct TradeReviewFlow: View {
                 case .sending: sending
                 case .done: done
                 case .unsure: unsure
+                case .refused: refused
                 }
             }
             .padding(.horizontal, Space.gutter)
@@ -513,11 +516,36 @@ struct TradeReviewFlow: View {
             }
             stage = .done
             portfolio.show(session.selectedWallet, session: session, force: true)
+        } catch let refusal as TradeRefusedForSure {
+            // Recusa certa, com o motivo: nada foi criado, e enviar de novo nao muda nada.
+            ids = []
+            unsureSigned = nil
+            refusedReason = refusal.reason
+            stage = .refused
         } catch {
             ids = signed.map(\.id)
             unsureSigned = signed
             unsureDetail = (error as? LocalizedError)?.errorDescription
             stage = .unsure
+        }
+    }
+
+    /// A recusa certa da CoW: o titulo diz que nada foi criado, e o texto, o motivo exato.
+    private var refused: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Spacer()
+            Image(systemName: "xmark.circle").font(.system(size: 44)).foregroundStyle(Palette.down)
+            Text(text(swap: String(localized: "A troca não foi enviada"), limit: String(localized: "A ordem não foi criada"),
+                      cancel: String(localized: "O cancelamento não saiu. A ordem continua aberta.")))
+                .typeStyle(.title).foregroundStyle(Palette.ink).padding(.top, Space.md)
+                .fixedSize(horizontal: false, vertical: true)
+            if let refusedReason {
+                Text(refusedReason).typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            PrimaryButton(title: String(localized: "Voltar")) { onClose(false) }
+                .padding(.bottom, Space.xs)
         }
     }
 

@@ -135,11 +135,38 @@ final class Sessao: @unchecked Sendable {
         }
     }
 
+    // MARK: Super Security: a biometria antes do PIN
+
+    /// A biometria do Super Security ja confirmada, a espera do PIN (pedido do dono, 01/11/2026: o
+    /// rosto antes do PIN ao abrir o app, enviar e ver as palavras). So o identificador fica aqui; o
+    /// cofre guarda o resto, vale um PIN e vence em 2 minutos.
+    private var rostoConfirmado: RootKeyVault.HardenedFacePass?
+
+    func confirmarRosto(motivo: String, abrir: Bool) throws {
+        let passe = try Chaves.root.hardenedFace(reason: motivo, use: abrir ? .openApp : .operation)
+        trava.withLock { rostoConfirmado = passe }
+    }
+
+    func descartarRosto() {
+        trava.withLock { rostoConfirmado = nil }
+        Chaves.root.discardHardenedFace()
+    }
+
+    /// O PIN do Super Security com a biometria ja confirmada, ou, sem ela, as duas numa chamada so.
+    private func abrirReforcado(pin: SecureBytes, motivo: String, uso: RootKeyVault.HardenedUse) throws -> SecureBytes {
+        let passe = trava.withLock { () -> RootKeyVault.HardenedFacePass? in
+            defer { rostoConfirmado = nil }
+            return rostoConfirmado
+        }
+        if let passe { return try Chaves.root.unlockHardened(pin: pin, face: passe, use: uso) }
+        return try Chaves.root.unlockHardened(pin: pin, reason: motivo, use: uso)
+    }
+
     func destrancar(pin: SecureBytes) throws {
         defer { pin.wipe() }
         let epoca = trava.withLock { epocaDeTravar }
         let rk = Chaves.root.securityMode == .hardened
-            ? try Chaves.root.unlockHardened(pin: pin, reason: Textos.destravar, use: .openApp)
+            ? try abrirReforcado(pin: pin, motivo: Textos.destravar, uso: .openApp)
             : try Chaves.root.unlock(pin: pin)
         defer { rk.wipe() }
         try abrir(com: IndexCipher.key(from: rk), novasContas: Self.contasQueFaltam(rk: rk), epoca: epoca)
@@ -209,6 +236,8 @@ final class Sessao: @unchecked Sendable {
     }
 
     func travar() {
+        // A biometria confirmada e ainda sem PIN nao vale depois de travar.
+        descartarRosto()
         trava.withLock {
             epocaDeTravar &+= 1
             rascunho?.zerar()
@@ -237,6 +266,8 @@ final class Sessao: @unchecked Sendable {
     /// O app foi para o segundo plano (a tela ja fica coberta pelo FLAG_SECURE).
     func foiParaSegundoPlano() {
         trava.withLock { segundoPlanoDesde = PINPolicy.uptime }
+        // A biometria confirmada e ainda sem PIN nao fica para a volta.
+        descartarRosto()
     }
 
     /// Voltou: trava se passou do tempo escolhido (padrao 1 minuto). Devolve se travou.
@@ -270,7 +301,7 @@ final class Sessao: @unchecked Sendable {
                 rk = try Chaves.root.unlockWithPINAndBiometry(pin: pin, reason: motivo)
             case .reforcado(let pin, let motivo):
                 defer { pin.wipe() }
-                rk = try Chaves.root.unlockHardened(pin: pin, reason: motivo)
+                rk = try abrirReforcado(pin: pin, motivo: motivo, uso: .operation)
             }
             defer { rk.wipe() }
             return try corpo(rk)
@@ -316,6 +347,8 @@ final class Sessao: @unchecked Sendable {
         // conferir antes de valer.
         if case .reforcado(let pin, let motivo) = credencial {
             defer { pin.wipe() }
+            // Trocar o PIN pede a biometria la dentro, para conferir antes de valer.
+            descartarRosto()
             do {
                 try Chaves.root.changeHardenedPIN(currentPIN: pin, newPIN: novo, reason: motivo,
                                                   confirmReason: Textos.t("Confirme a biometria para conferir o Super Security"))
@@ -719,15 +752,10 @@ final class Sessao: @unchecked Sendable {
         return (palavras, pass != nil)
     }
 
-    /// A passphrase do rascunho aberto, so para mostrar junto das palavras de um envelope. A de uma
-    /// carteira guardada nunca sai do nucleo: ver as palavras mostra so as palavras (pedido do dono,
-    /// 01/11/2026); ela fica no rascunho so para `conferirPassphrase`.
-    func passphraseDoRascunho() -> String? {
-        trava.withLock {
-            guard let rascunho, rascunho.carteira == nil else { return nil }
-            return rascunho.passphrase?.withUnsafeBytes { String(decoding: $0, as: UTF8.self) }
-        }
-    }
+    /// A passphrase nunca sai do nucleo para a tela, nem a de uma carteira guardada nem a de um
+    /// envelope: ver as palavras mostra so as palavras (pedido do dono, 01/11/2026). No rascunho ela
+    /// fica so para `conferirPassphrase` e para importar o envelope.
+    func passphraseDoRascunho() -> String? { nil }
 
     /// Fechou a tela das palavras: a carteira anota quando elas foram vistas e o rascunho sai.
     func terminarRevelacao(_ id: UUID) {

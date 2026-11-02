@@ -220,4 +220,18 @@ struct EVMLimitOrderTests {
         ])
         #expect(sorted.map(\.id) == ["x2", "x3", "x1", "40", "12"])
     }
+
+    @Test("Recusa da CoW: o motivo exato vira a mensagem, e nada do texto livre do servidor passa")
+    func cowRefusalReasons() {
+        let body = Data(#"{"errorType":"TooManyLimitOrders","description":"Too many limit orders"}"#.utf8)
+        #expect(CoWClient.errorType(body) == "TooManyLimitOrders")
+        #expect(CoWClient.errorType(Data(#"{"errorType":"Insufficient<script>Balance"}"#.utf8)) == "InsufficientscriptBalance")
+        #expect(CoWClient.errorType(Data("nao e json".utf8)) == nil)
+        #expect(CoWClient.errorType(Data(#"{"description":"sem tipo"}"#.utf8)) == nil)
+        #expect(EVMEngineMessages.cowRejection("TooManyLimitOrders").contains("máximo de ordens limite"))
+        #expect(EVMEngineMessages.cowRejection("InsufficientBalance").contains("saldo do token"))
+        #expect(EVMEngineMessages.cowRejection("DuplicatedOrder").contains("Ordens abertas"))
+        #expect(EVMEngineMessages.cowRejection("AlgoNovo").contains("AlgoNovo"))
+        #expect(EVMEngineMessages.cowClient(.rejected("ZeroAmount"), chain: .base) == EVMEngineMessages.cowRejection("ZeroAmount"))
+    }
 }

@@ -854,8 +854,8 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, aoCancelar: () -> Unit = { Navega
         Box(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
             Column(Modifier.fillMaxSize()) {
                 Spacer(Modifier.height(Altura.barra))
-                GravarPalavras(palavras, nomeDaCarteira = dados?.optString("rotulo")?.ifEmpty { null } ?: t("Envelope"),
-                               comPassphrase = dados?.optBoolean("comPassphrase") == true) { aoCancelar() }
+                // So as palavras: a passphrase do envelope nunca aparece (pedido do dono, 01/11/2026).
+                GravarPalavras(palavras, nomeDaCarteira = dados?.optString("rotulo")?.ifEmpty { null } ?: t("Envelope")) { aoCancelar() }
             }
             BotaoDeCanto(Icones.fechar, t("Fechar"), Modifier.padding(start = Espaco.xs)) { aoCancelar() }
         }

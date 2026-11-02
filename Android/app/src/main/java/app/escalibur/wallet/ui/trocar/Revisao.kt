@@ -128,6 +128,7 @@ fun RevisaoDaTroca(controle: ControleDaTroca, encerra: Boolean = false, aoSair: 
                 "enviando" -> Espera(r, frases.passo, r.revisao?.nota ?: t("Não feche o app até terminar."), frases.enviando)
                 "enviada" -> Enviada(controle, r, frases) { fechar() }
                 "incerta" -> Incerta(controle, r, frases) { fechar() }
+                "recusada" -> Recusada(r) { fechar() }
             }
         }
     }
@@ -383,6 +384,18 @@ private fun AndamentoDaOrdem(r: RetratoDaTroca) {
         Text(t("Recebido %@", andamento.recebido), style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.md))
         Text(t("Garantido no total: %@ ou mais", andamento.garantido), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
     }
+}
+
+/** A CoW recusou com certeza e disse por que: nada foi criado, e enviar de novo nao muda nada (01/11/2026). */
+@Composable
+private fun ColumnScope.Recusada(r: RetratoDaTroca, aoFechar: () -> Unit) {
+    Spacer(Modifier.weight(1f))
+    Icone(Icones.fechar, Paleta.baixa, tamanho = 44.dp)
+    Text(if (r.modo == "limite") t("A ordem não foi criada") else t("A troca não foi enviada"), style = estilo(Tipo.titulo), color = Paleta.tinta,
+         modifier = Modifier.padding(top = Espaco.md))
+    r.motivoDaRecusa?.let { Text(it, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs)) }
+    Spacer(Modifier.weight(1f))
+    BotaoPrimario(t("Voltar"), acao = aoFechar)
 }
 
 /** Assinada e enviada sem resposta certa: so os mesmos bytes podem ir de novo, nunca outra. */

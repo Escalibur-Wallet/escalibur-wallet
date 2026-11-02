@@ -16,6 +16,8 @@ enum Credential: Sendable {
     case pinAndBiometry(SecureBytes, reason: String)
     /// Modo reforcado: o PIN e o rosto pela criptografia, em tudo (docs/seguranca.md §2.6).
     case hardened(SecureBytes, reason: String)
+    /// Modo reforcado com o rosto ja confirmado antes do PIN (pedido do dono, 01/11/2026).
+    case hardenedFace(SecureBytes, face: RootKeyVault.HardenedFacePass)
 }
 
 /// O estado de alto nivel do app.
@@ -159,6 +161,24 @@ final class AppSession {
         try open(with: key, adding: updates, epoch: epoch)
     }
 
+    /// Super Security: o rosto antes do PIN, para abrir o app (pedido do dono, 01/11/2026). O cofre
+    /// guarda o rosto confirmado para um PIN so, por 2 minutos.
+    func hardenedFace(reason: String) async throws -> RootKeyVault.HardenedFacePass {
+        try await Offload.run { try KeyServices.root.hardenedFace(reason: reason, use: .openApp) }
+    }
+
+    /// Abre o app com o PIN e o rosto ja confirmado em `hardenedFace`.
+    func unlock(pin: SecureBytes, face: RootKeyVault.HardenedFacePass) async throws {
+        let epoch = lockEpoch
+        let (key, updates) = try await Offload.run {
+            defer { pin.wipe() }
+            let rk = try KeyServices.root.unlockHardened(pin: pin, face: face, use: .openApp)
+            defer { rk.wipe() }
+            return (IndexCipher.key(from: rk), Self.missingAccounts(rk: rk))
+        }
+        try open(with: key, adding: updates, epoch: epoch)
+    }
+
     func unlockWithBiometry() async throws {
         let epoch = lockEpoch
         let (key, updates) = try await Offload.run {
@@ -251,6 +271,8 @@ final class AppSession {
         PassphraseGate.shared.cancel()
         VoiceGate.shared.cancel()
         PassphraseGate.shared.clearGrace()
+        // Um rosto do Super Security confirmado e ainda sem PIN nao vale depois de travar.
+        KeyServices.root.discardHardenedFace()
         indexKey = nil
         metadata = Metadata()
         withAnimation(Motion.fade) { phase = .locked }
@@ -262,6 +284,8 @@ final class AppSession {
         switch scenePhase {
         case .background:
             backgroundedAt = PINPolicy.uptime
+            // Um rosto do Super Security confirmado e ainda sem PIN nao fica para a volta.
+            KeyServices.root.discardHardenedFace()
         case .active:
             // Fora da thread principal: com um PIN sendo cadastrado ou conferido (dois
             // Argon2, segundos), o cofre fica trancado, e esperar por ele aqui congelava
@@ -317,6 +341,9 @@ final class AppSession {
             case .hardened(let pin, let reason):
                 defer { pin.wipe() }
                 rk = try KeyServices.root.unlockHardened(pin: pin, reason: reason)
+            case .hardenedFace(let pin, let face):
+                defer { pin.wipe() }
+                rk = try KeyServices.root.unlockHardened(pin: pin, face: face, use: .operation)
             }
             defer { rk.wipe() }
             return try body(rk)

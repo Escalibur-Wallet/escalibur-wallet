@@ -23,6 +23,9 @@ public enum CoWClientError: Error, Equatable, Sendable {
     case uidMismatch
     case orderMismatch
     case badResponse(String)
+    /// A CoW recusou a ordem e disse por que (`errorType` da API, so letras e numeros): a ordem
+    /// nao foi criada.
+    case rejected(String)
 }
 
 /// O estado de uma ordem, como a API conta e depois de conferido.
@@ -196,12 +199,27 @@ public struct CoWClient: Sendable {
     /// recusa ordem sem saldo e allowance. Devolve o UID, conferido.
     public func submit(_ plan: CoWLimitOrderPlan, signature: SignedTransaction) async throws -> [UInt8] {
         let body = try Self.submissionBody(plan, signature: signature)
-        let data = try await client.post(try api(plan.order.chain).appendingPathComponent("orders"), json: body, timeout: 15)
+        let data: Data
+        do {
+            data = try await client.postKeepingRefusal(try api(plan.order.chain).appendingPathComponent("orders"), json: body, timeout: 15)
+        } catch let refusal as HTTPClient.Refusal {
+            // O motivo da CoW, para a tela dizer exatamente por que a ordem nao foi criada.
+            if let type = Self.errorType(refusal.body) { throw CoWClientError.rejected(type) }
+            throw HTTPClient.Failure.status(refusal.status)
+        }
         guard let text = try? JSONDecoder().decode(String.self, from: data), let uid = Hex.decode(String(text.dropFirst(2))) else {
             throw CoWClientError.badResponse("uid")
         }
         guard uid == plan.uid else { throw CoWClientError.uidMismatch }
         return uid
+    }
+
+    /// O `errorType` de uma recusa da CoW (`{"errorType": "TooManyLimitOrders", ...}`), so com letras e
+    /// numeros e ate 40: nada do texto livre do servidor chega a tela.
+    static func errorType(_ body: Data) -> String? {
+        guard let json = try? StrictJSON.parse(body), let type = try? json.field("errorType", "errorType").string("errorType") else { return nil }
+        let clean = String(type.filter { $0.isASCII && ($0.isLetter || $0.isNumber) }.prefix(40))
+        return clean.isEmpty ? nil : clean
     }
 
     // MARK: Consulta

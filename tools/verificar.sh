@@ -431,10 +431,14 @@ achados=$(grep -nE 'UIPasteboard' "$APP/Features/NewWallet/SecurityScreens.swift
 # Toda copia passa por setItems, local (nao vai para o Mac) e com validade. A frase vale
 # no maximo 1 minuto e so sai pela tela das palavras, depois do aviso (CopyPhraseSheet).
 f="$APP/Features/Receive/ReceiveSheet.swift"
+# Menos o endereco, que e publico e vai tambem para o Mac (pedido do dono, 01/11/2026): todas as
+# outras copias sao locais, e a da frase e local com certeza.
 copias=$(grep -c 'UIPasteboard.general.setItems' "$f"); locais=$(grep -c '\.localOnly: true' "$f"); prazos=$(grep -c '\.expirationDate: Date().addingTimeInterval' "$f")
 outras=$(grep -n 'UIPasteboard' "$f" | grep -v 'UIPasteboard.general.setItems')
-[ "$copias" -gt 0 ] && [ "$copias" = "$locais" ] && [ "$copias" = "$prazos" ] && [ -z "$outras" ] \
-    && ok "toda copia e local e expira" || aviso "copia sem localOnly/expiracao"
+endereco_local=$(awk '/static func copyAddress/,/^    }/' "$f" | grep -c '\.localOnly')
+frase_local=$(awk '/static func copyPhrase/,/^    }/' "$f" | grep -c '\.localOnly: true')
+[ "$copias" -gt 0 ] && [ "$locais" = "$((copias - 1))" ] && [ "$endereco_local" = "0" ] && [ "$frase_local" = "1" ] && [ "$copias" = "$prazos" ] && [ -z "$outras" ] \
+    && ok "toda copia expira, e so a do endereco sai do iPhone" || aviso "copia sem localOnly/expiracao"
 prazo=$(awk '/static func copyPhrase/,/^    }/' "$f" | grep -oE 'addingTimeInterval\([0-9]+\)' | grep -oE '[0-9]+')
 chamadas=$(procurar 'Pasteboard\.copyPhrase' "$APP" | grep -v 'Receive/ReceiveSheet\.swift:')
 [ -n "$prazo" ] && [ "$prazo" -le 60 ] && [ "$(echo "$chamadas" | grep -c .)" = "1" ] && echo "$chamadas" | grep -q 'NewWallet/RecordWordsView\.swift:' \

@@ -255,6 +255,15 @@ struct ReaderBStellarTests {
 
     // MARK: Historico
 
+    @Test("Historico de conta que ainda nao existe na rede: vazio, nunca falha")
+    func historyOfMissingAccount() async throws {
+        let transport = ReaderBFakeTransport()
+        transport.on("horizon-a.test/accounts/\(Self.owner)/operations", status: 404)
+        transport.on("horizon-b.test/accounts/\(Self.owner)/operations", status: 404)
+        let items = try await Self.reader(transport).history(try Self.id(Self.owner), listedAssets: [Self.usdc])
+        #expect(items.isEmpty)
+    }
+
     @Test("Historico: pagamentos em duas direcoes, saldo reivindicavel de desconhecido, poeira")
     func history() async throws {
         let transport = ReaderBFakeTransport()

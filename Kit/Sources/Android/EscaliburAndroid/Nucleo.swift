@@ -52,6 +52,15 @@ enum Nucleo {
         case "sessao.travar":
             Sessao.shared.travar()
             return try json(Estado.agora())
+        // Super Security: a biometria antes do PIN (pedido do dono, 01/11/2026). `abrir` e o abrir do
+        // app, o unico uso que a espera de "Esperar 24 horas" deixa passar.
+        case "sessao.confirmarRosto":
+            try Sessao.shared.confirmarRosto(motivo: pedido["motivo"]?.stringValue ?? Textos.destravar,
+                                             abrir: pedido["abrir"]?.boolValue == true)
+            return try json(["ok": true])
+        case "sessao.descartarRosto":
+            Sessao.shared.descartarRosto()
+            return try json(["ok": true])
         case "sessao.segundoPlano":
             Sessao.shared.foiParaSegundoPlano()
             return try json(["ok": true])

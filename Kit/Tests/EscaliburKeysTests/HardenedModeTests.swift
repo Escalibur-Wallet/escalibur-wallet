@@ -1204,4 +1204,78 @@ struct HardenedModeTests {
         #expect(!WrapSlot.hardenedBiometryAny.followsEnrollment)
     }
     #endif
+
+    // MARK: O rosto antes do PIN (pedido do dono, 01/11/2026)
+
+    @Test("Rosto primeiro, PIN depois: abre com um rosto so e nao conta nada", arguments: Policy.allCases)
+    func faceThenPIN(policy: Policy) throws {
+        let (vault, _, wrapper, rk) = try makeHardened(policy)
+        let before = wrapper.faces
+        let pass = try vault.hardenedFace(reason: "abrir", use: .openApp)
+        #expect(wrapper.faces == before + 1)
+        #expect(vault.failureCount() == 0)
+        #expect(bytes(try vault.unlockHardened(pin: secure(pin), face: pass, use: .openApp)) == rk)
+        #expect(wrapper.faces == before + 1)
+        #expect(vault.failureCount() == 0)
+    }
+
+    @Test("Um rosto vale um PIN: o errado conta e gasta o rosto; o mesmo rosto nao serve de novo", arguments: Policy.allCases)
+    func oneFaceOnePIN(policy: Policy) throws {
+        let (vault, _, wrapper, rk) = try makeHardened(policy)
+        let pass = try vault.hardenedFace(reason: "x")
+        #expect(throws: RootKeyVault.Failure.wrongPIN(remainingBeforeWipe: nil)) { try vault.unlockHardened(pin: secure("000001"), face: pass, use: .operation) }
+        #expect(vault.failureCount() == 1)
+        let pinUses = wrapper.unwrapCount[.hardenedPINA, default: 0]
+        // O rosto ja usado nao avalia outro PIN, nem o certo, e nao conta.
+        #expect(throws: RootKeyVault.Failure.biometryNotConfirmed(remainingBeforeWipe: nil)) { try vault.unlockHardened(pin: secure(pin), face: pass, use: .operation) }
+        #expect(vault.failureCount() == 1)
+        #expect(wrapper.unwrapCount[.hardenedPINA, default: 0] == pinUses)
+        let again = try vault.hardenedFace(reason: "x")
+        #expect(bytes(try vault.unlockHardened(pin: secure(pin), face: again, use: .operation)) == rk)
+        #expect(vault.failureCount() == 0)
+    }
+
+    @Test("Rosto recusado, rosto novo, desistir ou travar: nada conta e o rosto antigo nao vale", arguments: Policy.allCases)
+    func faceRefusedOrDiscarded(policy: Policy) throws {
+        let (vault, _, wrapper, rk) = try makeHardened(policy)
+        wrapper.refuseBiometry = true
+        #expect(throws: RootKeyVault.Failure.biometryNotConfirmed(remainingBeforeWipe: nil)) { try vault.hardenedFace(reason: "x") }
+        wrapper.refuseBiometry = false
+        #expect(vault.failureCount() == 0)
+        let old = try vault.hardenedFace(reason: "x")
+        let newer = try vault.hardenedFace(reason: "x")
+        #expect(throws: RootKeyVault.Failure.biometryNotConfirmed(remainingBeforeWipe: nil)) { try vault.unlockHardened(pin: secure(pin), face: old, use: .operation) }
+        vault.discardHardenedFace()
+        #expect(throws: RootKeyVault.Failure.biometryNotConfirmed(remainingBeforeWipe: nil)) { try vault.unlockHardened(pin: secure(pin), face: newer, use: .operation) }
+        #expect(vault.failureCount() == 0)
+        let pass = try vault.hardenedFace(reason: "x")
+        #expect(bytes(try vault.unlockHardened(pin: secure(pin), face: pass, use: .operation)) == rk)
+    }
+
+    @Test("Rosto primeiro recusa antes do rosto o que o PIN recusaria sem contar")
+    func faceRefusalsBeforeFace() throws {
+        let (vault, _, wrapper, _) = try makeHardened(.continue)
+        let before = wrapper.faces
+        vault.hardenedBiometryStatus = { .lockedOut }
+        #expect(throws: RootKeyVault.Failure.biometryLockedOut) { try vault.hardenedFace(reason: "x") }
+        vault.hardenedBiometryStatus = { .ready }
+        #expect(wrapper.faces == before)
+        let pass = try vault.hardenedFace(reason: "x")
+        #expect(throws: RootKeyVault.Failure.malformedPIN) { try vault.unlockHardened(pin: secure("4829"), face: pass, use: .operation) }
+        #expect(vault.failureCount() == 0)
+    }
+
+    @Test("O rosto de abrir o app nao serve para operacao, nem com o cadastro de rostos trocado depois dele")
+    func faceUseAndEnrollment() throws {
+        let (vault, _, _, rk) = try makeHardened(.continue)
+        let opening = try vault.hardenedFace(reason: "abrir", use: .openApp)
+        #expect(throws: RootKeyVault.Failure.biometryNotConfirmed(remainingBeforeWipe: nil)) { try vault.unlockHardened(pin: secure(pin), face: opening, use: .operation) }
+        #expect(vault.failureCount() == 0)
+        let pass = try vault.hardenedFace(reason: "x")
+        vault.hardenedDomainState = { Data([0x99]) }
+        #expect(throws: RootKeyVault.Failure.biometryNotConfirmed(remainingBeforeWipe: nil)) { try vault.unlockHardened(pin: secure(pin), face: pass, use: .operation) }
+        #expect(vault.failureCount() == 0)
+        let again = try vault.hardenedFace(reason: "x")
+        #expect(bytes(try vault.unlockHardened(pin: secure(pin), face: again, use: .operation)) == rk)
+    }
 }

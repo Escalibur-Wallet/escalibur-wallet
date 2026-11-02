@@ -187,6 +187,15 @@ public struct LimitOrderRequest: Sendable {
     }
 }
 
+/// A outra ponta recusou com certeza e disse por que (a CoW recusou a ordem): nada foi criado, e
+/// enviar de novo os mesmos dados nao muda nada. A tela mostra o motivo, sem o "pode ja estar a
+/// caminho" de uma resposta incerta (01/11/2026).
+public struct TradeRefusedForSure: LocalizedError, Equatable, Sendable {
+    public let reason: String
+    public init(reason: String) { self.reason = reason }
+    public var errorDescription: String? { reason }
+}
+
 /// Uma ordem limite aberta da conta, lida da rede.
 public struct OpenOrder: Sendable, Equatable, Identifiable {
     /// Como a ordem pode ser cancelada.

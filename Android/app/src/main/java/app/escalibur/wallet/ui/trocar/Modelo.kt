@@ -187,6 +187,8 @@ class RetratoDaTroca(json: JSONObject) {
     }
     val semAndamento: Boolean = e.getBoolean("semAndamento")
     val detalheIncerto: String? = e.opcional("detalheIncerto")
+    /** A CoW recusou com certeza: o motivo exato (etapa "recusada"). */
+    val motivoDaRecusa: String? = e.opcional("motivoDaRecusa")
     val valorEmMoeda: Double? = e.duplo("valorEmMoeda")
 }
 

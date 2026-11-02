@@ -4,6 +4,19 @@ import app.escalibur.wallet.ui.ajustes.mensagemDaEspera
 import app.escalibur.wallet.ui.comp.CabecalhoDaFolha
 import app.escalibur.wallet.ui.comp.FolhaSolta
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.scale
+import app.escalibur.wallet.ui.comp.PixelsCifrando
+import app.escalibur.wallet.ui.comp.movimentoReduzido
+import app.escalibur.wallet.ui.comp.relogio
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -104,9 +117,25 @@ fun TelaDeBloqueio(vinda: Int) {
         }
     }
 
+    // Super Security: a biometria antes do PIN (pedido do dono, 01/11/2026). Confirmada, o nucleo guarda
+    // para o proximo PIN so; cancelada, o teclado continua, e o PIN pede a biometria depois.
+    var rostoConfirmado by remember { mutableStateOf(false) }
+    suspend fun confirmarRosto() {
+        if (!App.estado.reforcado || rostoConfirmado || App.estado.atraso > 0) return
+        try {
+            Api.objeto("sessao.confirmarRosto", JSONObject().put("motivo", t("Destravar a Escalibur")).put("abrir", true))
+            rostoConfirmado = true
+        } catch (falha: FalhaDoNucleo) {
+            if (falha.codigo != "cofre.biometriaNaoConfirmou") entrada.falhar(Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível destravar. Tente de novo."))
+            App.recarregar()
+        }
+    }
+
     LaunchedEffect(vinda) {
         atraso = App.estado.atraso
-        if (App.estado.biometriaLigada && !App.estado.pedePINDepoisDeReiniciar) tentarBiometria()
+        rostoConfirmado = false
+        if (App.estado.reforcado) confirmarRosto()
+        else if (App.estado.biometriaLigada && !App.estado.pedePINDepoisDeReiniciar) tentarBiometria()
     }
 
     TelaDoPin(
@@ -114,18 +143,26 @@ fun TelaDeBloqueio(vinda: Int) {
         subtitulo = when {
             // A espera de "Esperar 24 horas", se correndo: abrir o app vale, o saldo aparece e o resto espera.
             estado.reforcado && estado.espera > 0 -> mensagemDaEspera(estado.espera)
-            estado.reforcado -> t("Super Security: depois do PIN, a biometria confirma que é você.")
+            estado.reforcado && rostoConfirmado -> t("A biometria confirmou. Agora o PIN.")
+            estado.reforcado -> t("Super Security: primeiro a biometria, depois o PIN.")
             depoisDeReiniciar -> t("O celular reiniciou. Depois de reiniciar ou de a bateria acabar, o PIN é necessário uma vez antes de a biometria voltar a valer.")
             else -> null
         },
         entrada = entrada,
         trabalhando = trabalhando,
         topo = { SeloDaCarteira(44.dp, modifier = Modifier.padding(bottom = Espaco.md)) },
-        iconeDeBiometria = if (estado.biometriaLigada && !depoisDeReiniciar) Icones.digital else null,
-        aoUsarBiometria = { escopo.launch { tentarBiometria() } },
+        iconeDeBiometria = when {
+            estado.reforcado -> if (rostoConfirmado) null else Icones.digital
+            estado.biometriaLigada && !depoisDeReiniciar -> Icones.digital
+            else -> null
+        },
+        aoUsarBiometria = { escopo.launch { if (App.estado.reforcado) confirmarRosto() else tentarBiometria() } },
         aoCompletar = {
             val pin = entrada.tirar()
             trabalhando = true
+            // A biometria confirmada vale este PIN so, certo ou errado.
+            val comRosto = rostoConfirmado
+            rostoConfirmado = false
             escopo.launch {
                 try {
                     App.aplicar(Api.comSegredo("sessao.destrancar", JSONObject(), pin))
@@ -145,6 +182,8 @@ fun TelaDeBloqueio(vinda: Int) {
                     }
                     App.recarregar()
                     atraso = App.estado.atraso
+                    // O proximo PIN pede a biometria antes de novo.
+                    if (comRosto && App.estado.reforcado && !cofrePerdido) confirmarRosto()
                 } finally {
                     trabalhando = false
                 }
@@ -179,23 +218,23 @@ private fun FolhaEsqueciOPin(perdido: Boolean, aoFechar: () -> Unit) {
     FolhaSolta(aoFechar) {
     Column(Modifier.fillMaxSize().navigationBarsPadding()) {
         CabecalhoDaFolha("", aoFechar)
+        // Redesenho do dono (01/11/2026, o mesmo do iOS): sem o icone num circulo nem o cartao de passos
+        // numerados, que tinham cara de template. A cena de pixels conta a saida, e o texto vai a esquerda.
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            horizontalAlignment = Alignment.Start,
         ) {
-            Box(Modifier.size(72.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
-                Icone(Icones.celularComCadeado, Paleta.tinta, tamanho = 34.dp)
-            }
+            CenaEsqueciOPin()
             Text(if (perdido) t("A biometria mudou") else t("Não existe redefinir o PIN"), style = estilo(Tipo.titulo), color = Paleta.tinta,
-                 textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.md))
+                 modifier = Modifier.padding(top = Espaco.md))
             Text(
                 if (perdido) t("No Super Security, as carteiras deste celular só abrem com o PIN e a mesma biometria de quando ele foi ligado. O cadastro mudou, e ninguém consegue abrir, nem a Escalibur. Para voltar a usar o app, comece de novo:")
                 else t("O PIN mora só neste celular, e ninguém tem cópia dele, nem a Escalibur. Para voltar a usar o app, comece de novo:"),
-                style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs),
+                style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs),
             )
             Column(
-                Modifier.fillMaxWidth().padding(top = Espaco.lg).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.trilho).padding(Espaco.base),
-                verticalArrangement = Arrangement.spacedBy(Espaco.md),
+                Modifier.fillMaxWidth().padding(top = Espaco.lg),
+                verticalArrangement = Arrangement.spacedBy(Espaco.base),
             ) {
                 Passo(1, t("Tenha em mãos a senha de cada carteira (as 12 ou 24 palavras) ou o envelope Escalibur, e a passphrase de cada carteira que usa passphrase."))
                 Passo(2, t("Apague as carteiras deste celular."))
@@ -249,12 +288,98 @@ private fun FolhaEsqueciOPin(perdido: Boolean, aoFechar: () -> Unit) {
     }
 }
 
+/** Um passo: o numero no mesmo tipo do texto, mais apagado, sem circulo nem cartao. */
 @Composable
 private fun Passo(numero: Int, texto: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-        Box(Modifier.size(28.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
-            Text("$numero", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Paleta.tinta)
-        }
-        Text(texto, style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.padding(top = 3.dp))
+        Text("$numero", style = estilo(Tipo.linha), color = Paleta.tintaApagada, modifier = Modifier.width(16.dp))
+        Text(texto, style = estilo(Tipo.corpo), color = Paleta.tinta)
     }
+}
+
+/**
+ * A saida de quem esqueceu o PIN, em pixels que cifram (o `ForgotPINScene` do iOS): os seis pontos do
+ * PIN se desfazem em ruido, as palavras anotadas aparecem uma a uma e sobem para virar um PIN novo, em
+ * lima. Nada aqui e de verdade: pontos e palavras sao desenho.
+ */
+@Composable
+private fun CenaEsqueciOPin() {
+    val parado = movimentoReduzido()
+    val segundos by relogio(parado)
+    Canvas(Modifier.fillMaxWidth().height(176.dp)) {
+        val periodo = 7.2
+        val t = if (parado) 5.6 else (segundos.toDouble() % periodo)
+        val escala = minOf(size.width / 300f, size.height / 176f)
+        translate((size.width - 300f * escala) / 2, (size.height - 176f * escala) / 2) {
+            scale(escala, escala, pivot = Offset.Zero) {
+                val brilho = if (parado) 1.0 else minOf(suave(t / 0.3), 1 - suave((t - (periodo - 0.45)) / 0.45))
+                desenharEsqueci(t, if (parado) 0.0 else segundos.toDouble(), brilho)
+            }
+        }
+    }
+}
+
+private fun suave(x: Double): Double { val t = x.coerceIn(0.0, 1.0); return t * t * (3 - 2 * t) }
+
+private fun DrawScope.desenharEsqueci(t: Double, relogio: Double, brilho: Double) {
+    val passo = 6f
+    val celula = 4.6f
+    fun tom(id: Int, camada: Int): Double {
+        val fase = PixelsCifrando.ruido(id, camada, 0x5F1)
+        val batida = relogio * 4 * (0.6 + 0.8 * fase) + fase * 8
+        val degrau = kotlin.math.floor(batida)
+        val s = batida - degrau
+        val a = PixelsCifrando.ruido(id, camada, degrau.toLong())
+        val b = PixelsCifrando.ruido(id, camada, degrau.toLong() + 1)
+        return a + (b - a) * s * s * (3 - 2 * s)
+    }
+    fun ponto(centro: Offset, cor: Color, alfa: Double) {
+        val a = (alfa * brilho).toFloat()
+        if (a <= 0.01f) return
+        drawRoundRect(cor.copy(alpha = a), Offset(centro.x - celula / 2, centro.y - celula / 2), Size(celula, celula), CornerRadius(celula * 0.24f))
+    }
+    // Os seis pontos do PIN: 3 por 3 pixels cada, com 4 pixels entre eles.
+    val larguraDosPontos = (6 * 3 + 5 * 4) * passo
+    val xDosPontos = (300f - larguraDosPontos) / 2
+    fun pixelDoPin(i: Int): Offset {
+        val ponto = i / 9; val dentro = i % 9
+        val coluna = ponto * 7 + dentro % 3
+        return Offset(xDosPontos + (coluna + 0.5f) * passo, 40f + (dentro / 3 + 0.5f) * passo)
+    }
+    val pixelsDoPin = 6 * 9
+    // 1. O PIN de antes: aceso, e depois se desfaz em ruido, cada pixel para um lado.
+    val desfaz = suave((t - 0.9) / 1.5)
+    for (i in 0 until pixelsDoPin) {
+        val casa = pixelDoPin(i)
+        val espalha = desfaz.toFloat() * 30
+        val dx = (PixelsCifrando.ruido(i, 3, 1).toFloat() - 0.5f) * espalha * 2
+        val dy = (PixelsCifrando.ruido(i, 3, 2).toFloat() - 0.5f) * espalha * 2 - desfaz.toFloat() * 8
+        val valor = if (desfaz > 0) 0.3 + 0.45 * tom(i, 2) else 0.9
+        ponto(Offset(casa.x + dx, casa.y + dy), PixelsCifrando.cinza(valor), 1 - suave((desfaz - 0.45) / 0.55))
+    }
+    // 2. As palavras anotadas aparecem, uma pastilha de cada vez.
+    val xDasPalavras = (300f - (6 * 5 + 5) * passo) / 2
+    data class Px(val casa: Offset, val id: Int, val aparece: Double)
+    val pixels = ArrayList<Px>()
+    for (pastilha in 0 until 12) {
+        val aparece = suave((t - 2.3 - pastilha * 0.09) / 0.35)
+        for (px in 0 until 5) for (py in 0 until 2) {
+            pixels.add(Px(Offset(xDasPalavras + ((pastilha % 6) * 6 + px + 0.5f) * passo, 104f + ((pastilha / 6) * 3 + py + 0.5f) * passo),
+                          pastilha * 10 + px * 2 + py, aparece))
+        }
+    }
+    // 3. As palavras sobem e viram o PIN novo, em lima: so quem tem as palavras volta.
+    val sobe = suave((t - 4.0) / 1.3)
+    pixels.forEachIndexed { i, p ->
+        val atraso = PixelsCifrando.ruido(p.id, 9, 0x2C) * 0.4
+        val f = suave((sobe - atraso) / (1 - atraso + 0.0001))
+        val alvo = pixelDoPin(i % pixelsDoPin)
+        val x = p.casa.x + (alvo.x - p.casa.x) * f.toFloat()
+        val y = p.casa.y + (alvo.y - p.casa.y) * f.toFloat() - kotlin.math.sin(f * Math.PI).toFloat() * 14
+        ponto(Offset(x, y), PixelsCifrando.cinza(0.42 + 0.36 * tom(p.id, 5)), p.aparece * (1 - suave((f - 0.8) / 0.2)))
+    }
+    val assentou = suave((t - 5.0) / 0.5)
+    for (i in 0 until pixelsDoPin) ponto(pixelDoPin(i), Paleta.lima, assentou)
+    // As palavras ficam, apagadas, depois de virar o PIN: elas continuam sendo a saida.
+    for (p in pixels) ponto(p.casa, PixelsCifrando.cinza(0.2 + 0.12 * tom(p.id, 6)), assentou * 0.9)
 }

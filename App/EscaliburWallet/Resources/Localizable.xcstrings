@@ -14559,6 +14559,614 @@
         }
       }
     },
+    "A CoW recusou a assinatura da ordem." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "رفضت CoW توقيع الأمر."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW hat die Signatur der Order abgelehnt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW refused the order's signature."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW rechazó la firma de la orden."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW a refusé la signature de l’ordre."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने ऑर्डर के हस्ताक्षर को मना किया।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW menolak tanda tangan order."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW が注文の署名を拒否しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 주문 서명을 거절했습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW emrin imzasını reddetti."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW đã từ chối chữ ký của lệnh."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 拒绝了订单签名。"
+          }
+        }
+      }
+    },
+    "A CoW recusou a ordem. Motivo informado por ela: %@." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "رفضت CoW الأمر. السبب الذي ذكرته: %@."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW hat die Order abgelehnt. Angegebener Grund: %@."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW refused the order. Reason it gave: %@."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW rechazó la orden. Motivo que informó: %@."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW a refusé l’ordre. Motif indiqué : %@."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने ऑर्डर मना किया। बताया गया कारण: %@।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW menolak order. Alasan yang diberikan: %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW が注文を拒否しました。示された理由：%@。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 주문을 거절했습니다. 알려준 사유: %@."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW emri reddetti. Bildirdiği neden: %@."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW đã từ chối lệnh. Lý do được đưa ra: %@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 拒绝了该订单。给出的原因：%@。"
+          }
+        }
+      }
+    },
+    "A CoW recusou: a autorização do token não cobre o valor da venda. Monte a ordem de novo para o app autorizar." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "رفضت CoW: تفويض الرمز لا يغطي قيمة البيع. أنشئ الأمر من جديد ليقوم التطبيق بالتفويض."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW hat abgelehnt: Die Token-Freigabe deckt den Verkaufsbetrag nicht. Erstelle die Order neu, damit die App freigibt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW refused: the token approval doesn't cover the amount being sold. Build the order again so the app approves it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW rechazó: la autorización del token no cubre el monto de la venta. Arma la orden de nuevo para que la app autorice."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW a refusé : l’autorisation du jeton ne couvre pas le montant vendu. Recréez l’ordre pour que l’app l’autorise."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने मना किया: टोकन की अनुमति बेचने की राशि को पूरा नहीं करती। ऑर्डर दोबारा बनाएं ताकि ऐप अनुमति दे।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW menolak: izin token tidak menutupi jumlah yang dijual. Buat order lagi agar aplikasi memberi izin."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW が拒否しました：トークンの承認額が売却額に足りません。アプリが承認できるよう、注文を作り直してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 거절했습니다: 토큰 승인 금액이 판매 금액보다 적습니다. 앱이 승인하도록 주문을 다시 만드세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW reddetti: token onayı satış tutarını karşılamıyor. Uygulamanın onay vermesi için emri yeniden oluşturun."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW đã từ chối: mức cấp quyền token không đủ cho số tiền bán. Hãy tạo lại lệnh để ứng dụng cấp quyền."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 已拒绝：代币授权额度不足以支付卖出金额。请重新创建订单，让应用完成授权。"
+          }
+        }
+      }
+    },
+    "A CoW recusou: ela não negocia um dos tokens desta ordem." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "رفضت CoW: لا تتداول أحد رموز هذا الأمر."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW hat abgelehnt: Einer der Token dieser Order wird dort nicht gehandelt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW refused: it doesn't trade one of the tokens in this order."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW rechazó: no negocia uno de los tokens de esta orden."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW a refusé : elle ne négocie pas l’un des jetons de cet ordre."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने मना किया: वह इस ऑर्डर के एक टोकन का कारोबार नहीं करता।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW menolak: CoW tidak memperdagangkan salah satu token dalam order ini."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW が拒否しました：この注文のトークンの 1 つを取り扱っていません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 거절했습니다: 이 주문의 토큰 중 하나를 거래하지 않습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW reddetti: bu emirdeki tokenlerden birinin işlemini yapmıyor."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW đã từ chối: CoW không giao dịch một trong các token của lệnh này."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 已拒绝：它不交易此订单中的某个代币。"
+          }
+        }
+      }
+    },
+    "A CoW recusou: esta carteira já tem o máximo de ordens limite com preço fora do mercado nesta rede. Cancele uma, ou crie a ordem mais perto do preço atual." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "رفضت CoW: لدى هذه المحفظة الحد الأقصى من الأوامر المحددة بسعر بعيد عن السوق على هذه الشبكة. ألغِ واحدًا، أو أنشئ الأمر بسعر أقرب إلى السعر الحالي."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW hat abgelehnt: Diese Wallet hat in diesem Netzwerk bereits die Höchstzahl an Limit-Orders mit Preis außerhalb des Markts. Storniere eine oder erstelle die Order näher am aktuellen Preis."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW refused: this wallet already has the maximum number of limit orders priced away from the market on this network. Cancel one, or create the order closer to the current price."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW rechazó: esta billetera ya tiene el máximo de órdenes límite con precio fuera del mercado en esta red. Cancela una, o crea la orden más cerca del precio actual."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW a refusé : ce portefeuille a déjà le maximum d’ordres limites à un prix hors marché sur ce réseau. Annulez-en un, ou créez l’ordre plus près du prix actuel."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने मना किया: इस नेटवर्क पर इस वॉलेट के पास बाज़ार से दूर कीमत वाले लिमिट ऑर्डर की अधिकतम संख्या पहले से है। एक रद्द करें, या ऑर्डर मौजूदा कीमत के करीब बनाएं।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW menolak: dompet ini sudah punya jumlah maksimum order limit dengan harga di luar pasar di jaringan ini. Batalkan satu, atau buat order lebih dekat ke harga saat ini."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW が拒否しました：このウォレットはこのネットワークで、市場から離れた価格の指値注文がすでに上限に達しています。1 件キャンセルするか、現在の価格に近い価格で注文を作成してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 거절했습니다: 이 지갑은 이 네트워크에서 시장가와 동떨어진 가격의 지정가 주문을 이미 최대로 가지고 있습니다. 하나를 취소하거나 현재 가격에 더 가깝게 주문을 만드세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW reddetti: bu cüzdanın bu ağda piyasadan uzak fiyatlı limit emir sayısı zaten en yüksek seviyede. Birini iptal edin ya da emri güncel fiyata daha yakın oluşturun."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW đã từ chối: ví này đã có số lệnh giới hạn với giá xa thị trường tối đa trên mạng này. Hãy hủy một lệnh, hoặc tạo lệnh gần giá hiện tại hơn."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 已拒绝：此钱包在该网络上价格偏离市场的限价单已达上限。请取消一个，或以更接近当前价格的价格创建订单。"
+          }
+        }
+      }
+    },
+    "A CoW recusou: o prazo da ordem está fora do que ela aceita." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "رفضت CoW: مدة الأمر خارج ما تقبله."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW hat abgelehnt: Die Laufzeit der Order liegt außerhalb dessen, was sie akzeptiert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW refused: the order's expiry is outside what it accepts."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW rechazó: el plazo de la orden está fuera de lo que acepta."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW a refusé : l’échéance de l’ordre est hors de ce qu’elle accepte."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने मना किया: ऑर्डर की समय सीमा उसकी मंज़ूर सीमा से बाहर है।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW menolak: masa berlaku order di luar yang diterimanya."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW が拒否しました：注文の期限が受け付け範囲外です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 거절했습니다: 주문 기한이 허용 범위를 벗어났습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW reddetti: emrin süresi kabul ettiği aralığın dışında."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW đã từ chối: thời hạn của lệnh nằm ngoài mức CoW chấp nhận."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 已拒绝：订单期限超出其接受范围。"
+          }
+        }
+      }
+    },
+    "A CoW recusou: o saldo do token não cobre o valor da venda." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "رفضت CoW: رصيد الرمز لا يغطي قيمة البيع."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW hat abgelehnt: Das Token-Guthaben deckt den Verkaufsbetrag nicht."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW refused: the token balance doesn't cover the amount being sold."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW rechazó: el saldo del token no cubre el monto de la venta."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW a refusé : le solde du jeton ne couvre pas le montant vendu."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने मना किया: टोकन का बैलेंस बेचने की राशि को पूरा नहीं करता।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW menolak: saldo token tidak menutupi jumlah yang dijual."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW が拒否しました：トークンの残高が売却額に足りません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 거절했습니다: 토큰 잔액이 판매 금액보다 적습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW reddetti: token bakiyesi satış tutarını karşılamıyor."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW đã từ chối: số dư token không đủ cho số tiền bán."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 已拒绝：代币余额不足以支付卖出金额。"
+          }
+        }
+      }
+    },
+    "A CoW recusou: o valor da ordem está fora do que ela aceita." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "رفضت CoW: قيمة الأمر خارج ما تقبله."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW hat abgelehnt: Der Betrag der Order liegt außerhalb dessen, was sie akzeptiert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW refused: the order amount is outside what it accepts."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW rechazó: el monto de la orden está fuera de lo que acepta."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW a refusé : le montant de l’ordre est hors de ce qu’elle accepte."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने मना किया: ऑर्डर की राशि उसकी मंज़ूर सीमा से बाहर है।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW menolak: jumlah order di luar yang diterimanya."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW が拒否しました：注文の金額が受け付け範囲外です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 거절했습니다: 주문 금액이 허용 범위를 벗어났습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW reddetti: emir tutarı kabul ettiği aralığın dışında."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW đã từ chối: số tiền của lệnh nằm ngoài mức CoW chấp nhận."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 已拒绝：订单金额超出其接受范围。"
+          }
+        }
+      }
+    },
     "A CoW respondeu fora do esperado. Confira a Atividade antes de tentar de novo." : {
       "localizations" : {
         "ar" : {
@@ -15952,6 +16560,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此笔转账的带宽来自账户的质押或免费额度，不会燃烧 TRX。"
+          }
+        }
+      }
+    },
+    "A biometria confirmou. Agora o PIN." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "أكدت المصادقة الحيوية. الآن رمز PIN."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Biometrie hat bestätigt. Jetzt die PIN."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biometrics confirmed. Now the PIN."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La biometría confirmó. Ahora el PIN."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La biométrie a confirmé. Maintenant le PIN."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "बायोमेट्रिक ने पुष्टि कर दी। अब PIN।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biometrik sudah memastikan. Sekarang PIN."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生体認証で確認しました。次に PIN を入力してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "생체 인증이 완료되었습니다. 이제 PIN을 입력하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biyometri doğruladı. Şimdi PIN."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sinh trắc học đã xác nhận. Giờ đến mã PIN."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生物识别已确认。现在输入 PIN。"
           }
         }
       }
@@ -22424,6 +23108,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "订单会一直开放，直到成交、过期或你取消。"
+          }
+        }
+      }
+    },
+    "A ordem não foi criada" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لم يتم إنشاء الأمر"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Order wurde nicht erstellt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The order was not created"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La orden no se creó"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’ordre n’a pas été créé"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ऑर्डर नहीं बना"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order tidak dibuat"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "注文は作成されませんでした"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주문이 생성되지 않았습니다"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emir oluşturulmadı"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lệnh chưa được tạo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "订单未创建"
           }
         }
       }
@@ -34545,6 +35305,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此兑换会使账户中的 SOL 低于网络的最低储备金。请降低金额。"
+          }
+        }
+      }
+    },
+    "A troca não foi enviada" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لم يتم إرسال المبادلة"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Tausch wurde nicht gesendet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The swap was not sent"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El intercambio no se envió"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’échange n’a pas été envoyé"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "स्वैप नहीं भेजा गया"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Penukaran tidak terkirim"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スワップは送信されませんでした"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스왑이 전송되지 않았습니다"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Takas gönderilmedi"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Giao dịch hoán đổi chưa được gửi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "兑换未发送"
           }
         }
       }
@@ -92242,6 +93078,82 @@
         }
       }
     },
+    "Esta ordem já está na CoW. Confira em Ordens abertas." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "هذا الأمر موجود بالفعل على CoW. تحقق من الأوامر المفتوحة."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Order ist bereits bei CoW. Sieh unter Offene Orders nach."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This order is already on CoW. Check Open orders."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta orden ya está en CoW. Revisa Órdenes abiertas."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet ordre est déjà sur CoW. Vérifiez dans Ordres ouverts."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यह ऑर्डर पहले से CoW पर है। खुले ऑर्डर में देखें।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order ini sudah ada di CoW. Periksa di Order terbuka."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この注文はすでに CoW にあります。未約定の注文で確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 주문은 이미 CoW에 있습니다. 미체결 주문에서 확인하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu emir zaten CoW'da. Açık emirler'e bakın."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lệnh này đã có trên CoW. Hãy kiểm tra trong Lệnh đang mở."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此订单已在 CoW 上。请在未成交订单中查看。"
+          }
+        }
+      }
+    },
     "Esta ordem move o preço em %@%%. Dividir em ordens menores ajuda." : {
       "localizations" : {
         "ar" : {
@@ -138194,6 +139106,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "整数价位"
+          }
+        }
+      }
+    },
+    "O %@ confirmou. Agora o PIN." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تأكَّد %@. الآن أدخل PIN."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat bestätigt. Jetzt die PIN."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ confirmed. Now the PIN."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ confirmó. Ahora el PIN."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ a confirmé. Maintenant le PIN."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ने पुष्टि कर दी. अब PIN."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ sudah memastikan. Sekarang PIN."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ で確認しました。次に PIN を入力してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 인증이 완료되었습니다. 이제 PIN을 입력하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ doğruladı. Şimdi PIN."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ đã xác nhận. Giờ đến PIN."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 已确认。现在输入 PIN 码。"
           }
         }
       }
@@ -187861,6 +188849,158 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "强化模式：输入 PIN 码后，%@ 会确认是你本人。"
+          }
+        }
+      }
+    },
+    "Super Security: primeiro a biometria, depois o PIN." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security: أولًا المصادقة الحيوية، ثم رمز PIN."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security: zuerst die Biometrie, dann die PIN."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security: biometrics first, then the PIN."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security: primero la biometría, después el PIN."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security : d’abord la biométrie, puis le PIN."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security: पहले बायोमेट्रिक, फिर PIN।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security: biometrik dulu, lalu PIN."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security: まず生体認証、次に PIN。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security: 먼저 생체 인증, 그다음 PIN."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security: önce biyometri, sonra PIN."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security: trước tiên là sinh trắc học, sau đó là mã PIN."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security：先用生物识别，再输入 PIN。"
+          }
+        }
+      }
+    },
+    "Super Security: primeiro o %@, depois o PIN." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الوضع المعزَّز: أولًا %@، ثم PIN."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verstärkter Modus: zuerst %@, dann die PIN."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Super Security: first %@, then the PIN."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modo reforzado: primero %@, después el PIN."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode renforcé : d’abord %@, puis le PIN."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सख़्त मोड: पहले %@, फिर PIN."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode diperkuat: pertama %@, lalu PIN."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "強化モード：まず %@、次に PIN。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "강화 모드: 먼저 %@, 그다음 PIN."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Güçlendirilmiş mod: önce %@, sonra PIN."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chế độ tăng cường: trước tiên là %@, sau đó là PIN."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "强化模式：先 %@，再输入 PIN 码。"
           }
         }
       }

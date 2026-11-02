@@ -62,10 +62,30 @@ object Autorizacao {
     }
 
     /** A credencial para uma operacao. Nil quando o dono cancela. */
-    suspend fun credencial(motivo: String, forcarPin: Boolean = false, aviso: String? = null, erro: String? = null): Credencial? {
+    suspend fun credencial(motivo: String, forcarPin: Boolean = false, aviso: String? = null, erro: String? = null,
+                           rostoPrimeiro: Boolean = false): Credencial? {
         val estado = App.estado
         if (estado.reforcado) {
-            val pin = pedirPin(motivo, aviso ?: avisoDoReforcado, erro) ?: return null
+            // Nas operacoes (enviar, trocar, ver as palavras), a biometria antes do PIN (pedido do dono,
+            // 01/11/2026): o nucleo guarda a confirmada para um PIN so. Sem ela, o PIN pede a biometria depois.
+            var avisoFinal = aviso ?: avisoDoReforcado
+            var erroFinal = erro
+            var confirmado = false
+            if (rostoPrimeiro) {
+                try {
+                    Api.objeto("sessao.confirmarRosto", JSONObject().put("motivo", motivo))
+                    confirmado = true
+                    avisoFinal = t("A biometria confirmou. Agora o PIN.")
+                } catch (falha: FalhaDoNucleo) {
+                    erroFinal = erroFinal ?: if (falha.codigo == "cofre.biometriaNaoConfirmou") mensagemDeBiometriaNaoConfirmou(falha.restantes)
+                                             else mensagemDeRecusa(falha)
+                }
+            }
+            val pin = pedirPin(motivo, avisoFinal, erroFinal)
+            if (pin == null) {
+                if (confirmado) runCatching { Api.objeto("sessao.descartarRosto") }
+                return null
+            }
             return Credencial.Reforcado(pin, motivo)
         }
         val depoisDeReiniciar = estado.biometriaLigada && estado.pedePINDepoisDeReiniciar
@@ -85,7 +105,7 @@ object Autorizacao {
         // A espera depois de a biometria mudar, e a biometria perdida e nao religada, recusam antes
         // do teclado (o `retrying` do iOS): digitar o PIN para ouvir "espere" nao ajuda ninguem.
         Api.objeto("sessao.podeComecar", JSONObject().put("ambos", ambos))
-        var tentativa = credencial(motivo, forcarPin = presenca != Presenca.qualquer, aviso = if (ambos) avisoDosDois else null) ?: return null
+        var tentativa = credencial(motivo, forcarPin = presenca != Presenca.qualquer, aviso = if (ambos) avisoDosDois else null, rostoPrimeiro = true) ?: return null
         while (true) {
             if (ambos && tentativa is Credencial.Pin) tentativa = Credencial.PinEBiometria(tentativa.pin, motivo)
             var aviso: String? = null
@@ -109,7 +129,7 @@ object Autorizacao {
                 }
             }
             App.recarregar()
-            tentativa = credencial(motivo, forcarPin = true, aviso = aviso ?: if (ambos) avisoDosDois else null, erro = erro) ?: return null
+            tentativa = credencial(motivo, forcarPin = true, aviso = aviso ?: if (ambos) avisoDosDois else null, erro = erro, rostoPrimeiro = true) ?: return null
         }
     }
 
