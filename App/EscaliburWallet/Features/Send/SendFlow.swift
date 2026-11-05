@@ -1600,8 +1600,9 @@ struct SendStages: View {
         let plan = renewed
         // Ate a assinatura: uma troca ou outro envio deste ativo pode ter saido depois da revisao.
         if let address = model.account?.address, sellsInFlight(chain: chain, address: address) { return }
-        // Sem cotacao, o valor em reais e desconhecido e a voz e pedida (falha fechada).
-        let price = portfolio.price(of: holding.asset)
+        // Sem cotacao, o valor em reais e desconhecido e a voz e pedida (falha fechada). So a cotacao da fonte: a convertida na
+        // troca de moeda e uma estimativa e nao decide (`firmPrice`).
+        let price = portfolio.firmPrice(of: holding.asset)
         let moved = plan.review.outgoing?.amount ?? model.amount ?? 0
         let fiat = price.map { Fmt.double(moved, decimals: holding.asset.decimals) * $0 }
         guard await VoiceGate.shared.confirm(.send(fiat: fiat), session: session) else { return }

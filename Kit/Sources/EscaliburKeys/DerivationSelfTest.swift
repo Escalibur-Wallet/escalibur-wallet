@@ -11,7 +11,8 @@ import Foundation
 /// teste usa (revisao da decima terceira passada):
 /// - a seed BIP-39 com a passphrase "TREZOR" (trezor/python-mnemonic, vectors.json, english[0]);
 /// - a seed da frase japonesa do bip32JP (test_JP_BIP39.json, vetor 0): a lista japonesa e a passphrase (o ㍍ e as kana
-///   com dakuten) so dao esta seed com o NFKD (o NFD, o NFC e o NFKC dao outras);
+///   com dakuten) so dao esta seed com o NFKD (o NFD, o NFC e o NFKC dao outras), tanto a frase gerada aqui quanto a
+///   digitada, com o espaco ideografico e o ぞ composto, que passa pela normalizacao da importacao;
 /// - o endereco de cada rede que nao e EVM, e o da Ethereum pelas EVM, que derivam pelo mesmo caminho: da frase abandon, Bitcoin pelo BIP-84, Ethereum e Solana pelo python-hdwallet, XRPL e
 ///   Tron pelo firmware da Keystone, Stellar pela SEP-0005 (teste 5); da frase shoot, as demais pela Trust Wallet Core
 ///   (CoinAddressDerivationTests.swift);
@@ -53,19 +54,27 @@ public enum DerivationSelfTest {
 
     private static let cache = Cache()
 
-    static let abandon = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    /// De onde sai a carteira de teste. A frase dos vetores do BIP-39 e do bip32JP e a da entropia zero, gerada aqui pelo
+    /// mesmo `BIP39.phrase(fromEntropy:)` das carteiras: o texto em ingles dela nao fica no binario, onde marca o modo demo
+    /// e a conferencia do build recusa (revisao da decima terceira passada). A japonesa tambem vai digitada, pela importacao.
+    enum Source {
+        case zeroEntropy(BIP39Language)
+        case phrase(String, BIP39Language)
+    }
+
     static let shoot = "shoot island position soft burden budget tooth cruel issue economy destroy above"
     static let japanese = Array(repeating: "\u{3042}\u{3044}\u{3053}\u{304F}\u{3057}\u{3093}", count: 11).joined(separator: "\u{3000}")
         + "\u{3000}\u{3042}\u{304A}\u{305E}\u{3089}"
     static let japanesePassphrase = "\u{334D}\u{30AC}\u{30D0}\u{30F4}\u{30A1}\u{3071}\u{3070}\u{3050}\u{309E}\u{3061}\u{3062}\u{5341}\u{4EBA}\u{5341}\u{8272}"
 
-    static let seeds: [(phrase: String, language: BIP39Language, passphrase: String, seed: String)] = [
-        (abandon, .english, "TREZOR", "c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04"),
-        (japanese, .japanese, japanesePassphrase, "a262d6fb6122ecf45be09c50492b31f92e9beb7d9a845987a02cefda57a15f9c467a17872029a9e92299b5cbdf306e3a0ee620245cbd508959b6cb7ca637bd55"),
+    static let seeds: [(source: Source, passphrase: String, seed: String)] = [
+        (.zeroEntropy(.english), "TREZOR", "c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04"),
+        (.zeroEntropy(.japanese), japanesePassphrase, "a262d6fb6122ecf45be09c50492b31f92e9beb7d9a845987a02cefda57a15f9c467a17872029a9e92299b5cbdf306e3a0ee620245cbd508959b6cb7ca637bd55"),
+        (.phrase(japanese, .japanese), japanesePassphrase, "a262d6fb6122ecf45be09c50492b31f92e9beb7d9a845987a02cefda57a15f9c467a17872029a9e92299b5cbdf306e3a0ee620245cbd508959b6cb7ca637bd55"),
     ]
 
-    static let addresses: [(phrase: String, accounts: [(chain: Chain, address: String)])] = [
-        (abandon, [
+    static let addresses: [(source: Source, accounts: [(chain: Chain, address: String)])] = [
+        (.zeroEntropy(.english), [
             (.bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"),
             (.ethereum, "0x9858EfFD232B4033E47d90003D41EC34EcaEda94"),
             (.solana, "HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk"),
@@ -73,7 +82,7 @@ public enum DerivationSelfTest {
             (.tron, "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH"),
             (.stellar, "GB3JDWCQJCWMJ3IILWIGDTQJJC5567PGVEVXSCVPEQOTDN64VJBDQBYX"),
         ]),
-        (shoot, [
+        (.phrase(shoot, .english), [
             (.ton, "UQDgEMqToTacHic7SnvnPFmvceG5auFkCcAw0mSCvzvKUaT4"),
             (.sui, "0xada112cfb90b44ba889cc5d39ac2bf46281e4a91f7919c693bcd9b8323e81ed2"),
             (.cardano, "addr1qyr8jjfnypp95eq74aqzn7ss687ehxclgj7mu6gratmg3mul2040vt35dypp042awzsjk5xm3zr3zm5qh7454uwdv08s84ray2"),
@@ -91,18 +100,30 @@ public enum DerivationSelfTest {
         ([1, 0], "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el"),
     ]
 
-    static func secret(_ phrase: String, _ language: BIP39Language, passphrase: String) throws -> WalletSecret {
+    static func secret(_ source: Source, passphrase: String) throws -> WalletSecret {
         // O segredo fica com o buffer da passphrase (o ASCII entra sem copia), e o `wipe()` dele o zera.
         let typed = SecureBytes(capacity: max(passphrase.utf8.count, 1))
         Array(passphrase.utf8).withUnsafeBufferPointer { typed.append(contentsOf: $0) }
-        let words = BIP39.canonical(phrase)
+        let words: SecureBytes
+        let language: BIP39Language
+        switch source {
+        case .zeroEntropy(let idioma):
+            let entropy = SecureBytes(capacity: 16)
+            entropy.replaceAll(with: [UInt8](repeating: 0, count: 16))
+            defer { entropy.wipe() }
+            words = try BIP39.phrase(fromEntropy: entropy, language: idioma)
+            language = idioma
+        case .phrase(let phrase, let idioma):
+            words = BIP39.canonical(phrase)
+            language = idioma
+        }
         defer { words.wipe() }
         return try WalletSecret.from(phrase: words, language: language, passphrase: typed)
     }
 
     static func check() throws -> Bool {
         for vector in seeds {
-            let wallet = try secret(vector.phrase, vector.language, passphrase: vector.passphrase)
+            let wallet = try secret(vector.source, passphrase: vector.passphrase)
             defer { wallet.wipe() }
             let seed = try wallet.seed()
             defer { seed.wipe() }
@@ -116,8 +137,8 @@ public enum DerivationSelfTest {
             covered.contains(chain.id)
                 || (chain.family == .evm && chain.coinType == Chain.ethereum.coinType && DefaultPaths.path(for: chain) == DefaultPaths.path(for: .ethereum))
         }) else { return false }
-        for (phrase, expected) in addresses {
-            let wallet = try secret(phrase, .english, passphrase: "")
+        for (source, expected) in addresses {
+            let wallet = try secret(source, passphrase: "")
             defer { wallet.wipe() }
             let (accounts, _) = try AccountDeriver.deriveUnchecked(wallet, chains: expected.map(\.chain))
             for (chain, address) in expected {

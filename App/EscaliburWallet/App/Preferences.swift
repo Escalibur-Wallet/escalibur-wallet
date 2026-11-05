@@ -10,6 +10,7 @@ enum Preferences {
     private static let priceAlertChoiceKey = "alertas.escolhido"
     private static let receiptOfferKey = "recebimento.oferta.vista"
     private static let updateAlarmKey = "versao.alarme"
+    private static let releaseIssuedKey = "versao.lista.emitida"
 
     /// Este app ja rodou nesta instalacao? Ver `KeyServices.firstLaunchCleanup`.
     static var installMarked: Bool {
@@ -43,5 +44,12 @@ enum Preferences {
     static var updateAlarm: String? {
         get { UserDefaults.standard.string(forKey: updateAlarmKey) }
         set { UserDefaults.standard.set(newValue, forKey: updateAlarmKey) }
+    }
+
+    /// A emissao da lista assinada mais nova que uma conferencia ja viu: uma lista mais antiga, servida de novo pelo site,
+    /// nao empurra para atualizar. So uma data, nada da carteira. Ver `UpdateGuard`.
+    static var releaseIssued: Date? {
+        get { UserDefaults.standard.object(forKey: releaseIssuedKey) as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: releaseIssuedKey) }
     }
 }

@@ -60,8 +60,8 @@ struct LockView: View {
             guard scenePhase == .active, !triedBiometry else { return }
             triedBiometry = true
             showThrottleIfNeeded()
-            // Com a trava de alerta na tela, o Face ID automatico nao abre por cima dela.
-            guard !UpdateAlarmWindow.covering else { return }
+            // Com a trava de alerta ou a atualizacao obrigatoria na tela, o Face ID automatico nao abre por cima delas.
+            guard !UpdateAlarmWindow.covering, !UpdateRequiredWindow.shared.covering else { return }
             if session.hardenedModeOn {
                 await tryHardenedFace()
             } else if session.biometryEnabled, !restartNeedsPIN {

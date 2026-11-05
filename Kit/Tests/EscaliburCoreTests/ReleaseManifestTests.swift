@@ -76,6 +76,40 @@ struct ReleaseManifestTests {
         }
     }
 
+    @Test("Atualizacao obrigatoria: abaixo da minima ou numa das versoes; sem o campo, nenhuma")
+    func obrigatoria() throws {
+        let chave = P256.Signing.PrivateKey()
+        func lista(_ obrigatoria: String?) throws -> ReleaseManifest {
+            var texto = Self.manifesto(["1.0.0", "1.0.1", "1.0.2"])
+            if let obrigatoria { texto = texto.replacingOccurrences(of: #""formato":1,"#, with: #""formato":1,"obrigatoria":\#(obrigatoria),"#) }
+            return try ReleaseManifest.verified(try Self.arquivo(texto, assinantes: [("a", chave)]), app: Self.app, keys: ["a": chave.publicKey], threshold: 1)
+        }
+        #expect(try lista(nil).mandatory == nil)
+        let minima = try #require(try lista(#"{"minima":"1.0.2"}"#).mandatory)
+        #expect(minima.requires("1.0.0") && minima.requires("1.0.1") && !minima.requires("1.0.2") && !minima.requires("1.0.3"))
+        let versoes = try #require(try lista(#"{"versoes":["1.0.0"]}"#).mandatory)
+        #expect(versoes.requires("1.0.0") && !versoes.requires("1.0.1"))
+        let juntas = try #require(try lista(#"{"minima":"1.0.1","versoes":["1.0.1"]}"#).mandatory)
+        #expect(juntas.requires("1.0.0") && juntas.requires("1.0.1") && !juntas.requires("1.0.2"))
+        // Minima fora do formato nao obriga ninguem.
+        #expect(try #require(try lista(#"{"minima":"1.0.x"}"#).mandatory).requires("1.0.0") == false)
+        // De outro tipo: a lista vale, sem obrigacao (nunca a lista mexida do alarme).
+        #expect(try lista(#""x""#).mandatory == nil)
+        #expect(try lista(#"{"minima":1}"#).mandatory == ReleaseManifest.Mandatory(minimum: nil, versions: []))
+        #expect(try lista(#"{"versoes":["1.0.1",null]}"#).mandatory == ReleaseManifest.Mandatory(minimum: nil, versions: []))
+    }
+
+    @Test("Liberada: so a versao com o dia da liberacao; de outro tipo, nao liberada")
+    func liberada() throws {
+        let chave = P256.Signing.PrivateKey()
+        let texto = Self.manifesto(["1.0.0", "1.0.1", "1.0.2"])
+            .replacingOccurrences(of: #""versao":"1.0.0""#, with: #""liberada":"2026-10-20","versao":"1.0.0""#)
+            .replacingOccurrences(of: #""versao":"1.0.1""#, with: #""liberada":true,"versao":"1.0.1""#)
+        let lista = try ReleaseManifest.verified(try Self.arquivo(texto, assinantes: [("a", chave)]), app: Self.app, keys: ["a": chave.publicKey], threshold: 1)
+        #expect(lista.released(version: "1.0.0") && !lista.released(version: "1.0.1") && !lista.released(version: "1.0.2"))
+        #expect(lista.authorizes(version: "1.0.1") && lista.authorizes(version: "1.0.2"))
+    }
+
     @Test("Versao mais nova, numero a numero")
     func comparacao() {
         #expect(ReleaseManifest.isNewer("1.0.10", than: "1.0.9"))

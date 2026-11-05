@@ -240,6 +240,13 @@ struct BridgeReviewFlow: View {
         return Fmt.double(intent.amount, decimals: sell.decimals) * price
     }
 
+    /// O mesmo valor para a voz, so com a cotacao da fonte: a estimativa do formulario e o preco convertido na troca de
+    /// moeda nao decidem se a voz e pedida (sem valor, ela e pedida).
+    private var voiceFiat: Double? {
+        guard let sell = sellAsset, sell.coingeckoID != nil, let price = portfolio.firmPrice(of: sell) else { return nil }
+        return Fmt.double(intent.amount, decimals: sell.decimals) * price
+    }
+
     private func confirm() async {
         guard let plan, let quote else { return }
         guard !plan.isExpired() else {
@@ -250,7 +257,7 @@ struct BridgeReviewFlow: View {
         guard planMatches(plan, quote: quote) else { return }
         // Ate a assinatura: uma troca ou um envio deste ativo pode ter saido depois da revisao.
         if let account = session.selectedWallet?.account(intent.from.chain), sellsInFlight(wallet: plan.walletID, address: account.address) { return }
-        guard await VoiceGate.shared.confirm(.send(fiat: fiat), session: session) else { return }
+        guard await VoiceGate.shared.confirm(.send(fiat: voiceFiat), session: session) else { return }
         // O autoteste da assinatura antes da passphrase e do PIN, fora da thread principal: com um defeito do aparelho,
         // nada e pedido a toa (o Signer confere de novo antes de abrir o cofre; revisao da decima terceira passada).
         guard (try? await Offload.run({ SigningSelfTest.passed(for: plan) })) == true else {

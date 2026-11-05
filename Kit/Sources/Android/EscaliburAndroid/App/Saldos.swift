@@ -82,6 +82,11 @@ final class Saldos: @unchecked Sendable {
     private var carteiraID: UUID?
     private var saldos: [String: ChainBalance] = [:]
     private var cotacoes: [String: Quote] = [:]
+    /// Os precos convertidos na troca de moeda, e quando: ficam por 10 minutos enquanto o preco na moeda nova nao chega (a
+    /// fonte de reserva nao tem os tokens menores, e o BNBFROG ficava carregando). O resto que a resposta nao traz sai, e
+    /// o convertido nunca vai para o cache. As chaves: o id do CoinGecko, ou `prefixoDeContrato` + o `Asset.id`.
+    private var convertidas: [String: Date] = [:]
+    static let prazoDasConvertidas: TimeInterval = 600
     private var cotacoesPorContrato: [String: Quote] = [:]
     private var precosDoBitcoin: [String: Double] = [:]
     /// A moeda em que as cotacoes guardadas estao: logo depois de trocar a moeda do app, os valores
@@ -99,6 +104,51 @@ final class Saldos: @unchecked Sendable {
     static let intervaloRedeVazia: TimeInterval = 300
     static let leiturasParalelas = 6
     static let prefixoDeContrato = "contrato:"
+
+    /// As cotacoes novas, com as convertidas na troca de moeda que ainda nao vieram e estao no prazo. Chamar com a trava.
+    private func juntar(_ novas: [String: Quote], moeda: String) -> [String: Quote] {
+        guard moedaDasCotacoes == moeda else {
+            convertidas = [:]
+            return novas
+        }
+        let agora = Date()
+        let ficam = cotacoes.filter { chave, _ in novas[chave] == nil && noPrazo(chave, agora) }
+        convertidas = convertidas.filter { chave, _ in chave.hasPrefix(Self.prefixoDeContrato) || ficam[chave] != nil }
+        return novas.merging(ficam) { nova, _ in nova }
+    }
+
+    /// Tira dos mapas o convertido que passou do prazo: com as fontes fora, ele sumia so do `preco`, e os totais e as
+    /// linhas ainda o mostravam (revisao dos 3 agentes de 05/11/2026). Chamar com a trava.
+    private func purgarConvertidasVencidas() {
+        let agora = Date()
+        for chave in convertidas.keys where !noPrazo(chave, agora) {
+            convertidas[chave] = nil
+            if chave.hasPrefix(Self.prefixoDeContrato) {
+                cotacoesPorContrato[String(chave.dropFirst(Self.prefixoDeContrato.count))] = nil
+            } else {
+                cotacoes[chave] = nil
+            }
+        }
+    }
+
+    /// O convertido ainda esta no prazo. Chamar com a trava.
+    private func noPrazo(_ chave: String, _ agora: Date) -> Bool {
+        convertidas[chave].map { agora.timeIntervalSince($0) < Self.prazoDasConvertidas } ?? false
+    }
+
+    /// Os precos por contrato novos, com os de antes: os de verdade ficam, como antes; os convertidos, so no prazo. Chamar
+    /// com a trava.
+    private func juntarPorContrato(_ achados: [String: Quote]) -> [String: Quote] {
+        let agora = Date()
+        let ficam = cotacoesPorContrato.filter { id, _ in
+            let chave = Self.prefixoDeContrato + id
+            return achados[id] == nil && (convertidas[chave] == nil || noPrazo(chave, agora))
+        }
+        convertidas = convertidas.filter { chave, _ in
+            !chave.hasPrefix(Self.prefixoDeContrato) || ficam[String(chave.dropFirst(Self.prefixoDeContrato.count))] != nil
+        }
+        return ficam.merging(achados) { $1 }
+    }
 
     /// Os mapas por ativo (a cotacao por contrato e o reconhecimento de token) so com o que as carteiras que ficam tem no
     /// cache de saldo: os tokens que so a removida tinha saem com ela (revisao da decima terceira passada).
@@ -120,6 +170,7 @@ final class Saldos: @unchecked Sendable {
             carteiraID = nil
             saldos = [:]
             cotacoes = [:]
+            convertidas = [:]
             moedaDasCotacoes = nil
             cotacoesPorContrato = [:]
             falhas = []
@@ -138,6 +189,7 @@ final class Saldos: @unchecked Sendable {
                 carteiraID = wallet.id
                 saldos = metadata.balanceCache[wallet.id] ?? [:]
                 cotacoes = metadata.quoteCache.filter { !$0.key.hasPrefix(Self.prefixoDeContrato) }
+                convertidas = [:]
                 moedaDasCotacoes = cotacoes.isEmpty ? nil : metadata.settings.currency
                 cotacoesPorContrato = Dictionary(uniqueKeysWithValues: metadata.quoteCache.compactMap { chave, cotacao in
                     chave.hasPrefix(Self.prefixoDeContrato) ? (String(chave.dropFirst(Self.prefixoDeContrato.count)), cotacao) : nil
@@ -268,9 +320,7 @@ final class Saldos: @unchecked Sendable {
             guard carteiraID == wallet.id else { return false }
             for (id, saldo) in novos { saldos[id] = saldo }
             if let novasCotacoes, !novasCotacoes.isEmpty, mesmaMoeda {
-                // Por cima das da mesma moeda, e nao no lugar: a fonte de reserva nao tem os tokens menores, e o preco
-                // convertido sumia (o BNBFROG carregando, relatado no iPhone).
-                cotacoes = moedaDasCotacoes == moeda ? cotacoes.merging(novasCotacoes) { $1 } : novasCotacoes
+                cotacoes = juntar(novasCotacoes, moeda: moeda)
                 moedaDasCotacoes = moeda
             }
             falhas = falharam.filter { !Self.redeVaziaConhecida(saldos[$0.id]) }.sorted { $0.name < $1.name }
@@ -298,7 +348,7 @@ final class Saldos: @unchecked Sendable {
         let achados = await MarketService.shared.tokenQuotes(comPrecoPorContrato, currency: moeda, knownIDs: reconhecidos)
         trava.withLock {
             let aindaNaMoeda = Sessao.shared.metadata.settings.currency == moeda && (moedaDasCotacoes ?? moeda) == moeda
-            if carteiraID == wallet.id, aindaNaMoeda { cotacoesPorContrato.merge(achados) { $1 } }
+            if carteiraID == wallet.id, aindaNaMoeda { cotacoesPorContrato = juntarPorContrato(achados) }
         }
         emitir()
     }
@@ -316,13 +366,23 @@ final class Saldos: @unchecked Sendable {
                 let fator = daNova / daAntiga
                 cotacoes = cotacoes.mapValues { $0.converted(by: fator) }
                 cotacoesPorContrato = cotacoesPorContrato.mapValues { $0.converted(by: fator) }
+                // O prazo conta da primeira conversao: trocar de moeda de novo nao renova uma estimativa velha.
+                let agora = Date()
+                let chaves = Array(cotacoes.keys) + cotacoesPorContrato.keys.map { Self.prefixoDeContrato + $0 }
+                convertidas = Dictionary(uniqueKeysWithValues: chaves.map { ($0, convertidas[$0] ?? agora) })
             } else {
                 cotacoes = [:]
                 cotacoesPorContrato = [:]
+                convertidas = [:]
             }
             moedaDasCotacoes = cotacoes.isEmpty && cotacoesPorContrato.isEmpty ? nil : nova
         }
         emitir()
+        // No fim do prazo, o convertido sai da tela mesmo sem resposta das fontes (o `montar` tira o vencido).
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.prazoDasConvertidas + 1))
+            self?.emitir()
+        }
     }
 
     /// So os precos, na moeda de agora, para os saldos que ja estao na tela (o `refreshQuotes` do iPhone).
@@ -340,7 +400,7 @@ final class Saldos: @unchecked Sendable {
             precosDoBitcoin.merge(precos) { $1 }
             guard carteiraID == wallet.id, Sessao.shared.metadata.settings.currency == moeda else { return false }
             if let novas, !novas.isEmpty {
-                cotacoes = moedaDasCotacoes == moeda ? cotacoes.merging(novas) { $1 } : novas
+                cotacoes = juntar(novas, moeda: moeda)
                 moedaDasCotacoes = moeda
             }
             return true
@@ -358,7 +418,8 @@ final class Saldos: @unchecked Sendable {
     private func guarda(_ wallet: WalletMeta, moeda: String) {
         let lido = trava.withLock { () -> ([String: ChainBalance], [String: Quote], [String: Quote], Date?, String?)? in
             guard carteiraID == wallet.id else { return nil }
-            return (saldos, cotacoes, cotacoesPorContrato, atualizado, moedaDasCotacoes)
+            return (saldos, cotacoes.filter { convertidas[$0.key] == nil },
+                    cotacoesPorContrato.filter { convertidas[Self.prefixoDeContrato + $0.key] == nil }, atualizado, moedaDasCotacoes)
         }
         guard let (copia, cotacoesAgora, porContrato, quando, moedaDelas) = lido else { return }
         try? Sessao.shared.alterar { metadata in
@@ -375,7 +436,10 @@ final class Saldos: @unchecked Sendable {
             Self.podarPorAtivo(&metadata, mantendo: Set(copia.values.flatMap { $0.holdings.map(\.asset.id) + ($0.unlisted ?? []).map(\.asset.id) }))
         }
         let cache = Sessao.shared.metadata.quoteCache
-        trava.withLock { cotacoesPorContrato = cotacoesPorContrato.filter { cache[Self.prefixoDeContrato + $0.key] != nil } }
+        // O convertido nao esta no cache e fica, no prazo dele (sai na troca de carteira, que zera `convertidas`).
+        trava.withLock {
+            cotacoesPorContrato = cotacoesPorContrato.filter { cache[Self.prefixoDeContrato + $0.key] != nil || convertidas[Self.prefixoDeContrato + $0.key] != nil }
+        }
     }
 
     /// Pergunta ao CoinGecko pelos tokens fora da lista, sem suspeita, ainda sem resposta de menos
@@ -508,6 +572,9 @@ final class Saldos: @unchecked Sendable {
 
     func preco(_ ativo: Asset) -> Double? {
         trava.withLock {
+            // O convertido vencido nao vale, mesmo com as fontes fora (o `juntar` so roda quando uma resposta chega).
+            let chave = ativo.coingeckoID ?? Self.prefixoDeContrato + ativo.id
+            if convertidas[chave] != nil, !noPrazo(chave, Date()) { return nil }
             if let id = ativo.coingeckoID { return cotacoes[id]?.price }
             return cotacoesPorContrato[ativo.id]?.price
         }
@@ -533,6 +600,7 @@ final class Saldos: @unchecked Sendable {
 
     /// A mesma conta do `Portfolio.recompute` do iOS. Chamar com a trava.
     private func montar(_ wallet: WalletMeta, _ metadata: Metadata) -> Retrato {
+        purgarConvertidasVencidas()
         var agrupados: [String: [Holding]] = [:]
         var ordem: [String] = []
         var desconhecidos = 0

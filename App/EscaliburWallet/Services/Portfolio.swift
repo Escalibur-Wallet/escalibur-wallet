@@ -123,12 +123,80 @@ final class Portfolio {
             let factor = to / from
             quotes = quotes.mapValues { $0.converted(by: factor) }
             tokenQuotes = tokenQuotes.mapValues { $0.converted(by: factor) }
+            // O prazo conta da primeira conversao: trocar de moeda de novo nao renova uma estimativa velha.
+            let now = Date()
+            let keys = Array(quotes.keys) + tokenQuotes.keys.map { Self.contractQuotePrefix + $0 }
+            converted = Dictionary(uniqueKeysWithValues: keys.map { ($0, converted[$0] ?? now) })
         } else {
             quotes = [:]
             tokenQuotes = [:]
+            converted = [:]
         }
         if let wallet { recompute(wallet) }
         Task { await refreshQuotes(wallet, session: session) }
+        // No fim do prazo, o convertido sai da tela mesmo sem resposta das fontes: quem le `quotes` direto (a Troca aberta)
+        // nao fica com o vencido ate o proximo recalculo.
+        if let wallet, !converted.isEmpty {
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(Self.convertedHold + 1))
+                // A carteira de agora, e nao a da troca: um ativo escondido ou mostrado nesses 10 minutos fica como esta.
+                guard let self, let current = session.metadata.wallets.first(where: { $0.id == wallet.id }),
+                      self.stillShown(current, session) else { return }
+                self.recompute(current)
+            }
+        }
+    }
+
+    /// Os precos convertidos na troca de moeda, e quando: ficam na tela por 10 minutos enquanto o preco na moeda nova nao
+    /// chega. A fonte de reserva (o CoinGecko limita logo depois da troca) nao tem os tokens menores, e o BNBFROG ficava
+    /// carregando (relatado no iPhone). Fora isso, o que a resposta nao traz sai, como antes. O convertido nunca vai para o
+    /// cache e nunca decide a voz (`firmPrice`). As chaves: o id do CoinGecko, ou `contractQuotePrefix` + o `Asset.id`.
+    private var converted: [String: Date] = [:]
+    static let convertedHold: TimeInterval = 600
+
+    private func held(_ key: String, _ now: Date) -> Bool {
+        converted[key].map { now.timeIntervalSince($0) < Self.convertedHold } ?? false
+    }
+
+    private func merged(_ fresh: [String: Quote]) -> [String: Quote] {
+        let now = Date()
+        let keep = quotes.filter { key, _ in fresh[key] == nil && held(key, now) }
+        converted = converted.filter { key, _ in key.hasPrefix(Self.contractQuotePrefix) || keep[key] != nil }
+        return fresh.merging(keep) { new, _ in new }
+    }
+
+    /// Os precos por contrato novos, com os de antes: os de verdade ficam, como antes; os convertidos, so no prazo.
+    private func mergedTokens(_ found: [String: Quote]) -> [String: Quote] {
+        let now = Date()
+        let keep = tokenQuotes.filter { id, _ in
+            let key = Self.contractQuotePrefix + id
+            return found[id] == nil && (converted[key] == nil || held(key, now))
+        }
+        converted = converted.filter { key, _ in
+            !key.hasPrefix(Self.contractQuotePrefix) || keep[String(key.dropFirst(Self.contractQuotePrefix.count))] != nil
+        }
+        return keep.merging(found) { $1 }
+    }
+
+    /// Tira dos mapas o convertido que passou do prazo: com as fontes fora, ele sumia so do `price(of:)`, e os totais, as
+    /// linhas e quem le `quotes` direto ainda o mostravam (revisao dos 3 agentes de 05/11/2026).
+    private func purgeExpiredConverted() {
+        let now = Date()
+        for key in converted.keys where !held(key, now) {
+            converted[key] = nil
+            if key.hasPrefix(Self.contractQuotePrefix) {
+                tokenQuotes[String(key.dropFirst(Self.contractQuotePrefix.count))] = nil
+            } else {
+                quotes[key] = nil
+            }
+        }
+    }
+
+    /// O cache de cotacoes: so o que veio da fonte, na moeda de agora.
+    private var quoteCacheEntries: [String: Quote] {
+        var cache = quotes.filter { converted[$0.key] == nil }
+        for (id, quote) in tokenQuotes where converted[Self.contractQuotePrefix + id] == nil { cache[Self.contractQuotePrefix + id] = quote }
+        return cache
     }
 
     /// So os precos, na moeda de agora, para os saldos que ja estao na tela.
@@ -139,10 +207,8 @@ final class Portfolio {
         let fresh = try? await MarketService.shared.quotes(ids: Array(ids), currency: base)
         guard walletID == wallet.id, stillIn(base, session) else { return }
         if let fresh, !fresh.isEmpty {
-            // Por cima do que ja estava, e nao no lugar: a resposta da fonte de reserva (o CoinGecko limita logo depois da
-            // troca de moeda) nao tem os tokens menores, e o preco convertido do BNBFROG sumia, com a linha carregando ate a
-            // leitura seguinte (relatado no iPhone). O que esta aqui ja e da moeda de agora: convertido na troca, ou nada.
-            quotes.merge(fresh) { $1 }
+            // O convertido na troca de moeda fica ate o preco novo chegar (`merged`).
+            quotes = merged(fresh)
             if let btc = fresh["bitcoin"]?.price { bitcoinPrices[base] = btc }
         }
         recompute(wallet)
@@ -150,13 +216,11 @@ final class Portfolio {
         if !priced.isEmpty {
             let found = await MarketService.shared.tokenQuotes(priced, currency: base, knownIDs: recognizedIDs)
             guard walletID == wallet.id, stillIn(base, session) else { return }
-            tokenQuotes.merge(found) { $1 }
+            tokenQuotes = mergedTokens(found)
             recompute(wallet)
         }
         guard stillShown(wallet, session) else { return }
-        var cache = quotes
-        for (id, quote) in tokenQuotes { cache[Self.contractQuotePrefix + id] = quote }
-        session.metadata.quoteCache = cache
+        session.metadata.quoteCache = quoteCacheEntries
         prune(session)
         try? session.persist()
     }
@@ -166,7 +230,8 @@ final class Portfolio {
     private func prune(_ session: AppSession) {
         let held = Set(balances.values.flatMap { $0.holdings.map(\.asset.id) + ($0.unlisted ?? []).map(\.asset.id) })
         AppSession.pruneAssetMaps(&session.metadata, keeping: held)
-        tokenQuotes = tokenQuotes.filter { session.metadata.quoteCache[Self.contractQuotePrefix + $0.key] != nil }
+        // O convertido nao esta no cache e fica, no prazo dele (sai na troca de carteira, que zera `converted`).
+        tokenQuotes = tokenQuotes.filter { session.metadata.quoteCache[Self.contractQuotePrefix + $0.key] != nil || converted[Self.contractQuotePrefix + $0.key] != nil }
         recognizedTokens = session.metadata.recognizedTokens ?? [:]
     }
 
@@ -181,6 +246,7 @@ final class Portfolio {
     func forget(_ wallet: UUID? = nil) {
         if let wallet, wallet != walletID { return }
         walletID = nil
+        converted = [:]
         rows = []
         allRows = []
         total = 0
@@ -224,6 +290,7 @@ final class Portfolio {
         }
         if walletID != wallet.id {
             walletID = wallet.id
+            converted = [:]
             balances = session.metadata.balanceCache[wallet.id] ?? [:]
             quotes = session.metadata.quoteCache.filter { !$0.key.hasPrefix(Self.contractQuotePrefix) }
             tokenQuotes = Dictionary(uniqueKeysWithValues: session.metadata.quoteCache.compactMap { key, quote in
@@ -440,7 +507,7 @@ final class Portfolio {
         // A moeda mudou durante a leitura (Dolar e de volta para Real): os precos daqui sao
         // da moeda antiga e nao entram, senao o dolar aparecia com R$. A leitura que a troca
         // comecou traz os da moeda nova.
-        if let newQuotes, !newQuotes.isEmpty, stillIn(base, session) { quotes.merge(newQuotes) { $1 } }
+        if let newQuotes, !newQuotes.isEmpty, stillIn(base, session) { quotes = merged(newQuotes) }
         // Rede cuja ultima leitura boa nao tinha nada (o Litecoin de quem nunca teve
         // Litecoin): a falha de agora nao muda o que a tela mostra, e o aviso so
         // assustaria. Fica o zero guardado ate a proxima leitura responder.
@@ -454,7 +521,7 @@ final class Portfolio {
         if !priced.isEmpty {
             let found = await MarketService.shared.tokenQuotes(priced, currency: base, knownIDs: recognizedIDs)
             guard walletID == wallet.id else { return }
-            if stillIn(base, session) { tokenQuotes.merge(found) { $1 } }
+            if stillIn(base, session) { tokenQuotes = mergedTokens(found) }
             recompute(wallet)
         }
         await recognize(wallet, session: session)
@@ -465,11 +532,7 @@ final class Portfolio {
         guard walletID == wallet.id, session.phase == .unlocked,
               session.metadata.wallets.contains(where: { $0.id == wallet.id }) else { return }
         session.metadata.balanceCache[wallet.id] = balances
-        if stillIn(base, session) {
-            var cache = quotes
-            for (id, quote) in tokenQuotes { cache[Self.contractQuotePrefix + id] = quote }
-            session.metadata.quoteCache = cache
-        }
+        if stillIn(base, session) { session.metadata.quoteCache = quoteCacheEntries }
         session.metadata.cachedAt = lastUpdated
         prune(session)
         try? session.persist()
@@ -504,8 +567,18 @@ final class Portfolio {
 
     /// O preco de um ativo: pelo id do CoinGecko na lista; por contrato fora dela.
     func price(of asset: Asset) -> Double? {
+        let key = asset.coingeckoID ?? Self.contractQuotePrefix + asset.id
+        // O convertido vencido nao vale, mesmo com as fontes fora (o `merged` so roda quando uma resposta chega).
+        if converted[key] != nil, !held(key, Date()) { return nil }
         if let id = asset.coingeckoID { return quotes[id]?.price }
         return tokenQuotes[asset.id]?.price
+    }
+
+    /// O preco que veio da fonte, na moeda de agora: o que decide se a voz e pedida. O convertido na troca de moeda, uma
+    /// estimativa pela razao do bitcoin, nao decide (revisao dos 3 agentes de 05/11/2026): sem preco, a voz e pedida.
+    func firmPrice(of asset: Asset) -> Double? {
+        guard converted[asset.coingeckoID ?? Self.contractQuotePrefix + asset.id] == nil else { return nil }
+        return price(of: asset)
     }
 
     /// O preco do bitcoin nas moedas que nao sao a do app, para as outras unidades do
@@ -550,6 +623,7 @@ final class Portfolio {
     }
 
     private func recompute(_ wallet: WalletMeta) {
+        purgeExpiredConverted()
         var grouped: [String: [Holding]] = [:]
         var order: [String] = []
         var unknown = 0

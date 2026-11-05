@@ -34,7 +34,9 @@ public enum BIP39 {
         }
         let list = try store.wordlist(for: language)
         let checksumBits = entropy.count / 4
-        let digest = entropy.withUnsafeBytes { Array(SHA256.hash(data: $0)) }
+        // O resumo da entropia tambem e zerado na saida: ele e o checksum, tirado do segredo (revisao dos 3 agentes de 05/11/2026).
+        var digest = entropy.withUnsafeBytes { Array(SHA256.hash(data: $0)) }
+        defer { digest.resetBytes() }
 
         // Os bits ficam num array de vida curta, zerado na saida.
         var bits = [UInt8]()
@@ -54,8 +56,8 @@ public enum BIP39 {
             var index = 0
             for b in 0..<11 { index = index << 1 | Int(bits[w * 11 + b]) }
             if w > 0 { out.append(0x20) }
-            let word = Array(list.words[index].decomposedStringWithCompatibilityMapping.utf8)
-            word.withUnsafeBufferPointer { out.append(contentsOf: $0) }
+            // Os bytes NFKD que a lista ja guarda, sem montar texto nem copia por palavra.
+            list.nfkdWords[index].withUnsafeBufferPointer { out.append(contentsOf: $0) }
         }
         return out
     }
@@ -188,7 +190,8 @@ public enum BIP39 {
             out.append(byte)
         }
         // O checksum precisa fechar: entropia de frase invalida nao sai daqui.
-        let digest = out.withUnsafeBytes { Array(SHA256.hash(data: $0)) }
+        var digest = out.withUnsafeBytes { Array(SHA256.hash(data: $0)) }
+        defer { digest.resetBytes() }
         for i in 0..<(entropyBits / 32) where bits[entropyBits + i] != (digest[i / 8] >> (7 - i % 8)) & 1 {
             out.wipe()
             throw CryptoError.malformedVault("checksum da frase não fecha")

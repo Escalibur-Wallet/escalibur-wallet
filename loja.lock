@@ -2,9 +2,9 @@
   "nota": "Os scripts que montam o app da loja (tools/copia-publicada.sh e os dois que o leem), o workflow do release, o script que compila o nucleo do Android, o do digesto do archive, os conferidores das flags do pacote e do build, o Package.swift, o projeto do Xcode, o verificador e o leitor de codigo, a lista de versoes, o Xcode do .xcode-version, o CI e os arquivos do Gradle (a versao do Android mora no app/build.gradle.kts, e o projeto muda a cada arquivo novo do app). Mudou um deles: revise o diff e grave o digesto novo aqui.",
   "arquivos": {
     "tools/copia-publicada.sh": "ca38de5ee4a94147e1a78e3092638db9f9486b7937151077e6e770f7eacf48da",
-    "tools/arquivar.sh": "b4659d990f481c71c6590af34aa216a5a03b5bdecbe085196d15d637be2357a7",
+    "tools/arquivar.sh": "39cfa89bc9012ee94a8cd047f0220a34389b5d8dafb66dbfc9ac7e5568216891",
     "tools/android/gerar-aab.sh": "d806a1de01d8d352d5d53bae1bb25325fb28ee75ff7b28714593cdcd61c2fd94",
-    ".github/workflows/release.yml": "1135f2ae9bd13442909bff4238c29908130630c784cac779ff32a9e7efee730e",
+    ".github/workflows/release.yml": "5050ff5c03b7eac39492cf3d17df9c0f6c57b0c1829186b46311e0718726b628",
     "tools/android/compilar-nucleo.sh": "623a58474f57f245554a9904914fe5521b7fd817819370a6b676d7c340de4b70",
     "tools/digesto.sh": "486a3e806de0c9475792f52a26dc0d37a3da220238ed2e101707883272018240",
     "tools/flags-do-pacote.py": "9eabc46c7836712b0bc91d76dd4d930aa537b2e0395be85d9611ec007bc0f2f9",
@@ -24,11 +24,11 @@
     "EscaliburWallet.xcodeproj/project.xcworkspace/contents.xcworkspacedata": "7f3b00b5c3fdb45242d7b87e1e5c4e25d1fa8129a16c94295ecc4e8ea2235c5f",
     "EscaliburWallet.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings": "1217e88c0f6d47ddc1282863891735f7ecb21fef803b2834ac186fa9b6d597e0",
     "EscaliburWallet.xcodeproj/xcshareddata/xcschemes/EscaliburWallet.xcscheme": "93c098486d5212db927725bc95a4a5f0d1ea7571d19829e266d88eaa59998656",
-    "tools/versoes/versoes.swift": "c7919a1899599eb994bcc255ba062aef4f89b87dd7f11356ad5d1098e8ed699e",
+    "tools/versoes/versoes.swift": "27461eace6a15115b8fd3473f17cd7d2aa96fbcfd0fbae22ca1d16aa723262cf",
     "tools/verificar.sh": "272d9f3e9ef3965354f5af264e4c587d8d42b017006ef98ff6a47115fb7abb66",
     "tools/codigo.py": "8b9177f894858956c6b888669f6a76b52f24736b8759e5ea1d4085b99252e0dd",
     ".xcode-version": "8fdab257cb1a860a6416eadf25c0ae8ddf3af194de2b8e8003c9e974a8f33644",
-    ".github/workflows/verificar.yml": "b2e45eb6294a14180e2ebd3b64150f886b7e0b210f637d66119fd85683ad31bf",
+    ".github/workflows/verificar.yml": "e3e79a8ef2b84f82fca907945f4ea2834254663f37b82ff8d6d484595a23aed9",
     "tools/android/testar-nucleo.sh": "31f996eab85f7540e3d311766ecab5ca828cedd8a491a49d88a0b492c4775f56"
   }
 }

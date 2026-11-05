@@ -33180,6 +33180,82 @@
         }
       }
     },
+    "A tela volta na próxima vez que você abrir o app." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ستعود هذه الشاشة في المرة القادمة التي تفتح فيها التطبيق."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Bildschirm erscheint beim nächsten Öffnen der App wieder."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This screen comes back the next time you open the app."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La pantalla vuelve la próxima vez que abras la app."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’écran revient la prochaine fois que vous ouvrez l’app."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अगली बार ऐप खोलने पर यह स्क्रीन फिर आएगी."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Layar ini muncul lagi saat Anda membuka aplikasi berikutnya."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次にアプリを開いたとき、この画面が再び表示されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음에 앱을 열면 이 화면이 다시 나옵니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu ekran uygulamayı bir sonraki açışınızda geri gelir."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Màn hình này sẽ quay lại lần sau bạn mở ứng dụng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下次打开应用时，此界面会再次出现。"
+          }
+        }
+      }
+    },
     "A tolerância de preço passa do máximo que a carteira aceita na Solana. Escolha uma menor." : {
       "localizations" : {
         "ar" : {
@@ -36036,6 +36112,158 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Version %@ showed up on the App Store without Escalibur's signature. Don't install or open the new version: turn off automatic updates (Settings, App Store, App Updates) and check the notice on Escalibur's site."
+          }
+        }
+      }
+    },
+    "A versão %@ da Escalibur já está na App Store, confirmada pela lista assinada da Escalibur. Atualize para continuar com as correções mais recentes." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الإصدار %@ من Escalibur متاح الآن في App Store، ومؤكَّد في القائمة الموقّعة من Escalibur. حدّث التطبيق لتحصل على أحدث الإصلاحات."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version %@ von Escalibur ist im App Store, bestätigt durch die signierte Liste von Escalibur. Aktualisiere, um die neuesten Korrekturen zu erhalten."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur version %@ is on the App Store, confirmed by Escalibur's signed list. Update to keep the latest fixes."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La versión %@ de Escalibur ya está en la App Store, confirmada por la lista firmada de Escalibur. Actualiza para seguir con las correcciones más recientes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La version %@ d’Escalibur est sur l’App Store, confirmée par la liste signée d’Escalibur. Mettez à jour pour profiter des dernières corrections."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur का वर्शन %@ App Store पर है, Escalibur की साइन की गई सूची से पक्का. नए सुधारों के लिए अपडेट करें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur versi %@ sudah ada di App Store, dikonfirmasi oleh daftar bertanda tangan Escalibur. Perbarui untuk mendapat perbaikan terbaru."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur のバージョン %@ が App Store にあり、Escalibur の署名付きリストで確認されています。最新の修正を受け取るためにアップデートしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur %@ 버전이 App Store에 있으며, Escalibur의 서명된 목록으로 확인되었습니다. 최신 수정 사항을 받으려면 업데이트하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur %@ sürümü App Store'da ve Escalibur'un imzalı listesiyle doğrulandı. En son düzeltmeler için güncelleyin."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phiên bản Escalibur %@ đã có trên App Store, được xác nhận bởi danh sách đã ký của Escalibur. Hãy cập nhật để có các bản sửa mới nhất."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur %@ 版本已在 App Store 上架，并经 Escalibur 签名列表确认。请更新以获取最新修复。"
+          }
+        }
+      }
+    },
+    "A versão %@ da Escalibur já está na App Store, confirmada pela lista assinada da Escalibur. Esta atualização é obrigatória: atualize para continuar usando o app." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الإصدار %@ من Escalibur متاح الآن في App Store، ومؤكَّد في القائمة الموقّعة من Escalibur. هذا التحديث إلزامي: حدّث التطبيق لتواصل استخدامه."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version %@ von Escalibur ist im App Store, bestätigt durch die signierte Liste von Escalibur. Dieses Update ist Pflicht: Aktualisiere, um die App weiter zu nutzen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur version %@ is on the App Store, confirmed by Escalibur's signed list. This update is required: update to keep using the app."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La versión %@ de Escalibur ya está en la App Store, confirmada por la lista firmada de Escalibur. Esta actualización es obligatoria: actualiza para seguir usando la app."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La version %@ d’Escalibur est sur l’App Store, confirmée par la liste signée d’Escalibur. Cette mise à jour est obligatoire : mettez à jour pour continuer à utiliser l’app."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur का वर्शन %@ App Store पर है, Escalibur की साइन की गई सूची से पक्का. यह अपडेट ज़रूरी है: ऐप इस्तेमाल करते रहने के लिए अपडेट करें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur versi %@ sudah ada di App Store, dikonfirmasi oleh daftar bertanda tangan Escalibur. Pembaruan ini wajib: perbarui untuk terus memakai aplikasi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur のバージョン %@ が App Store にあり、Escalibur の署名付きリストで確認されています。このアップデートは必須です。アプリを使い続けるにはアップデートしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur %@ 버전이 App Store에 있으며, Escalibur의 서명된 목록으로 확인되었습니다. 이 업데이트는 필수입니다. 앱을 계속 사용하려면 업데이트하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur %@ sürümü App Store'da ve Escalibur'un imzalı listesiyle doğrulandı. Bu güncelleme zorunlu: uygulamayı kullanmaya devam etmek için güncelleyin."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phiên bản Escalibur %@ đã có trên App Store, được xác nhận bởi danh sách đã ký của Escalibur. Bản cập nhật này là bắt buộc: hãy cập nhật để tiếp tục dùng ứng dụng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escalibur %@ 版本已在 App Store 上架，并经 Escalibur 签名列表确认。此更新为必须更新：请更新以继续使用本应用。"
           }
         }
       }
@@ -46612,6 +46840,386 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当前价"
+          }
+        }
+      }
+    },
+    "Atualizar agora" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "حدّث الآن"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt aktualisieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update now"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualizar ahora"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mettre à jour"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अभी अपडेट करें"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perbarui sekarang"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今すぐアップデート"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금 업데이트"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Şimdi güncelle"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cập nhật ngay"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即更新"
+          }
+        }
+      }
+    },
+    "Não deu para conferir a App Store agora. Tente de novo em instantes." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تعذّر التحقق من App Store الآن. حاول مرة أخرى بعد قليل."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der App Store konnte gerade nicht geprüft werden. Versuche es gleich noch einmal."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't check the App Store right now. Try again in a moment."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo comprobar la App Store ahora. Inténtalo de nuevo en un momento."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de vérifier l’App Store pour le moment. Réessayez dans un instant."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अभी App Store की जाँच नहीं हो सकी. थोड़ी देर में फिर से कोशिश करें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Store belum bisa diperiksa sekarang. Coba lagi sebentar lagi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今は App Store を確認できませんでした。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금은 App Store를 확인할 수 없습니다. 잠시 후 다시 시도하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Store şu anda kontrol edilemedi. Birazdan tekrar deneyin."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hiện chưa kiểm tra được App Store. Hãy thử lại sau ít phút."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂时无法检查 App Store。请稍后再试。"
+          }
+        }
+      }
+    },
+    "Atualizar não pede suas palavras e mantém suas carteiras como estão." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "التحديث لا يطلب كلماتك ويُبقي محافظك كما هي."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Update fragt nicht nach deinen Wörtern und lässt deine Wallets, wie sie sind."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updating never asks for your words and keeps your wallets as they are."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualizar no pide tus palabras y mantiene tus billeteras como están."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La mise à jour ne demande pas vos mots et garde vos portefeuilles tels qu’ils sont."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अपडेट आपके शब्द नहीं मांगता और आपके वॉलेट जैसे हैं वैसे ही रखता है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pembaruan tidak meminta kata-kata Anda dan menjaga dompet Anda tetap seperti semula."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アップデートで単語を求められることはなく、ウォレットはそのまま残ります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업데이트는 단어를 묻지 않으며 지갑을 그대로 유지합니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Güncelleme kelimelerinizi istemez ve cüzdanlarınızı olduğu gibi korur."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cập nhật không hỏi các từ của bạn và giữ nguyên các ví của bạn."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新不会要求你的助记词，你的钱包保持原样。"
+          }
+        }
+      }
+    },
+    "Atualização" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "التحديث"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualización"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mise à jour"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अपडेट"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pembaruan"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アップデート"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업데이트"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Güncelleme"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cập nhật"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新"
+          }
+        }
+      }
+    },
+    "Atualização obrigatória" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تحديث إلزامي"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pflicht-Update"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Required update"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualización obligatoria"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mise à jour obligatoire"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ज़रूरी अपडेट"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pembaruan wajib"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "必須のアップデート"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "필수 업데이트"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zorunlu güncelleme"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bản cập nhật bắt buộc"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "必须更新"
           }
         }
       }
@@ -94220,6 +94828,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此兑换因价格影响损失过多。请尝试更小的金额或使用限价单。"
+          }
+        }
+      }
+    },
+    "Esta versão está desatualizada" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "هذا الإصدار قديم"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Version ist veraltet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This version is out of date"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta versión está desactualizada"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette version n’est plus à jour"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यह वर्शन पुराना है"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versi ini sudah usang"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このバージョンは古くなっています"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 버전은 최신이 아닙니다"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu sürüm güncel değil"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phiên bản này đã cũ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本已过时"
           }
         }
       }
@@ -211716,6 +212400,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "24h 成交量"
+          }
+        }
+      }
+    },
+    "Vou atualizar depois" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "سأحدّث لاحقًا"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Später aktualisieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I'll update later"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualizaré después"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Je mettrai à jour plus tard"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "बाद में अपडेट करूंगा"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nanti saya perbarui"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あとでアップデート"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "나중에 업데이트"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sonra güncelleyeceğim"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tôi sẽ cập nhật sau"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "稍后更新"
           }
         }
       }

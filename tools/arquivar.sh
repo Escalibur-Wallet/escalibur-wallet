@@ -108,7 +108,7 @@ segunda_fase() {
     done
     swift tools/versoes/versoes.swift conferir-app "$app" \
         || { echo "o app nao leva a lista assinada que autoriza $versao ($build)" >&2; exit 1; }
-    if strings "$app/EscaliburWallet" | grep -E "abandon abandon abandon|DebugDemo|envio-incerto|enviar-eth"; then
+    if strings "$app/EscaliburWallet" | grep -E "abandon abandon abandon|DebugDemo|envio-incerto|enviar-eth|-alarme-versao|-versao-expirada|-versao-obrigatoria|-tentou-atualizar"; then
         echo "o binario de distribuicao carrega codigo do modo demo" >&2
         exit 1
     fi

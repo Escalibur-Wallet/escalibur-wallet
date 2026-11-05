@@ -209,7 +209,7 @@ jobs:
             || { echo "::error::o app nao leva o commit $GITHUB_SHA e a arvore $arvore"; exit 1; }
           swift tools/versoes/versoes.swift conferir-app "$app" \
             || { echo "::error::o app nao leva a lista assinada que autoriza $VERSAO ($BUILD)"; exit 1; }
-          if strings "$app/EscaliburWallet" | grep -E "abandon abandon abandon|DebugDemo|envio-incerto|enviar-eth"; then
+          if strings "$app/EscaliburWallet" | grep -E "abandon abandon abandon|DebugDemo|envio-incerto|enviar-eth|-alarme-versao|-versao-expirada|-versao-obrigatoria|-tentou-atualizar"; then
             echo "::error::o binario de distribuicao carrega codigo do modo demo"
             exit 1
           fi
@@ -262,7 +262,7 @@ jobs:
           done
           codesign --verify --strict --deep "$app"
           python3 -I "$GITHUB_WORKSPACE/tools/conferir-entitlements.py" "$app"
-          if strings "$app/EscaliburWallet" | grep -E "abandon abandon abandon|DebugDemo|envio-incerto|enviar-eth"; then
+          if strings "$app/EscaliburWallet" | grep -E "abandon abandon abandon|DebugDemo|envio-incerto|enviar-eth|-alarme-versao|-versao-expirada|-versao-obrigatoria|-tentou-atualizar"; then
             echo "::error::o binario de distribuicao carrega codigo do modo demo"
             exit 1
           fi

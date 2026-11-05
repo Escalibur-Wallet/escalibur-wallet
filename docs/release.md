@@ -36,6 +36,16 @@ Nenhum build sai sem ela (pedido do dono, 18/10/2026): o job `assinatura` do `re
 swift tools/versoes/versoes.swift conferir-app build/EscaliburWallet-1.0.1-8.xcarchive/Products/Applications/EscaliburWallet.app
 ```
 
+## Liberar a versão (depois de a Apple publicar)
+
+A tela "Esta versão está desatualizada" do app só empurra para uma versão liberada (docs/seguranca.md §8.6). Depois de a Apple publicar o build do dono na App Store, e de conferir no App Store Connect que o build aprovado é o que o dono enviou (o número e o dia do envio), no Terminal do Mac do dono (pede o Touch ID):
+
+```
+swift tools/versoes/versoes.swift liberar 1.0.2 19 escalibur-mac-1
+```
+
+O build é o aprovado que o App Store Connect mostra, e a conferência de que foi o dono quem o enviou, no dia do envio, é o que prende a liberação ao binário: os builds autorizados ficam públicos antes. A ferramenta recusa um build fora dos autorizados da versão ou que não seja do iPhone, a versão que a App Store não mostra no ar, e o relógio do Mac mais de 5 minutos fora da hora da Apple (o app ignora uma lista mais antiga que uma já vista). Se o envio de um build autorizado for recusado pela Apple como repetido, alguém enviou antes: é incidente, e não se autoriza outro número por cima. O `site/versoes.json` assinado entra num commit e sai com o site. O site sai antes do build seguinte: o app leva a lista de dentro dele como a mais nova já vista, e com o site atrás as telas de atualizar ficam desligadas nesse build até o site chegar. Para obrigar quem ficou para trás (`obrigatoria 1.0.2 - escalibur-mac-1` obriga quem está abaixo da 1.0.2; `obrigatoria - - escalibur-mac-1` tira), a versão de saída já tem de estar liberada.
+
 ## Assinar a tag
 
 Cada release, num commit que já está na main:

@@ -530,6 +530,14 @@ struct TradeReviewFlow: View {
         return Fmt.double(outgoing.amount, decimals: sell.decimals) * price
     }
 
+    /// O mesmo valor para a voz, so do plano e com a cotacao da fonte: a estimativa da tela anterior e o preco convertido
+    /// na troca de moeda nao decidem se a voz e pedida (sem valor, ela e pedida).
+    private var voiceFiat: Double? {
+        guard let outgoing = plan?.review.outgoing, let sell = assets.sell, sell.coingeckoID != nil,
+              let price = portfolio.firmPrice(of: sell) else { return nil }
+        return Fmt.double(outgoing.amount, decimals: sell.decimals) * price
+    }
+
     private func confirm() async {
         guard let plan, let engine else { return }
         guard !plan.isExpired() else {
@@ -547,7 +555,7 @@ struct TradeReviewFlow: View {
         }
         // Cancelar nao tira valor da carteira: a voz fica para o que tira.
         if !isCancel {
-            guard await VoiceGate.shared.confirm(.send(fiat: fiat), session: session) else { return }
+            guard await VoiceGate.shared.confirm(.send(fiat: voiceFiat), session: session) else { return }
         }
         // O autoteste da assinatura antes da passphrase e do PIN, fora da thread principal: com um defeito do aparelho,
         // nada e pedido a toa (o Signer confere de novo antes de abrir o cofre; revisao da decima terceira passada).

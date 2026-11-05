@@ -119,6 +119,141 @@ struct UpdateAlarmView: View {
     }
 }
 
+/// A versao esta desatualizada: a App Store ja tem uma versao mais nova, confirmada pela lista assinada da Escalibur (pedido do
+/// dono, 05/11/2026). O botao abre a App Store; o deslizar, com os mesmos pixels da trava, deixa para depois, ate o app
+/// fechar. Com a lista obrigando esta versao (`mandatory`), so o botao; depois de tentar atualizar sem conseguir
+/// (`allowEmergency`), o "Usar em emergência" da trava. Uma versao fora da lista nunca chega aqui: ela e a trava de cima
+/// (`UpdateAlarmView`).
+struct UpdateRequiredView: View {
+    let version: String
+    let mandatory: Bool
+    let allowEmergency: Bool
+    /// A conferencia do "Atualizar agora" ficou sem resposta.
+    let unchecked: Bool
+    let onUpdate: () -> Void
+    let onLater: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                // A seta num circulo simples, sem o anel de pixels (pedido do dono, 05/11/2026).
+                Circle().fill(Palette.control)
+                    .frame(width: 72, height: 72)
+                    .overlay {
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 26, weight: .semibold))
+                            .foregroundStyle(Palette.accent)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, Space.xl)
+                    .accessibilityHidden(true)
+                Text(mandatory ? String(localized: "Atualização obrigatória") : String(localized: "Atualização"))
+                    .typeStyle(.note).fontWeight(.semibold)
+                    .foregroundStyle(Palette.ink)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, Space.lg)
+                Text("Esta versão está desatualizada")
+                    .typeStyle(.title).foregroundStyle(Palette.ink)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("versao-desatualizada")
+                    .padding(.top, Space.xs)
+                Text(mandatory
+                     ? String(localized: "A versão \(version) da Escalibur já está na App Store, confirmada pela lista assinada da Escalibur. Esta atualização é obrigatória: atualize para continuar usando o app.")
+                     : String(localized: "A versão \(version) da Escalibur já está na App Store, confirmada pela lista assinada da Escalibur. Atualize para continuar com as correções mais recentes."))
+                    .typeStyle(.body).foregroundStyle(Palette.inkSoft)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, Space.base)
+                HStack(alignment: .center, spacing: Space.md) {
+                    CipherEmblem(size: 76, symbol: "lock.fill", tint: Palette.success)
+                    VStack(alignment: .leading, spacing: Space.xxs) {
+                        Text("Seus fundos estão seguros").typeStyle(.row).foregroundStyle(Palette.ink)
+                        Text("Atualizar não pede suas palavras e mantém suas carteiras como estão.")
+                            .typeStyle(.note).foregroundStyle(Palette.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(Space.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Palette.body, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .accessibilityElement(children: .combine)
+                .padding(.top, Space.lg)
+            }
+            .padding(.horizontal, Space.gutter)
+            .padding(.bottom, Space.lg)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom) {
+            ActionFooter {
+                PrimaryButton(title: String(localized: "Atualizar agora")) { onUpdate() }
+                    .accessibilityIdentifier("versao-atualizar")
+                if unchecked {
+                    Text("Não deu para conferir a App Store agora. Tente de novo em instantes.")
+                        .typeStyle(.note).foregroundStyle(Palette.inkMuted)
+                        .multilineTextAlignment(.center)
+                }
+                if !mandatory {
+                    SlideToConfirm(title: String(localized: "Vou atualizar depois")) { onLater() }
+                        .accessibilityIdentifier("versao-depois")
+                    Text("A tela volta na próxima vez que você abrir o app.")
+                        .typeStyle(.note).foregroundStyle(Palette.inkMuted)
+                        .multilineTextAlignment(.center)
+                } else if allowEmergency {
+                    SlideToConfirm(title: String(localized: "Usar em emergência")) { onLater() }
+                        .accessibilityIdentifier("versao-emergencia")
+                    Text("Só se precisar mexer nos fundos agora.")
+                        .typeStyle(.note).foregroundStyle(Palette.inkMuted)
+                        .multilineTextAlignment(.center)
+                }
+            }
+        }
+        .background(Palette.void.ignoresSafeArea())
+    }
+}
+
+/// A janela da versao desatualizada: abaixo da trava, para a trava, se houver, ficar por cima.
+@MainActor
+final class UpdateRequiredWindow {
+    static let shared = UpdateRequiredWindow()
+    private var window: UIWindow?
+    private var showing: (version: String, mandatory: Bool, allowEmergency: Bool, unchecked: Bool)?
+    /// A tela obrigatoria na frente: o Face ID automatico da tela de bloqueio nao abre por cima dela.
+    var covering: Bool { showing?.mandatory == true }
+
+    func show(version: String, mandatory: Bool, allowEmergency: Bool, unchecked: Bool, onUpdate: @escaping () -> Void, onLater: @escaping () -> Void) {
+        guard window == nil || showing?.version != version || showing?.mandatory != mandatory || showing?.allowEmergency != allowEmergency
+                || showing?.unchecked != unchecked,
+              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+        let view = UpdateRequiredView(version: version, mandatory: mandatory, allowEmergency: allowEmergency, unchecked: unchecked,
+                                      onUpdate: onUpdate, onLater: onLater)
+            .preferredColorScheme(.dark)
+        let host = UIHostingController(rootView: view)
+        host.view.backgroundColor = UIColor(Palette.void)
+        let window = self.window ?? UIWindow(windowScene: scene)
+        // Abaixo do pedido de PIN e de voz (`OverlayWindow`, `.alert + 1`): um pedido aberto quando a tela chega termina ou
+        // cancela por cima dela, em vez de ficar escondido sem resposta.
+        window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 0.5)
+        window.rootViewController = host
+        window.overrideUserInterfaceStyle = .dark
+        window.makeKeyAndVisible()
+        self.window = window
+        showing = (version, mandatory, allowEmergency, unchecked)
+    }
+
+    func hide() {
+        guard let window else { return }
+        UIView.animate(withDuration: 0.3, animations: { window.alpha = 0 }, completion: { _ in
+            window.isHidden = true
+        })
+        self.window = nil
+        showing = nil
+    }
+}
+
 /// A janela da trava: acima de tudo, ate do pedido de PIN (`OverlayWindow`), para cobrir o
 /// app de onde quer que ele esteja, com envio ou folha aberta.
 @MainActor
