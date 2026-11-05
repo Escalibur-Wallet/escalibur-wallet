@@ -29,6 +29,6 @@
     "tools/codigo.py": "8b9177f894858956c6b888669f6a76b52f24736b8759e5ea1d4085b99252e0dd",
     ".xcode-version": "8fdab257cb1a860a6416eadf25c0ae8ddf3af194de2b8e8003c9e974a8f33644",
     ".github/workflows/verificar.yml": "e3e79a8ef2b84f82fca907945f4ea2834254663f37b82ff8d6d484595a23aed9",
-    "tools/android/testar-nucleo.sh": "31f996eab85f7540e3d311766ecab5ca828cedd8a491a49d88a0b492c4775f56"
+    "tools/android/testar-nucleo.sh": "8e9c21664cb074604c1d338e711f7e077be60682fa95cb657c69ff0a667f372e"
   }
 }

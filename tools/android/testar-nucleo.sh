@@ -13,7 +13,8 @@
 # (revisao de blockchain de 26/10/2026).
 #
 # Os testes sao compilados com a biblioteca do Swift dinamica (o modulo Testing nao existe na
-# estatica) e vao para /data/local/tmp/escalibur com as .so do Swift SDK e a libc++ do NDK. Os
+# estatica) e vao para /data/local/tmp/escalibur-<processo da rodada>, apagada no fim, com as .so
+# do Swift SDK e a libc++ do NDK. Os
 # arquivos de teste que os testes leem do repositorio vao junto, num tar; ESCALIBUR_RAIZ diz onde
 # eles ficaram no aparelho (CaminhoDoRepositorio.swift).
 set -euo pipefail
@@ -44,6 +45,9 @@ $limpo || exec /usr/bin/env -i HOME="$casa" USER="$(/usr/bin/id -un)" LOGNAME="$
     /bin/bash -p "$0" "$@"
 cd "$(dirname "$0")/../.."
 K=$PWD
+# Os logs e o pacote dos testes ficam em build/, que a copia limpa da loja nao tem (o gerar-aab.sh roda os vetores
+# antes do compilar-nucleo.sh, que era quem criava a pasta).
+mkdir -p build
 
 SWIFT=~/Library/Developer/Toolchains/swift-6.4.1-RELEASE.xctoolchain/usr/bin/swift
 # O NDK e sempre o r30 da pasta de sempre, como no compilar-nucleo.sh.
@@ -51,7 +55,9 @@ export ANDROID_NDK_HOME="$HOME/Library/Android/android-ndk-r30"
 ADB=$HOME/Library/Android/sdk/platform-tools/adb
 SDK_LIBS=~/Library/org.swift.swiftpm/swift-sdks/swift-6.4.1-RELEASE_android.artifactbundle/swift-android/swift-resources/usr/lib/swift-aarch64/android
 NDK_LIBS=$(ls -d "$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/sysroot/usr/lib/aarch64-linux-android | head -1)
-D=/data/local/tmp/escalibur
+# Uma pasta por rodada: outra rodada no mesmo aparelho, ao mesmo tempo, nao troca os runners desta (revisao dos 3
+# agentes de 05/11/2026).
+D=/data/local/tmp/escalibur-$$
 CONFIG=debug
 FILTRO=""
 if [ "${1:-}" = "--derivacao" ]; then
@@ -76,7 +82,14 @@ read -r -a TESTES <<< "${TESTES[*]}"
     --triple aarch64-unknown-linux-android28 --scratch-path "../$PASTA" > ../build/android-testes.log 2>&1) \
     || { echo "a compilacao dos testes falhou (build/android-testes.log)" >&2; grep error: build/android-testes.log | head >&2; exit 1; }
 
-"$ADB" shell "mkdir -p $D"
+# A pasta do aparelho comeca vazia, e cada teste tem o runner desta compilacao: um runner ou uma biblioteca de rodada
+# anterior (outro commit, ou a depuracao) rodaria no lugar e passaria os vetores sem o nucleo deste build (revisao dos 3
+# agentes de 05/11/2026).
+for t in "${TESTES[@]}"; do
+    [ -x "$P/$t-test-runner" ] || { echo "a compilacao nao gerou o $t-test-runner" >&2; exit 1; }
+done
+trap '"$ADB" shell "rm -rf $D" > /dev/null 2>&1 || true' EXIT
+"$ADB" shell "rm -rf $D && mkdir -p $D"
 "$ADB" push -q "$SDK_LIBS"/*.so "$NDK_LIBS/libc++_shared.so" "$D/"
 (cd "$P" && "$ADB" push -q ./*-test-runner ./*Tests.so "$D/" && for b in *.bundle; do "$ADB" push -q "$b" "$D/"; done)
 
@@ -88,8 +101,11 @@ rm build/repo-teste.tgz
 falhou=0
 for t in "${TESTES[@]}"; do
     L=build/android-$t.log
+    E=build/android-$t-eventos.jsonl
     filtro=""
-    [ -n "$FILTRO" ] && filtro="--filter '$FILTRO'"
+    # Nos vetores, o fluxo de eventos do swift-testing tambem: e por ele que o pulado, o cancelado e a falha conhecida
+    # aparecem, inclusive o caso cancelado de um teste com argumentos, que o texto mostra como passado.
+    [ -n "$FILTRO" ] && filtro="--filter '$FILTRO' --event-stream-output-path $D/eventos-$t.jsonl --event-stream-version 6.4"
     "$ADB" shell "cd $D && ESCALIBUR_RAIZ=$D/repo ESCALIBUR_RAIZ_MAC=$K LD_LIBRARY_PATH=$D ./$t-test-runner --testing-library swift-testing $filtro 2>&1" > "$L" 2>&1 || falhou=1
     echo "== $t: $(tail -1 "$L" | sed 's/\x1b\[[0-9;]*m//g' | cut -c1-120)"
     grep "recorded an issue" "$L" | sed 's/\x1b\[[0-9;]*m//g' | cut -c1-260 | head -10 || true
@@ -101,6 +117,38 @@ for t in "${TESTES[@]}"; do
         if [ "$t" = EscaliburKeysTests ]; then esperado=40; fi
         sed 's/\x1b\[[0-9;]*m//g' "$L" | grep -qE "Test run with $esperado tests? in [0-9]+ suites? passed" \
             || { echo "== $t: nao rodaram os $esperado vetores esperados" >&2; falhou=1; }
+        # O swift-testing conta o teste pulado, o cancelado e o de falha conhecida no total que passou: nos vetores,
+        # nenhum dos tres. Pelo fluxo de eventos, que precisa chegar inteiro ate o fim da rodada; o texto fica como
+        # segunda trava, direto no arquivo (sem pipe: com pipefail, o grep -q que acha cedo mata o sed e a conferencia
+        # passaria). Revisao dos 3 agentes de 05/11/2026.
+        rm -f "$E"
+        "$ADB" pull "$D/eventos-$t.jsonl" "$E" > /dev/null 2>&1 || true
+        python3 -I - "$E" <<'PY' || { echo "== $t: um vetor foi pulado, cancelado ou marcado como falha conhecida, ou a rodada nao terminou" >&2; falhou=1; }
+import json, sys
+ruins = {"testSkipped", "testCancelled", "testCaseCancelled"}
+terminou = False
+try:
+    linhas = open(sys.argv[1], encoding="utf-8").read().splitlines()
+except OSError:
+    sys.exit(1)
+for linha in linhas:
+    if not linha.strip():
+        continue
+    registro = json.loads(linha)
+    if registro.get("kind") != "event":
+        continue
+    evento = registro["payload"]
+    if evento.get("kind") in ruins:
+        sys.exit(1)
+    if evento.get("kind") == "issueRecorded":
+        sys.exit(1)
+    if evento.get("kind") == "runEnded":
+        terminou = True
+sys.exit(0 if terminou else 1)
+PY
+        if grep -qiE "skipped|known issue|cancell?ed" "$L"; then
+            echo "== $t: um vetor foi pulado, cancelado ou marcado como falha conhecida" >&2; falhou=1
+        fi
     fi
 done
 exit $falhou
