@@ -93,6 +93,8 @@ import app.escalibur.wallet.ui.comp.Aceite
 import app.escalibur.wallet.ui.comp.Esqueleto
 import app.escalibur.wallet.ui.comp.Icone
 import app.escalibur.wallet.ui.comp.Icones
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import app.escalibur.wallet.ui.comp.LogoDaMoeda
 import app.escalibur.wallet.ui.comp.Logos
 import app.escalibur.wallet.ui.comp.SeloDaRede
@@ -133,7 +135,7 @@ internal fun CaixaDeValor(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(titulo, style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.weight(1f))
-            if (saldo != null) Text(saldo, style = estilo(Tipo.nota), color = if (passou) Paleta.baixa else Paleta.tintaApagada, maxLines = 1)
+            if (saldo != null) Text(saldo, style = estilo(Tipo.nota), color = if (passou) Paleta.baixa else Paleta.tintaSuave, maxLines = 1)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
             Box(Modifier.weight(1f)) {
@@ -165,31 +167,31 @@ internal fun CaixaDeValor(
             }
             PilulaDoToken(ativo, aoEscolher)
         }
-        if (emMoeda != null || aoFracao != null || recalculando) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                Text(emMoeda ?: "", style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.weight(1f), maxLines = 1)
-                if (recalculando) {
-                    Text(t("Recalculando"), style = estilo(Tipo.nota), color = Paleta.tintaApagada, maxLines = 1,
-                         modifier = Modifier.graphicsLayer { alpha = if (parado) 0.7f else pulso.value })
-                }
-                if (aoFracao != null) {
-                    for ((rotulo, fracao) in listOf("25%" to 0.25, "50%" to 0.5, t("Máx") to 1.0)) {
-                        Box(
-                            Modifier.height(26.dp).clip(CircleShape).background(Paleta.trilho).clickable {
-                                porcento = (fracao * 100).toInt()
-                                aoFracao(fracao)
-                            }.padding(horizontal = Espaco.sm),
-                            contentAlignment = Alignment.Center,
-                        ) { Text(rotulo, style = estilo(Tipo.rotulo), color = Paleta.tinta) }
-                    }
+        // A linha de baixo fica sempre, mesmo vazia, como no iOS: as caixas tem a mesma altura.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+            Text(emMoeda ?: " ", style = estilo(Tipo.nota), color = if (texto.isEmpty()) Paleta.tintaApagada else Paleta.tintaSuave,
+                 modifier = Modifier.weight(1f), maxLines = 1)
+            if (recalculando) {
+                Text(t("Recalculando"), style = estilo(Tipo.nota), color = Paleta.tintaApagada, maxLines = 1,
+                     modifier = Modifier.graphicsLayer { alpha = if (parado) 0.7f else pulso.value })
+            }
+            if (aoFracao != null) {
+                for ((rotulo, fracao) in listOf("25%" to 0.25, "50%" to 0.5, t("Máx") to 1.0)) {
                     Box(
-                        Modifier.size(26.dp).clip(CircleShape).background(Paleta.trilho)
-                            .clickable(onClickLabel = if (reguaAberta) t("Fechar a porcentagem do saldo") else t("Escolher a porcentagem do saldo")) {
-                                reguaAberta = !reguaAberta
-                            },
+                        Modifier.height(28.dp).clip(CircleShape).background(Paleta.trilho).clickable {
+                            porcento = (fracao * 100).toInt()
+                            aoFracao(fracao)
+                        }.padding(horizontal = Espaco.xs),
                         contentAlignment = Alignment.Center,
-                    ) { Icone(Icones.abaixo, Paleta.tintaSuave, tamanho = 11.dp, modifier = Modifier.rotate(if (reguaAberta) 180f else 0f)) }
+                    ) { Text(rotulo, style = estilo(Tipo.rotulo), color = Paleta.tintaSuave) }
                 }
+                Box(
+                    Modifier.size(28.dp).clip(CircleShape).background(Paleta.trilho)
+                        .clickable(onClickLabel = if (reguaAberta) t("Fechar a porcentagem do saldo") else t("Escolher a porcentagem do saldo")) {
+                            reguaAberta = !reguaAberta
+                        },
+                    contentAlignment = Alignment.Center,
+                ) { Icone(Icones.abaixo, Paleta.tintaSuave, tamanho = 11.dp, modifier = Modifier.rotate(if (reguaAberta) 180f else 0f)) }
             }
         }
         if (aoFracao != null && reguaAberta) {
@@ -256,17 +258,18 @@ internal fun CampoDeNumero(texto: String, estilo: TextStyle, modifier: Modifier,
 @Composable
 private fun PilulaDoToken(ativo: AtivoDaTroca?, acao: () -> Unit) {
     Row(
-        Modifier.height(40.dp).clip(CircleShape).background(Paleta.controle).clickable(onClick = acao).padding(start = 6.dp, end = Espaco.sm),
+        // Como no iOS: cantos do cartao (nao capsula), fundo da trilha, logo de 24.
+        Modifier.height(40.dp).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.trilho).clickable(onClick = acao).padding(horizontal = Espaco.sm),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (ativo != null) {
-            LogoDaMoeda(ativo.coingecko, ativo.simbolo, 28.dp, rede = ativo.rede, redeCoingecko = ativo.redeCoingecko, anel = Paleta.controle,
+            LogoDaMoeda(ativo.coingecko, ativo.simbolo, 24.dp, rede = ativo.rede, redeCoingecko = ativo.redeCoingecko, anel = Paleta.trilho,
                         naoConferido = !ativo.conferido)
             Text(ativo.simbolo, style = estilo(Tipo.acao), color = Paleta.tinta, maxLines = 1)
         } else {
-            Text(t("Escolher token"), style = estilo(Tipo.acao), color = Paleta.tinta, modifier = Modifier.padding(start = Espaco.xs))
+            Text(t("Escolher token"), style = estilo(Tipo.acao), color = Paleta.tinta)
         }
-        Icone(Icones.abaixo, Paleta.tintaSuave, tamanho = 12.dp)
+        Icone(Icones.abaixo, Paleta.tintaApagada, tamanho = 12.dp)
     }
 }
 
@@ -440,11 +443,20 @@ internal fun LinhasDaCotacao(controle: ControleDaTroca, r: RetratoDaTroca, cotac
             Text(cotacao.rota, style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Text(t("Ver rota"), style = estilo(Tipo.nota), fontWeight = FontWeight.SemiBold, color = Paleta.tinta)
         }
-        Text(
-            cotacao.taxaDaRede?.let { t("Taxas: rede %@ · sem taxa da Escalibur", Formato.valor(it, r.moeda)) }
-                ?: t("Sem taxa da Escalibur. A taxa da rede aparece na revisão."),
-            style = estilo(Tipo.nota), color = Paleta.tintaSuave,
-        )
+        val taxa = cotacao.taxaDaRede
+        if (taxa != null) {
+            // A bomba de combustivel e a taxa da rede na moeda do dono, como no iOS.
+            val valor = Formato.valor(taxa, r.moeda)
+            val descricao = t("Taxa da rede %@, sem taxa da Escalibur", valor)
+            Row(Modifier.clearAndSetSemantics { contentDescription = descricao }, verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icone(Icones.bomba, Paleta.tintaSuave, tamanho = 14.dp)
+                // Estimada pelo provedor da troca, e nao a do plano: por isso o "≈", como no iOS.
+                Text(t("%@ · sem taxa da Escalibur", "≈ $valor"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+            }
+        } else {
+            Text(t("Sem taxa da Escalibur. A taxa da rede aparece na revisão."), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+        }
         r.abaixoDoAlvo?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.cautela) }
         // Em cinza, o texto secundario de sempre, sem cor de alerta (pedido do dono, 23/10/2026).
         r.naoVerificado?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaSuave) }
@@ -573,17 +585,23 @@ internal fun FolhaDeTokens(controle: ControleDaTroca, vende: Boolean, r: Retrato
         val termo = busca.trim()
         val todas = opcoes ?: emptyList()
         val lista = todas.filter { termo.isEmpty() || it.ativo.simbolo.contains(termo, true) || it.ativo.nome.contains(termo, true) }
-        val conferidas = lista.filter { !it.fora }
-        val fora = lista.filter { it.fora }
+        val conferidas = lista.filter { !it.fora && !it.outraRede }
+        val fora = lista.filter { it.fora && !it.outraRede }
+        // As moedas que a carteira tem nas outras redes (pedido do dono, 02/11/2026): escolher muda a rede la em cima.
+        val outras = lista.filter { it.outraRede }
         LazyColumn(Modifier.fillMaxWidth().heightIn(min = 320.dp).padding(top = Espaco.xs, bottom = Espaco.md)) {
             if (opcoes == null) item {
                 Box(Modifier.fillMaxWidth().padding(Espaco.lg), contentAlignment = Alignment.Center) { Girando(Paleta.tintaSuave, 20.dp) }
             }
-            if (fora.isNotEmpty() && conferidas.isNotEmpty()) item { Secao(t("Verificadas")) }
+            if ((fora.isNotEmpty() || outras.isNotEmpty()) && conferidas.isNotEmpty()) item { Secao(t("Verificadas")) }
             items(conferidas, key = { it.ativo.id }) { opcao -> LinhaDoToken(opcao) { fechar { aoEscolher(opcao.ativo.id) } } }
             if (fora.isNotEmpty()) {
                 item { Secao(t("Fora da lista verificada")) }
                 items(fora, key = { "fora-" + it.ativo.id }) { opcao -> LinhaDoToken(opcao) { fechar { aoEscolher(opcao.ativo.id) } } }
+            }
+            if (outras.isNotEmpty()) {
+                item { Secao(t("Suas moedas em outras redes")) }
+                items(outras, key = { "outra-" + it.ativo.id }) { opcao -> LinhaDoToken(opcao) { fechar { aoEscolher(opcao.ativo.id) } } }
             }
             if (vende && opcoes != null && lista.isEmpty()) item {
                 val rede = r.rede?.nome ?: ""

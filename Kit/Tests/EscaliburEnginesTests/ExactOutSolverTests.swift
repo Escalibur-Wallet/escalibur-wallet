@@ -24,7 +24,7 @@ struct ExactOutSolverTests {
             let out = minimum(amount)
             return TradeQuote(
                 sell: ExactOutSolverTests.sell, buy: ExactOutSolverTests.buy, amountIn: amount, expectedOut: out, minimumOut: out,
-                priceImpactPercent: nil, networkFeeFiat: nil, providerFeeNote: nil, legs: [], alternatives: [], providersCompared: 1,
+                priceImpactPercent: nil, networkFees: [], providerFeeNote: nil, legs: [], alternatives: [], providersCompared: 1,
                 needsApproval: false, expiresAt: Date().addingTimeInterval(60),
                 parts: parts.map { .init(expectedOut: $0(amount), minimumOut: $0(amount), sampleShareBps: 2_500, validFor: 3_600) }
             )

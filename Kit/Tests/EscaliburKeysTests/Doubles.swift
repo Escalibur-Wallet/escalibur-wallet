@@ -131,6 +131,9 @@ final class SoftwareWrapper: KeyWrapper, @unchecked Sendable {
     private(set) var faces = 0
     /// Recusa o rosto a partir do enesimo Face ID (contado em `faces`).
     var refuseFaceFrom: Int?
+    /// Chamado com o Face ID "na tela", antes de ele responder e fora da trava do embrulho: o teste
+    /// segura o rosto ali, como o dono que ainda nao olhou para o celular.
+    var duringFace: (@Sendable () -> Void)?
     /// A vigia nao responde na mesma sessao: o contexto que nao serve para a outra chave.
     var watchUnknown = false
     /// Chaves cuja exclusao nao acontece: a queda antes da limpeza.
@@ -252,6 +255,7 @@ final class SoftwareWrapper: KeyWrapper, @unchecked Sendable {
     }
 
     func unwrap(_ blob: Data, slot: WrapSlot, reason: String?) throws -> SecureBytes {
+        if slot.usesBiometry, reason != nil { duringFace?() }
         lock.lock(); defer { lock.unlock() }
         guard let key = keys[slot] else { throw EnclaveError.keyMissing }
         unwrapCount[slot, default: 0] += 1

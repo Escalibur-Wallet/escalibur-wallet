@@ -75,7 +75,10 @@ struct EVMTradeEngineTests {
         #expect(quote.alternatives.count == 5)
         #expect(!quote.alternatives.contains { $0.provider == best.quote.provider.displayName })
         #expect(quote.needsApproval)
-        #expect(quote.networkFeeFiat == nil)
+        // A taxa de rede: o gas da perna escolhida com a autorizacao que falta, em ETH da Base.
+        let costs = TradeCostModel(gasPriceWei: 6_000_000, l1FeePerTransactionWei: F.l1Fee, nativeToBuy: .identity)
+        #expect(quote.networkFees == [TradeQuote.NetworkFee(asset: .native(.base), amount: TradeRanking.gas(of: best.quote, costs: costs).wei)])
+        #expect(quote.networkFeeFiat(price: { $0 == .native(.base) ? 3_000 : nil }) != nil)
         #expect(quote.sell == F.usdc && quote.buy == .native(.base) && quote.amountIn == F.amount)
         #expect(quote.expiresAt.timeIntervalSinceNow > 50 && quote.expiresAt.timeIntervalSinceNow <= 60)
         for provider in F.baseProviders { #expect(await counter.count(provider.rawValue) == 1) }
@@ -291,7 +294,7 @@ struct EVMTradeEngineTests {
         func copy(sell: Asset? = nil, minimumOut: BigUInt? = nil, legs: [TradeQuote.Leg]? = nil, expiresAt: Date? = nil) -> TradeQuote {
             TradeQuote(sell: sell ?? quote.sell, buy: quote.buy, amountIn: quote.amountIn, expectedOut: quote.expectedOut,
                        minimumOut: minimumOut ?? quote.minimumOut, priceImpactPercent: quote.priceImpactPercent,
-                       networkFeeFiat: nil, providerFeeNote: nil, legs: legs ?? quote.legs, alternatives: [],
+                       networkFees: [], providerFeeNote: nil, legs: legs ?? quote.legs, alternatives: [],
                        providersCompared: quote.providersCompared, needsApproval: quote.needsApproval,
                        expiresAt: expiresAt ?? quote.expiresAt)
         }
@@ -367,7 +370,7 @@ struct EVMTradeEngineTests {
         let kyber = try F.validated(.kyberSwap)
         return TradeQuote(
             sell: F.usdc, buy: .native(.base), amountIn: F.amount * BigUInt(2), expectedOut: velora.expectedOut + kyber.expectedOut,
-            minimumOut: velora.guaranteedOut + kyber.guaranteedOut, priceImpactPercent: nil, networkFeeFiat: nil, providerFeeNote: nil,
+            minimumOut: velora.guaranteedOut + kyber.guaranteedOut, priceImpactPercent: nil, networkFees: [], providerFeeNote: nil,
             legs: [
                 .init(provider: "Velora", fraction: 0.5, amountIn: F.amount, expectedOut: velora.expectedOut),
                 .init(provider: "KyberSwap", fraction: 0.5, amountIn: F.amount, expectedOut: kyber.expectedOut),

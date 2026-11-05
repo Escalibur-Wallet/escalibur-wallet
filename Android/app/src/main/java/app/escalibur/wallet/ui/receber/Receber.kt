@@ -588,9 +588,14 @@ private fun TelaDoEndereco(
                 Transferencia.copiar(contexto, endereco)
                 Avisos.mostrar(t("Endereço copiado. Depois de colar, confira o endereço inteiro, inclusive o meio."))
             }
-            BotaoSecundario(t("Compartilhar"), Modifier.padding(top = Espaco.sm)) {
-                val envio = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, endereco)
-                contexto.startActivity(Intent.createChooser(envio, null))
+            // O Compartilhar do sistema tem o Copiar, sem prazo e sem a marca de sensivel: some na carteira com
+            // passphrase e no Super Security, como no iOS (segunda passada da auditoria de 03/11/2026).
+            val podeCompartilhar = App.estado.carteira?.temPassphrase == false && !App.estado.reforcado
+            if (podeCompartilhar) {
+                BotaoSecundario(t("Compartilhar"), Modifier.padding(top = Espaco.sm)) {
+                    val envio = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, endereco)
+                    contexto.startActivity(Intent.createChooser(envio, null))
+                }
             }
         }
     }

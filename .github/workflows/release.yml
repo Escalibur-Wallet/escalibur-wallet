@@ -115,7 +115,7 @@ jobs:
           # este build. A assinatura da lista o job verificar confere (tools/verificar.sh,
           # versoes.swift conferir), e o site publica a lista quando o commit chega na main,
           # antes de o build chegar na loja.
-          if ! python3 - "$versao" "$build" <<'PY'
+          if ! python3 -I - "$versao" "$build" <<'PY'
           import json, sys
           versao, build = sys.argv[1], sys.argv[2]
           try:
@@ -183,15 +183,30 @@ jobs:
         run: |
           set -euo pipefail
           arquivo="$RUNNER_TEMP/EscaliburWallet.xcarchive"
+          arvore=$(git rev-parse 'HEAD^{tree}')
+          # As flags do pacote avaliado e as que o compilador recebeu de fato, no log inteiro do archive (decima passada
+          # da auditoria de 03/11/2026), como no tools/arquivar.sh.
+          unset XCODE_XCCONFIG_FILE
+          (cd Kit && swift package dump-package 2>/dev/null) | python3 -I tools/flags-do-pacote.py Kit/Package.swift \
+            || { echo "::error::o Package.swift define uma flag do Swift que o verificador nao conhece"; exit 1; }
           xcodebuild -project EscaliburWallet.xcodeproj -scheme EscaliburWallet -configuration Release \
             -destination 'generic/platform=iOS' -archivePath "$arquivo" -derivedDataPath "$RUNNER_TEMP/dd" \
-            CURRENT_PROJECT_VERSION="$BUILD" CODE_SIGNING_ALLOWED=NO archive -quiet
+            CURRENT_PROJECT_VERSION="$BUILD" ESCALIBUR_COMMIT="$GITHUB_SHA" ESCALIBUR_TREE="$arvore" CODE_SIGNING_ALLOWED=NO archive \
+            > "$RUNNER_TEMP/archive.log" 2> "$RUNNER_TEMP/archive-erros.log" \
+            || { tail -40 "$RUNNER_TEMP/archive-erros.log" "$RUNNER_TEMP/archive.log"; echo "::error::o archive falhou"; exit 1; }
+          ! grep -qE '(builtin-Swift|builtin-swift|/swiftc |/swift-frontend |/clang |/clang\+\+ )' "$RUNNER_TEMP/archive-erros.log" \
+            || { echo "::error::uma chamada do compilador saiu na saida de erro do archive"; exit 1; }
+          python3 -I tools/flags-do-build.py ios "$RUNNER_TEMP/archive.log" --build "$RUNNER_TEMP/dd" \
+            || { echo "::error::o build passou ao Swift uma flag, um alvo ou um plugin que o verificador nao conhece"; exit 1; }
           app="$arquivo/Products/Applications/EscaliburWallet.app"
           for plist in "$app/Info.plist" "$app/PlugIns/EscaliburWidgets.appex/Info.plist"; do
             [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$VERSAO" ] \
               && [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" = "$BUILD" ] \
               || { echo "::error::$plist sem a versao $VERSAO ($BUILD)"; exit 1; }
           done
+          [ "$(/usr/libexec/PlistBuddy -c 'Print :EscaliburCommit' "$app/Info.plist")" = "$GITHUB_SHA" ] \
+            && [ "$(/usr/libexec/PlistBuddy -c 'Print :EscaliburTree' "$app/Info.plist")" = "$arvore" ] \
+            || { echo "::error::o app nao leva o commit $GITHUB_SHA e a arvore $arvore"; exit 1; }
           swift tools/versoes/versoes.swift conferir-app "$app" \
             || { echo "::error::o app nao leva a lista assinada que autoriza $VERSAO ($BUILD)"; exit 1; }
           if strings "$app/EscaliburWallet" | grep -E "abandon abandon abandon|DebugDemo|envio-incerto|enviar-eth"; then

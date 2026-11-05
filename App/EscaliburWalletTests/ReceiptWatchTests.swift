@@ -16,6 +16,14 @@ struct ReceiptWatchTests {
         return ChainBalance(chainID: "tron", holdings: holdings, accountExists: true, unknownTokenCount: 0, fetchedAt: .now)
     }
 
+    /// As de so observar ficam sempre de fora (pedido do dono, 02/11/2026), mesmo num arquivo de
+    /// antes com a escolha ligada: a chave antiga e ignorada e a conta marcada nao entra.
+    @Test func watchOnlyAlwaysLeftOut() throws {
+        let old = #"{"enabled":true,"showDetails":false,"seen":{},"includeWatchOnly":true,"accounts":[{"chainID":"tron","addresses":["TXYZ"]},{"chainID":"ethereum","addresses":["0xabc"],"watchOnly":true}]}"#
+        let file = try JSONDecoder().decode(ReceiptWatchFile.self, from: Data(old.utf8))
+        #expect(file.admitted(file.accounts) == [account])
+    }
+
     @Test func firstReadOnlyMarksTheBase() {
         var seen: [String: ReceiptWatchFile.Seen] = [:]
         let events = ReceiptWatchCenter.compare([(account, balance(trx: 5_000_000, usdt: 100_000_000))], seen: &seen)

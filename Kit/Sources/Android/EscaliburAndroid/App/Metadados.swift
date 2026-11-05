@@ -44,6 +44,9 @@ struct Metadata: Codable, Equatable {
     var recognizedTokens: [String: TokenIdentity]?
     var unrecognizedChecks: [String: Date]?
     var bridges: [BridgeRecord]?
+    /// As ordens limite da CoW assinadas aqui que a CoW disse ter recusado, ou sem resposta certa
+    /// (`SignedOrderRecord`, como no iOS): ate vencer ou a cadeia dizer que terminaram.
+    var signedOrders: [SignedOrderRecord]?
     /// As transacoes EVM transmitidas e ainda sem confirmacao, por carteira, rede e conta.
     var pendingEVM: [String: [PendingEVMTransaction]]?
     /// O ultimo historico lido de cada carteira, e quando cada rede foi lida.

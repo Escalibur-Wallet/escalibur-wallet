@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- O Kit (pacote local) tambem sai em arm64e, como o app com o Enhanced Security.
+	     Sem isto a fatia arm64e do app nao acha os modulos do Kit. O xcodegen nao
+	     gera nem apaga este arquivo; tools/verificar.sh confere que ele existe. -->
+	<key>iOSPackagesShouldBuildARM64e</key>
+	<true/>
+</dict>
+</plist>

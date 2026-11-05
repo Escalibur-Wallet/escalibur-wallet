@@ -317,7 +317,7 @@ private fun CampoDaMoeda(rotulo: String, texto: String, dica: String, modifier: 
                 Row(
                     Modifier.height(30.dp).clip(CircleShape).background(Paleta.controle).clickable {
                         val gerente = contexto.getSystemService(android.content.ClipboardManager::class.java)
-                        runCatching { gerente.primaryClip?.getItemAt(0)?.coerceToText(contexto)?.toString() }.getOrNull()
+                        runCatching { gerente.primaryClip?.getItemAt(0)?.text?.toString() }.getOrNull()
                             ?.trim()?.takeIf { it.isNotEmpty() }?.let(aoMudar)
                     }.padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),

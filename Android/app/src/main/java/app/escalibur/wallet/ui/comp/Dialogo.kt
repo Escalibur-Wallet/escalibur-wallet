@@ -56,6 +56,7 @@ fun AlertaDoIos(titulo: String, mensagem: String?, cancelar: BotaoDeAlerta?, aco
                 extra: (@Composable () -> Unit)? = null) {
     val entrada = remember { MutableTransitionState(false).apply { targetState = true } }
     Dialog(onDismissRequest = aoFechar, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        ProtegerJanela()
         // O fundo escurece de leve, como atras do alerta do iOS.
         val janela = (LocalView.current.parent as? DialogWindowProvider)?.window
         SideEffect { janela?.setDimAmount(0.32f) }

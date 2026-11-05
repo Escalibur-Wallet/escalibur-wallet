@@ -48,8 +48,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -89,6 +96,7 @@ import app.escalibur.wallet.ui.comp.Icones
 import app.escalibur.wallet.ui.comp.Logos
 import app.escalibur.wallet.ui.comp.LogoDaMoeda
 import app.escalibur.wallet.ui.comp.SeloDaCarteira
+import app.escalibur.wallet.ui.comp.movimentoReduzido
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
 import app.escalibur.wallet.ui.legal.DocumentoLegal
 import app.escalibur.wallet.ui.legal.FolhaLegal
@@ -344,6 +352,9 @@ private fun Tour(paginaInicial: Int, aoTerminar: () -> Unit) {
     val paginas = 2
     val estado = rememberPagerState(initialPage = paginaInicial) { paginas }
     val escopo = rememberCoroutineScope()
+    // Os quadros de frente da moeda ja lidos quando a segunda pagina chega (o `preload` do iOS).
+    val contexto = LocalContext.current
+    LaunchedEffect(Unit) { QuadrosDaMoeda.adiantar(contexto) }
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem), horizontalArrangement = Arrangement.End) {
             BotaoTerciario(t("Pular"), Modifier.alpha(if (estado.currentPage < paginas - 1) 1f else 0f)) {
@@ -442,32 +453,83 @@ private fun MoedaQueEntra(id: String, tamanho: androidx.compose.ui.unit.Dp, visi
 }
 
 /**
- * A moeda de Bitcoin gira devagar, esperando; a biometria procura e confirma; a moeda da um giro
- * rapido e para de frente.
+ * A moeda de Bitcoin em 3D, a mesma do iOS (`MoedaEmTresD`), gira devagar, esperando; a biometria
+ * procura e confirma; a moeda da um giro rapido e para de frente. E o dono gira com o dedo, como no
+ * iOS: arrastando ela acompanha, ao soltar segue no embalo e para de frente, e um toque da uma volta.
  */
 @Composable
 private fun CenaDaAssinatura(ativa: Boolean) {
+    val parado = movimentoReduzido()
     var confirmado by remember { mutableStateOf(false) }
     var procurando by remember { mutableStateOf(false) }
-    val angulo = remember { Animatable(0f) }
-    LaunchedEffect(ativa) {
+    // Os tempos em `System.nanoTime`: o comeco da cena, o instante do quadro e a confirmacao, em segundos.
+    var inicio by remember { mutableStateOf<Long?>(null) }
+    var agora by remember { mutableLongStateOf(System.nanoTime()) }
+    var confirmadoEm by remember { mutableStateOf<Double?>(null) }
+    var arraste by remember { mutableDoubleStateOf(0.0) }
+    var solta by remember { mutableStateOf<SoltaDaMoeda?>(null) }
+    LaunchedEffect(ativa, parado) {
         if (!ativa) return@LaunchedEffect
+        if (parado) {
+            // Com as animacoes desligadas, so o estado final, de frente.
+            confirmadoEm = 0.0
+            procurando = false
+            confirmado = true
+            return@LaunchedEffect
+        }
+        val comeco = System.nanoTime()
+        inicio = comeco
+        agora = comeco
+        confirmadoEm = null
         confirmado = false
         procurando = false
-        angulo.snapTo(0f)
-        val giroLento = launch {
-            while (true) angulo.animateTo(angulo.value + (2 * PI).toFloat(), tween(3400, easing = LinearEasing))
-        }
+        launch { while (true) withFrameNanos { agora = System.nanoTime() } }
         delay(1300)
         procurando = true
         delay(1500)
-        giroLento.cancel()
+        confirmadoEm = (System.nanoTime() - comeco) / 1e9
         confirmado = true
-        val alvo = ((floor(angulo.value / (2 * PI)) + 2) * 2 * PI).toFloat()
-        angulo.animateTo(alvo, tween(1100, easing = FastOutSlowInEasing))
     }
+    val t = if (parado) 10.0 else inicio?.let { ((agora - it) / 1e9).coerceAtLeast(0.0) } ?: 0.0
+    val angulo = anguloDaAssinatura(t, confirmadoEm) + GiroDaMoeda.daMao(solta, agora) + arraste
+    val entrada = (1 - (1 - (t / 0.6).coerceIn(0.0, 1.0)).pow(3)).toFloat()
+    val balanco = (4 * sin(t * 1.6)).toFloat()
     Column(Modifier.fillMaxSize().padding(horizontal = Espaco.lg), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        MoedaQueGira(angulo.value, Modifier.size(200.dp))
+        MoedaEmTresD(
+            angulo, entrada, balanco,
+            Modifier.fillMaxWidth().height(200.dp)
+                .pointerInput(Unit) {
+                    detectTapGestures {
+                        val instante = System.nanoTime()
+                        solta = GiroDaMoeda.soltar(GiroDaMoeda.daMao(solta, instante), 2 * PI, instante)
+                    }
+                }
+                .pointerInput(Unit) {
+                    val rastro = VelocityTracker()
+                    var andado = 0f
+                    fun soltar(velocidade: Float) {
+                        // O embalo como o do iOS: o que o dedo andaria desacelerando (0,998 por ms).
+                        val embalo = velocidade / density * 0.998f / (1 - 0.998f) / 1000f / GiroDaMoeda.DP_POR_RADIANO
+                        val instante = System.nanoTime()
+                        val de = GiroDaMoeda.daMao(solta, instante) + arraste
+                        arraste = 0.0
+                        solta = GiroDaMoeda.soltar(de, embalo.toDouble(), instante)
+                    }
+                    detectHorizontalDragGestures(
+                        onDragStart = {
+                            rastro.resetTracking()
+                            andado = 0f
+                        },
+                        onDragEnd = { soltar(rastro.calculateVelocity().x) },
+                        onDragCancel = { soltar(0f) },
+                    ) { mudanca, delta ->
+                        mudanca.consume()
+                        rastro.addPosition(mudanca.uptimeMillis, mudanca.position)
+                        andado += delta
+                        arraste = (andado / density / GiroDaMoeda.DP_POR_RADIANO).toDouble()
+                    }
+                },
+        )
         Spacer(Modifier.height(Espaco.lg))
         Column(Modifier.alpha(if (procurando || confirmado) 1f else 0f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
             val volta = rememberInfiniteTransition(label = "procura")
@@ -489,32 +551,15 @@ private fun CenaDaAssinatura(ativa: Boolean) {
     }
 }
 
-/** A moeda de Bitcoin de frente ou de lado: a face encolhe com o cosseno do giro e a borda aparece. */
-@Composable
-private fun MoedaQueGira(angulo: Float, modifier: Modifier) {
-    val contexto = LocalContext.current
-    val logo = remember { Logos.imagem(contexto, "logo-bitcoin") }
-    Canvas(modifier) {
-        val raio = size.minDimension * 0.42f
-        val centro = Offset(size.width / 2, size.height / 2 - 8.dp.toPx())
-        val largura = cos(angulo.toDouble()).toFloat()
-        val espessura = raio * 0.16f * abs(sin(angulo.toDouble())).toFloat()
-        // A sombra no chao, que encolhe quando a moeda esta de lado.
-        drawOval(Color.Black.copy(alpha = 0.45f), Offset(centro.x - raio * (0.35f + 0.5f * abs(largura)), centro.y + raio * 1.12f), Size(raio * 2 * (0.35f + 0.5f * abs(largura)), raio * 0.16f))
-        // A borda da moeda.
-        if (espessura > 0.5f) {
-            drawOval(Color(0xFFB86E0C), Offset(centro.x - raio * abs(largura) - espessura / 2, centro.y - raio), Size(raio * 2 * abs(largura) + espessura, raio * 2))
-        }
-        if (logo != null && abs(largura) > 0.02f) {
-            scale(scaleX = abs(largura), scaleY = 1f, pivot = centro) {
-                drawImage(
-                    logo, srcOffset = IntOffset.Zero, srcSize = IntSize(logo.width, logo.height),
-                    dstOffset = IntOffset((centro.x - raio).toInt(), (centro.y - raio).toInt()), dstSize = IntSize((raio * 2).toInt(), (raio * 2).toInt()),
-                )
-                if (largura < 0) drawCircle(Color(0xFFE38A12).copy(alpha = 0.55f), raio, centro)
-            }
-        }
-    }
+/** O angulo da moeda (o `SignScene.angle` do iOS): giro lento ate a confirmacao; depois, um giro rapido que para de frente. */
+private fun anguloDaAssinatura(t: Double, confirmadoEm: Double?): Double {
+    val lento = { tempo: Double -> tempo / 3.4 * 2 * PI }
+    confirmadoEm ?: return lento(t)
+    if (confirmadoEm == 0.0) return 0.0
+    val de = lento(confirmadoEm)
+    val ate = (floor(de / (2 * PI)) + 2) * 2 * PI
+    val p = ((t - confirmadoEm) / 1.1).coerceIn(0.0, 1.0)
+    return de + (ate - de) * (1 - (1 - p).pow(3))
 }
 
 /** Oferecer a biometria, depois do PIN e antes da primeira carteira. */

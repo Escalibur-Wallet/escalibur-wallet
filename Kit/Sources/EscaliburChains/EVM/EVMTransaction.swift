@@ -22,7 +22,7 @@ public enum EVMTransactionError: Error, Equatable, Sendable {
 
 /// Os campos de uma transacao, com o chainId como numero. E interno ao modulo de
 /// proposito: e o unico lugar onde o chainId entra como parametro, e so os vetores
-/// oficiais (com chainIds arbitrarios, via `@testable`) e o `EVMTransaction` (com o
+/// oficiais (com chainIds arbitrarios, pelo import de teste) e o `EVMTransaction` (com o
 /// chainId compilado da rede) o usam.
 struct EVMTransactionFields: Sendable, Equatable {
     var chainID: BigUInt

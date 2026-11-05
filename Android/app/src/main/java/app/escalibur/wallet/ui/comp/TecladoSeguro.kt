@@ -66,6 +66,7 @@ import app.escalibur.wallet.ui.tema.Paleta
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 
 /**
@@ -86,11 +87,13 @@ object TecladoSeguro {
     enum class Layout { texto, decimal, algarismos }
 
     /** `janela`: o campo esta numa janela propria (o alerta de renomear), que mostra o teclado nela. */
-    class Sessao(val layout: Layout, val conexao: InputConnection, val info: EditorInfo, val janela: Any?) {
+    class Sessao(val layout: Layout, val conexao: InputConnection, val info: EditorInfo, val janela: Any?, val palavras: Boolean = false) {
         /** O globo: o teclado do celular neste campo. */
         val pediuOSistema = CompletableDeferred<Unit>()
         /** Campo de senha (passphrase, senha do envelope, palavras): o globo nao aparece nele. */
         val secreto = campoSecreto(info)
+        /** Digita segredo: o campo de senha e o das palavras pelo celular (o globo, para frases em japones, chines ou coreano). */
+        val deSegredo get() = secreto || palavras
     }
 
     private fun campoSecreto(info: EditorInfo): Boolean =
@@ -169,6 +172,17 @@ object TecladoSeguro {
     fun Raiz(conteudo: @Composable () -> Unit) {
         val atual = sessao
         val vista = LocalView.current
+        val foco = LocalFocusManager.current
+        // Um servico de acessibilidade de fora ligou (pelo atalho, ou por um app com permissao dada pelo adb): o
+        // campo aberto perde o foco e o teclado do celular fecha na hora, qualquer que seja o campo. No caminho do
+        // teclado do celular a sessao nem existe (o pedido ao sistema nao volta), e conferir o campo deixava o
+        // teclado aberto (terceira e quarta passadas da auditoria de 03/11/2026).
+        val deFora = app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isNotEmpty()
+        LaunchedEffect(deFora) {
+            if (!deFora) return@LaunchedEffect
+            foco.clearFocus(force = true)
+            vista.context.getSystemService(InputMethodManager::class.java)?.hideSoftInputFromWindow(vista.windowToken, 0)
+        }
         LaunchedEffect(pedidosDoCelular) {
             if (pedidosDoCelular == 0) return@LaunchedEffect
             delay(150)
@@ -196,16 +210,23 @@ object TecladoSeguro {
                     val info = EditorInfo()
                     val conexao = original.createInputConnection(info)
                     // Desligado, o campo vai para o teclado do celular; campo de senha com um teclado
-                    // de terceiros, nunca.
+                    // de terceiros, nunca. Campo de senha com um servico de acessibilidade de fora ligado:
+                    // nenhum teclado, nem o do celular (segunda passada da auditoria de 03/11/2026).
+                    // O campo das palavras pelo celular tambem e de segredo, mesmo sem o tipo senha (terceira passada).
+                    val bloqueado = (campoSecreto(info) || sistema?.palavras == true) &&
+                        app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isNotEmpty()
                     val peloCelular = !App.estado.tecladoProprio && !(campoSecreto(info) && tecladoDeTerceiros(vista.context))
-                    if (sistema != null || peloCelular) proximo.startInputMethod(semAprendizado)
-                    val nova = Sessao(layout(info), conexao, info, janela)
+                    if (!bloqueado && (sistema != null || peloCelular)) proximo.startInputMethod(semAprendizado)
+                    val nova = Sessao(layout(info), conexao, info, janela, palavras = sistema?.palavras == true)
                     sessao = nova
                     try {
                         nova.pediuOSistema.await()
                     } finally {
                         if (sessao === nova) sessao = null
                     }
+                    // O globo foi tocado: confere de novo, porque um servico de fora pode ter ligado enquanto o Safe
+                    // Keyboard estava aberto. Bloqueado, o teclado do celular nao abre.
+                    if (nova.deSegredo && app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isNotEmpty()) awaitCancellation()
                     pedidosDoCelular++
                     proximo.startInputMethod(semAprendizado)
                 },
@@ -223,6 +244,12 @@ object TecladoSeguro {
     private fun Painel(sessao: Sessao, modifier: Modifier) {
         val foco = LocalFocusManager.current
         BackHandler { foco.clearFocus() }
+        // Campo de senha com um servico de acessibilidade de fora ligado: no lugar das teclas, o aviso.
+        val deFora = app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo
+        if (sessao.deSegredo && deFora.isNotEmpty()) {
+            app.escalibur.wallet.ui.TecladoFechadoPelaAcessibilidade(deFora, modifier)
+            return
+        }
         val modelo = remember(sessao) { Modelo(sessao, fechar = { foco.clearFocus() }, sistema = { sessao.pediuOSistema.complete(Unit) }) }
         Column(modifier.fillMaxWidth().seguraToques().background(Paleta.corpo).navigationBarsPadding()) {
             if (sessao.layout == Layout.texto) Barra(modelo)

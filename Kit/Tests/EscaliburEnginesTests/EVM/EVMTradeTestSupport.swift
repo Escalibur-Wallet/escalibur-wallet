@@ -182,6 +182,18 @@ actor FakeTradeChain: EVMTradeChainReading {
 
     func l1DataFee(chain: Chain, calldataSize: Int) async throws -> BigUInt? { EVMTradeFixtures.l1Fee }
 
+    /// O `filledAmount` de cada UID na cadeia; sem entrada, zero.
+    var filled: [String: BigUInt] = [:]
+    func setFilled(_ uid: String, _ amount: BigUInt) { filled[uid] = amount }
+
+    func cowFilledAmount(chain: Chain, uid: [UInt8]) async throws -> BigUInt { filled["0x" + Hex.encode(uid)] ?? 0 }
+
+    /// O tempo do ultimo bloco; sem valor, o do relogio.
+    var blockTime: UInt64?
+    func setBlockTime(_ seconds: UInt64) { blockTime = seconds }
+
+    func latestBlockTimestamp(chain: Chain) async throws -> UInt64 { blockTime ?? UInt64(Date().timeIntervalSince1970) }
+
     func token(chain: Chain, token: EVMAddress, owner: EVMAddress, spender: EVMAddress) async throws -> EVMTokenState {
         EVMTokenState(contractHasCode: true, balance: tokenBalance, allowance: allowance)
     }
@@ -231,6 +243,10 @@ actor FakeCoW: EVMCoWService {
     var quotes: [BigUInt: BigUInt] = [:]
     private(set) var quoted: [BigUInt] = []
     var statuses: [[UInt8]: CoWOrderStatus] = [:]
+    /// A CoW recusa o envio da ordem com este `errorType`.
+    private(set) var submitRejection: String?
+    /// O envio da ordem falha assim (sem resposta, erro do servidor).
+    private(set) var submitFailure: (any Error)?
 
     init(openTotal: BigUInt = 0, quotes: [BigUInt: BigUInt] = [:]) {
         self.openTotal = openTotal
@@ -255,17 +271,26 @@ actor FakeCoW: EVMCoWService {
         registered.append(appData)
     }
 
+    func rejectSubmit(_ type: String?) { submitRejection = type }
+    func failSubmit(_ error: (any Error)?) { submitFailure = error }
+
     func submit(_ plan: CoWLimitOrderPlan, signature: SignedTransaction) async throws -> [UInt8] {
         _ = try CoWClient.submissionBody(plan, signature: signature)
+        if let submitRejection { throw CoWClientError.rejected(submitRejection) }
+        if let submitFailure { throw submitFailure }
         submitted.append(plan.uid)
-        return plan.uid
+        return answeredUID ?? plan.uid
     }
+
+    /// O UID que a CoW responde no envio; sem valor, o da ordem.
+    private(set) var answeredUID: [UInt8]?
+    func answerUID(_ uid: [UInt8]?) { answeredUID = uid }
 
     func openSellTotal(owner: EVMAddress, sellToken: EVMAddress, chain: Chain) async throws -> BigUInt { openTotal }
 
     func setOpen(_ orders: [CoWOrderStatus]) { open = orders }
 
-    func openOrders(owner: EVMAddress, chain: Chain, now: Date) async throws -> [CoWOrderStatus] { open.filter { $0.owner == owner } }
+    func openOrders(owner: EVMAddress, chain: Chain) async throws -> [CoWOrderStatus] { open.filter { $0.owner == owner } }
 
     func cancel(uids: [[UInt8]], chain: Chain, owner: EVMAddress, signature: SignedTransaction) async throws {
         let typed = try CoWPlanner.cancellationTypedData(chain: chain, uids: uids)

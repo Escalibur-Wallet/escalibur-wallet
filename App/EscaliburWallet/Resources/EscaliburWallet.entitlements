@@ -12,5 +12,19 @@
 	<array>
 		<string>group.app.escalibur.wallet</string>
 	</array>
+	<!-- Enhanced Security (Xcode 26), igual no widget: processo endurecido, versao e
+	     restricoes de plataforma como string (as chaves inteiras impediam instalar no
+	     iOS 18 com o iOS 17 de minimo), heap endurecido e dyld so de leitura. O
+	     checked-allocations (MIE) so entra depois de testado num iPhone 17. -->
+	<key>com.apple.security.hardened-process</key>
+	<true/>
+	<key>com.apple.security.hardened-process.enhanced-security-version-string</key>
+	<string>1</string>
+	<key>com.apple.security.hardened-process.platform-restrictions-string</key>
+	<string>2</string>
+	<key>com.apple.security.hardened-process.hardened-heap</key>
+	<true/>
+	<key>com.apple.security.hardened-process.dyld-ro</key>
+	<true/>
 </dict>
 </plist>

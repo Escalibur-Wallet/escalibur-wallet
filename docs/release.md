@@ -96,3 +96,32 @@ gh attestation verify EscaliburWallet.sem-assinatura \
 ## Se o export recusar
 
 O archive sai sem assinatura e recebe, pelo `codesign`, uma assinatura local com os entitlements do repositório, para o export da nuvem saber o que o app pede. Isso não foi testado de ponta a ponta antes do primeiro release. Se a Apple recusar esse archive, ou o `.ipa` sair com outros entitlements (o `conferir-entitlements.py` para o release antes do envio), o caminho é um certificado Apple Development de longa duração, em `.p12`, como quarto segredo do environment `release`, importado num keychain temporário só para o archive.
+
+## Build feito no Mac
+
+Enquanto o workflow não roda, o build do TestFlight e o da Play saem do Mac do dono, mas só do código publicado (auditoria de 03/11/2026):
+
+```
+tools/arquivar.sh <build>              # iPhone: /private/tmp/escalibur-arquivo-<versao>-<build>.*/EscaliburWallet.xcarchive
+tools/android/gerar-aab.sh             # Android: /private/tmp/escalibur-aab-<versao>-<build>.*/ (AAB, APK e SHA256SUMS)
+```
+
+Os dois leem `tools/copia-publicada.sh`:
+- a árvore daqui (`HEAD^{tree}`) tem de ser a da `main` do GitHub: o push do dia vem antes do build;
+- os scripts da loja daqui têm de ser os do commit publicado, comparados pelo conteúdo (`git hash-object`, que um `assume-unchanged` não esconde), e a `main` é lida pela ref remota e conferida com o `ls-remote` (uma tag local chamada `origin/main` não engana);
+- o build roda num worktree novo e destacado do commit publicado, em `/private/tmp`, sem hooks, e sai dali no fim. A segunda fase de cada script roda da cópia de dentro dele e confere de novo que ela está limpa (nem arquivo ignorado, nem arquivo marcado para o git não olhar). Nada da pasta de trabalho entra: nem arquivo que o git ignora, nem mudança de outra sessão;
+- o commit publicado e a árvore vão dentro do app (`EscaliburCommit` e `EscaliburTree` no `Info.plist`, `COMMIT_DE_ORIGEM` e `ARVORE_DE_ORIGEM` no `BuildConfig`) e são conferidos no binário. A tela de Ajustes mostra o commit; quem confere depois de uma junção diária compara a árvore: `git rev-parse <commit>^{tree}`.
+
+O iPhone roda depois as mesmas conferências do `release.yml` (versão, lista assinada, nada do modo demo). No Android, o Gradle recusa o release fora de um worktree em `/private/tmp/escalibur-loja.*`, sem o commit e a árvore da própria pasta, com a pasta suja, com o commit diferente da `main` publicada ou com um núcleo que não foi compilado em release deste commit (o `compilar-nucleo.sh release --loja` grava o carimbo `build/android-kit/origem-do-nucleo.txt` com `release-loja`, o commit e o SHA-256 do `.so` e da `libc++_shared.so`, conferida pelo digesto do NDK r30), e confere o C do núcleo; o `gerar-aab.sh` confere os dois nos dex extraídos do APK e do AAB. Assinar, exportar e enviar seguem como antes, a partir desse archive. O archive sai numa pasta nova em `/private/tmp`, fora do repositório, com um app só e o `ApplicationPath` dele, e o script imprime o digesto do `.xcarchive` inteiro (cada arquivo, pasta e link simbólico, com o modo e o conteúdo); antes de assinar, confira que ele não mudou:
+
+```
+git -C <repositorio> show <commit impresso>:tools/digesto.sh | /usr/bin/env -i /bin/bash -p -s -- <pasta do archive>/EscaliburWallet.xcarchive
+```
+
+O script vem do commit publicado, e não da pasta de trabalho, que outra sessão pode editar.
+
+As flags que o compilador do Swift recebeu de fato são conferidas no log de cada build da loja (`tools/flags-do-build.py`): o `arquivar.sh` e o `release.yml` gravam o log inteiro do archive (sem `-quiet`; o do Mac fica em `archive.log`, ao lado do `.xcarchive`), e o `compilar-nucleo.sh release --loja`, que o `gerar-aab.sh` chama, compila o núcleo do zero com `swift build -v` e grava `build/nucleo-release.log`. Cada chamada do `swiftc` e do `swift-frontend` que compila um módulo nosso tem de vir do toolchain de verdade (o Xcode do `xcode-select -p`, o Swift 6.4.1 do Android), para o aparelho e no modo 6 da linguagem, só com os `-D` que o verificador conhece para o módulo, com plugin de macro só do toolchain, e todo módulo da plataforma aparece ao menos uma vez. Toda opção do compilador está numa lista fechada, com o valor de cada uma, e os caminhos de busca só podem ser do toolchain, da pasta do build e das pastas `include` do C do Kit: uma opção a mais para tudo antes de assinar (décima e décima primeira passadas da auditoria de 03/11/2026). O núcleo de depuração não é conferido (as flags dele são outras).
+
+O build da loja só começa com o CI (`verificar`) verde no commit publicado: depois do push do dia, espere o check no GitHub. A cópia limpa confere os digestos do `loja.lock` antes de montar.
+
+O `loja.lock` trava também o `Kit/Package.swift`, o `flags-do-build.py`, o projeto do Xcode (`project.yml`, `project.pbxproj`, o workspace e o esquema; ele muda a cada arquivo novo do app) e os arquivos do Gradle (os três `.gradle.kts`, `gradle.properties`, `libs.versions.toml`, o wrapper, `verification-metadata.xml` e `proguard-rules.pro`). A versão do Android mora no `Android/app/build.gradle.kts`: ao subir o `versionCode` ou o `versionName`, revise o diff e grave o digesto novo no `loja.lock` (`shasum -a 256 Android/app/build.gradle.kts`).

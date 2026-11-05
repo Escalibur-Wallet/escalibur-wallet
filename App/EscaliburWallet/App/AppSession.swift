@@ -18,6 +18,14 @@ enum Credential: Sendable {
     case hardened(SecureBytes, reason: String)
     /// Modo reforcado com o rosto ja confirmado antes do PIN (pedido do dono, 01/11/2026).
     case hardenedFace(SecureBytes, face: RootKeyVault.HardenedFacePass)
+
+    /// Zera o PIN quando a operacao para antes de abrir a RK, que o zeraria la dentro (revisao da decima terceira passada).
+    func wipe() {
+        switch self {
+        case .pin(let pin), .pinAndBiometry(let pin, _), .hardened(let pin, _), .hardenedFace(let pin, _): pin.wipe()
+        case .biometry: break
+        }
+    }
 }
 
 /// O estado de alto nivel do app.
@@ -118,12 +126,20 @@ final class AppSession {
         ReceiptWatchStore.erase()
         LimitOrderWatchStore.erase()
         PriceAlertStore.erase()
+        NoticeKey.erase()
         WidgetFeed.erase()
         ImageLoader.eraseStored()
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
         center.removeAllDeliveredNotifications()
         BackgroundCheck.reschedule()
+    }
+
+    /// Os enderecos EVM da carteira, em hex minusculo sem `0x`: o dono que o UID da CoW traz.
+    nonisolated static func evmOwners(_ meta: WalletMeta) -> Set<String> {
+        Set(Chain.all.filter { $0.family == .evm }.compactMap { chain in
+            meta.account(chain).map { $0.address.lowercased().replacingOccurrences(of: "0x", with: "") }
+        })
     }
 
     var selectedWallet: WalletMeta? { metadata.selectedWallet }
@@ -222,7 +238,7 @@ final class AppSession {
     /// Cada `lock()` soma um. O destravar que comecou antes de um travar (o iPhone bloqueado durante o
     /// Argon2) nao termina abrindo o app: o `open` posterior desfazia o `lock()` do
     /// `protectedDataWillBecomeUnavailable` (revisao de seguranca do iPhone de 27/10/2026).
-    private var lockEpoch = 0
+    private(set) var lockEpoch = 0
 
     private func open(with key: SymmetricKey, adding updates: [UUID: [DerivedAccount]] = [:], epoch: Int) throws {
         guard epoch == lockEpoch else { throw WalletError.locked }
@@ -247,6 +263,54 @@ final class AppSession {
         let queued = afterUnlock
         afterUnlock = []
         for change in queued { change(self) }
+        NoticeMigration.runOnce(self)
+        // O cache de saldo e o historico de carteira que nao existe mais saem: uma leitura que terminou depois da remocao
+        // os regravava (decima terceira passada da auditoria de 03/11/2026 e a revisao dela).
+        let carteiras = Set(metadata.wallets.map(\.id))
+        let prefixes = carteiras.map { $0.uuidString + "|" }
+        if metadata.balanceCache.keys.contains(where: { !carteiras.contains($0) })
+            || (metadata.activityCache ?? [:]).keys.contains(where: { !carteiras.contains($0) })
+            || (metadata.activityFetched ?? [:]).keys.contains(where: { !carteiras.contains($0) })
+            || (metadata.pendingEVM ?? [:]).keys.contains(where: { key in !prefixes.contains { key.hasPrefix($0) } }) {
+            metadata.balanceCache = metadata.balanceCache.filter { carteiras.contains($0.key) }
+            metadata.activityCache = metadata.activityCache?.filter { carteiras.contains($0.key) }
+            metadata.activityFetched = metadata.activityFetched?.filter { carteiras.contains($0.key) }
+            metadata.pendingEVM = metadata.pendingEVM?.filter { item in prefixes.contains { item.key.hasPrefix($0) } }
+            try? persist()
+        }
+        // E os mapas por ativo com o que nenhuma carteira tem mais (o resto de uma leitura que terminou depois de remover).
+        var pruned = metadata
+        Self.pruneAssetMaps(&pruned)
+        if pruned.quoteCache != metadata.quoteCache || pruned.recognizedTokens != metadata.recognizedTokens
+            || pruned.unrecognizedChecks != metadata.unrecognizedChecks || pruned.tokenLogos != metadata.tokenLogos {
+            metadata = pruned
+            try? persist()
+        }
+    }
+
+    /// O que a tela guarda na memoria de uma carteira (o Portfolio, que e do App, e o historico e as ordens vencidas):
+    /// sai ao travar e ao apagar tudo, e ao remover a carteira que esta na tela, e uma leitura em curso dela nao grava
+    /// mais nada (revisao da decima terceira passada; o Android ja esquecia ao travar).
+    var onForget: ((UUID?) -> Void)?
+
+    private func forgetMemory(_ wallet: UUID? = nil) {
+        onForget?(wallet)
+        ActivityFeed.shared.forget(wallet)
+        LimitRenewalCenter.shared.forget(wallet)
+    }
+
+    /// Os mapas por ativo (a cotacao por contrato, o reconhecimento de token e as logos) so com o que as carteiras que
+    /// ficam tem no cache de saldo: os tokens que so a removida tinha saem com ela (revisao da decima terceira passada).
+    /// `keeping`: o que a leitura em curso tem na memoria e o cache de saldo ainda nao tem.
+    static func pruneAssetMaps(_ metadata: inout Metadata, keeping extra: Set<String> = []) {
+        let held = Set(metadata.balanceCache.values.flatMap(\.values).flatMap { balance in
+            balance.holdings.map(\.asset.id) + (balance.unlisted ?? []).map(\.asset.id)
+        }).union(extra)
+        metadata.recognizedTokens = metadata.recognizedTokens?.filter { held.contains($0.key) }
+        metadata.unrecognizedChecks = metadata.unrecognizedChecks?.filter { held.contains($0.key) }
+        metadata.tokenLogos = metadata.tokenLogos?.filter { held.contains($0.key) }
+        let prefix = Portfolio.contractQuotePrefix
+        metadata.quoteCache = metadata.quoteCache.filter { key, _ in !key.hasPrefix(prefix) || held.contains(String(key.dropFirst(prefix.count))) }
     }
 
     /// O que terminou depois de o app travar e precisa ir para os metadados: a ponte ou a ordem
@@ -275,6 +339,7 @@ final class AppSession {
         KeyServices.root.discardHardenedFace()
         indexKey = nil
         metadata = Metadata()
+        forgetMemory()
         withAnimation(Motion.fade) { phase = .locked }
     }
 
@@ -491,21 +556,32 @@ final class AppSession {
     ) async throws -> WalletMeta {
         let id = UUID()
         let hasPassphrase = secret.passphrase.count > 0
-        let (accounts, fingerprint): ([DerivedAccount], [UInt8]) = try await withRootKey(credential) { rk in
+        // O autoteste antes de abrir a RK, e a derivacao antes de gravar: se ela falha, nada fica no cofre (a frase ficava
+        // guardada sem carteira, longe do "Remover"; revisao da decima terceira passada).
+        // Fora da thread principal: a primeira conferencia leva dezenas de milissegundos.
+        do { try await Offload.run { try DerivationSelfTest.require() } } catch { secret.wipe(); credential.wipe(); throw error }
+        // A carteira que ja esta aqui nao e gravada de novo: gravar e depois apagar deixava um registro se o apagar
+        // falhasse (revisao da decima terceira passada).
+        let known = Set(metadata.wallets.filter { !$0.isWatchOnly }.map(\.fingerprint))
+        let (accounts, fingerprint, saved): ([DerivedAccount], [UInt8], Bool) = try await withRootKey(credential) { rk in
             defer { secret.wipe() }
+            let derived = try AccountDeriver.derive(secret)
+            guard !known.contains(derived.fingerprint.hex) else { return (derived.accounts, derived.fingerprint, false) }
             try KeyServices.wallets.save(secret, walletID: id, rk: rk)
-            return try AccountDeriver.derive(secret)
+            return (derived.accounts, derived.fingerprint, true)
         }
         // Travou enquanto o cofre abria: a frase ja foi guardada, mas a lista nao vai gravar. Ela sai
         // agora, ou ficaria no chaveiro sem carteira nenhuma, longe do "Remover" (caca de bugs de 27/10/2026).
         guard phase == .unlocked, indexKey != nil else {
-            try? KeyServices.wallets.delete(id)
+            if saved { try? KeyServices.wallets.delete(id) }
             throw WalletError.locked
         }
         if let existing = metadata.wallets.first(where: { $0.fingerprint == fingerprint.hex && !$0.isWatchOnly }) {
-            try? KeyServices.wallets.delete(id)
+            if saved { try? KeyServices.wallets.delete(id) }
             throw WalletError.alreadyImported(existing.name)
         }
+        // Estava aqui quando o cofre abriu e saiu no meio: nada foi gravado, e nada e criado.
+        guard saved else { throw WalletError.changedDuringSave }
         var wallet = WalletMeta(
             id: id, name: uniqueName(name, origin: origin), kind: .phrase(wordCount: wordCount), origin: origin, createdAt: .now,
             accounts: accounts, fingerprint: fingerprint.hex, hasPassphrase: hasPassphrase,
@@ -513,6 +589,9 @@ final class AppSession {
         )
         if tronForeignControl { wallet.tronForeignControl = true }
         metadata.wallets.append(wallet)
+        // A mesma conta de volta (removida e importada de novo nesta sessao) volta a ter os avisos de ordem.
+        let returning = Self.evmOwners(wallet)
+        Task { await LimitOrderWatch.shared.remember(owners: returning) }
         if select || metadata.selectedWalletID == nil { metadata.selectedWalletID = id }
         do { try persist() } catch {
             metadata.wallets.removeAll { $0.id == id }
@@ -558,7 +637,11 @@ final class AppSession {
         guard passphrase.count > 0 else { throw WalletError.emptyPassphrase }
         let baseID = base.id
         let id = UUID()
-        let (accounts, fingerprint): ([DerivedAccount], [UInt8]) = try await withRootKey(credential) { rk in
+        // Como em `addWallet`: o autoteste antes da RK, a derivacao antes de gravar, e a carteira que ja esta aqui nao e
+        // gravada de novo.
+        do { try await Offload.run { try DerivationSelfTest.require() } } catch { credential.wipe(); throw error }
+        let known = Set(metadata.wallets.filter { !$0.isWatchOnly }.map(\.fingerprint))
+        let (accounts, fingerprint, saved): ([DerivedAccount], [UInt8], Bool) = try await withRootKey(credential) { rk in
             let original = try KeyServices.wallets.open(walletID: baseID, rk: rk)
             defer { original.wipe() }
             let entropy = SecureBytes(capacity: original.entropy.count)
@@ -570,28 +653,34 @@ final class AppSession {
             let normalized = passphrase.withUnsafeBytes({ raw in raw.contains { $0 >= 0x80 } }) ? BIP39.nfkd(passphrase) : passphrase
             let secret = WalletSecret(entropy: entropy, language: original.language, passphrase: normalized)
             defer { secret.wipe() }
+            let derived = try AccountDeriver.derive(secret)
+            guard !known.contains(derived.fingerprint.hex) else { return (derived.accounts, derived.fingerprint, false) }
             try KeyServices.wallets.save(secret, walletID: id, rk: rk)
-            return try AccountDeriver.derive(secret)
+            return (derived.accounts, derived.fingerprint, true)
         }
         // Travou enquanto o cofre abria: a carteira guardada sai, como em `addWallet`.
         guard phase == .unlocked, indexKey != nil else {
-            try? KeyServices.wallets.delete(id)
+            if saved { try? KeyServices.wallets.delete(id) }
             throw WalletError.locked
         }
         // A mesma frase com a mesma passphrase abre a mesma carteira: se ela ja esta aqui,
         // abrir e so passar a usa-la.
         if let existing = metadata.wallets.first(where: { $0.fingerprint == fingerprint.hex && !$0.isWatchOnly }) {
-            try? KeyServices.wallets.delete(id)
+            if saved { try? KeyServices.wallets.delete(id) }
             metadata.selectedWalletID = existing.id
             try persist()
             return existing
         }
+        guard saved else { throw WalletError.changedDuringSave }
         let wallet = WalletMeta(
             id: id, name: name, kind: .phrase(wordCount: wordCount), origin: base.origin, createdAt: .now,
             accounts: accounts, fingerprint: fingerprint.hex, hasPassphrase: true,
             backupConfirmedAt: base.backupConfirmedAt
         )
         metadata.wallets.append(wallet)
+        // A mesma conta de volta (removida e importada de novo nesta sessao) volta a ter os avisos de ordem.
+        let returning = Self.evmOwners(wallet)
+        Task { await LimitOrderWatch.shared.remember(owners: returning) }
         metadata.selectedWalletID = id
         do { try persist() } catch {
             metadata.wallets.removeAll { $0.id == id }
@@ -618,6 +707,9 @@ final class AppSession {
             accounts: accounts, fingerprint: nil, hasPassphrase: false, backupConfirmedAt: nil
         )
         metadata.wallets.append(wallet)
+        // A mesma conta de volta (removida e importada de novo nesta sessao) volta a ter os avisos de ordem.
+        let returning = Self.evmOwners(wallet)
+        Task { await LimitOrderWatch.shared.remember(owners: returning) }
         metadata.selectedWalletID = wallet.id
         try persist()
         return wallet
@@ -664,7 +756,21 @@ final class AppSession {
         metadata.activityFetched?[wallet.id] = nil
         let prefix = wallet.id.uuidString + "|"
         metadata.pendingEVM = metadata.pendingEVM?.filter { !$0.key.hasPrefix(prefix) }
+        // Os avisos de refazer quando vencer dela saem da agenda do sistema (quinta passada de 03/11/2026).
+        LimitRenewalCenter.forgetNotices((metadata.limitRenewals ?? []).filter { $0.walletID == wallet.id }.map(\.orderID))
+        // As notificacoes ja mostradas saem da Central: a de ordem e a de recebimento podem ser desta carteira, e o id
+        // de uma versao anterior levava o UID da ordem, com o endereco (sexta passada da auditoria de 03/11/2026).
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
         metadata.limitRenewals?.removeAll { $0.walletID == wallet.id }
+        // As ordens assinadas guardadas e os avisos de ordem limite dela: o UID traz o endereco, e o arquivo dos
+        // avisos abre com o iPhone bloqueado (quarta passada da auditoria de 03/11/2026).
+        // So os enderecos que nenhuma carteira que fica usa (uma carteira so para ver o mesmo endereco segue com os
+        // avisos dela).
+        let owners = Self.evmOwners(wallet).subtracting(metadata.wallets.filter { $0.id != wallet.id }.flatMap(Self.evmOwners))
+        let stored = Set((metadata.signedOrders ?? []).filter { $0.walletID == wallet.id }.map(\.id))
+        metadata.signedOrders?.removeAll { $0.walletID == wallet.id }
+        Self.pruneAssetMaps(&metadata)
+        Task { await LimitOrderWatch.shared.forget(owners: owners, ids: stored) }
         PassphraseGate.shared.forget(self, wallet: wallet.id)
         ImageLoader.eraseStored()
         if metadata.selectedWalletID == wallet.id { metadata.selectedWalletID = metadata.wallets.first?.id }
@@ -673,6 +779,7 @@ final class AppSession {
         // a lista sem ela estar gravada: com a gravacao recusada, nada mais e apagado.
         let lastOne = metadata.wallets.isEmpty
         try persist()
+        forgetMemory(wallet.id)
         if lastOne { eraseEverything() }
     }
 
@@ -693,11 +800,16 @@ final class AppSession {
         metadata.balanceCache[id] = nil
         metadata.activityCache?[id] = nil
         metadata.activityFetched?[id] = nil
+        // O que leva o endereco dela: as transacoes em transito e as ordens guardadas (quarta passada de 03/11/2026).
+        metadata.pendingEVM = metadata.pendingEVM?.filter { !$0.key.hasPrefix(id.uuidString + "|") }
+        metadata.signedOrders?.removeAll { $0.walletID == id }
+        Self.pruneAssetMaps(&metadata)
         PassphraseGate.shared.forget(self, wallet: id)
         let back = previous.flatMap { previous in metadata.wallets.contains { $0.id == previous } ? previous : nil }
         metadata.selectedWalletID = back ?? metadata.wallets.first?.id
         try persist()
         freshPassphraseWallets[id] = nil
+        forgetMemory(id)
     }
 
     /// Apaga tudo deste aparelho: chaves do SE e itens do chaveiro primeiro.
@@ -718,6 +830,7 @@ final class AppSession {
         }
         indexKey = nil
         metadata = Metadata()
+        forgetMemory()
         phase = .onboarding
     }
 
@@ -736,6 +849,8 @@ enum WalletError: LocalizedError {
     case locked
     case emptyPassphrase
     case passphraseBase
+    /// A carteira que ja estava aqui quando o cofre abriu saiu no meio: nada foi gravado.
+    case changedDuringSave
 
     var errorDescription: String? {
         switch self {
@@ -745,6 +860,7 @@ enum WalletError: LocalizedError {
         case .locked: return String(localized: "O app travou antes de terminar. Destrave e tente de novo.")
         case .emptyPassphrase: return String(localized: "Digite a passphrase")
         case .passphraseBase: return String(localized: "Abra a carteira com passphrase a partir da carteira de sempre, a que não tem passphrase.")
+        case .changedDuringSave: return String(localized: "As carteiras mudaram enquanto o cofre abria. Nada foi guardado; tente de novo.")
         }
     }
 }

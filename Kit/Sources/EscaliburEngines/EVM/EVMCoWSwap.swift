@@ -144,27 +144,10 @@ extension EVMTradeEngine {
         return candidate.quote.buyAmount <= best + band && candidate.quote.buyAmount + band >= best
     }
 
-    /// O `TradeQuote` da troca pela CoW. As alternativas sao os agregadores, cada um com o
-    /// seu garantido.
-    static func cowQuote(_ request: TradeRequest, candidate: EVMCoWCandidate, ranked: [TradeCandidate]) -> TradeQuote {
-        let fee = candidate.quote.protocolFeeBps.map { kitText(" (\(EVMEngineText.percent(bps: $0)) do volume)") } ?? ""
-        return TradeQuote(
-            sell: request.sell, buy: request.buy, amountIn: request.amountIn,
-            expectedOut: candidate.quote.buyAmount, minimumOut: candidate.guaranteed,
-            priceImpactPercent: candidate.deviationBps.map { Double(max(0, $0)) / 100 },
-            networkFeeFiat: nil,
-            providerFeeNote: kitText("A taxa da CoW\(fee) e a taxa da rede da troca já saíram da cotação e do mínimo garantido."),
-            legs: [TradeQuote.Leg(provider: "CoW", fraction: 1, amountIn: request.amountIn, expectedOut: candidate.quote.buyAmount)],
-            alternatives: ranked.map { TradeQuote.Alternative(provider: $0.quote.provider.displayName, out: $0.quote.guaranteedOut) },
-            providersCompared: ranked.count + 1, needsApproval: candidate.needsApproval,
-            expiresAt: Date().addingTimeInterval(ValidatedTradeQuote.lifetime), execution: .order, parts: candidate.parts
-        )
-    }
-
     // MARK: Plano
 
-    /// A troca pela CoW: a ordem assinada com exatamente o minimo que a tela mostrou (o
-    /// da troca de uma vez ou o da troca em partes), com execucao parcial.
+    /// A troca em partes pela CoW: a ordem assinada com exatamente o minimo das partes que a
+    /// tela mostrou, com execucao parcial. A troca de uma vez nunca vai para o leilao.
     func makeCoWSwapPlan(_ request: TradeRequest, quote: TradeQuote) async throws -> SigningPlan {
         let context = try EVMTradeContext(request, chain: chain)
         guard quote.sell == request.sell, quote.buy == request.buy, quote.amountIn == request.amountIn else {
@@ -172,20 +155,14 @@ extension EVMTradeEngine {
         }
         guard quote.expiresAt > .now else { throw EVMEngineFailure.quoteExpired }
         guard supportsLimitOrders else { throw EVMEngineFailure.limitOrdersUnavailable }
-        if request.inParts {
-            guard quote.parts != nil else { throw EVMEngineFailure.quoteMismatch }
-        } else {
-            guard quote.execution == .order else { throw EVMEngineFailure.quoteMismatch }
-            guard PriceImpact.level(quote.priceImpactPercent) != .blocked else { throw EVMEngineFailure.riskIncreased }
-        }
-        let minimum = quote.minimumOut(inParts: request.inParts)
+        guard request.inParts, quote.parts != nil else { throw EVMEngineFailure.quoteMismatch }
+        let minimum = quote.minimumOut(inParts: true)
         let account = context.account
         let sell = context.intent.sell
         let buy = context.intent.buy
         let intent = try CoWLimitOrderIntent(
             owner: account.address, sell: sell, buy: buy, sellAmount: request.amountIn, buyAmount: minimum,
-            validFor: request.inParts ? CoWProtocol.partsValidity : CoWProtocol.instantValidity,
-            partiallyFillable: true, style: request.inParts ? .parts : .instant
+            validFor: CoWProtocol.partsValidity, partiallyFillable: true, style: .parts
         )
         guard intent.buyAmount == minimum, let sellToken = intent.orderSellToken else { throw EVMEngineFailure.limitPriceNotRepresentable }
 
@@ -243,8 +220,9 @@ extension EVMTradeEngine {
 }
 
 extension TradeQuote {
-    /// A troca pelos agregadores com a CoW ao lado: a CoW entra nas alternativas, e a
-    /// troca em partes dela vira opcao quando garante pelo menos 0,2% mais que esta.
+    /// A troca pelos agregadores com a troca em partes da CoW como opcao, quando ela garante
+    /// pelo menos 0,2% mais que esta. A CoW de uma vez nao entra nas alternativas: a troca
+    /// imediata nao vai para o leilao.
     func adding(cow: EVMCoWCandidate?) -> TradeQuote {
         guard let cow else { return self }
         var option: Parts?
@@ -254,8 +232,8 @@ extension TradeQuote {
         }
         return TradeQuote(
             sell: sell, buy: buy, amountIn: amountIn, expectedOut: expectedOut, minimumOut: minimumOut,
-            priceImpactPercent: priceImpactPercent, networkFeeFiat: networkFeeFiat, providerFeeNote: providerFeeNote, legs: legs,
-            alternatives: alternatives + [Alternative(provider: "CoW", out: cow.guaranteed)], providersCompared: providersCompared + 1,
+            priceImpactPercent: priceImpactPercent, networkFees: networkFees, providerFeeNote: providerFeeNote, legs: legs,
+            alternatives: alternatives, providersCompared: providersCompared,
             needsApproval: needsApproval, expiresAt: expiresAt, execution: execution, parts: option
         )
     }

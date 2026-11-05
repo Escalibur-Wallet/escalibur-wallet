@@ -19,10 +19,10 @@ struct LimitRenewalPrompts: ViewModifier {
     func body(content: Content) -> some View {
         content
             .sheet(isPresented: Binding(
-                get: { queued == nil && reviewing == nil && !center.pending.isEmpty },
+                get: { queued == nil && reviewing == nil && !center.pending(for: session.selectedWallet?.id).isEmpty },
                 set: { shown in
                     // Arrastar para baixo: pergunta de novo so na proxima abertura.
-                    if !shown, queued == nil, reviewing == nil { center.postponed.formUnion(center.pending.map(\.id)) }
+                    if !shown, queued == nil, reviewing == nil { center.postponed.formUnion(center.pending(for: session.selectedWallet?.id).map(\.id)) }
                 }
             ), onDismiss: {
                 if let queued {
@@ -30,9 +30,9 @@ struct LimitRenewalPrompts: ViewModifier {
                     self.queued = nil
                 }
             }) {
-                if let due = center.pending.first {
+                if let due = center.pending(for: session.selectedWallet?.id).first {
                     LimitRenewalSheet(
-                        due: due, more: center.pending.count - 1, marketRate: marketRate(due), keepRenewing: $keepRenewing,
+                        due: due, more: center.pending(for: session.selectedWallet?.id).count - 1, marketRate: marketRate(due), keepRenewing: $keepRenewing,
                         onRenew: { renew(due) },
                         onDrop: { center.forget(due.id, session: session) },
                         onLater: { center.postponed.insert(due.id) }
@@ -56,7 +56,8 @@ struct LimitRenewalPrompts: ViewModifier {
     }
 
     private func renew(_ due: DueRenewal) {
-        guard let wallet = session.selectedWallet, let account = wallet.account(due.chain) else { return }
+        // A ordem vencida e da carteira em uso: a de outra carteira nunca vira ordem nesta.
+        guard let wallet = session.selectedWallet, wallet.id == due.record.walletID, let account = wallet.account(due.chain) else { return }
         let request = LimitOrderRequest(
             walletID: wallet.id, chain: due.chain, account: account, sell: due.sell, buy: due.buy, amountIn: due.amountIn,
             minimumOut: due.minimumOut, validFor: due.record.validFor

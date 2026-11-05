@@ -134,6 +134,13 @@ fun TecladoDePalavras(
     podeSeguir: Boolean = digitado.isNotEmpty(), aoLimpar: (() -> Unit)? = null, aoSistema: (() -> Unit)? = null, aoSobre: (() -> Unit)? = null,
     demo: Boolean = false, apertada: Char? = null,
 ) {
+    // Com um servico de acessibilidade de fora ligado, as letras em posicao fixa entregariam a frase pela
+    // posicao dos toques: no lugar das teclas, o aviso (segunda passada da auditoria de 03/11/2026).
+    val deFora = app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo
+    if (!demo && deFora.isNotEmpty()) {
+        app.escalibur.wallet.ui.TecladoFechadoPelaAcessibilidade(deFora, modifier)
+        return
+    }
     val linhas = listOf("qwertyuiop", "asdfghjkl", "zxcvbnm")
     val haptico = LocalHapticFeedback.current
     BoxWithConstraints(
@@ -263,6 +270,13 @@ fun PalavraPeloCelular(
 ) {
     teclado.controle = LocalSoftwareKeyboardController.current
     teclado.vista = LocalView.current
+    // Com um servico de acessibilidade de fora ligado, o campo das palavras pelo celular nem aparece: no lugar,
+    // o aviso, como no Safe Keyboard (quarta passada da auditoria de 03/11/2026).
+    val deFora = app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo
+    if (deFora.isNotEmpty()) {
+        app.escalibur.wallet.ui.TecladoFechadoPelaAcessibilidade(deFora)
+        return
+    }
     var campo by remember { mutableStateOf(TextFieldValue(texto, TextRange(texto.length))) }
     LaunchedEffect(texto) { if (campo.text != texto) campo = TextFieldValue(texto, TextRange(texto.length)) }
     LaunchedEffect(todosOsIdiomas) { teclado.mostrar() }

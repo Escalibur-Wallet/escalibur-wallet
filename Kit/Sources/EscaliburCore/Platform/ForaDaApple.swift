@@ -2,17 +2,56 @@
 // BoringSSL (Sources/SwiftCrypto, travada em swift-crypto.lock). Nada disto compila no iOS
 // nem no macOS, onde o nucleo usa o Security, o os e o Darwin do sistema.
 #if !canImport(Darwin)
+#if canImport(Android)
+import Android
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import CCryptoBoringSSL
 import Foundation
 
-/// O gerador do sistema: `RAND_bytes` le o do kernel (`getrandom`). O mesmo contrato do
-/// `SecRandomCopyBytes`: zero quando encheu tudo.
+/// O gerador do sistema: o `RAND_bytes` da BoringSSL, misturado por XOR com o `getrandom(2)` do kernel, lido aqui direto.
+/// Basta um dos dois ser bom para o sorteio ser bom: um modo de build da BoringSSL que deixasse o `RAND_bytes`
+/// deterministico (o de fuzzing, por um ajuste do C que nenhuma conferencia viu) nao deixa a frase previsivel (decima
+/// terceira passada da auditoria de 03/11/2026). O mesmo contrato do `SecRandomCopyBytes`: zero quando encheu tudo, e
+/// nada sai quando uma das duas fontes falha.
 let kSecRandomDefault: Int? = nil
 let errSecSuccess: Int32 = 0
 
 func SecRandomCopyBytes(_ generator: Int?, _ count: Int, _ bytes: UnsafeMutableRawPointer) -> Int32 {
     guard count > 0 else { return errSecSuccess }
-    return CCryptoBoringSSL_RAND_bytes(bytes.assumingMemoryBound(to: UInt8.self), count) == 1 ? errSecSuccess : -1
+    let saida = bytes.assumingMemoryBound(to: UInt8.self)
+    guard CCryptoBoringSSL_RAND_bytes(saida, count) == 1 else {
+        CCryptoBoringSSL_OPENSSL_cleanse(bytes, count)
+        return -1
+    }
+    // A metade do kernel direto na regiao presa na RAM e fora do core dump: no caso que a mistura defende (o RAND_bytes
+    // deterministico), ela e o sorteio inteiro (revisao da decima terceira passada).
+    let kernel = SecureBytes(capacity: count)
+    defer { kernel.wipe() }
+    var lido = false
+    kernel.fill(count: count) { regiao in
+        let base = regiao.assumingMemoryBound(to: UInt8.self)
+        var feito = 0
+        while feito < count {
+            // Sem flag: espera o gerador do kernel estar pronto, e nunca devolve menos que o pedido sem dizer.
+            let n = getrandom(base + feito, count - feito, 0)
+            if n > 0 {
+                feito += n
+            } else if n < 0, errno == EINTR {
+                continue
+            } else {
+                return
+            }
+        }
+        lido = true
+    }
+    guard lido else {
+        CCryptoBoringSSL_OPENSSL_cleanse(bytes, count)
+        return -1
+    }
+    kernel.withUnsafeBytes { metade in for indice in 0..<count { saida[indice] ^= metade[indice] } }
+    return errSecSuccess
 }
 
 /// O HMAC e o PBKDF2 do CommonCrypto, com os mesmos nomes, constantes e retornos, sobre o

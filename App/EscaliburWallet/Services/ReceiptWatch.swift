@@ -28,7 +28,7 @@ struct ReceiptWatchFile: Codable, Equatable {
         /// A conta, sem endereco: um resumo da rede e do primeiro endereco dela. E a chave do
         /// saldo visto, que nao muda quando o endereco UTXO de recebimento anda.
         var owner: String? = nil
-        /// De uma carteira de so observar: so entra com `includeWatchOnly`.
+        /// De uma carteira de so observar, num arquivo de antes de 02/11/2026: nunca entra.
         var watchOnly: Bool? = nil
 
         var key: String { owner ?? addresses.first ?? "" }
@@ -54,13 +54,10 @@ struct ReceiptWatchFile: Codable, Equatable {
     /// Nas redes UTXO, o ultimo valor confirmado de cada endereco ("rede|endereco"): a conferencia
     /// e endereco por endereco (`BalanceService.receiptBalance`).
     var addressSeen: [String: UInt64]?
-    /// As carteiras de so observar tambem entram. Comeca desligado: em geral e a carteira fria,
-    /// e conferi-la junto com as outras liga as duas no provedor.
-    var includeWatchOnly: Bool?
-
-    /// As contas que entram, pela escolha de so observar.
+    /// As contas que entram. As de so observar ficam sempre de fora (pedido do dono, 02/11/2026):
+    /// em geral e a carteira fria, e conferi-la junto com as outras ligaria as duas no provedor.
     func admitted(_ all: [Account]) -> [Account] {
-        includeWatchOnly == true ? all : all.filter { $0.watchOnly != true }
+        all.filter { $0.watchOnly != true }
     }
 }
 
@@ -190,12 +187,6 @@ actor ReceiptWatchCenter {
         }
     }
 
-    /// Carteiras de so observar no aviso, ou fora dele.
-    func setIncludeWatchOnly(_ on: Bool, accounts all: [ReceiptWatchFile.Account]) {
-        update { $0.includeWatchOnly = on }
-        sync(accounts: all)
-    }
-
     func setShowDetails(_ on: Bool) {
         update { $0.showDetails = on }
     }
@@ -218,10 +209,12 @@ actor ReceiptWatchCenter {
         defer { checking = false }
 
         let salt = before.salt ?? 0
+        // O arquivo de antes de 02/11/2026 pode ter conta de so observar ate o app abrir: fica de fora.
+        let accounts = before.admitted(before.accounts)
         let balances = await withTaskGroup(of: (ReceiptWatchFile.Account, ChainBalance?).self) { group in
             // Em ordem sorteada e cada rede com um atraso proprio: as consultas de todas as
             // redes nao saem juntas, no mesmo segundo, a cada rodada.
-            for account in (try? SecureRandom.mixed(before.accounts)) ?? before.accounts {
+            for account in (try? SecureRandom.mixed(accounts)) ?? accounts {
                 guard let chain = Chain.all.first(where: { $0.id == account.chainID }), !account.addresses.isEmpty else { continue }
                 let (seen, seenAddresses) = Self.seen(for: account, in: before)
                 // So o que ja entrou num bloco, e toda mudanca conferida por outro dono: o aviso diz

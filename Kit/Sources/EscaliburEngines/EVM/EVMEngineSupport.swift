@@ -201,6 +201,17 @@ enum EVMEngineSupport {
     /// Transmite um por um, em ordem de nonce, e devolve os ids calculados aqui a partir
     /// dos bytes. Se um falhar depois de outro ter saido, o erro diz que o lote ficou
     /// pela metade: a tela manda conferir a Atividade em vez de repetir.
+    /// Os mesmos bytes ja entraram num bloco: o reenvio de uma transmissao incerta recebe "nonce baixo", e
+    /// o recibo deles em duas fontes prova que sairam (terceira passada da auditoria de 03/11/2026; antes a
+    /// tela dizia que outra transacao tinha entrado antes, e o cancelamento da edicao parava ali).
+    static func alreadyMined(_ error: Error, id: String, chain: Chain, reader: EVMReader) async -> Bool {
+        guard case ReaderError.broadcastRejected(.nonceTooLow, _) = error else { return false }
+        switch try? await reader.status(of: id, chain: chain) {
+        case .confirmed?, .failed?: return true
+        default: return false
+        }
+    }
+
     static func broadcast(
         _ ordered: [(EVMTransaction, SignedTransaction)], chain: Chain, route: EVMBroadcastRoute, reader: EVMReader
     ) async throws -> [String] {
@@ -211,6 +222,10 @@ enum EVMEngineSupport {
                 let receipt = try await reader.broadcast(signed, chain: chain, route: route)
                 guard receipt.id.lowercased() == local else { throw ReaderError.broadcastMismatch }
             } catch {
+                if await alreadyMined(error, id: local, chain: chain, reader: reader) {
+                    ids.append(local)
+                    continue
+                }
                 if ids.isEmpty { throw error }
                 throw EVMEngineFailure.partialBroadcast
             }

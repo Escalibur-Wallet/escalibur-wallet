@@ -259,7 +259,8 @@ struct ContractPanel: View {
             VStack(alignment: .leading, spacing: Space.xs) {
                 if case .issued(let code, _) = asset.kind {
                     Text("Código da moeda").typeStyle(.note).foregroundStyle(Palette.inkMuted)
-                    Text(verbatim: code).typeStyle(.monoSmall).foregroundStyle(Palette.ink).textSelection(.enabled)
+                    // Sem selecionar: o Copiar do sistema iria para o Mac, sem prazo (terceira passada de 03/11/2026).
+                    Text(verbatim: code).typeStyle(.monoSmall).foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(chain.id == "xrpl" ? "Emissor no \(chain.name)" : "Emissor na \(chain.name)").typeStyle(.note).foregroundStyle(Palette.inkMuted)
                         .padding(.top, Space.xxs)

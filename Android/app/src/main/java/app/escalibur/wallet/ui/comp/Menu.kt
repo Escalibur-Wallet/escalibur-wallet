@@ -77,6 +77,7 @@ fun MenuFlutuante(aberto: Boolean, opcoes: List<OpcaoDoMenu>, escolhida: String?
         onDismissRequest = aoFechar,
         properties = PopupProperties(focusable = true),
     ) {
+        ProtegerJanela()
         AnimatedVisibility(
             estado,
             enter = scaleIn(spring(dampingRatio = 0.82f, stiffness = 520f), initialScale = 0.6f, transformOrigin = TransformOrigin(1f, 0f)) + fadeIn(tween(120)),

@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import app.escalibur.wallet.nucleo.Cofre
 import app.escalibur.wallet.nucleo.Nucleo
 import app.escalibur.wallet.ui.Ciclo
+import app.escalibur.wallet.ui.t
 import app.escalibur.wallet.ui.Raiz
 import app.escalibur.wallet.ui.comp.TecladoSeguro
 import app.escalibur.wallet.ui.envelope.EnvelopeCompartilhado
@@ -57,7 +58,7 @@ class MainActivity : ComponentActivity() {
         Vigia.receber(this, intent)
         // So na primeira criacao: recriada (tema, idioma), a Activity recebe o mesmo pedido de novo.
         if (savedInstanceState == null) {
-            EnvelopeRecebido.receber(intent)
+            EnvelopeRecebido.receber(intent, origemDoIntent())
             // A copia do envelope lacrado que foi para a folha de compartilhar, se ficou de outra vez.
             EnvelopeCompartilhado.apagar(this)
         }
@@ -79,9 +80,31 @@ class MainActivity : ComponentActivity() {
     /** O toque numa notificacao, ou um envelope aberto em outro app, com o app ja aberto. */
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        // O `referrer` le o intent da Activity: o novo, e nao o da abertura.
+        setIntent(intent)
         if (BuildConfig.DEBUG) intent.getStringExtra("tela")?.let { Navegacao.telaDeDepuracao = it }
         Vigia.receber(this, intent)
-        EnvelopeRecebido.receber(intent)
+        EnvelopeRecebido.receber(intent, origemDoIntent())
+    }
+
+    /**
+     * O app que mandou o intent: a tela de senha do envelope diz de onde ele veio (auditoria Android de
+     * 31/10/2026, AA-10). O `referrer` le primeiro os extras EXTRA_REFERRER e EXTRA_REFERRER_NAME, que
+     * quem manda escreve como quiser ("Escalibur Suporte"): eles saem antes, e fica o que o sistema poe
+     * (segunda passada da auditoria de 03/11/2026). So um nome de pacote de verdade, que o PackageManager
+     * resolve, vira nome; e o pacote vai junto, porque o rotulo do app tambem e escolhido por quem o fez.
+     * Sem isso, "um app que nao se identificou".
+     */
+    private fun origemDoIntent(): String? {
+        intent?.removeExtra(android.content.Intent.EXTRA_REFERRER)
+        intent?.removeExtra(android.content.Intent.EXTRA_REFERRER_NAME)
+        val pacote = referrer?.takeIf { it.scheme == "android-app" }?.host ?: callingPackage
+        if (pacote == packageName) return null
+        val nomeDePacote = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
+        if (pacote == null || !nomeDePacote.matches(pacote)) return t("um app que não se identificou")
+        val rotulo = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pacote, 0)).toString() }.getOrNull()
+            ?: return t("um app que não se identificou")
+        return if (rotulo.isBlank() || rotulo == pacote) pacote else "$rotulo ($pacote)"
     }
 
     override fun onStart() {

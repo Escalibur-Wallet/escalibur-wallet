@@ -85,5 +85,11 @@ struct BIP39BytesTests {
         let nfc = try BIP39.seed(phrase: phrase, passphrase: secure("canção"))
         let nfkd = try BIP39.seed(phrase: phrase, passphrase: secure("canção".decomposedStringWithCompatibilityMapping))
         #expect(Hash.constantTimeEqual(nfc, nfkd))
+        // E contra um valor publicado, e nao so contra a propria Foundation: o vetor 0 do bip32JP (test_JP_BIP39.json), em
+        // que o espaco ideografico, o ㍍ e as kana com dakuten so dao esta seed com o NFKD (revisao da decima terceira passada).
+        let japanese = BIP39.canonical(Array(repeating: "\u{3042}\u{3044}\u{3053}\u{304F}\u{3057}\u{3093}", count: 11).joined(separator: "\u{3000}")
+            + "\u{3000}\u{3042}\u{304A}\u{305E}\u{3089}")
+        let jp = try BIP39.seed(phrase: japanese, passphrase: secure("\u{334D}\u{30AC}\u{30D0}\u{30F4}\u{30A1}\u{3071}\u{3070}\u{3050}\u{309E}\u{3061}\u{3062}\u{5341}\u{4EBA}\u{5341}\u{8272}"))
+        #expect(jp.withUnsafeBytes { Array($0) }.hex == "a262d6fb6122ecf45be09c50492b31f92e9beb7d9a845987a02cefda57a15f9c467a17872029a9e92299b5cbdf306e3a0ee620245cbd508959b6cb7ca637bd55")
     }
 }

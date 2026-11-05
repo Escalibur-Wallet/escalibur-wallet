@@ -26,6 +26,9 @@ final class Ordens: @unchecked Sendable {
     private var terminadas: [(ordem: OpenOrder, andamento: OrderProgress)] = []
     /// Redes que nao responderam na ultima leitura (as outras continuam na lista).
     private var semResposta: [Chain] = []
+    /// As ordens assinadas que a CoW disse ter recusado: a lista dela nao as mostra, e o cancelamento
+    /// na cadeia precisa delas (auditoria de 03/11/2026).
+    private var assinadas: [String: OpenOrder] = [:]
 
     private init() {}
 
@@ -42,7 +45,41 @@ final class Ordens: @unchecked Sendable {
         }
     }
 
-    func marcarCancelando(_ id: String) { trava.withLock { cancelando[id] = Date() } }
+    /// A transacao do cancelamento na cadeia de cada ordem marcada, e a rede dela (o `cancelTransactions`
+    /// do iOS, terceira passada da auditoria de 03/11/2026).
+    private var transacoesDeCancelamento: [String: (transacao: String, rede: Chain)] = [:]
+
+    func marcarCancelando(_ id: String, transacao: String? = nil, rede: Chain? = nil) {
+        trava.withLock {
+            cancelando[id] = Date()
+            if let transacao, let rede { transacoesDeCancelamento[id] = (transacao, rede) }
+        }
+    }
+
+    /// O cancelamento falhou na rede: a ordem continua viva e volta a aparecer.
+    func desmarcarCancelando(_ id: String) {
+        trava.withLock {
+            cancelando[id] = nil
+            transacoesDeCancelamento[id] = nil
+        }
+    }
+
+    /// O resultado dos cancelamentos na cadeia ainda marcados: o que falhou desmarca (a ordem volta, com os
+    /// avisos, que so saem com o cancelamento confirmado); o confirmado tira os avisos.
+    private func conferirCancelamentos() async {
+        for (id, enviado) in trava.withLock({ transacoesDeCancelamento }) {
+            guard let motor = SendEngines.engine(for: enviado.rede) else { continue }
+            switch await motor.status(enviado.transacao, chain: enviado.rede) {
+            case .confirmed:
+                trava.withLock { transacoesDeCancelamento[id] = nil }
+                VigiaDeOrdens.esquecer(id)
+            case .failed:
+                desmarcarCancelando(id)
+            case .pending:
+                continue
+            }
+        }
+    }
 
     /// Cancelamento enviado ha menos de 10 minutos. Se a transacao falhar na rede, a ordem volta a
     /// aparecer depois disso: uma ordem viva nunca fica escondida de vez. Chamar com a trava.
@@ -51,9 +88,64 @@ final class Ordens: @unchecked Sendable {
         return Date().timeIntervalSince(enviado) < 600
     }
 
+    /// A ordem da lista lida para uma carteira, com a carteira: a edicao fica com ela, e so pela carteira dela cancela e
+    /// cria a nova (revisao da decima terceira passada).
+    func daLista(_ id: String) -> (ordem: OpenOrder, carteira: UUID)? {
+        trava.withLock {
+            guard let carteiraID, let ordem = ordens?.first(where: { $0.id == id }) else { return nil }
+            return (ordem, carteiraID)
+        }
+    }
+
     /// Tambem a do Enviar, lida so na rede dele: o cancelar de la passa pela mesma revisao.
     func ordem(_ id: String) -> OpenOrder? {
-        trava.withLock { ordens?.first { $0.id == id } ?? doEnvio?.ordens.first { $0.id == id } }
+        trava.withLock { ordens?.first { $0.id == id } ?? doEnvio?.ordens.first { $0.id == id } ?? assinadas[id] }
+    }
+
+    /// A ordem assinada que a CoW disse ter recusado, ou sem resposta certa: para o cancelamento na
+    /// cadeia agora, e guardada nos metadados ate vencer ou a cadeia dizer que terminou, como no iOS
+    /// (segunda passada da auditoria de 03/11/2026).
+    func lembrarAssinada(_ ordem: OpenOrder, carteira: UUID) {
+        trava.withLock { assinadas[ordem.id] = ordem }
+        guard let guardada = SignedOrderRecord(ordem, walletID: carteira) else { return }
+        Sessao.shared.alterarOuDepois { metadata in
+            // A carteira removida enquanto travado nao ganha a ordem de volta (sexta passada, como no iOS).
+            guard metadata.wallets.contains(where: { $0.id == carteira }) else { return }
+            metadata.signedOrders = SignedOrders.adding(guardada, to: metadata.signedOrders)
+        }
+    }
+
+    /// A ultima leitura na cadeia das ordens assinadas guardadas: no maximo a cada 30 s, e nao a cada 6 da lista.
+    private var assinadasConferidasEm: Date?
+
+    /// Le na cadeia o que as ordens assinadas guardadas ja liquidaram, e tira a vencida e a terminada.
+    /// So o que foi conferido aqui muda: uma ordem guardada durante a leitura fica.
+    private func conferirAssinadas(_ carteira: UUID, desligadas: Set<String>) async {
+        // As de carteira que ja nao existe saem antes de qualquer leitura (inclusive as de antes desta regra).
+        if Sessao.shared.metadata.signedOrders?.contains(where: { ordem in !Sessao.shared.metadata.wallets.contains { $0.id == ordem.walletID } }) == true {
+            Sessao.shared.alterarOuDepois { metadata in
+                let vivas = Set(metadata.wallets.map(\.id))
+                metadata.signedOrders?.removeAll { !vivas.contains($0.walletID) }
+                if metadata.signedOrders?.isEmpty == true { metadata.signedOrders = nil }
+            }
+        }
+        guard let guardadas = Sessao.shared.metadata.signedOrders, guardadas.contains(where: { $0.walletID == carteira }) else { return }
+        let devida = trava.withLock { () -> Bool in
+            guard assinadasConferidasEm.map({ Date().timeIntervalSince($0) >= 30 }) ?? true else { return false }
+            assinadasConferidasEm = Date()
+            return true
+        }
+        guard devida else { return }
+        let ficam = await SignedOrders.refreshed(guardadas, wallet: carteira, existingWallets: Set(Sessao.shared.metadata.wallets.map(\.id)),
+                                                 skippingChains: desligadas, state: SignedOrders.onChainState)
+        guard ficam != guardadas else { return }
+        let conferidas = Set(guardadas.map(\.id))
+        Sessao.shared.alterarOuDepois { metadata in
+            // As carteiras de agora, e nao as de antes da leitura: uma removida no meio nao volta, como no iOS.
+            let vivas = Set(metadata.wallets.map(\.id))
+            let todas = ((metadata.signedOrders ?? []).filter { !conferidas.contains($0.id) } + ficam).filter { vivas.contains($0.walletID) }
+            metadata.signedOrders = todas.isEmpty ? nil : todas
+        }
     }
 
     // MARK: O que o envio consulta
@@ -120,6 +212,8 @@ final class Ordens: @unchecked Sendable {
     /// `inicial`: a primeira leitura da visita limpa as terminadas e mostra o erro. As seguintes so
     /// trocam a lista quando a leitura volta; falha no meio mantem a lista que havia.
     func ler(inicial: Bool) async {
+        // A epoca dos avisos antes de qualquer leitura, como no iOS (decima primeira passada).
+        let epocaDosAvisos = Vigias.epocaAgora
         let metadata = Sessao.shared.metadata
         guard let carteira = metadata.selectedWallet else { return }
         let desligadas = metadata.settings.disabledChainIDs
@@ -141,6 +235,7 @@ final class Ordens: @unchecked Sendable {
             }
             return ordens ?? []
         }
+        await conferirCancelamentos()
         // Todas as redes ao mesmo tempo; a que nao responde nao segura as outras.
         let resultados = await withTaskGroup(of: (Chain, [OpenOrder]?).self) { grupo in
             for (rede, motor, conta) in alvos {
@@ -163,6 +258,10 @@ final class Ordens: @unchecked Sendable {
         // Uma rede que nao respondeu agora fica com o que mostrava.
         let idsQueFalharam = Set(falharam.map(\.id))
         lidas += antes.filter { idsQueFalharam.contains($0.chain.id) }
+        // As ordens assinadas que a CoW disse ter recusado, ou sem resposta certa: ate vencer ou a cadeia
+        // dizer que terminaram, entram como abertas e contam no que esta preso, como no iOS.
+        await conferirAssinadas(carteira.id, desligadas: desligadas)
+        lidas = SignedOrders.merged(lidas, records: Sessao.shared.metadata.signedOrders, wallet: carteira.id)
         lidas = OpenOrder.newestFirst(lidas)
         // A que saiu da lista (numa rede que respondeu) terminou: le o andamento final. Executada
         // ou vencida fica na lista com o resultado; cancelada sai de vez.
@@ -174,7 +273,7 @@ final class Ordens: @unchecked Sendable {
             guard let motor = TradeEngines.engine(for: saiu.chain), let conta = carteira.account(saiu.chain) else { continue }
             if let andamento = try? await motor.orderProgress(id: saiu.id, account: conta), andamento.isFinal {
                 if andamento.state != .cancelled { novasTerminadas.append((saiu, andamento)) }
-                VigiaDeOrdens.assentar(saiu.id, executada: andamento.state == .filled)
+                VigiaDeOrdens.assentar(saiu.id, executada: andamento.state == .filled, epoca: epocaDosAvisos)
             }
         }
         // Ordem da CoW aberta (criada antes destes avisos, ou em outro aparelho): passa a ser
@@ -183,7 +282,7 @@ final class Ordens: @unchecked Sendable {
         if !carteira.hasPassphrase {
             for aberta in lidas where !trava.withLock({ cancelandoAgora(aberta.id) }) {
                 guard let vence = aberta.expiresAt else { continue }
-                VigiaDeOrdens.acompanhar(id: aberta.id, rede: aberta.chain, venceEm: vence)
+                VigiaDeOrdens.acompanhar(id: aberta.id, rede: aberta.chain, venceEm: vence, epoca: epocaDosAvisos)
             }
         }
         trava.withLock {
@@ -193,6 +292,7 @@ final class Ordens: @unchecked Sendable {
             terminadas += novasTerminadas
             semResposta = falharam.sorted { (posicao[$0.id] ?? .max) < (posicao[$1.id] ?? .max) }
             cancelando = cancelando.filter { atuais.contains($0.key) }
+            transacoesDeCancelamento = transacoesDeCancelamento.filter { atuais.contains($0.key) }
         }
     }
 
@@ -217,9 +317,13 @@ final class Ordens: @unchecked Sendable {
         let criada: Double?
         let onde: String
         let podeCancelar: Bool
+        let podeEditar: Bool
         let explicacao: String
         /// "Refazer quando vencer" ligado nesta ordem; nil sem prazo ou na rede sem refazer.
         let refazer: Bool?
+        /// A ordem assinada que so este aparelho conhece (a CoW disse que recusou, ou nao respondeu):
+        /// a tela avisa e so oferece o cancelamento na cadeia.
+        let semConfirmacao: Bool
     }
 
     struct Terminada: Encodable {
@@ -314,9 +418,13 @@ final class Ordens: @unchecked Sendable {
             porNoMinimo: porNoMinimo, preco: precos?.linha, precoCurto: precos?.curto,
             vence: ordem.expiresAt.map { $0.timeIntervalSince1970 * 1000 }, fracao: ordem.filledFraction,
             recebido: recebido, falta: recebido == nil ? nil : falta, criada: ordem.createdAt.map { $0.timeIntervalSince1970 * 1000 },
-            onde: Self.onde(ordem.chain), podeCancelar: podeAssinar && via != nil && vende != nil && compra != nil,
+            // Cancelar nao depende de saber o nome dos ativos, como no iOS: a ordem guardada de um token fora
+            // da lista nunca fica sem o unico cancelamento garantido (terceira passada de 03/11/2026). Editar sim.
+            onde: Self.onde(ordem.chain), podeCancelar: podeAssinar && via != nil,
+            podeEditar: podeAssinar && via != nil && vende != nil && compra != nil && ordem.sources > 0,
             explicacao: Self.explicacao(via),
-            refazer: ordem.expiresAt != nil && Renovacoes.suporta(ordem.chain) ? Renovacoes.renova(ordem.id) : nil
+            refazer: ordem.expiresAt != nil && Renovacoes.suporta(ordem.chain) ? Renovacoes.renova(ordem.id) : nil,
+            semConfirmacao: ordem.sources == 0
         )
     }
 

@@ -76,6 +76,25 @@ final class ActivityFeed {
         }
     }
 
+    /// Ao travar, ao apagar tudo e ao remover a carteira da tela: a leitura em curso para, e nada dela fica na tela nem
+    /// volta ao disco (o `esquecer` do Android; revisao da decima terceira passada). `wallet` nil esquece qualquer uma.
+    func forget(_ wallet: UUID? = nil) {
+        if let wallet, wallet != shownWalletID, wallet != currentWalletID { return }
+        current?.cancel()
+        current = nil
+        currentWalletID = nil
+        generation += 1
+        shownWalletID = nil
+        byChain = [:]
+        entries = []
+        failed = []
+        unavailable = []
+        loading = false
+        loadedOnce = false
+        suspiciousCount = 0
+        remaining = 0
+    }
+
     private var current: Task<Void, Never>?
     private var currentWalletID: UUID?
     /// A leitura valida: uma de carteira trocada no meio termina sem mexer na tela.
@@ -157,6 +176,9 @@ final class ActivityFeed {
         publish(failures: failures, missing: missing)
         loadedOnce = true
         guard !toRead.isEmpty else { return }
+        // So a carteira que ainda existe, com o app destravado: a removida no meio da leitura, ou a de antes de apagar
+        // tudo, nao volta a ter historico gravado (revisao da decima terceira passada).
+        guard session.phase == .unlocked, session.metadata.wallets.contains(where: { $0.id == wallet.id }) else { return }
         let all = byChain.values.flatMap { $0 }.sorted { $0.date > $1.date }.prefix(CachedActivity.limit)
         var cache = session.metadata.activityCache ?? [:]
         cache[wallet.id] = all.map(CachedActivity.init)

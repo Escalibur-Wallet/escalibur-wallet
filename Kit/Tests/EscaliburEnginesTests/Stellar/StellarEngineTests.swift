@@ -413,7 +413,7 @@ struct StellarTradeTests {
         }
         let expired = TradeQuote(
             sell: quote.sell, buy: quote.buy, amountIn: quote.amountIn, expectedOut: quote.expectedOut, minimumOut: quote.minimumOut,
-            priceImpactPercent: nil, networkFeeFiat: nil, providerFeeNote: nil, legs: [], alternatives: [], providersCompared: 1,
+            priceImpactPercent: nil, networkFees: [], providerFeeNote: nil, legs: [], alternatives: [], providersCompared: 1,
             needsApproval: false, expiresAt: Date().addingTimeInterval(-1)
         )
         await #expect(throws: SendEngineError.self) {

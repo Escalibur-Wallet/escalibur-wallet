@@ -713,6 +713,7 @@ final class Envio: @unchecked Sendable {
         }
         guard let (motor, chain, conta, _) = preparo else { return }
         await FilaDeNonces.podar(carteira: wallet.id, rede: chain, endereco: conta.address)
+        guard !emTransito(rede: chain, endereco: conta.address) else { return }
         guard let pedido = trava.withLock({ quantidade.flatMap { pedido(quantidade: $0, tudo: tudo) } }) else { return }
         do {
             let novo = try await motor.plan(pedido)
@@ -732,6 +733,16 @@ final class Envio: @unchecked Sendable {
             }
             trava.withLock { erro = (error as? LocalizedError)?.errorDescription ?? Textos.t("Não foi possível preparar o envio.") }
         }
+    }
+
+    /// Uma transacao anterior desta conta com o mesmo ativo (troca, envio, ponte) ainda nao confirmou:
+    /// o plano leria o saldo de antes dela, e o segundo envio reverteria cobrando a taxa (auditoria de
+    /// 03/11/2026, o `sellsInFlight` do iOS). Ler depois de `podar`. Mostra o motivo e devolve true.
+    private func emTransito(rede: Chain, endereco: String) -> Bool {
+        let ativo = trava.withLock { holding.asset }
+        guard let motivo = FilaDeNonces.motivoDoBloqueio(carteira: wallet.id, rede: rede, endereco: endereco, ativo: ativo) else { return false }
+        trava.withLock { erro = motivo }
+        return true
     }
 
     /// O plano confere com o que o dono digitou: mesma carteira, mesma rede, mesmo destino e mesma
@@ -901,11 +912,19 @@ final class Envio: @unchecked Sendable {
             }
             plano = novo
         }
+        // Ate a assinatura: uma troca ou outro envio deste ativo pode ter saido depois da revisao.
+        if let endereco = trava.withLock({ conta?.address }), emTransito(rede: chain, endereco: endereco) {
+            credencial.zerar()
+            return
+        }
         let carteira = Sessao.shared.metadata.wallets.first { $0.id == plano.walletID }
         if PortaDaPassphrase.precisa(carteira), passphrase == nil {
             credencial.zerar()
             throw Nucleo.Falha(erro: "envio.pedePassphrase")
         }
+        // O autoteste da assinatura antes da porta da passphrase e da RK: com um defeito do aparelho, nada conta nem abre
+        // (o Signer confere de novo antes de abrir o cofre; revisao da decima terceira passada).
+        guard SigningSelfTest.passed(for: plano) else { credencial.zerar(); throw SigningSelfTest.Failure() }
         let conferir = PortaDaPassphrase.pede(carteira) ? passphrase : nil
         if conferir != nil {
             do { try PortaDaPassphrase.comecar(plano.walletID) } catch { credencial.zerar(); throw error }
@@ -938,7 +957,8 @@ final class Envio: @unchecked Sendable {
     /// acompanha o id que ja se conhece e so oferece transmitir de novo os mesmos bytes.
     private func transmitir(_ assinado: [SignedTransaction], plano: SigningPlan, motor: any SendEngine, chain: Chain) async {
         if let endereco = conta?.address {
-            FilaDeNonces.anotar(carteira: wallet.id, rede: chain, endereco: endereco, plano: plano, assinado: assinado)
+            FilaDeNonces.anotar(carteira: wallet.id, rede: chain, endereco: endereco, plano: plano, assinado: assinado,
+                                 vende: trava.withLock { holding.asset.id })
         }
         let usoAtual = Sessao.shared.metadata.wallets.first { $0.id == wallet.id }?.utxoUsage[chain.id]
         if let uso = motor.usage(after: plano, current: usoAtual) {
@@ -1146,12 +1166,27 @@ struct PendingEVMTransaction: Codable, Equatable {
     let nonce: UInt64
     let hash: String
     let sentAt: Date
+    /// O ativo que esta transacao tira da conta (o id do `Asset`), na troca, no envio e na ponte: a
+    /// proxima transacao do mesmo ativo espera ela confirmar, como no iOS (auditoria de 03/11/2026). nil nas antigas.
+    var sells: String? = nil
+    /// Saiu pela rota privada (protecao de MEV na Ethereum): os provedores so a veem num bloco, e a poda
+    /// espera mais antes de dar por perdida (terceira passada de 03/11/2026). nil nas antigas e na publica.
+    var privateRoute: Bool? = nil
+    /// A rede conhecia a transacao na ultima poda. nil ou false: ainda nao vista, e a conta nao monta outra
+    /// por cima, como no iOS (quarta passada da auditoria de 03/11/2026).
+    var seen: Bool? = nil
+    /// Dois operadores ja a viram numa poda, e isso nao volta atras: a que ja foi vista so sai por um bloco, por
+    /// dois sem ela depois de perguntar a todos ou depois de 3 horas (sexta passada da auditoria de 03/11/2026).
+    var everSeen: Bool? = nil
+    /// A ultima poda em que uma de baixo vista a segurou (`NonceQueuePruning.Result.held`, decima passada).
+    var heldAt: Date? = nil
+    /// A primeira poda em que, segurada antes, deixou de estar (`NonceQueuePruning.Result.released`): o prazo recomeca
+    /// dali, e nao da ultima vez em que foi segurada (decima primeira passada).
+    var releasedAt: Date? = nil
 }
 
 /// A fila local de nonces EVM, por carteira, rede e conta (o `NonceQueue` do iOS).
 enum FilaDeNonces {
-    static let velhaDepois: TimeInterval = 30 * 60
-
     static func chave(carteira: UUID, rede: Chain, endereco: String) -> String {
         "\(carteira.uuidString)|\(rede.id)|\(endereco.lowercased())"
     }
@@ -1162,19 +1197,27 @@ enum FilaDeNonces {
         return PendingNonceQueue.trailingRun(entradas.map { ($0.nonce, $0.hash) })
     }
 
-    static func anotar(carteira: UUID, rede: Chain, endereco: String, plano: SigningPlan, assinado: [SignedTransaction]) {
+    static func anotar(carteira: UUID, rede: Chain, endereco: String, plano: SigningPlan, assinado: [SignedTransaction], vende: String? = nil,
+                       privada: Bool = false) {
         guard rede.family == .evm, plano.transactions.count == assinado.count else { return }
         let agora = Date()
         let novas = zip(plano.transactions, assinado).compactMap { transacao, assinatura -> PendingEVMTransaction? in
             guard let evm = transacao as? EVMTransaction else { return nil }
-            return PendingEVMTransaction(nonce: evm.nonce, hash: assinatura.id, sentAt: agora)
+            return PendingEVMTransaction(nonce: evm.nonce, hash: assinatura.id, sentAt: agora, sells: vende, privateRoute: privada ? true : nil)
         }
         guard !novas.isEmpty else { return }
         let chave = chave(carteira: carteira, rede: rede, endereco: endereco)
         Sessao.shared.alterarOuDepois { metadata in
             var todas = metadata.pendingEVM ?? [:]
-            let mantidas = (todas[chave] ?? []).filter { velha in !novas.contains { $0.nonce == velha.nonce } }
-            todas[chave] = mantidas + novas
+            let velhas = todas[chave] ?? []
+            // "Enviar de novo" dos mesmos bytes: a que a rede ja viu continua vista, como no iOS (setima passada).
+            let herdadas = novas.map { nova -> PendingEVMTransaction in
+                var nova = nova
+                if velhas.contains(where: { $0.hash == nova.hash && ($0.everSeen == true || $0.seen == true) }) { nova.everSeen = true }
+                return nova
+            }
+            let mantidas = velhas.filter { velha in !herdadas.contains { $0.nonce == velha.nonce } }
+            todas[chave] = mantidas + herdadas
             metadata.pendingEVM = todas
         }
     }
@@ -1183,25 +1226,73 @@ enum FilaDeNonces {
         let chave = chave(carteira: carteira, rede: rede, endereco: endereco)
         guard rede.family == .evm, let entradas = Sessao.shared.metadata.pendingEVM?[chave], !entradas.isEmpty,
               let motor = SendEngines.engine(for: rede) else { return }
-        var saem = Set<String>()
-        for entrada in entradas {
-            if Date().timeIntervalSince(entrada.sentAt) > velhaDepois { saem.insert(entrada.hash); continue }
-            if case .pending = await motor.status(entrada.hash, chain: rede) { continue }
-            saem.insert(entrada.hash)
-        }
-        // So sai o que foi conferido aqui: um envio anotado durante as leituras fica. Antes a fila
-        // inteira era trocada pela lista de antes das leituras, e a anotacao nova sumia. Travado,
-        // nada e gravado; a proxima poda refaz (caca de bugs de 25/10/2026).
-        guard !saem.isEmpty else { return }
+        // A mesma regra do iOS (`NonceQueuePruning`): sai a confirmada ou falha, a que a rede nao conhece depois
+        // do prazo de propagacao, com tudo acima, e fica marcada a que a rede ja viu (terceira e quarta passadas
+        // de 03/11/2026).
+        let resultado = await NonceQueuePruning.pruned(
+            entradas.map {
+                NonceQueuePruning.Entry(nonce: $0.nonce, hash: $0.hash, sentAt: $0.sentAt, privateRoute: $0.privateRoute == true,
+                                        wasSeen: $0.everSeen == true || $0.seen == true, heldAt: $0.heldAt, releasedAt: $0.releasedAt)
+            },
+            settled: { entrada in
+                if case .pending = await motor.status(entrada.hash, chain: rede) { return false }
+                return true
+            },
+            known: { await motor.sighting($0.hash, chain: rede, from: endereco, nonce: $0.nonce) })
+        // So muda o que foi conferido aqui, pelo hash e pela hora do envio: um envio anotado durante as leituras
+        // fica, e um "Enviar de novo" dos mesmos bytes tambem. Travado, nada e gravado; a proxima poda refaz
+        // (caca de bugs de 25/10/2026).
+        let conferidas = Set(entradas.map { "\($0.hash)|\($0.sentAt.timeIntervalSince1970)" })
+        let agoraDaPoda = Date()
         try? Sessao.shared.alterar { metadata in
             guard var atuais = metadata.pendingEVM?[chave] else { return }
-            atuais.removeAll { saem.contains($0.hash) }
+            atuais.removeAll { resultado.gone.contains($0.hash) && conferidas.contains("\($0.hash)|\($0.sentAt.timeIntervalSince1970)") }
+            for indice in atuais.indices where conferidas.contains("\(atuais[indice].hash)|\(atuais[indice].sentAt.timeIntervalSince1970)") {
+                // A vista de antes desta versao (so `seen`) tambem fica marcada, antes de `seen` mudar (setima passada).
+                let vista = resultado.seen.contains(atuais[indice].hash)
+                if vista || atuais[indice].seen == true { atuais[indice].everSeen = true }
+                atuais[indice].seen = vista
+                if resultado.held.contains(atuais[indice].hash) {
+                    atuais[indice].heldAt = agoraDaPoda
+                    atuais[indice].releasedAt = nil
+                }
+                if resultado.released.contains(atuais[indice].hash) { atuais[indice].releasedAt = agoraDaPoda }
+            }
             metadata.pendingEVM?[chave] = atuais.isEmpty ? nil : atuais
         }
     }
 
+    /// Uma transacao deste aparelho nesta conta que a rede ainda nao viu (ler depois de `podar`): a proxima
+    /// nao monta, de nenhum ativo, em vez de pular o nonce dela ou reusar o de uma transacao viva (o `unseen`
+    /// do iOS, quarta passada da auditoria de 03/11/2026).
+    static func naoVista(carteira: UUID, rede: Chain, endereco: String) -> Bool {
+        guard rede.family == .evm else { return false }
+        return Sessao.shared.metadata.pendingEVM?[chave(carteira: carteira, rede: rede, endereco: endereco)]?.contains { $0.seen != true } == true
+    }
+
+    /// O motivo para a tela quando a conta nao pode montar outra transacao agora, ou nil (o `blockedReason` do iOS).
+    /// `usaNonce`: o plano tem transacao na cadeia; o que so assina nao espera a transacao nao vista (como no iOS).
+    static func motivoDoBloqueio(carteira: UUID, rede: Chain, endereco: String, ativo: Asset?, usaNonce: Bool = true) -> String? {
+        if usaNonce, naoVista(carteira: carteira, rede: rede, endereco: endereco) {
+            return Textos.t("Uma transação anterior desta conta ainda não apareceu na rede, e a próxima não pode passar na frente dela. Tente de novo quando ela aparecer ou confirmar. Se ela tiver sido descartada, o app libera em até 30 minutos, ou em até 3 horas se a rede já tinha visto a transação. Se uma transação anterior a ela seguir esperando na rede, só libera quando essa confirmar.")
+        }
+        if let ativo, vendeEmTransito(carteira: carteira, rede: rede, endereco: endereco, ativo: ativo.id) {
+            return preencher(Textos.t("Uma transação anterior com %@ ainda não confirmou na rede. Tente de novo quando ela confirmar. Se ela tiver sido descartada, o app libera em até 30 minutos, ou em até 3 horas se a rede já tinha visto a transação. Se ela seguir esperando na rede, só libera quando ela confirmar."), ativo.symbol)
+        }
+        return nil
+    }
+
     static func esquecer(carteira: UUID, rede: Chain, endereco: String) {
         try? Sessao.shared.alterar { $0.pendingEVM?[chave(carteira: carteira, rede: rede, endereco: endereco)] = nil }
+    }
+
+    /// Uma transacao deste aparelho que tira `ativo` desta conta ainda nao confirmou (ler depois de
+    /// `podar`): a nova do mesmo ativo reverteria na rede, cobrando a taxa (o `sellsInFlight` do iOS). Na
+    /// moeda da rede, qualquer uma conta: toda transacao paga o gas nela (terceira passada de 03/11/2026).
+    static func vendeEmTransito(carteira: UUID, rede: Chain, endereco: String, ativo: String) -> Bool {
+        guard rede.family == .evm, let entradas = Sessao.shared.metadata.pendingEVM?[chave(carteira: carteira, rede: rede, endereco: endereco)]
+        else { return false }
+        return ativo == Asset.native(rede).id ? !entradas.isEmpty : entradas.contains { $0.sells == ativo }
     }
 }
 

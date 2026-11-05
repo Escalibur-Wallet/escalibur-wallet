@@ -27,7 +27,7 @@ public enum AutoSlippage {
     /// Moedas de liquidez profunda em qualquer rede: as nativas e as embrulhadas delas,
     /// e as maiores por volume.
     static let majors: Set<String> = [
-        "ethereum", "weth", "bitcoin", "wrapped-bitcoin", "coinbase-wrapped-btc", "binance-bitcoin", "binancecoin",
+        "ethereum", "weth", "bitcoin", "wrapped-bitcoin", "coinbase-wrapped-btc", "binance-bitcoin", "binancecoin", "wbnb", "wmatic", "wrapped-avax",
         "solana", "wrapped-solana", "avalanche-2", "polygon-ecosystem-token", "tron", "the-open-network", "ripple",
         "stellar", "sui", "aptos", "near", "cardano", "polkadot", "chainlink", "wrapped-steth", "wrapped-eeth", "okb",
         "sonic-3", "celo", "arbitrum", "optimism", "uniswap",

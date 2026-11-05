@@ -22,15 +22,32 @@ enum QRCode {
     }
 }
 
-/// Area de transferencia: com validade, e local (nao sincroniza com outros aparelhos), menos o
-/// endereco. O endereco vale 2 minutos e vai tambem para o Mac pela area de transferencia da Apple
-/// (pedido do dono, 01/11/2026: ele e publico). A frase so passa por aqui depois da tela de aviso
-/// (`CopyPhraseSheet`, pedido do dono de 15/10/2026), vale 1 minuto e nunca sai do iPhone.
+/// Area de transferencia: com validade, e local (nao sincroniza com outros aparelhos). O endereco vale
+/// 2 minutos; so o de receber de uma carteira sem passphrase, fora do Super Security, vai tambem para
+/// o Mac pela area de transferencia da Apple (pedido do dono, 01/11/2026: ele e publico). O da carteira
+/// com passphrase ligaria as duas carteiras no Mac de quem examina, e contatos, hashes e contratos
+/// contam o que o dono faz (auditoria de 03/11/2026). A frase so passa por aqui depois da tela de
+/// aviso (`CopyPhraseSheet`, pedido do dono de 15/10/2026), vale 1 minuto e nunca sai do iPhone.
 enum Pasteboard {
+    /// Qualquer endereco, contrato ou hash: so no iPhone.
     static func copyAddress(_ address: String) {
+        UIPasteboard.general.setItems([[UTType.utf8PlainText.identifier: address]], options: [
+            .localOnly: true, .expirationDate: Date().addingTimeInterval(120),
+        ])
+    }
+
+    /// O endereco de receber de uma carteira: vai tambem para o Mac so sem passphrase e fora do Super
+    /// Security (`macAllowed`). E a unica copia sem o `localOnly` (o `verificar.sh` confere).
+    @MainActor static func copyReceiveAddress(_ address: String, hasPassphrase: Bool?, session: AppSession) {
+        guard macAllowed(session, hasPassphrase: hasPassphrase) else { return copyAddress(address) }
         UIPasteboard.general.setItems([[UTType.utf8PlainText.identifier: address]], options: [
             .expirationDate: Date().addingTimeInterval(120),
         ])
+    }
+
+    /// O endereco de receber desta carteira pode ir para o Mac: sem passphrase e fora do Super Security.
+    @MainActor static func macAllowed(_ session: AppSession, hasPassphrase: Bool?) -> Bool {
+        hasPassphrase == false && !session.hardenedModeOn
     }
 
     /// O chamado de suporte, para mandar pelo e-mail que a pessoa usa quando nenhum app de
@@ -716,15 +733,20 @@ struct ReceiveSheet: View {
                 }
 
                 CopyButton {
-                    Pasteboard.copyAddress(address)
+                    Pasteboard.copyReceiveAddress(address, hasPassphrase: session.selectedWallet?.hasPassphrase, session: session)
                     toasts.show(String(localized: "Endereço copiado. Depois de colar, confira o endereço inteiro, inclusive o meio."))
                 }
                 .padding(.top, Space.lg)
-                ShareLink(item: address) {
-                    Text("Compartilhar").typeStyle(.action).frame(maxWidth: .infinity).frame(height: Height.secondary)
+                // O Compartilhar do sistema tem o Copiar, sem prazo e sem o localOnly: some quando o
+                // endereco nao pode ir para o Mac (carteira com passphrase, Super Security), como a copia
+                // (segunda passada da auditoria de 03/11/2026).
+                if Pasteboard.macAllowed(session, hasPassphrase: session.selectedWallet?.hasPassphrase) {
+                    ShareLink(item: address) {
+                        Text("Compartilhar").typeStyle(.action).frame(maxWidth: .infinity).frame(height: Height.secondary)
+                    }
+                    .buttonStyle(SecondaryStyle())
+                    .padding(.top, Space.sm)
                 }
-                .buttonStyle(SecondaryStyle())
-                .padding(.top, Space.sm)
                 if let coin = moreNetworks { moreNetworksLink(coin).padding(.top, Space.sm) }
             }
             .padding(.horizontal, Space.gutter)

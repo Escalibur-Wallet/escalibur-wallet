@@ -196,6 +196,9 @@ public enum TradeRefusal: Error, Equatable, Sendable {
     // Simulacao (docs/seguranca.md 4.9)
     case simulationUnavailable
     case simulationFailed(call: Int)
+    /// A troca executaria, mas entregaria menos que o minimo garantido (o contrato reverte pelo minimo):
+    /// o que acontece com moeda que cobra taxa na compra ou na venda, ou com o preco que andou.
+    case simulationBelowMinimum(call: Int)
     case simulationShape
     case simulationSpentTooMuch(found: BigUInt, allowed: BigUInt)
     case simulationReceivedTooLittle(found: BigUInt, required: BigUInt)

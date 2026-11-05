@@ -9,6 +9,15 @@ $s10Foundation12CharacterSetV22whitespacesAndNewlinesACvgZ
 $s10Foundation12CharacterSetV8containsySbs7UnicodeO6ScalarVF
 $s10Foundation12CharacterSetV8newlinesACvgZ
 $s10Foundation12CharacterSetVMa
+$s10Foundation14LocalizedErrorMp
+$s10Foundation14LocalizedErrorP10helpAnchorSSSgvgTq
+$s10Foundation14LocalizedErrorP13failureReasonSSSgvgTq
+$s10Foundation14LocalizedErrorP16errorDescriptionSSSgvgTq
+$s10Foundation14LocalizedErrorP18recoverySuggestionSSSgvgTq
+$s10Foundation14LocalizedErrorPAAE10helpAnchorSSSgvg
+$s10Foundation14LocalizedErrorPAAE13failureReasonSSSgvg
+$s10Foundation14LocalizedErrorPAAE18recoverySuggestionSSSgvg
+$s10Foundation14LocalizedErrorPs0C0Tb
 $s10Foundation15ContiguousBytesP010withUnsafeC0yqd__qd__SWKXEKlFTj
 $s10Foundation22_convertErrorToNSErrorySo0E0Cs0C0_pF
 $s10Foundation22_convertNSErrorToErrorys0E0_pSo0C0CSgF
@@ -70,6 +79,7 @@ $s10Foundation4UUIDVMn
 $s10Foundation4UUIDVSeAAMc
 $s10Foundation4UUIDVSEAAMc
 $s10Foundation4UUIDVSHAAMc
+$s10Foundation4UUIDVSQAAMc
 $s10Foundation6LocaleV10identifierACSS_tcfC
 $s10Foundation6LocaleV19_bridgeToObjectiveCSo8NSLocaleCyF
 $s10Foundation6LocaleV2eeoiySbAC_ACtFZ
@@ -97,6 +107,16 @@ $s6Darwin10MAP_FAILEDSvSgvg
 $s7Elements10SetAlgebraPTl
 $s7ElementSTTl
 $s8AllCasess12CaseIterablePTl
+$s8Dispatch0A13WorkItemFlagsVMa
+$s8Dispatch0A13WorkItemFlagsVMn
+$s8Dispatch0A13WorkItemFlagsVs10SetAlgebraAAMc
+$s8Dispatch0A3QoSV0B6SClassO7utilityyA2EmFWC
+$s8Dispatch0A3QoSV0B6SClassOMa
+$s8Dispatch0A3QoSV11unspecifiedACvgZ
+$s8Dispatch0A3QoSVMa
+$s8Dispatch0A4TimeV3nowACyFZ
+$s8Dispatch0A4TimeVMa
+$s8Dispatch1poiyAA0A4TimeVAD_SdtF
 $s8IteratorSTTl
 $s8RawValueSYTl
 $s9CryptoKit03ChaC4PolyO4open_5using10Foundation4DataVAC9SealedBoxV_AA12SymmetricKeyVtKFZ
@@ -156,6 +176,8 @@ $sBOWV
 $sSo10CFErrorRefas5Error10FoundationMc
 $sSo13os_log_type_ta0A0E4infoABvgZ
 $sSo13os_log_type_ta0A0E5errorABvgZ
+$sSo17OS_dispatch_queueC8DispatchE10asyncAfter8deadline3qos5flags7executeyAC0D4TimeV_AC0D3QoSVAC0D13WorkItemFlagsVyyXBtF
+$sSo17OS_dispatch_queueC8DispatchE6global3qosAbC0D3QoSV0G6SClassO_tFZ
 $sSo8NSBundleC13EscaliburCoreE6moduleABvau
 $sxSgSHsSHRzlMc
 $sxSgSQsSQRzlMc
@@ -163,6 +185,7 @@ $sypN
 $sytN
 $sytWV
 $syXlN
+$syycWV
 argon2id_hash_raw
 bzero
 CCHmac
@@ -223,6 +246,7 @@ OBJC_CLASS_$_NSLock
 OBJC_CLASS_$_NSNumber
 OBJC_CLASS_$_NSNumberFormatter
 OBJC_CLASS_$_NSProcessInfo
+OBJC_CLASS_$_OS_dispatch_queue
 objc_getAssociatedObject
 OBJC_METACLASS_$__TtCs12_SwiftObject
 objc_msgSend$activeProcessorCount

@@ -52,7 +52,9 @@ struct TradeReviewFlow: View {
     #endif
 
     /// `unsure`: assinado e enviado sem resposta certa (auditoria 2, M3).
-    enum Stage { case planning, review, sending, done, unsure, refused }
+    /// `waitingCancel`: na edicao, o cancelamento da ordem antiga saiu e a tela espera ele confirmar
+    /// antes de montar a nova (segunda passada da auditoria de 03/11/2026).
+    enum Stage { case planning, review, sending, waitingCancel, done, unsure, refused }
     @State private var stage: Stage = .planning
     @State private var plan: SigningPlan?
     @State private var error: String?
@@ -62,6 +64,13 @@ struct TradeReviewFlow: View {
     @State private var unsureDetail: String?
     /// A CoW recusou com certeza e disse por que: nada foi criado (01/11/2026).
     @State private var refusedReason: String?
+    /// O que ja tinha entrado na rede antes da recusa, e a ordem assinada que a CoW diz ter recusado:
+    /// a palavra e dela, e so o cancelamento na cadeia nao depende dela (auditoria de 03/11/2026).
+    @State private var refusedNotes: [String] = []
+    @State private var refusedOrder: OpenOrder?
+    /// A troca imediata enviada, como a rede responde, todas as transacoes do plano.
+    @State private var swapOutcome: TradeOutcome = .pending
+    @State private var cancellingRefused: Item?
     /// Edicao: a etapa 1 (cancelar a atual) ja saiu, e a etapa da vez e a ordem nova.
     @State private var cancelled = false
 
@@ -108,6 +117,7 @@ struct TradeReviewFlow: View {
                 case .planning: planning
                 case .review: review
                 case .sending: sending
+                case .waitingCancel: waitingCancel
                 case .done: done
                 case .unsure: unsure
                 case .refused: refused
@@ -121,7 +131,8 @@ struct TradeReviewFlow: View {
             .ignoresSafeArea(.container, edges: waits ? .vertical : [])
             .background(Palette.void.ignoresSafeArea())
             .toolbar {
-                if stage != .sending {
+                // Transmitindo, ou esperando o cancelamento da edicao confirmar (a ordem antiga ja saiu), nao fecha.
+                if stage != .sending && stage != .waitingCancel {
                     ToolbarItem(placement: .topBarLeading) {
                         Button { onClose(stage == .done || cancelled) } label: {
                             Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.inkSoft)
@@ -132,6 +143,13 @@ struct TradeReviewFlow: View {
             }
         }
         .interactiveDismissDisabled()
+        // O cancelamento na cadeia da ordem que a CoW diz ter recusado: a mesma revisao das ordens abertas.
+        .fullScreenCover(item: $cancellingRefused) { cancel in
+            TradeReviewFlow(item: cancel, onClose: { done in
+                cancellingRefused = nil
+                if done { onClose(cancelled) }
+            })
+        }
         .task {
             #if DEBUG
             if let debugStage {
@@ -146,7 +164,7 @@ struct TradeReviewFlow: View {
     // MARK: Etapas
 
     /// Montando ou enviando: so a animacao e o texto, no centro da tela.
-    private var waits: Bool { (stage == .planning && error == nil) || stage == .sending }
+    private var waits: Bool { (stage == .planning && error == nil) || stage == .sending || stage == .waitingCancel }
 
     private var planning: some View {
         VStack(alignment: .leading, spacing: Space.md) {
@@ -230,6 +248,19 @@ struct TradeReviewFlow: View {
         }
     }
 
+    private var waitingCancel: some View {
+        VStack(alignment: .leading, spacing: Space.md) {
+            Spacer()
+            SwapProcessingIndicator(sell: assets.sell, buy: assets.buy, cancelling: true).frame(maxWidth: .infinity)
+            Text("Esperando o cancelamento confirmar na rede").typeStyle(.title).foregroundStyle(Palette.ink)
+                .multilineTextAlignment(.center).frame(maxWidth: .infinity).padding(.top, Space.lg)
+            Text("A ordem nova é montada depois que o cancelamento da antiga confirmar.").typeStyle(.body).foregroundStyle(Palette.inkSoft)
+                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+            Spacer()
+        }
+    }
+
     /// A troca pela CoW: o id devolvido e o UID da ordem, e a tela acompanha o
     /// preenchimento. A ordem limite nao: ela espera o preco, e o andamento fica em Ordens
     /// abertas (pedido do dono, 11/10/2026).
@@ -242,7 +273,9 @@ struct TradeReviewFlow: View {
 
     @ViewBuilder
     private var done: some View {
-        if let order = followedOrder {
+        if case .swap = kind, followedOrder == nil, let last = ids.last {
+            swapResult(last, all: ids)
+        } else if let order = followedOrder {
             VStack(spacing: 0) {
                 Spacer()
                 OrderProgressPanel(kind: order.kind, chain: item.chain, orderID: order.id, account: order.account,
@@ -290,6 +323,79 @@ struct TradeReviewFlow: View {
         .sensoryFeedback(.success, trigger: stage == .done)
     }
 
+    /// A troca imediata depois de enviada: a rede aceitar a transmissao nao quer dizer que a troca saiu. A
+    /// tela acompanha a transacao ate a rede responder em duas fontes, e so entao diz concluida (o visto e a
+    /// vibracao) ou que falhou, com a taxa da rede cobrada. Antes ela mostrava o visto logo na transmissao, e
+    /// uma troca que reverteu no bloco parecia feita (moeda com taxa, 03/11/2026).
+    private func swapResult(_ transaction: String, all: [String]) -> some View {
+        VStack(spacing: 0) {
+            Spacer()
+            VStack(spacing: 0) {
+                switch swapOutcome {
+                case .failed(let reason, let partial):
+                    Image(systemName: "xmark.circle").font(.system(size: 44)).foregroundStyle(Palette.down)
+                    Text("A troca falhou na rede").typeStyle(.title).foregroundStyle(Palette.ink).padding(.top, Space.md)
+                    Text(reason).typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
+                    // So diz que o valor ficou quando nenhuma parte da troca saiu (a troca dividida pode ter saido em parte).
+                    Text(partial ? String(localized: "Parte da troca saiu antes da falha. Confira o saldo e a Atividade.")
+                                 : String(localized: "Moedas que cobram taxa na compra ou na venda costumam falhar assim. O que você vendia continua na carteira."))
+                        .typeStyle(.note).foregroundStyle(Palette.inkMuted).padding(.top, Space.sm)
+                case .done(let detail):
+                    CoinFlipBadge(asset: assets.sell)
+                    Text("Troca concluída").typeStyle(.title).foregroundStyle(Palette.ink).padding(.top, Space.lg)
+                    Text(detail ?? String(localized: "Confirmado na rede.")).typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
+                case .pending:
+                    SwapProcessingIndicator(sell: assets.sell, buy: assets.buy)
+                    Text("Troca enviada").typeStyle(.title).foregroundStyle(Palette.ink).padding(.top, Space.lg)
+                    Text("Esperando a rede confirmar. Pode fechar: a Atividade mostra o resultado.")
+                        .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
+                }
+            }
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
+            Spacer()
+            if let url = item.chain.explorerURL(tx: transaction) {
+                Link(destination: url) {
+                    Text("Ver no \(item.chain.explorerName)").typeStyle(.action)
+                        .frame(maxWidth: .infinity).frame(height: Height.secondary)
+                }
+                .buttonStyle(SecondaryStyle())
+            }
+            PrimaryButton(title: String(localized: "Concluir")) { onClose(true) }.padding(.top, Space.sm).padding(.bottom, Space.xs)
+        }
+        .sensoryFeedback(trigger: swapOutcome) { _, now in
+            switch now {
+            case .done: return .success
+            case .failed: return .error
+            case .pending: return nil
+            }
+        }
+        .task(id: all.joined()) { await followSwap(all) }
+    }
+
+    /// Pergunta a rede por todas as transacoes do plano a cada 5 segundos, por ate 10 minutos, ate todas
+    /// confirmarem ou uma falhar (`TradeOutcome`, a mesma regra do Android).
+    private func followSwap(_ transactions: [String]) async {
+        guard let engine = SendEngines.engine(for: item.chain) else { return }
+        var statuses: [String: TransferStatus] = [:]
+        for _ in 0..<120 {
+            for id in transactions where statuses[id] == nil {
+                let now = await engine.status(id, chain: item.chain)
+                if case .pending = now { continue }
+                statuses[id] = now
+            }
+            let outcome = TradeOutcome.of(plan, ids: transactions, statuses: statuses)
+            if outcome != .pending {
+                swapOutcome = outcome
+                portfolio.show(session.selectedWallet, session: session, force: true)
+                return
+            }
+            try? await Task.sleep(for: .seconds(5))
+            if Task.isCancelled { return }
+        }
+    }
+
     /// Ordem da CoW com autorizacao antes: a CoW so aceita a ordem depois que a
     /// autorizacao confirma na rede, e a espera e essa.
     private var sendingNote: String {
@@ -317,6 +423,15 @@ struct TradeReviewFlow: View {
 
     /// O plano nao saiu. Na troca e na ordem nova, antes de qualquer etapa assinada, o erro
     /// volta para a tela da troca; no cancelamento (e depois dele, na edicao), fica aqui.
+    /// O ativo que esta etapa vende (a troca e a ordem limite); o cancelamento nao vende nada.
+    private var soldAsset: Asset? {
+        switch kind {
+        case .swap(let request, _): return request.sell
+        case .limit(let request): return request.sell
+        case .cancel: return nil
+        }
+    }
+
     private func planFailed(_ message: String) {
         if let onPlanFailed, !isCancel, !cancelled { onPlanFailed(message) } else { error = message }
     }
@@ -336,6 +451,14 @@ struct TradeReviewFlow: View {
         // pedido: o planejador sabe o que este aparelho ja transmitiu.
         await NonceQueue.prune(session, wallet: wallet.id, chain: item.chain, address: account.address)
         let queue = NonceQueue.queue(session, wallet: wallet.id, chain: item.chain, address: account.address)
+        // Uma transacao anterior desta conta que a rede ainda nao viu, ou que tira o mesmo ativo e ainda nao
+        // confirmou: o plano pularia o nonce dela, ou leria o saldo de antes dela (auditoria de 03/11/2026). A
+        // transacao nao vista so pesa no plano com transacao na cadeia: conferida de novo depois de montar.
+        if let reason = NonceQueue.blockedReason(session, wallet: wallet.id, chain: item.chain, address: account.address, asset: soldAsset,
+                                                 usesNonce: false) {
+            planFailed(reason)
+            return
+        }
         do {
             let built: SigningPlan
             switch kind {
@@ -345,14 +468,21 @@ struct TradeReviewFlow: View {
                                            inParts: r.inParts)
                 built = try await engine.plan(request, quote: quote)
             case .limit(let r):
+                // Editando, depois do cancelamento confirmado: a ordem antiga sai da soma das abertas.
                 let request = LimitOrderRequest(walletID: r.walletID, chain: r.chain, account: r.account, sell: r.sell, buy: r.buy,
-                                                amountIn: r.amountIn, minimumOut: r.minimumOut, validFor: r.validFor, nonceQueue: queue)
+                                                amountIn: r.amountIn, minimumOut: r.minimumOut, validFor: r.validFor, nonceQueue: queue,
+                                                replacing: cancelled ? item.cancelFirst?.order.id : nil)
                 built = try await engine.planLimitOrder(request)
             case .cancel(let order, let via):
                 built = try await engine.planCancel(order, walletID: wallet.id, account: account, via: via, nonceQueue: queue)
             }
             guard planMatches(built) else {
                 planFailed(String(localized: "O plano montado não confere com a troca pedida. Nada foi assinado."))
+                return
+            }
+            if let reason = NonceQueue.blockedReason(session, wallet: wallet.id, chain: item.chain, address: account.address, asset: nil,
+                                                     usesNonce: built.transactions.contains { $0 is EVMTransaction }) {
+                planFailed(reason)
                 return
             }
             plan = built
@@ -408,9 +538,22 @@ struct TradeReviewFlow: View {
             return
         }
         guard planMatches(plan) else { return }
+        // Ate a assinatura: outra transacao desta conta pode ter saido depois da revisao.
+        if let wallet = session.selectedWallet, let account = wallet.account(item.chain),
+           let reason = NonceQueue.blockedReason(session, wallet: wallet.id, chain: item.chain, address: account.address, asset: soldAsset,
+                                                 usesNonce: plan.transactions.contains { $0 is EVMTransaction }) {
+            error = reason
+            return
+        }
         // Cancelar nao tira valor da carteira: a voz fica para o que tira.
         if !isCancel {
             guard await VoiceGate.shared.confirm(.send(fiat: fiat), session: session) else { return }
+        }
+        // O autoteste da assinatura antes da passphrase e do PIN, fora da thread principal: com um defeito do aparelho,
+        // nada e pedido a toa (o Signer confere de novo antes de abrir o cofre; revisao da decima terceira passada).
+        guard (try? await Offload.run({ SigningSelfTest.passed(for: plan) })) == true else {
+            error = SigningSelfTest.Failure().errorDescription
+            return
         }
         // Carteira com passphrase: a passphrase antes do Face ID ou do PIN, conferida dentro
         // do assinador. Cancelar uma ordem nao tira valor: nao pede (pedido do dono, 16/10/2026).
@@ -464,14 +607,26 @@ struct TradeReviewFlow: View {
     /// ter se perdido depois de a rede (ou a CoW) receber. A tela diz isso e so oferece
     /// enviar de novo os mesmos bytes, que tem o mesmo id e nao pagam duas vezes.
     private func transmit(_ signed: [SignedTransaction], plan: SigningPlan, engine: any TradeEngine) async {
+        // A epoca dos avisos antes de tudo: um apagar tudo durante o envio nao acompanha a ordem (decima primeira
+        // passada), e a leitura, que espera o ator, fica antes da trava, e nao entre ela e o envio (decima segunda).
+        let noticeEpoch = await LimitOrderWatch.shared.currentEpoch()
         // Travou entre assinar e enviar: nada sai (ver o envio). Destravado, o dono envia de novo.
         guard session.phase == .unlocked else {
             error = WalletError.locked.errorDescription
             stage = unsureSigned == nil ? .review : .unsure
             return
         }
+        // A carteira com passphrase fica fora dos avisos de ordem, decidido aqui, antes de enviar, pela carteira do
+        // plano: travado durante o envio, a carteira escolhida vira nil, e `nil != true` acompanhava a ordem dela
+        // (sexta passada da auditoria de 03/11/2026). Sem a carteira, fica de fora.
+        let orderNotices = session.metadata.wallets.first(where: { $0.id == plan.walletID })?.hasPassphrase == false
         if let wallet = session.selectedWallet, let account = wallet.account(item.chain) {
-            NonceQueue.record(session, wallet: wallet.id, chain: item.chain, address: account.address, plan: plan, signed: signed)
+            // A troca imediata na Ethereum sai pela rota privada (protecao de MEV), e a poda espera mais por ela. A
+            // "em partes" e da CoW: a autorizacao e o embrulho dela saem pela publica.
+            var swapOnEthereum = false
+            if case .swap(let request, _) = kind { swapOnEthereum = item.chain.evmChainID == 1 && !request.inParts }
+            NonceQueue.record(session, wallet: wallet.id, chain: item.chain, address: account.address, plan: plan, signed: signed,
+                              sells: soldAsset?.id, privately: swapOnEthereum)
         }
         stage = .sending
         do {
@@ -482,46 +637,100 @@ struct TradeReviewFlow: View {
             switch kind {
             case .swap(let request, _): session.whenUnlocked { TradedAssets.remember([request.sell, request.buy], session: $0) }
             case .limit(let request): session.whenUnlocked { TradedAssets.remember([request.sell, request.buy], session: $0) }
-            case .cancel: break
+            // O cancelamento saiu: a ordem sai da lista ate a rede responder. Os avisos de executada e de
+            // vencimento so saem com o cancelamento na cadeia confirmado (`settleCancellations`, ou a ordem
+            // que some da lista); falhou, a ordem volta.
+            case .cancel(let order, let via):
+                OpenOrdersBook.shared.markCancelling(order.id, transaction: via == .onchain ? ids.last : nil, chain: order.chain)
             }
             if case .limit(let request) = kind, let orderID = ids.first {
                 let old = item.replacesRenewal, renew = item.renewLimit
+                let walletID = plan.walletID
                 session.whenUnlocked { session in
+                    // Depois de um apagar tudo, o destravar seguinte e o de outra carteira: a renovacao da ordem antiga,
+                    // cujo UID traz o endereco antigo, nao entra nela (decima segunda passada da auditoria de 03/11/2026).
+                    guard session.metadata.wallets.contains(where: { $0.id == walletID }) else { return }
                     if let old { LimitRenewalCenter.shared.forget(old, session: session) }
-                    if renew { LimitRenewalCenter.shared.register(orderID: orderID, request: request, session: session) }
+                    if renew { LimitRenewalCenter.shared.register(orderID: orderID, request: request, session: session, notify: orderNotices) }
                 }
                 // Avisos de 24 horas antes de vencer e de executada: pede a permissao de
                 // notificacao aqui, com a ordem na tela, se ainda nao pediu. A carteira com
                 // passphrase fica de fora: o UID traz o endereco, e o arquivo dos avisos abre
                 // com o iPhone bloqueado (revisao da auditoria 4, C7-03).
-                if session.selectedWallet?.hasPassphrase != true, CoWProtocol.supports(request.chain),
+                if orderNotices, CoWProtocol.supports(request.chain),
                    let uid = Hex.decode(orderID), let validTo = CoWProtocol.validTo(ofUID: uid) {
                     let chainID = request.chain.id
                     Task {
                         _ = await PriceAlertCenter.requestPermission()
-                        await LimitOrderWatch.shared.track(id: orderID, chainID: chainID, expiresAt: Date(timeIntervalSince1970: TimeInterval(validTo)))
+                        await LimitOrderWatch.shared.track(id: orderID, chainID: chainID, expiresAt: Date(timeIntervalSince1970: TimeInterval(validTo)),
+                                                           epoch: noticeEpoch)
                     }
                 }
             }
-            // Edicao: o cancelamento saiu; a etapa 2 monta a ordem nova na mesma tela.
-            if item.cancelFirst != nil, !cancelled, case .cancel(let order, _) = kind {
+            // Edicao: o cancelamento saiu; a etapa 2 monta a ordem nova na mesma tela, depois de ele
+            // confirmar na rede (o pedido a CoW fora da cadeia nao tem transacao para esperar).
+            if item.cancelFirst != nil, !cancelled, case .cancel(let order, let via) = kind {
                 OpenOrdersBook.shared.markCancelling(order.id)
-                Task { await LimitOrderWatch.shared.forget(order.id) }
-                cancelled = true
-                self.plan = nil
-                ids = []
-                portfolio.show(session.selectedWallet, session: session, force: true)
-                await makePlan()
+                if via == .onchain, let transaction = ids.last {
+                    stage = .waitingCancel
+                    switch await CancellationWait.untilConfirmed(transaction, chain: item.chain) {
+                    case .confirmed: break
+                    case .failed(let reason):
+                        // A transacao do cancelamento falhou: a ordem antiga continua aberta, e nada novo e montado.
+                        OpenOrdersBook.shared.unmarkCancelling(order.id)
+                        refusedReason = reason
+                        refusedNotes = []
+                        refusedOrder = nil
+                        stage = .refused
+                        return
+                    case .timedOut:
+                        // Sem confirmar no prazo: o reenvio dos mesmos bytes, como em qualquer envio incerto. A
+                        // tela segue acompanhando o cancelamento, e a etapa 2 continua sozinha quando ele
+                        // confirmar (terceira passada da auditoria de 03/11/2026).
+                        unsureSigned = signed
+                        unsureDetail = nil
+                        stage = .unsure
+                        Task {
+                            guard case .confirmed = await CancellationWait.untilConfirmed(transaction, chain: item.chain),
+                                  stage == .unsure, !cancelled else { return }
+                            await continueEdit(after: order)
+                        }
+                        return
+                    }
+                }
+                await continueEdit(after: order)
                 return
             }
             stage = .done
             portfolio.show(session.selectedWallet, session: session, force: true)
         } catch let refusal as TradeRefusedForSure {
-            // Recusa certa, com o motivo: nada foi criado, e enviar de novo nao muda nada.
+            // A CoW diz que recusou, com o motivo: enviar de novo nao muda nada. O que entrou na rede
+            // antes e a ordem assinada ficam na tela, e a ordem continua acompanhada.
             ids = []
             unsureSigned = nil
             refusedReason = refusal.reason
+            // So o cancelamento na cadeia foi esperado ate confirmar: o pedido a CoW fora dela nao tem como.
+            // O pedido fora dela foi aceito pela CoW, sem confirmacao na cadeia: a nota diz isso, e onde conferir
+            // (decima primeira passada).
+            refusedNotes = refusal.notes + (!cancelled || item.cancelFirst == nil ? [] : item.cancelFirst?.via == .onchain
+                ? [String(localized: "A ordem anterior já tinha sido cancelada.")]
+                : [String(localized: "O pedido de cancelamento da ordem anterior foi aceito pela CoW. Confira em Ordens abertas.")])
+            refusedOrder = refusal.signedOrder
+            if let order = refusal.signedOrder { watchRefused(order, walletID: plan.walletID, notices: orderNotices, epoch: noticeEpoch) }
+            // Os ativos ficam lembrados: a ordem guardada mostra nome e casas mesmo depois de sair do saldo.
+            if case .limit(let request) = kind { session.whenUnlocked { TradedAssets.remember([request.sell, request.buy], session: $0) } }
             stage = .refused
+        } catch let uncertain as TradeSubmissionUncertain {
+            // A ordem assinada saiu para a CoW sem resposta certa: o mesmo incerto, mais o que ja entrou
+            // na rede, o acompanhamento e o cancelamento na cadeia (segunda passada da auditoria de 03/11/2026).
+            ids = signed.map(\.id)
+            unsureSigned = signed
+            unsureDetail = uncertain.detail
+            refusedNotes = uncertain.notes
+            refusedOrder = uncertain.signedOrder
+            watchRefused(uncertain.signedOrder, walletID: plan.walletID, notices: orderNotices, epoch: noticeEpoch)
+            if case .limit(let request) = kind { session.whenUnlocked { TradedAssets.remember([request.sell, request.buy], session: $0) } }
+            stage = .unsure
         } catch {
             ids = signed.map(\.id)
             unsureSigned = signed
@@ -530,12 +739,25 @@ struct TradeReviewFlow: View {
         }
     }
 
-    /// A recusa certa da CoW: o titulo diz que nada foi criado, e o texto, o motivo exato.
+    /// Edicao: o cancelamento da ordem antiga confirmou (ou foi o pedido a CoW, que nao tem transacao);
+    /// a etapa 2 monta a ordem nova na mesma tela.
+    private func continueEdit(after order: OpenOrder) async {
+        Task { await LimitOrderWatch.shared.forget(order.id) }
+        cancelled = true
+        plan = nil
+        ids = []
+        unsureSigned = nil
+        portfolio.show(session.selectedWallet, session: session, force: true)
+        await makePlan()
+    }
+
+    /// A recusa da CoW: o titulo diz que e a palavra dela, o texto, o motivo exato, e as notas, o que
+    /// ja entrou na rede. Com a ordem assinada, o cancelamento na cadeia.
     private var refused: some View {
         VStack(alignment: .leading, spacing: 0) {
             Spacer()
             Image(systemName: "xmark.circle").font(.system(size: 44)).foregroundStyle(Palette.down)
-            Text(text(swap: String(localized: "A troca não foi enviada"), limit: String(localized: "A ordem não foi criada"),
+            Text(text(swap: String(localized: "A CoW diz que recusou a ordem"), limit: String(localized: "A CoW diz que recusou a ordem"),
                       cancel: String(localized: "O cancelamento não saiu. A ordem continua aberta.")))
                 .typeStyle(.title).foregroundStyle(Palette.ink).padding(.top, Space.md)
                 .fixedSize(horizontal: false, vertical: true)
@@ -543,9 +765,41 @@ struct TradeReviewFlow: View {
                 Text(refusedReason).typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            ForEach(refusedNotes, id: \.self) { note in
+                Text(note).typeStyle(.note).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Spacer()
-            PrimaryButton(title: String(localized: "Voltar")) { onClose(false) }
+            if let refusedOrder {
+                SecondaryButton(title: String(localized: "Cancelar ordem limite na cadeia")) {
+                    cancellingRefused = Item(kind: .cancel(refusedOrder, .onchain), chain: refusedOrder.chain, fiat: nil)
+                }
+                .padding(.bottom, Space.sm)
+            }
+            PrimaryButton(title: String(localized: "Voltar")) { onClose(cancelled) }
                 .padding(.bottom, Space.xs)
+        }
+    }
+
+    /// A ordem assinada que a CoW diz ter recusado segue nos avisos de executada e de vencimento,
+    /// como uma ordem criada (fora a carteira com passphrase, como no envio).
+    private func watchRefused(_ order: OpenOrder, walletID: UUID, notices: Bool, epoch: Int) {
+        // Guardada ate vencer: aparece em Ordens abertas com o cancelamento na cadeia, tambem depois de
+        // fechar esta tela, ate a cadeia dizer que terminou (segunda passada da auditoria de 03/11/2026).
+        if let record = SignedOrderRecord(order, walletID: walletID) {
+            session.whenUnlocked { session in
+                // A carteira removida enquanto travado nao ganha a ordem de volta.
+                guard session.metadata.wallets.contains(where: { $0.id == walletID }) else { return }
+                session.metadata.signedOrders = SignedOrders.adding(record, to: session.metadata.signedOrders)
+                try? session.persist()
+            }
+        }
+        guard notices, CoWProtocol.supports(order.chain),
+              let uid = Hex.decode(order.id), let validTo = CoWProtocol.validTo(ofUID: uid) else { return }
+        let id = order.id, chainID = order.chain.id
+        Task {
+            _ = await PriceAlertCenter.requestPermission()
+            await LimitOrderWatch.shared.track(id: id, chainID: chainID, expiresAt: Date(timeIntervalSince1970: TimeInterval(validTo)), epoch: epoch)
         }
     }
 
@@ -563,7 +817,20 @@ struct TradeReviewFlow: View {
                 Text(unsureDetail).typeStyle(.note).foregroundStyle(Palette.inkMuted).padding(.top, Space.sm)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // A ordem que pode estar com a CoW: o que ja entrou na rede e o cancelamento na cadeia.
+            if stage == .unsure, refusedOrder != nil {
+                ForEach(refusedNotes, id: \.self) { note in
+                    Text(note).typeStyle(.note).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             Spacer()
+            if let refusedOrder {
+                SecondaryButton(title: String(localized: "Cancelar ordem limite na cadeia")) {
+                    cancellingRefused = Item(kind: .cancel(refusedOrder, .onchain), chain: refusedOrder.chain, fiat: nil)
+                }
+                .padding(.bottom, Space.sm)
+            }
             if !isLimit, !isOffchainCancel, let last = ids.last, let url = item.chain.explorerURL(tx: last) {
                 Link(destination: url) {
                     Text("Procurar no \(item.chain.explorerName)").typeStyle(.action)

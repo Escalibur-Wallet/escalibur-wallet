@@ -25,6 +25,12 @@ import class Foundation.ProcessInfo
 /// Onde o CryptoKit nao existe: o build Android (e o Linux, para conferir).
 let foraDaApple: [Platform] = [.android, .linux]
 
+/// O FORTIFY da libc no C vendorizado, fora da Apple (no Xcode ele ja vem ligado). So nos alvos C:
+/// por -Xcc ele chegaria ao importador de C do Swift e quebraria o open e o write da bionic
+/// (auditoria Android de 31/10/2026, AA-07).
+let fortify: [CSetting] = [.define("_FORTIFY_SOURCE", to: "2", .when(platforms: foraDaApple))]
+let fortifyCxx: [CXXSetting] = [.define("_FORTIFY_SOURCE", to: "2", .when(platforms: foraDaApple))]
+
 /// As opcoes com que a propria swift-crypto se compila (o Package.swift dela, versao 5.0.1).
 let swiftCryptoSettings: [SwiftSetting] = [
     .define("CRYPTO_IN_SWIFTPM"),
@@ -63,7 +69,15 @@ let package = Package(
                 .define("COMB_TEETH", to: "6"),
                 .headerSearchPath("upstream"),
                 .headerSearchPath("upstream/src"),
-            ]
+                // Enhanced Security no C, que o ajuste do projeto nao alcanca no pacote:
+                // -ftrivial-auto-var-init=zero zera toda variavel local na declaracao
+                // (contra ler memoria nao inicializada; nao apaga segredo ao sair da
+                // funcao), e -ftyped-memory-operations troca malloc e calloc pelo
+                // alocador por tipo. Excecao estreita da regra 27 (tools/verificar.sh).
+                // So na Apple: o clang do NDK nao conhece o alocador por tipo, e no Android
+                // a pilha zerada vai por -Xcc em tools/android/compilar-nucleo.sh.
+                .unsafeFlags(["-ftrivial-auto-var-init=zero", "-ftyped-memory-operations"], .when(platforms: [.iOS, .macOS])),
+            ] + fortify
         ),
         .target(
             name: "CArgon2",
@@ -72,7 +86,13 @@ let package = Package(
             // escalibur_blake2b.c nao e do Argon2: so expoe o BLAKE2b de referencia ao Swift.
             sources: ["argon2.c", "core.c", "encoding.c", "ref.c", "thread.c", "blake2/blake2b.c", "escalibur_blake2b.c"],
             publicHeadersPath: "include",
-            cSettings: [.headerSearchPath(".")]
+            cSettings: [
+                .headerSearchPath("."),
+                // As mesmas duas flags do CSecp256k1, mais -O3: o arm64e custa cerca de
+                // 6,5% de ciclos no Argon2 em -Os, e o -O3 compensa e ainda ganha uns 15%,
+                // com a mesma saida (vetores do Argon2 nos testes).
+                .unsafeFlags(["-O3", "-ftrivial-auto-var-init=zero", "-ftyped-memory-operations"], .when(platforms: [.iOS, .macOS])),
+            ] + fortify
         ),
         // A swift-crypto da Apple (Sources/SwiftCrypto, travada por digesto em swift-crypto.lock),
         // so fora das plataformas Apple: o mesmo CryptoKit, sobre a BoringSSL, para o build
@@ -81,7 +101,9 @@ let package = Package(
             name: "CCryptoBoringSSL",
             path: "Sources/SwiftCrypto/CCryptoBoringSSL",
             exclude: ["hash.txt", "CMakeLists.txt", "PrivacyInfo.xcprivacy",
-                      "crypto/bio/connect.cc", "crypto/bio/socket_helper.cc", "crypto/bio/socket.cc"]
+                      "crypto/bio/connect.cc", "crypto/bio/socket_helper.cc", "crypto/bio/socket.cc"],
+            cSettings: fortify,
+            cxxSettings: fortifyCxx
         ),
         .target(
             name: "CXKCP",
@@ -91,13 +113,14 @@ let package = Package(
                 .define("XKCP_has_KeccakP1600"),
                 .headerSearchPath("include"), .headerSearchPath("high"), .headerSearchPath("low"),
                 .headerSearchPath("low/KeccakP-1600"), .headerSearchPath("low/common"), .headerSearchPath("common"),
-            ]
+            ] + fortify
         ),
         .target(
             name: "CXKCPShims",
             dependencies: ["CXKCP"],
             path: "Sources/SwiftCrypto/CXKCPShims",
-            exclude: ["CMakeLists.txt", "PrivacyInfo.xcprivacy"]
+            exclude: ["CMakeLists.txt", "PrivacyInfo.xcprivacy"],
+            cSettings: fortify
         ),
         .target(
             name: "CryptoBoringWrapper",

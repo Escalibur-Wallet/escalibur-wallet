@@ -5744,6 +5744,82 @@
         }
       }
     },
+    "%@ · sem taxa da Escalibur" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · بلا رسوم من Escalibur"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · keine Escalibur-Gebühr"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · no Escalibur fee"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · sin comisión de Escalibur"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · sans frais Escalibur"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · Escalibur का कोई शुल्क नहीं"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · tanpa biaya Escalibur"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · Escalibur 手数料なし"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · Escalibur 수수료 없음"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · Escalibur ücreti yok"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · không có phí Escalibur"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · 无 Escalibur 费用"
+          }
+        }
+      }
+    },
     "%@%%" : {
       "localizations" : {
         "en" : {
@@ -43317,6 +43393,82 @@
         }
       }
     },
+    "As carteiras mudaram enquanto o cofre abria. Nada foi guardado; tente de novo." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تغيّرت المحافظ أثناء فتح الخزنة. لم يُحفظ أي شيء؛ حاول مرة أخرى."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Wallets haben sich geändert, während der Tresor geöffnet wurde. Nichts wurde gespeichert; versuche es erneut."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The wallets changed while the vault was opening. Nothing was saved; try again."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las billeteras cambiaron mientras se abría la bóveda. No se guardó nada; inténtalo de nuevo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les portefeuilles ont changé pendant l’ouverture du coffre. Rien n’a été enregistré ; réessayez."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "वॉल्ट खुलते समय वॉलेट बदल गए. कुछ भी सेव नहीं हुआ; फिर से कोशिश करें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dompet berubah saat brankas sedang dibuka. Tidak ada yang disimpan; coba lagi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金庫を開いている間にウォレットが変わりました。何も保存されていません。もう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "금고가 열리는 동안 지갑이 바뀌었습니다. 아무것도 저장되지 않았습니다. 다시 시도하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kasa açılırken cüzdanlar değişti. Hiçbir şey kaydedilmedi; tekrar deneyin."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các ví đã thay đổi trong lúc mở két. Chưa có gì được lưu; hãy thử lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开保险库时钱包发生了变化。没有保存任何内容；请重试。"
+          }
+        }
+      }
+    },
     "As casas decimais deste token na rede não conferem com as que a carteira mostrou. Atualize o saldo e tente de novo. Nada foi assinado." : {
       "localizations" : {
         "ar" : {
@@ -53174,6 +53326,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "仅观察钱包"
+          }
+        }
+      }
+    },
+    "Carteiras de só observar, carteiras com passphrase e carteiras com as palavras ainda não confirmadas ficam de fora. Desligar apaga o arquivo." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "محافظ المراقبة فقط، والمحافظ التي تستخدم passphrase، والمحافظ التي لم تُؤكَّد كلماتها بعد مستثناة. الإيقاف يحذف الملف."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur-ansehen-Wallets, Wallets mit Passphrase und Wallets, deren Wörter noch nicht bestätigt sind, bleiben außen vor. Ausschalten löscht die Datei."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Watch-only wallets, wallets with a passphrase and wallets whose words haven't been confirmed yet are left out. Turning it off deletes the file."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las billeteras de solo lectura, las billeteras con passphrase y las billeteras con las palabras aún sin confirmar quedan fuera. Desactivarlo borra el archivo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les portefeuilles en lecture seule, les portefeuilles avec passphrase et ceux dont les mots ne sont pas encore confirmés sont exclus. Désactiver supprime le fichier."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "केवल देखने वाले वॉलेट, passphrase वाले वॉलेट और जिन वॉलेट के शब्द अभी पुष्ट नहीं हुए, वे बाहर रहते हैं. बंद करने पर फ़ाइल मिट जाती है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dompet hanya pantau, dompet dengan passphrase, dan dompet yang kata-katanya belum dikonfirmasi tidak disertakan. Mematikannya menghapus file."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "閲覧のみのウォレット、passphrase 付きのウォレット、単語をまだ確認していないウォレットは対象外です。オフにするとファイルは削除されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보기 전용 지갑, passphrase가 있는 지갑, 단어를 아직 확인하지 않은 지갑은 제외됩니다. 끄면 파일이 삭제됩니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yalnızca izleme cüzdanları, passphrase'li cüzdanlar ve kelimeleri henüz onaylanmamış cüzdanlar dışarıda kalır. Kapatmak dosyayı siler."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ví chỉ theo dõi, ví có passphrase và ví chưa xác nhận các từ sẽ không được tính. Tắt đi sẽ xóa tệp."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅观察钱包、带 passphrase 的钱包和助记词尚未确认的钱包不包含在内。关闭会删除该文件。"
           }
         }
       }
@@ -93306,6 +93534,82 @@
         }
       }
     },
+    "Esta ordem é de outra carteira. Volte para ela para mudar a ordem." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "هذا الأمر يخص محفظة أخرى. عُد إليها لتغيير الأمر."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Order gehört zu einer anderen Wallet. Wechsle zu ihr zurück, um die Order zu ändern."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This order belongs to another wallet. Switch back to it to change the order."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta orden es de otra billetera. Vuelve a ella para cambiar la orden."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet ordre appartient à un autre portefeuille. Revenez-y pour modifier l’ordre."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यह ऑर्डर किसी दूसरे वॉलेट का है. ऑर्डर बदलने के लिए उसी पर वापस जाएं."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order ini milik dompet lain. Kembali ke dompet itu untuk mengubah order."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この注文は別のウォレットのものです。注文を変更するには、そのウォレットに戻ってください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 주문은 다른 지갑의 것입니다. 주문을 바꾸려면 그 지갑으로 돌아가세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu emir başka bir cüzdana ait. Emri değiştirmek için o cüzdana geri dönün."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lệnh này thuộc về ví khác. Hãy quay lại ví đó để thay đổi lệnh."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此订单属于另一个钱包。请切换回该钱包再修改订单。"
+          }
+        }
+      }
+    },
     "Esta rede ainda não aceita moeda custom." : {
       "localizations" : {
         "ar" : {
@@ -93992,6 +94296,158 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这些订单不属于此账户。"
+          }
+        }
+      }
+    },
+    "Este aparelho calculou um endereço de teste diferente do esperado. Por segurança, nenhuma carteira é criada ou importada aqui." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "حسب هذا الجهاز عنوان اختبار مختلفًا عن المتوقع. للأمان، لا يتم إنشاء أو استيراد أي محفظة هنا."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Gerät hat eine Testadresse berechnet, die nicht der erwarteten entspricht. Aus Sicherheitsgründen wird hier keine Wallet erstellt oder importiert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This device computed a test address that differs from the expected one. For safety, no wallet is created or imported here."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este dispositivo calculó una dirección de prueba distinta de la esperada. Por seguridad, aquí no se crea ni se importa ninguna billetera."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet appareil a calculé une adresse de test différente de celle attendue. Par sécurité, aucun portefeuille n’est créé ni importé ici."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस डिवाइस ने उम्मीद से अलग एक टेस्ट पता बनाया. सुरक्षा के लिए, यहां कोई वॉलेट नहीं बनाया या इंपोर्ट किया जाता."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perangkat ini menghitung alamat uji yang berbeda dari yang diharapkan. Demi keamanan, tidak ada dompet yang dibuat atau diimpor di sini."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末はテスト用のアドレスを想定と異なる値で計算しました。安全のため、ここではウォレットを作成・インポートしません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기가 예상과 다른 테스트 주소를 계산했습니다. 안전을 위해 여기서는 지갑을 만들거나 가져오지 않습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu cihaz beklenenden farklı bir test adresi hesapladı. Güvenlik için burada hiçbir cüzdan oluşturulmaz veya içe aktarılmaz."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thiết bị này tính ra một địa chỉ thử khác với địa chỉ mong đợi. Để an toàn, không ví nào được tạo hay nhập ở đây."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此设备算出的测试地址与预期不同。为安全起见，这里不会创建或导入任何钱包。"
+          }
+        }
+      }
+    },
+    "Este aparelho calculou uma assinatura de teste diferente da esperada. Por segurança, nada é assinado aqui." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "حسب هذا الجهاز توقيع اختبار مختلفًا عن المتوقع. للأمان، لا يتم توقيع أي شيء هنا."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Gerät hat eine Testsignatur berechnet, die nicht der erwarteten entspricht. Aus Sicherheitsgründen wird hier nichts signiert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This device computed a test signature that differs from the expected one. For safety, nothing is signed here."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este dispositivo calculó una firma de prueba distinta de la esperada. Por seguridad, aquí no se firma nada."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet appareil a calculé une signature de test différente de celle attendue. Par sécurité, rien n’est signé ici."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस डिवाइस ने उम्मीद से अलग एक टेस्ट सिग्नेचर बनाया. सुरक्षा के लिए, यहां कुछ भी साइन नहीं किया जाता."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perangkat ini menghitung tanda tangan uji yang berbeda dari yang diharapkan. Demi keamanan, tidak ada yang ditandatangani di sini."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末はテスト用の署名を想定と異なる値で計算しました。安全のため、ここでは何も署名しません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기가 예상과 다른 테스트 서명을 계산했습니다. 안전을 위해 여기서는 아무것도 서명하지 않습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu cihaz beklenenden farklı bir test imzası hesapladı. Güvenlik için burada hiçbir şey imzalanmaz."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thiết bị này tính ra một chữ ký thử khác với chữ ký mong đợi. Để an toàn, không có gì được ký ở đây."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此设备算出的测试签名与预期不同。为安全起见，这里不会签署任何内容。"
           }
         }
       }
@@ -150439,6 +150895,82 @@
         }
       }
     },
+    "O pedido de cancelamento da ordem anterior foi aceito pela CoW. Confira em Ordens abertas." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "قبلت CoW طلب إلغاء الأمر السابق. تحقّق منه في الأوامر المفتوحة."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW hat die Stornierung der vorherigen Order angenommen. Prüfe sie unter Offene Orders."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW accepted the request to cancel the previous order. Check it in Open orders."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW aceptó la solicitud de cancelar la orden anterior. Revísala en Órdenes abiertas."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW a accepté la demande d’annulation de l’ordre précédent. Vérifiez-le dans Ordres ouverts."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने पिछले ऑर्डर को रद्द करने का अनुरोध स्वीकार कर लिया. खुले ऑर्डर में देखें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW menerima permintaan pembatalan order sebelumnya. Periksa di Order terbuka."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoWは以前の注文のキャンセル依頼を受け付けました。未約定の注文で確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 이전 주문의 취소 요청을 받았습니다. 미체결 주문에서 확인하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW önceki emrin iptal isteğini kabul etti. Açık emirler bölümünden kontrol edin."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW đã nhận yêu cầu hủy lệnh trước đó. Hãy kiểm tra trong Lệnh đang mở."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 已接受取消之前订单的请求。请在未完成订单中查看。"
+          }
+        }
+      }
+    },
     "O plano montado não confere com a ponte pedida. Nada foi assinado." : {
       "localizations" : {
         "ar" : {
@@ -188104,6 +188636,82 @@
         }
       }
     },
+    "Suas moedas em outras redes" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "عملاتك على شبكات أخرى"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Coins in anderen Netzwerken"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your coins on other networks"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tus monedas en otras redes"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vos cryptos sur d’autres réseaux"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "दूसरे नेटवर्क पर आपके कॉइन"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koin Anda di jaringan lain"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ほかのネットワークにあるコイン"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 네트워크에 있는 내 코인"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diğer ağlardaki coinleriniz"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coin của bạn trên các mạng khác"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你在其他网络上的币"
+          }
+        }
+      }
+    },
     "Suas moedas, todas aqui" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -192505,6 +193113,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "网络费"
+          }
+        }
+      }
+    },
+    "Taxa da rede %@, sem taxa da Escalibur" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "رسوم الشبكة %@، بلا رسوم من Escalibur"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Netzwerkgebühr %@, keine Escalibur-Gebühr"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Network fee %@, no Escalibur fee"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comisión de red %@, sin comisión de Escalibur"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frais de réseau %@, sans frais Escalibur"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "नेटवर्क शुल्क %@, Escalibur का कोई शुल्क नहीं"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biaya jaringan %@, tanpa biaya Escalibur"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ネットワーク手数料 %@、Escalibur 手数料なし"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "네트워크 수수료 %@, Escalibur 수수료 없음"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ağ ücreti %@, Escalibur ücreti yok"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phí mạng %@, không có phí Escalibur"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网络费 %@，无 Escalibur 费用"
           }
         }
       }
@@ -219281,6 +219965,1526 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "目前无法提交申请。请重试。"
+          }
+        }
+      }
+    },
+    "A CoW diz que recusou a ordem" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تقول CoW إنها رفضت الأمر"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW sagt, sie habe die Order abgelehnt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW says it refused the order"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW dice que rechazó la orden"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW dit avoir refusé l’ordre"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW कहता है कि उसने ऑर्डर मना कर दिया"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW menyatakan telah menolak order"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW は注文を拒否したと言っています"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 주문을 거절했다고 합니다"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW emri reddettiğini söylüyor"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW cho biết đã từ chối lệnh"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 表示拒绝了该订单"
+          }
+        }
+      }
+    },
+    "A autorização do token entrou na rede antes da recusa e continua valendo." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "دخلت موافقة الرمز إلى الشبكة قبل الرفض وما زالت سارية."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Token-Genehmigung ging vor der Ablehnung ins Netzwerk und bleibt gültig."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The token approval went through on the network before the refusal and is still in effect."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La autorización del token entró en la red antes del rechazo y sigue vigente."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’autorisation du token est passée sur le réseau avant le refus et reste valable."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "मना होने से पहले टोकन की अनुमति नेटवर्क पर जा चुकी थी और अब भी लागू है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Persetujuan token sudah masuk ke jaringan sebelum penolakan dan masih berlaku."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "トークンの承認は拒否の前にネットワークに入っており、今も有効です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "토큰 승인은 거절 전에 네트워크에 들어갔으며 지금도 유효합니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token onayı retten önce ağa girdi ve hâlâ geçerli."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phê duyệt token đã lên mạng trước khi bị từ chối và vẫn còn hiệu lực."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代币授权在被拒绝之前已上链，并且仍然有效。"
+          }
+        }
+      }
+    },
+    "Antes da recusa, o %@ virou %@: ele está na carteira." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "قبل الرفض، تحوّل %@ إلى %@: إنه في المحفظة."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vor der Ablehnung wurde dein %@ zu %@: Es liegt in der Wallet."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Before the refusal, your %@ became %@: it is in the wallet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Antes del rechazo, tu %@ se convirtió en %@: está en la billetera."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avant le refus, vos %@ sont devenus des %@ : ils sont dans le portefeuille."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "मना होने से पहले आपका %@ %@ में बदल गया: वह वॉलेट में है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sebelum penolakan, %@ Anda sudah menjadi %@: ada di dompet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拒否の前に %@ は %@ に変わりました。ウォレットにあります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "거절 전에 %@이(가) %@(으)로 바뀌었습니다. 지갑에 있습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retten önce %@, %@ oldu: cüzdanda duruyor."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trước khi bị từ chối, %@ đã được đổi thành %@: nó đang ở trong ví."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在被拒绝之前，%@ 已换成 %@：它在钱包里。"
+          }
+        }
+      }
+    },
+    "A ordem já foi assinada, e quem diz que ela foi recusada é a CoW. Para ter certeza de que ela não executa, cancele na cadeia: custa a taxa da rede e não depende da CoW." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تم توقيع الأمر بالفعل، وCoW هي من تقول إنه رُفض. لتتأكد من أنه لن يُنفَّذ، ألغِه على السلسلة: يكلّف رسوم الشبكة ولا يعتمد على CoW."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Order wurde bereits signiert, und nur CoW sagt, sie sei abgelehnt worden. Um sicherzugehen, dass sie nicht ausgeführt wird, storniere sie on-chain: Das kostet die Netzwerkgebühr und hängt nicht von CoW ab."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The order was already signed, and it's CoW that says it was refused. To be sure it doesn't execute, cancel it on-chain: it costs the network fee and doesn't depend on CoW."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La orden ya fue firmada, y es CoW quien dice que fue rechazada. Para estar seguro de que no se ejecute, cancélala en la cadena: cuesta la comisión de red y no depende de CoW."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’ordre a déjà été signé, et c’est CoW qui dit l’avoir refusé. Pour être sûr qu’il ne s’exécute pas, annulez-le on-chain : cela coûte les frais de réseau et ne dépend pas de CoW."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ऑर्डर पहले ही साइन हो चुका है, और मना होने की बात CoW कह रहा है. पक्का करने के लिए कि वह पूरा न हो, उसे ऑन-चेन रद्द करें: इसमें नेटवर्क शुल्क लगता है और यह CoW पर निर्भर नहीं करता."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order sudah ditandatangani, dan yang menyatakan order ditolak adalah CoW. Agar pasti order tidak tereksekusi, batalkan on-chain: dikenai biaya jaringan dan tidak bergantung pada CoW."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "注文はすでに署名済みで、拒否されたと言っているのは CoW です。実行されないことを確実にするには、オンチェーンでキャンセルしてください。ネットワーク手数料がかかり、CoW には依存しません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주문은 이미 서명되었고, 거절되었다고 하는 것은 CoW입니다. 실행되지 않도록 확실히 하려면 온체인에서 취소하세요. 네트워크 수수료가 들며 CoW에 의존하지 않습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emir zaten imzalandı ve reddedildiğini söyleyen CoW. Gerçekleşmeyeceğinden emin olmak için zincir üstünde iptal et: ağ ücreti tutar ve CoW'a bağlı değildir."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lệnh đã được ký, và chính CoW nói rằng lệnh bị từ chối. Để chắc chắn lệnh không được thực hiện, hãy hủy trên chuỗi: tốn phí mạng và không phụ thuộc vào CoW."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "订单已经签名，说它被拒绝的是 CoW。要确保它不会执行，请在链上取消：需要支付网络费，且不依赖 CoW。"
+          }
+        }
+      }
+    },
+    "A ordem anterior já tinha sido cancelada." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "كان الأمر السابق قد أُلغي بالفعل."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die vorherige Order war bereits storniert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The previous order had already been cancelled."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La orden anterior ya había sido cancelada."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’ordre précédent avait déjà été annulé."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पिछला ऑर्डर पहले ही रद्द हो चुका था."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order sebelumnya sudah dibatalkan."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以前の注文はすでにキャンセルされていました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 주문은 이미 취소되었습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Önceki emir zaten iptal edilmişti."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lệnh trước đó đã được hủy."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "之前的订单已经取消。"
+          }
+        }
+      }
+    },
+    "A CoW recusou a ordem sem um motivo que o app conheça." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "رفضت CoW الأمر دون سبب يعرفه التطبيق."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW hat die Order abgelehnt, ohne einen Grund, den die App kennt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW refused the order without a reason the app recognizes."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW rechazó la orden sin un motivo que la app conozca."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW a refusé l’ordre sans motif connu de l’app."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने ऑर्डर ऐसे कारण से मना किया जिसे ऐप नहीं पहचानता."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW menolak order tanpa alasan yang dikenali aplikasi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW は、アプリが把握していない理由で注文を拒否しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 앱이 알지 못하는 사유로 주문을 거절했습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW emri, uygulamanın tanımadığı bir nedenle reddetti."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW đã từ chối lệnh với lý do mà ứng dụng không nhận biết."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 拒绝了该订单，原因不在应用已知的范围内。"
+          }
+        }
+      }
+    },
+    "Commit %@" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "الإيداع %@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commit %@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commit %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commit %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commit %@"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "कमिट %@"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commit %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コミット %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커밋 %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commit %@"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commit %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交 %@"
+          }
+        }
+      }
+    },
+    "Esperando o cancelamento confirmar na rede" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "بانتظار تأكيد الإلغاء على الشبكة"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warten, bis die Stornierung im Netzwerk bestätigt ist"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for the cancellation to confirm on the network"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperando que la cancelación se confirme en la red"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En attente de la confirmation de l’annulation sur le réseau"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "रद्द करने की नेटवर्क पर पुष्टि का इंतज़ार"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menunggu pembatalan terkonfirmasi di jaringan"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャンセルがネットワークで確定するのを待っています"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "취소가 네트워크에서 확인되기를 기다리는 중"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "İptalin ağda onaylanması bekleniyor"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang chờ lệnh hủy được xác nhận trên mạng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待取消在网络上确认"
+          }
+        }
+      }
+    },
+    "A ordem nova é montada depois que o cancelamento da antiga confirmar." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يُجهَّز الأمر الجديد بعد تأكيد إلغاء الأمر القديم."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die neue Order wird erstellt, nachdem die Stornierung der alten bestätigt ist."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The new order is built after the old one's cancellation confirms."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La orden nueva se prepara después de que se confirme la cancelación de la anterior."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le nouvel ordre est préparé après la confirmation de l’annulation de l’ancien."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पुराने ऑर्डर के रद्द होने की पुष्टि के बाद नया ऑर्डर तैयार होता है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order baru disiapkan setelah pembatalan order lama terkonfirmasi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "古い注文のキャンセルが確定してから、新しい注文を作成します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 주문의 취소가 확인된 뒤에 새 주문을 만듭니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeni emir, eskisinin iptali onaylandıktan sonra hazırlanır."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lệnh mới được tạo sau khi lệnh hủy của lệnh cũ được xác nhận."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧订单的取消确认后，才会创建新订单。"
+          }
+        }
+      }
+    },
+    "A CoW respondeu com outro código para esta ordem, e o app não a dá como criada." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ردّت CoW برمز مختلف لهذا الأمر، ولا يعدّه التطبيق أمرًا مُنشأً."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW hat mit einem anderen Code für diese Order geantwortet, und die App zählt sie nicht als erstellt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW answered with a different code for this order, and the app doesn't count it as created."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW respondió con otro código para esta orden, y la app no la da por creada."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW a répondu avec un autre code pour cet ordre, et l’app ne le considère pas comme créé."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने इस ऑर्डर के लिए दूसरा कोड लौटाया, इसलिए ऐप इसे बना हुआ नहीं मानता."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW menjawab dengan kode lain untuk order ini, dan aplikasi tidak menganggapnya sudah dibuat."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW はこの注文に別のコードを返したため、アプリは作成済みとはみなしません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 이 주문에 다른 코드를 응답해서, 앱은 생성된 것으로 보지 않습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW bu emir için farklı bir kodla yanıt verdi ve uygulama emri oluşturulmuş saymıyor."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW đã trả lời bằng một mã khác cho lệnh này, và ứng dụng không coi là lệnh đã được tạo."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 为此订单返回了不同的代码，应用不会将其视为已创建。"
+          }
+        }
+      }
+    },
+    "Uma transação anterior com %@ ainda não confirmou na rede. Tente de novo quando ela confirmar. Se ela tiver sido descartada, o app libera em até 30 minutos, ou em até 3 horas se a rede já tinha visto a transação. Se ela seguir esperando na rede, só libera quando ela confirmar." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لم تتأكد معاملة سابقة بـ %@ على الشبكة بعد. حاول مجددًا بعد تأكيدها. إذا أُسقطت، يرفع التطبيق القيد خلال 30 دقيقة كحد أقصى، أو خلال 3 ساعات إذا كانت الشبكة قد رأت المعاملة. وإذا بقيت تنتظر على الشبكة، فلا يُرفع القيد إلا بعد تأكيدها."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine frühere Transaktion mit %@ ist im Netzwerk noch nicht bestätigt. Versuche es erneut, sobald sie bestätigt ist. Wurde sie verworfen, gibt die App sie nach spätestens 30 Minuten frei, oder nach spätestens 3 Stunden, wenn das Netzwerk die Transaktion schon gesehen hatte. Wartet sie weiter im Netzwerk, gibt die App sie erst frei, wenn sie bestätigt ist."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An earlier transaction with %@ hasn't confirmed on the network yet. Try again once it confirms. If it was dropped, the app lifts the hold within 30 minutes, or within 3 hours if the network had already seen it. If it's still waiting on the network, the hold stays until it confirms."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una transacción anterior con %@ aún no se confirmó en la red. Vuelve a intentarlo cuando se confirme. Si fue descartada, la app la libera en un máximo de 30 minutos, o de 3 horas si la red ya la había visto. Si sigue esperando en la red, solo la libera cuando se confirme."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une transaction précédente avec %@ n’est pas encore confirmée sur le réseau. Réessayez une fois qu’elle sera confirmée. Si elle a été abandonnée, l’app la libère en 30 minutes au plus, ou en 3 heures au plus si le réseau l’avait déjà vue. Si elle attend encore sur le réseau, l’app ne la libère qu’une fois confirmée."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ वाला पिछला लेनदेन अभी नेटवर्क पर पक्का नहीं हुआ है. पक्का होने के बाद फिर से कोशिश करें. अगर वह रद्द हो गया हो, तो ऐप 30 मिनट के अंदर रोक हटा देता है, या 3 घंटे के अंदर अगर नेटवर्क ने लेनदेन पहले ही देख लिया था. अगर वह अभी भी नेटवर्क पर इंतज़ार कर रहा है, तो रोक पक्का होने तक रहती है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transaksi sebelumnya dengan %@ belum terkonfirmasi di jaringan. Coba lagi setelah terkonfirmasi. Jika transaksi itu dibuang, aplikasi melepasnya dalam 30 menit, atau dalam 3 jam jika jaringan sudah melihat transaksi itu. Jika masih menunggu di jaringan, aplikasi baru melepasnya setelah terkonfirmasi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ を使った前回の取引はまだネットワークで確定していません。確定してからもう一度お試しください。破棄された場合は、30分以内に、ネットワークがすでに取引を確認していた場合は3時間以内に、アプリが制限を解除します。ネットワークで待機中のままなら、確定するまで制限は続きます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@(으)로 한 이전 거래가 아직 네트워크에서 확인되지 않았습니다. 확인된 뒤 다시 시도하세요. 거래가 폐기된 경우 앱이 30분 안에, 네트워크가 이미 거래를 확인했다면 3시간 안에 제한을 해제합니다. 네트워크에서 계속 대기 중이면 확인될 때까지 제한이 유지됩니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ile yapılan önceki işlem ağda henüz onaylanmadı. Onaylandıktan sonra tekrar dene. İşlem düşürüldüyse uygulama en geç 30 dakika içinde, ağ işlemi daha önce gördüyse en geç 3 saat içinde kilidi kaldırır. Ağda beklemeye devam ederse kilit, işlem onaylanana kadar kalır."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Giao dịch trước với %@ vẫn chưa được xác nhận trên mạng. Hãy thử lại khi nó được xác nhận. Nếu giao dịch đã bị loại bỏ, ứng dụng sẽ mở khóa trong tối đa 30 phút, hoặc tối đa 3 giờ nếu mạng đã thấy giao dịch. Nếu nó vẫn đang chờ trên mạng, ứng dụng chỉ mở khóa khi nó được xác nhận."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "之前用 %@ 进行的交易尚未在网络上确认。请在确认后再试。如果该交易已被丢弃，应用会在 30 分钟内解除限制；如果网络已经见过该交易，则在 3 小时内解除。如果它仍在网络上等待，限制会保持到它确认为止。"
+          }
+        }
+      }
+    },
+    "Sem confirmação da CoW" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لم تؤكدها CoW"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ohne Bestätigung von CoW"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not confirmed by CoW"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin confirmación de CoW"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sans confirmation de CoW"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने पक्का नहीं किया"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanpa konfirmasi CoW"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW の確認なし"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 확인 없음"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW onayı yok"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW chưa xác nhận"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 未确认"
+          }
+        }
+      }
+    },
+    "A CoW disse que recusou esta ordem, ou não respondeu com certeza. A ordem assinada vale até vencer, e só o cancelamento na cadeia garante que ela não executa." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "قالت CoW إنها رفضت هذا الأمر، أو لم ترد بشكل مؤكد. يبقى الأمر الموقّع صالحًا حتى انتهاء صلاحيته، والإلغاء على السلسلة وحده يضمن عدم تنفيذه."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW hat gemeldet, diese Order abgelehnt zu haben, oder nicht sicher geantwortet. Die signierte Order gilt bis zum Ablauf, und nur die Stornierung on-chain garantiert, dass sie nicht ausgeführt wird."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW said it rejected this order, or didn't answer for certain. The signed order stays valid until it expires, and only the on-chain cancellation guarantees it won't execute."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW dijo que rechazó esta orden, o no respondió con certeza. La orden firmada vale hasta vencer, y solo la cancelación en la cadena garantiza que no se ejecute."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW a dit avoir refusé cet ordre, ou n’a pas répondu avec certitude. L’ordre signé reste valable jusqu’à son expiration, et seule l’annulation sur la chaîne garantit qu’il ne s’exécutera pas."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW ने कहा कि उसने यह ऑर्डर ठुकरा दिया, या पक्का जवाब नहीं दिया. साइन किया हुआ ऑर्डर समय खत्म होने तक मान्य रहता है, और सिर्फ़ चेन पर रद्द करना ही पक्का करता है कि वह पूरा नहीं होगा."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW bilang menolak order ini, atau tidak menjawab dengan pasti. Order yang sudah ditandatangani berlaku sampai kedaluwarsa, dan hanya pembatalan di chain yang menjamin order itu tidak tereksekusi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW はこの注文を拒否したと伝えたか、確かな応答をしませんでした。署名済みの注文は期限まで有効で、実行されないことを保証できるのはチェーン上のキャンセルだけです。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW가 이 주문을 거절했다고 했거나 확실히 응답하지 않았습니다. 서명된 주문은 만료될 때까지 유효하며, 체인 위 취소만이 주문이 실행되지 않음을 보장합니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW bu emri reddettiğini söyledi ya da kesin yanıt vermedi. İmzalanan emir süresi dolana kadar geçerlidir ve çalışmayacağını yalnızca zincir üzerinde iptal garanti eder."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW nói đã từ chối lệnh này, hoặc không trả lời chắc chắn. Lệnh đã ký vẫn có hiệu lực đến khi hết hạn, và chỉ việc hủy trên chuỗi mới bảo đảm lệnh không được thực hiện."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoW 表示已拒绝此订单，或没有给出确定的答复。已签名的订单在到期前一直有效，只有链上取消才能保证它不会成交。"
+          }
+        }
+      }
+    },
+    "A troca falhou na rede" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "فشلت المبادلة على الشبكة"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Tausch ist im Netzwerk fehlgeschlagen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The swap failed on the network"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El intercambio falló en la red"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’échange a échoué sur le réseau"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "स्वैप नेटवर्क पर विफल हो गया"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swap gagal di jaringan"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スワップはネットワーク上で失敗しました"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스왑이 네트워크에서 실패했습니다"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Takas ağda başarısız oldu"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Giao dịch hoán đổi đã thất bại trên mạng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "兑换在网络上失败"
+          }
+        }
+      }
+    },
+    "Esperando a rede confirmar. Pode fechar: a Atividade mostra o resultado." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "بانتظار تأكيد الشبكة. يمكنك الإغلاق: يعرض النشاط النتيجة."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warten auf die Bestätigung des Netzwerks. Du kannst schließen: Die Aktivität zeigt das Ergebnis."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Waiting for the network to confirm. You can close this: Activity shows the result."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esperando que la red confirme. Puedes cerrar: Actividad muestra el resultado."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En attente de la confirmation du réseau. Vous pouvez fermer : l’Activité affiche le résultat."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "नेटवर्क के पक्का करने का इंतज़ार है. आप बंद कर सकते हैं: गतिविधि में नतीजा दिखेगा."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menunggu konfirmasi jaringan. Anda boleh menutup: Aktivitas menampilkan hasilnya."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ネットワークの確定を待っています。閉じても大丈夫です。結果はアクティビティに表示されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "네트워크 확인을 기다리는 중입니다. 닫아도 됩니다. 결과는 활동에 표시됩니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ağın onaylaması bekleniyor. Kapatabilirsin: sonuç Etkinlik’te görünür."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang chờ mạng xác nhận. Bạn có thể đóng: Hoạt động sẽ hiển thị kết quả."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在等待网络确认。可以关闭：结果会显示在“动态”中。"
+          }
+        }
+      }
+    },
+    "Moedas que cobram taxa na compra ou na venda costumam falhar assim. O que você vendia continua na carteira." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "العملات التي تفرض رسومًا على الشراء أو البيع تفشل عادةً بهذه الطريقة. ما كنت تبيعه لا يزال في المحفظة."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coins, die beim Kauf oder Verkauf eine Gebühr erheben, scheitern oft so. Was du verkaufen wolltest, ist noch in der Wallet."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coins that charge a tax on buying or selling often fail like this. What you were selling is still in your wallet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las monedas que cobran una tasa al comprar o vender suelen fallar así. Lo que vendías sigue en la billetera."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les jetons qui prélèvent une taxe à l’achat ou à la vente échouent souvent ainsi. Ce que vous vendiez est toujours dans le portefeuille."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "जो कॉइन खरीदने या बेचने पर टैक्स लेते हैं, वे अक्सर ऐसे ही विफल होते हैं. जो आप बेच रहे थे, वह वॉलेट में ही है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koin yang memungut pajak saat beli atau jual sering gagal seperti ini. Yang Anda jual masih ada di dompet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "購入や売却に手数料を課すコインは、このように失敗することがよくあります。売ろうとしたものはウォレットに残っています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "매수나 매도에 세금을 부과하는 코인은 이렇게 실패하는 경우가 많습니다. 팔려던 자산은 지갑에 그대로 있습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alımda veya satımda vergi alan coinler genelde böyle başarısız olur. Sattığın şey hâlâ cüzdanda."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Các đồng coin thu thuế khi mua hoặc bán thường thất bại như vậy. Thứ bạn định bán vẫn còn trong ví."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "买入或卖出时收税的代币常会这样失败。你要卖出的资产仍在钱包中。"
+          }
+        }
+      }
+    },
+    "A ordem já foi assinada e pode estar com a CoW. Para ter certeza de que ela não executa, cancele na cadeia: custa a taxa da rede e não depende da CoW." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تم توقيع الأمر بالفعل وقد يكون لدى CoW. للتأكد من عدم تنفيذه، ألغِه على السلسلة: يكلّف رسوم الشبكة ولا يعتمد على CoW."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Order ist bereits signiert und könnte bei CoW liegen. Um sicherzugehen, dass sie nicht ausgeführt wird, storniere sie on-chain: Das kostet die Netzwerkgebühr und hängt nicht von CoW ab."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The order is already signed and may be with CoW. To be sure it won't execute, cancel it on-chain: it costs the network fee and doesn't depend on CoW."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La orden ya fue firmada y puede estar con CoW. Para asegurarte de que no se ejecute, cancélala en la cadena: cuesta la tarifa de red y no depende de CoW."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’ordre est déjà signé et peut être chez CoW. Pour être sûr qu’il ne s’exécute pas, annulez-le sur la chaîne : cela coûte les frais du réseau et ne dépend pas de CoW."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ऑर्डर पहले ही साइन हो चुका है और CoW के पास हो सकता है. पक्का करने के लिए कि वह पूरा न हो, उसे चेन पर रद्द करें: इसमें नेटवर्क शुल्क लगता है और यह CoW पर निर्भर नहीं है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order sudah ditandatangani dan mungkin ada di CoW. Untuk memastikan tidak tereksekusi, batalkan di chain: biayanya sebesar biaya jaringan dan tidak bergantung pada CoW."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "注文はすでに署名済みで、CoW にある可能性があります。実行されないことを確実にするには、チェーン上でキャンセルしてください。ネットワーク手数料がかかり、CoW には依存しません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주문은 이미 서명되었고 CoW에 있을 수 있습니다. 실행되지 않도록 확실히 하려면 체인에서 취소하세요. 네트워크 수수료가 들고 CoW에 의존하지 않습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emir zaten imzalandı ve CoW’da olabilir. Çalışmayacağından emin olmak için zincirde iptal et: ağ ücreti tutar ve CoW’a bağlı değildir."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lệnh đã được ký và có thể đang ở CoW. Để chắc chắn lệnh không được thực hiện, hãy hủy trên chuỗi: tốn phí mạng và không phụ thuộc vào CoW."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "订单已签名，可能已在 CoW 手中。要确保它不会成交，请在链上取消：需支付网络费，且不依赖 CoW。"
+          }
+        }
+      }
+    },
+    "A simulação mostra que esta troca entregaria menos que o mínimo garantido, e o contrato a recusaria. É comum em moedas que cobram taxa na compra ou na venda: elas entregam menos que a cotação. Suba a tolerância de preço e revise de novo. Nada foi assinado." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تُظهر المحاكاة أن هذه المبادلة ستسلّم أقل من الحد الأدنى المضمون، وسيرفضها العقد. هذا شائع في العملات التي تفرض رسومًا على الشراء أو البيع: فهي تسلّم أقل من التسعيرة. ارفع نسبة التسامح في السعر وراجع مجددًا. لم يتم توقيع شيء."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Simulation zeigt, dass dieser Tausch weniger als das garantierte Minimum liefern würde, und der Vertrag würde ihn ablehnen. Das ist häufig bei Coins, die beim Kauf oder Verkauf eine Gebühr erheben: Sie liefern weniger als das Angebot. Erhöhe die Preistoleranz und prüfe erneut. Nichts wurde signiert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The simulation shows this swap would deliver less than the guaranteed minimum, and the contract would reject it. This is common with coins that charge a tax on buying or selling: they deliver less than the quote. Raise the price tolerance and review again. Nothing was signed."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La simulación muestra que este intercambio entregaría menos que el mínimo garantizado, y el contrato lo rechazaría. Es común en monedas que cobran una tasa al comprar o vender: entregan menos que la cotización. Sube la tolerancia de precio y revisa de nuevo. No se firmó nada."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La simulation montre que cet échange livrerait moins que le minimum garanti, et le contrat le refuserait. C’est courant avec les jetons qui prélèvent une taxe à l’achat ou à la vente : ils livrent moins que la cotation. Augmentez la tolérance de prix et vérifiez à nouveau. Rien n’a été signé."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सिमुलेशन दिखाता है कि यह स्वैप गारंटी वाले न्यूनतम से कम देगा, और कॉन्ट्रैक्ट इसे ठुकरा देगा. यह उन कॉइन में आम है जो खरीदने या बेचने पर टैक्स लेते हैं: वे कोटेशन से कम देते हैं. कीमत की सहनशीलता बढ़ाएं और फिर से जांचें. कुछ भी साइन नहीं हुआ."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Simulasi menunjukkan swap ini akan memberikan kurang dari minimum yang dijamin, dan kontrak akan menolaknya. Ini umum pada koin yang memungut pajak saat beli atau jual: mereka memberikan kurang dari kuotasi. Naikkan toleransi harga dan tinjau lagi. Tidak ada yang ditandatangani."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "シミュレーションでは、このスワップは保証された最低額より少なく受け取ることになり、コントラクトに拒否されます。購入や売却に手数料を課すコインでよくあることで、見積もりより少なく届きます。価格の許容幅を上げて、もう一度確認してください。何も署名されていません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시뮬레이션 결과 이 스왑은 보장된 최소량보다 적게 전달되어 컨트랙트가 거부합니다. 매수나 매도에 세금을 부과하는 코인에서 흔한 일로, 견적보다 적게 전달됩니다. 가격 허용 범위를 높이고 다시 검토하세요. 아무것도 서명되지 않았습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Simülasyon, bu takasın garanti edilen minimumdan az teslim edeceğini ve sözleşmenin reddedeceğini gösteriyor. Alımda veya satımda vergi alan coinlerde yaygındır: tekliften az teslim ederler. Fiyat toleransını artır ve yeniden incele. Hiçbir şey imzalanmadı."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mô phỏng cho thấy giao dịch này sẽ nhận ít hơn mức tối thiểu được bảo đảm, và hợp đồng sẽ từ chối. Điều này thường gặp với các đồng coin thu thuế khi mua hoặc bán: chúng giao ít hơn báo giá. Hãy tăng mức chấp nhận giá và xem lại. Chưa có gì được ký."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模拟显示此兑换将少于保证的最低数量，合约会拒绝它。这在买入或卖出时收税的代币中很常见：实际到账少于报价。请提高价格容差后重新查看。未签署任何内容。"
+          }
+        }
+      }
+    },
+    "Parte da troca saiu antes da falha. Confira o saldo e a Atividade." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "خرج جزء من المبادلة قبل الفشل. تحقق من الرصيد ومن النشاط."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein Teil des Tauschs ging vor dem Fehler durch. Prüfe das Guthaben und die Aktivität."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Part of the swap went through before the failure. Check your balance and Activity."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parte del intercambio salió antes del fallo. Revisa el saldo y la Actividad."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une partie de l’échange est passée avant l’échec. Vérifiez le solde et l’Activité."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "विफलता से पहले स्वैप का कुछ हिस्सा हो गया. बैलेंस और गतिविधि जांचें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sebagian swap sudah berjalan sebelum gagal. Periksa saldo dan Aktivitas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失敗の前にスワップの一部が実行されました。残高とアクティビティを確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실패 전에 스왑의 일부가 처리되었습니다. 잔액과 활동을 확인하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hatadan önce takasın bir kısmı gerçekleşti. Bakiyeyi ve Etkinlik’i kontrol et."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Một phần giao dịch hoán đổi đã thực hiện trước khi lỗi. Hãy kiểm tra số dư và Hoạt động."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失败前已有部分兑换成交。请查看余额和“动态”。"
+          }
+        }
+      }
+    },
+    "Uma transação anterior desta conta ainda não apareceu na rede, e a próxima não pode passar na frente dela. Tente de novo quando ela aparecer ou confirmar. Se ela tiver sido descartada, o app libera em até 30 minutos, ou em até 3 horas se a rede já tinha visto a transação. Se uma transação anterior a ela seguir esperando na rede, só libera quando essa confirmar." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لم تظهر معاملة سابقة من هذا الحساب على الشبكة بعد، ولا يمكن للتالية أن تتقدم عليها. حاول مجددًا عندما تظهر أو تتأكد. وإذا أُسقطت، يرفع التطبيق القيد خلال 30 دقيقة كحد أقصى، أو خلال 3 ساعات إذا كانت الشبكة قد رأت المعاملة. وإذا بقيت معاملة قبلها تنتظر على الشبكة، فلا يُرفع القيد إلا بعد تأكيد تلك المعاملة."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine frühere Transaktion dieses Kontos ist im Netzwerk noch nicht aufgetaucht, und die nächste darf sie nicht überholen. Versuche es erneut, wenn sie erscheint oder bestätigt ist. Wurde sie verworfen, gibt die App sie nach spätestens 30 Minuten frei, oder nach spätestens 3 Stunden, wenn das Netzwerk die Transaktion schon gesehen hatte. Wartet eine Transaktion davor weiter im Netzwerk, gibt die App sie erst frei, wenn diese bestätigt ist."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An earlier transaction from this account hasn't appeared on the network yet, and the next one can't jump ahead of it. Try again once it appears or confirms. If it was dropped, the app lifts the hold within 30 minutes, or within 3 hours if the network had already seen it. If an earlier transaction before it is still waiting on the network, the hold stays until that one confirms."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una transacción anterior de esta cuenta aún no apareció en la red, y la siguiente no puede adelantarse. Vuelve a intentarlo cuando aparezca o se confirme. Si fue descartada, la app la libera en un máximo de 30 minutos, o de 3 horas si la red ya la había visto. Si una transacción anterior a ella sigue esperando en la red, solo la libera cuando esa se confirme."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une transaction précédente de ce compte n’est pas encore apparue sur le réseau, et la suivante ne peut pas passer devant. Réessayez quand elle apparaîtra ou sera confirmée. Si elle a été abandonnée, l’app la libère en 30 minutes au plus, ou en 3 heures au plus si le réseau l’avait déjà vue. Si une transaction précédente attend encore sur le réseau, l’app ne la libère qu’une fois celle-ci confirmée."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस खाते का पिछला लेनदेन अभी नेटवर्क पर नहीं दिखा है, और अगला उससे आगे नहीं जा सकता. जब वह दिखे या पक्का हो, तब फिर से कोशिश करें. अगर वह रद्द हो गया हो, तो ऐप 30 मिनट के अंदर रोक हटा देता है, या 3 घंटे के अंदर अगर नेटवर्क ने लेनदेन पहले ही देख लिया था. अगर उससे पहले का कोई लेनदेन अभी भी नेटवर्क पर इंतज़ार कर रहा है, तो रोक उसके पक्का होने तक रहती है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transaksi sebelumnya dari akun ini belum muncul di jaringan, dan transaksi berikutnya tidak boleh mendahuluinya. Coba lagi setelah muncul atau terkonfirmasi. Jika transaksi itu dibuang, aplikasi melepasnya dalam 30 menit, atau dalam 3 jam jika jaringan sudah melihat transaksi itu. Jika transaksi sebelum itu masih menunggu di jaringan, aplikasi baru melepasnya setelah transaksi itu terkonfirmasi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このアカウントの前の取引がまだネットワークに表示されておらず、次の取引はそれを追い越せません。表示されるか確定してから、もう一度お試しください。破棄された場合は、30分以内に、ネットワークがすでに取引を確認していた場合は3時間以内に、アプリが制限を解除します。その前の取引がネットワークで待機中のままなら、その取引が確定するまで制限は続きます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 계정의 이전 거래가 아직 네트워크에 나타나지 않았고, 다음 거래가 그보다 앞설 수 없습니다. 나타나거나 확인된 뒤 다시 시도하세요. 거래가 폐기된 경우 앱이 30분 안에, 네트워크가 이미 거래를 확인했다면 3시간 안에 제한을 해제합니다. 그 이전 거래가 네트워크에서 계속 대기 중이면, 그 거래가 확인될 때까지 제한이 유지됩니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu hesabın önceki işlemi ağda henüz görünmedi ve sonraki işlem onun önüne geçemez. Görünce veya onaylanınca tekrar dene. İşlem düşürüldüyse uygulama en geç 30 dakika içinde, ağ işlemi daha önce gördüyse en geç 3 saat içinde kilidi kaldırır. Ondan önceki bir işlem ağda beklemeye devam ederse kilit, o işlem onaylanana kadar kalır."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Một giao dịch trước của tài khoản này vẫn chưa xuất hiện trên mạng, và giao dịch tiếp theo không thể vượt lên trước. Hãy thử lại khi nó xuất hiện hoặc được xác nhận. Nếu giao dịch đã bị loại bỏ, ứng dụng sẽ mở khóa trong tối đa 30 phút, hoặc tối đa 3 giờ nếu mạng đã thấy giao dịch. Nếu một giao dịch trước đó vẫn đang chờ trên mạng, ứng dụng chỉ mở khóa khi giao dịch đó được xác nhận."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此账户之前的一笔交易尚未出现在网络上，下一笔不能抢在它前面。请在它出现或确认后再试。如果该交易已被丢弃，应用会在 30 分钟内解除限制；如果网络已经见过该交易，则在 3 小时内解除。如果它之前的交易仍在网络上等待，限制会保持到那笔交易确认为止。"
           }
         }
       }

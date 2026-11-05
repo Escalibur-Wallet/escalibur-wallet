@@ -43,6 +43,8 @@ MOEDAS += ["polkadot"]
 MOEDAS += ["near"]
 MOEDAS += ["aptos"]
 MOEDAS += ["shiba-inu", "bnb-frog-inu"]
+# Os embrulhados da moeda da rede que a ordem limite da CoW cria (pedido do dono, 04/11/2026).
+MOEDAS += ["wbnb", "wmatic", "wrapped-avax", "wrapped-xpl"]
 # Provedores de troca e de ponte com token proprio: o logo e o do token no CoinGecko (a
 # ShibaSwap usa o SHIB, a ponte da Tether o USDT0). LI.FI, De¹ e Circle (o CCTP) nao tem token:
 # os logos deles vieram do site de cada um, em vetor, renderizados em 250 px e conferidos a mao

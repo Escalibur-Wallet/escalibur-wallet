@@ -158,8 +158,9 @@ class EntradaDaFrase(quantas: Int = 12) {
     fun lugares(palavra: ByteArray): List<Int> = posicoes.indices.filter { posicoes[it]?.contentEquals(palavra) == true }
     val preenchidas: Int get() = posicoes.count { it != null }
 
-    /** Quantas letras tem a palavra (os pontos da tela). */
-    fun letras(indice: Int): Int = posicoes.getOrNull(indice)?.let { String(it, Charsets.UTF_8).length } ?: 0
+    /** Quantas letras tem a palavra (os pontos da tela): contadas nos bytes, sem uma String nova da palavra a
+     * cada quadro (auditoria Android de 31/10/2026, AA-08). */
+    fun letras(indice: Int): Int = posicoes.getOrNull(indice)?.count { it.toInt() and 0xC0 != 0x80 } ?: 0
 
     /** So para mostrar enquanto o dono segura a posicao. */
     fun texto(indice: Int): String = posicoes.getOrNull(indice)?.let { String(it, Charsets.UTF_8) } ?: ""
@@ -275,9 +276,15 @@ internal fun TelaDaFrase(
     // primeira carteira e na conferencia da copia; o globo troca pelo do celular nesta tela, para as
     // frases em japones, chines ou coreano. No Super Security, nunca.
     var peloCelular by remember { mutableStateOf(false) }
+    // Com um servico de acessibilidade de fora ligado, as palavras voltam ao teclado da Escalibur, que fecha
+    // (terceira passada da auditoria de 03/11/2026).
+    val acessibilidadeDeFora = app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isNotEmpty()
+    LaunchedEffect(acessibilidadeDeFora) { if (acessibilidadeDeFora) peloCelular = false }
     var confirmarCelular by remember { mutableStateOf(false) }
     val reforcado = App.estado.reforcado
-    val proprio = (App.estado.tecladoProprio || conferindo != null || App.estado.carteiras.isEmpty()) && (!peloCelular || reforcado)
+    // O teclado do celular so com nenhum servico de fora ligado, mesmo que a escolha tenha sido feita antes.
+    val celularLiberado = peloCelular && !acessibilidadeDeFora
+    val proprio = (App.estado.tecladoProprio || conferindo != null || App.estado.carteiras.isEmpty()) && (!celularLiberado || reforcado)
     val celular = remember { TecladoDoCelular() }
 
     // Sem internet enquanto as palavras estao na tela: a conferencia e toda local.
@@ -350,7 +357,7 @@ internal fun TelaDaFrase(
 
     fun colar() {
         val gerente = contexto.getSystemService(ClipboardManager::class.java)
-        val texto = runCatching { gerente.primaryClip?.getItemAt(0)?.coerceToText(contexto)?.toString() }.getOrNull().orEmpty()
+        val texto = runCatching { gerente.primaryClip?.getItemAt(0)?.text?.toString() }.getOrNull().orEmpty()
         if (texto.isBlank()) return
         palavra.limpar()
         val quantas = entrada.colar(texto)
@@ -396,7 +403,7 @@ internal fun TelaDaFrase(
                 }
             } catch (falha: FalhaDoNucleo) {
                 // Passou do limite do cofre: o aviso com o que fazer, em vez do erro generico.
-                mensagem = if (falha.codigo == "passphrase.longa") t("A passphrase passou do tamanho máximo: até 256 caracteres sem acento, menos com acento. Encurte para seguir.") else t("Não foi possível importar a carteira.")
+                mensagem = if (falha.codigo == "passphrase.longa") t("A passphrase passou do tamanho máximo: até 256 caracteres sem acento, menos com acento. Encurte para seguir.") else Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível importar a carteira.")
             } finally {
                 trabalhando = false
             }
@@ -549,7 +556,7 @@ internal fun TelaDaFrase(
                     aoSobre = { Navegacao.folha { FolhaDoSafeKeyboard { Navegacao.fechar() } } },
                 )
             } else {
-                PalavraPeloCelular(palavra.texto, { palavra.texto = it }, { seguir() }, celular, todosOsIdiomas = peloCelular)
+                PalavraPeloCelular(palavra.texto, { palavra.texto = it }, { seguir() }, celular, todosOsIdiomas = celularLiberado)
             }
         } else {
             Rodape {
@@ -568,7 +575,8 @@ internal fun TelaDaFrase(
             t("Usar o do celular"), destrutiva = false,
             aoConfirmar = {
                 confirmarCelular = false
-                peloCelular = true
+                // Um servico de fora ligado depois do aviso aberto: a escolha nao vale.
+                peloCelular = !app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isNotEmpty()
             },
             aoCancelar = { confirmarCelular = false },
         )
@@ -861,7 +869,7 @@ fun ObservarEndereco(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
                     Row(
                         Modifier.height(32.dp).clip(CircleShape).background(Paleta.controle).clickable {
                             val gerente = contexto.getSystemService(ClipboardManager::class.java)
-                            endereco = runCatching { gerente.primaryClip?.getItemAt(0)?.coerceToText(contexto)?.toString() }.getOrNull().orEmpty().trim().take(512)
+                            endereco = runCatching { gerente.primaryClip?.getItemAt(0)?.text?.toString() }.getOrNull().orEmpty().trim().take(512)
                         }.padding(horizontal = Espaco.sm),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {

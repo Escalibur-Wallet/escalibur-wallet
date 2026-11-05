@@ -347,7 +347,7 @@ private fun ColumnScope.EtapaDoDestino(controle: ControleDoEnvio, r: RetratoDoEn
                 val temTexto = remember { contexto.getSystemService(ClipboardManager::class.java).hasPrimaryClip() }
                 Pilula(t("Colar"), null, ligado = temTexto) {
                     val gerente = contexto.getSystemService(ClipboardManager::class.java)
-                    val colado = runCatching { gerente.primaryClip?.getItemAt(0)?.coerceToText(contexto)?.toString() }.getOrNull().orEmpty()
+                    val colado = runCatching { gerente.primaryClip?.getItemAt(0)?.text?.toString() }.getOrNull().orEmpty()
                     if (colado.isNotEmpty()) mudar("envio.link", JSONObject().put("texto", colado))
                 }
                 Pilula(t("Ler QR"), Icones.qr) {
@@ -636,6 +636,7 @@ private fun CaixasDeConferencia(texto: String, quantos: Int, modifier: Modifier 
 @Composable
 private fun FolhaDeCarteiras(r: RetratoDoEnvio, aoFechar: () -> Unit, aoEscolher: (RetratoDoEnvio.MinhaCarteira) -> Unit) {
     Dialog(onDismissRequest = aoFechar, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        app.escalibur.wallet.ui.comp.ProtegerJanela()
         Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
             CabecalhoDeFolha(t("Minhas carteiras"), aoFechar)
             Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(top = Espaco.md),

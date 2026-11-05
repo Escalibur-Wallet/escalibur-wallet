@@ -56,6 +56,8 @@ object Ciclo {
      */
     fun foiParaSegundoPlano() {
         primeiroPlano = false
+        // A biometria que estava na tela cai antes de o nucleo descartar o rosto (auditoria de 03/11/2026).
+        app.escalibur.wallet.nucleo.Cofre.cancelarBiometria()
         // O seletor de arquivos do proprio app (salvar ou abrir envelope) e outra Activity: sair para ele
         // nao e sair do app. Com "Ao sair do app", o app travava na volta, e salvar ou abrir envelope
         // nunca terminava (caca de bugs de 27/10/2026). Ate 10 minutos no seletor, nao conta.

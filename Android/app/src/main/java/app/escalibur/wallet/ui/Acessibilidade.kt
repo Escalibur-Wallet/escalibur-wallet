@@ -11,6 +11,8 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,25 +49,35 @@ object Acessibilidade {
     var suspeitos by mutableStateOf<List<String>>(emptyList())
         private set
 
+    /**
+     * Para digitar segredo (as palavras, a passphrase, a senha do envelope), todo servico que nao veio com
+     * o celular, ferramenta ou nao, e em qualquer Android (segunda passada da auditoria de 03/11/2026): no 14
+     * em diante quem nao se diz ferramenta nao le a tela, mas ainda pode por uma camada transparente por
+     * cima e ver onde o dono toca. No teclado de letras em posicao fixa, a posicao e a letra. O resto da
+     * carteira segue aberto; so o teclado desses campos fecha (`TecladoFechadoPelaAcessibilidade`).
+     */
+    var suspeitosParaSegredo by mutableStateOf<List<String>>(emptyList())
+        private set
+
     private var ouvindo = false
 
     /** Na criacao e a cada volta para a frente, antes de qualquer tela; e quando o Android avisa que mudou. */
     fun conferir(contexto: Context) {
         val gerente = contexto.getSystemService(AccessibilityManager::class.java) ?: return
-        suspeitos = suspeitosAgora(contexto.applicationContext, gerente)
+        atualizar(contexto.applicationContext, gerente)
         if (!ouvindo) {
             ouvindo = true
             val app = contexto.applicationContext
-            gerente.addAccessibilityStateChangeListener { suspeitos = suspeitosAgora(app, gerente) }
+            gerente.addAccessibilityStateChangeListener { atualizar(app, gerente) }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                gerente.addAccessibilityServicesStateChangeListener { suspeitos = suspeitosAgora(app, gerente) }
+                gerente.addAccessibilityServicesStateChangeListener { atualizar(app, gerente) }
             }
             // A lista que o sistema guarda, que muda tambem quando um servico liga com o app aberto
             // (tela dividida, atalho), sem aviso do AccessibilityManager no Android 11 e 12.
             app.contentResolver.registerContentObserver(
                 Settings.Secure.getUriFor(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES), false,
                 object : ContentObserver(Handler(Looper.getMainLooper())) {
-                    override fun onChange(selfChange: Boolean) { suspeitos = suspeitosAgora(app, gerente) }
+                    override fun onChange(selfChange: Boolean) { atualizar(app, gerente) }
                 },
             )
         }
@@ -78,7 +90,14 @@ object Acessibilidade {
      * nao some (revisao de seguranca de 01/11/2026). Um ligado que o sistema nao descreve (fora da
      * lista dos instalados) conta como suspeito: nao da para provar que veio com o celular.
      */
-    private fun suspeitosAgora(contexto: Context, gerente: AccessibilityManager): List<String> {
+    private fun atualizar(contexto: Context, gerente: AccessibilityManager) {
+        val (todos, segredo) = suspeitosAgora(contexto, gerente)
+        suspeitos = todos
+        suspeitosParaSegredo = segredo
+    }
+
+    /** Os que fecham a carteira e os que fecham o teclado de segredo. */
+    private fun suspeitosAgora(contexto: Context, gerente: AccessibilityManager): Pair<List<String>, List<String>> {
         val instalados = gerente.installedAccessibilityServiceList.associateBy { componente(it) }
         val ligados = gerente.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK).associateBy { componente(it) }.toMutableMap()
         val guardados = Settings.Secure.getString(contexto.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
@@ -92,10 +111,10 @@ object Acessibilidade {
                 if (info != null) ligados[nome] = info else desconhecidos.add(nome.packageName)
             }
         }
-        val suspeitos = ligados.values
-            .filter { info -> !doSistema(info) && (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE || info.isAccessibilityTool) }
-            .map { info -> runCatching { info.resolveInfo.loadLabel(contexto.packageManager).toString() }.getOrNull() ?: info.id }
-        return (suspeitos + desconhecidos).distinct()
+        fun nome(info: AccessibilityServiceInfo) = runCatching { info.resolveInfo.loadLabel(contexto.packageManager).toString() }.getOrNull() ?: info.id
+        val deFora = ligados.values.filter { info -> !doSistema(info) }
+        val suspeitos = deFora.filter { info -> Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE || info.isAccessibilityTool }.map(::nome)
+        return (suspeitos + desconhecidos).distinct() to (deFora.map(::nome) + desconhecidos).distinct()
     }
 
     private fun componente(info: AccessibilityServiceInfo): ComponentName? =
@@ -105,6 +124,23 @@ object Acessibilidade {
     private fun doSistema(info: AccessibilityServiceInfo): Boolean {
         val app = info.resolveInfo?.serviceInfo?.applicationInfo ?: return false
         return app.flags and ApplicationInfo.FLAG_SYSTEM != 0
+    }
+}
+
+/**
+ * No lugar do teclado de um campo de segredo, enquanto um servico de acessibilidade de fora estiver ligado
+ * (`suspeitosParaSegredo`): ele ve onde o dono toca. O resto da carteira segue aberto.
+ */
+@Composable
+fun TecladoFechadoPelaAcessibilidade(suspeitos: List<String>, modifier: Modifier = Modifier) {
+    val contexto = LocalContext.current
+    Column(modifier.fillMaxWidth().background(Paleta.corpo).navigationBarsPadding().padding(Espaco.margem),
+           horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(t("%@ tem acesso de acessibilidade e pode ver onde você toca. Para digitar palavras e senhas, desligue ele: o resto da carteira continua aberto.", suspeitos.joinToString(", ")),
+             style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
+        app.escalibur.wallet.ui.comp.BotaoSecundario(t("Abrir as configurações de acessibilidade"), Modifier.padding(top = Espaco.md)) {
+            runCatching { contexto.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+        }
     }
 }
 

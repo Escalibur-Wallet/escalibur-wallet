@@ -546,6 +546,7 @@ private fun LinhaDaForca(senha: Segredo, modifier: Modifier = Modifier) {
 private fun AvisoDeRisco(r: JSONObject, aoSortear: () -> Unit, aoUsar: () -> Unit) {
     val media = r.optBoolean("media")
     androidx.compose.ui.window.Dialog(onDismissRequest = aoSortear) {
+        app.escalibur.wallet.ui.comp.ProtegerJanela()
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(Raio.folha)).background(Paleta.corpo).padding(Espaco.lg),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -718,7 +719,7 @@ private fun nomeDoIdioma(idioma: String): String {
  * so ver as palavras.
  */
 @Composable
-fun FluxoDeAbrirEnvelope(inicial: Uri? = null, aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerminar: () -> Unit = aoCancelar) {
+fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerminar: () -> Unit = aoCancelar) {
     val escopo = rememberCoroutineScope()
     val contexto = LocalContext.current
     var passo by remember { mutableStateOf("escolher") }
@@ -826,8 +827,8 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, aoCancelar: () -> Unit = { Navega
             try {
                 previa = Api.objeto("envelope.previa")
                 passo = "previa"
-            } catch (_: FalhaDoNucleo) {
-                erro = t("Não foi possível importar a carteira.")
+            } catch (falha: FalhaDoNucleo) {
+                erro = Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível importar a carteira.")
             } finally {
                 trabalhando = false
             }
@@ -902,6 +903,14 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, aoCancelar: () -> Unit = { Navega
                     CampoSecreto(senha, t("Senha do envelope"), revelar) { revelar = it }
                     Text(t("Segure o dedo no campo para ver o que digitou."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
                     erro?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.baixa, modifier = Modifier.padding(top = Espaco.xs)) }
+                    // O envelope veio de outro app (auditoria Android de 31/10/2026, AA-10): o golpe do "envelope pronto"
+                    // e abrir a Escalibur ja nesta tela com um envelope do golpista, e convencer o dono a importa-lo.
+                    if (inicial != null) {
+                        Faixa(TipoDeFaixa.cautela, t("Este envelope veio de outro app"),
+                              mensagem = t("Veio de %@. Só abra e importe se foi você que lacrou este envelope: um envelope feito por outra pessoa abre uma carteira que ela controla.",
+                                           origem ?: t("outro app")),
+                              modifier = Modifier.padding(top = Espaco.md))
+                    }
                 }
                 Rodape { BotaoPrimario(t("Abrir envelope"), ligado = senha.text.isNotEmpty()) { abrir() } }
             }
@@ -985,13 +994,18 @@ object EnvelopeCompartilhado {
  */
 object EnvelopeRecebido {
     var uri by mutableStateOf<Uri?>(null)
+    /** O nome do app de onde o envelope veio (o `referrer` da Activity), para a faixa da tela de senha. */
+    var origem by mutableStateOf<String?>(null)
 
-    fun receber(intent: Intent?) {
+    fun receber(intent: Intent?, origem: String? = null) {
         val recebido = when (intent?.action) {
             Intent.ACTION_VIEW -> intent.data
             Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
             else -> null
         } ?: return
-        if (recebido.scheme == "content") uri = recebido
+        if (recebido.scheme == "content") {
+            uri = recebido
+            this.origem = origem
+        }
     }
 }

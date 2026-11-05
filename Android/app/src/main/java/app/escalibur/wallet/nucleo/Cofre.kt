@@ -26,6 +26,7 @@ import java.security.PrivateKey
 import java.security.SecureRandom
 import java.security.spec.MGF1ParameterSpec
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import javax.crypto.AEADBadTagException
@@ -98,6 +99,20 @@ object Cofre {
     /** A atividade em primeiro plano, onde a biometria aparece. */
     fun primeiroPlano(activity: Activity?) {
         atividade = activity?.let { WeakReference(it) }
+    }
+
+    /** O pedido de biometria na tela agora, com o sinal de cancelar e a espera dele. */
+    @Volatile private var pedidoAtual: Pair<CancellationSignal, CountDownLatch>? = null
+
+    /**
+     * O app saiu da frente: o pedido de biometria cai na hora, sem esperar a resposta do sistema, que
+     * chega pela thread principal (auditoria de 03/11/2026: com o Super Security, o app congelava).
+     */
+    fun cancelarBiometria() {
+        pedidoAtual?.let { (cancelar, pronto) ->
+            cancelar.cancel()
+            pronto.countDown()
+        }
     }
 
     private val keyStore: KeyStore by lazy { KeyStore.getInstance("AndroidKeyStore").apply { load(null) } }
@@ -665,6 +680,7 @@ object Cofre {
         val autenticou = java.util.concurrent.atomic.AtomicBoolean(false)
         val erro = AtomicInteger(CANCELADO)
         val cancelar = CancellationSignal()
+        pedidoAtual = cancelar to pronto
         Handler(Looper.getMainLooper()).post {
             try {
                 val prompt = BiometricPrompt.Builder(activity)
@@ -694,7 +710,16 @@ object Cofre {
                 pronto.countDown()
             }
         }
-        pronto.await()
+        // Sem resposta em 60 s, o pedido cai: nunca uma espera sem fim com o cofre preso nela.
+        val respondeu = try {
+            pronto.await(60, TimeUnit.SECONDS)
+        } finally {
+            pedidoAtual = null
+        }
+        if (!respondeu) {
+            cancelar.cancel()
+            throw Recusa(CANCELADO)
+        }
         if (!autenticou.get()) throw Recusa(erro.get())
         return if (cifra != null) resultado.get() ?: throw Recusa(FALHA) else null
     }

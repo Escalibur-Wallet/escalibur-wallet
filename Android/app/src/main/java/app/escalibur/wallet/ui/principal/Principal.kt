@@ -199,13 +199,14 @@ fun Principal() {
     // Um envelope aberto em outro app: a tela de abrir envelope com ele, por cima de tudo (o `incomingEnvelope` do iOS).
     androidx.compose.runtime.LaunchedEffect(app.escalibur.wallet.ui.envelope.EnvelopeRecebido.uri) {
         val uri = app.escalibur.wallet.ui.envelope.EnvelopeRecebido.uri ?: return@LaunchedEffect
+        val origem = app.escalibur.wallet.ui.envelope.EnvelopeRecebido.origem
         app.escalibur.wallet.ui.envelope.EnvelopeRecebido.uri = null
         // Como a notificacao: com um envio, troca ou ponte em revisao, transmitindo ou sem resposta, outro
         // app nao fecha a tela com um arquivo qualquer (auditoria de 30/10/2026).
         val critica = runCatching { app.escalibur.wallet.nucleo.Api.objeto("operacao.critica").optBoolean("critica") }.getOrDefault(false)
         if (critica) return@LaunchedEffect
         Navegacao.fecharTudo()
-        Navegacao.cobrir { app.escalibur.wallet.ui.envelope.FluxoDeAbrirEnvelope(inicial = uri) }
+        Navegacao.cobrir { app.escalibur.wallet.ui.envelope.FluxoDeAbrirEnvelope(inicial = uri, origem = origem) }
     }
     if (app.escalibur.wallet.BuildConfig.DEBUG) {
         androidx.compose.runtime.LaunchedEffect(Navegacao.telaDeDepuracao) {

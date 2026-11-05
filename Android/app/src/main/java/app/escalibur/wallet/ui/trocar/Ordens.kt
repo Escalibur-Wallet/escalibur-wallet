@@ -173,6 +173,7 @@ private fun LinhaDaOrdemAberta(ordem: LinhaDaOrdem, acao: () -> Unit) {
             Text(ordem.detalhe, style = estilo(Tipo.nota), color = Paleta.tintaSuave)
             ordem.preco?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1) }
             if (ordem.fracao != null) Text(vencimento(ordem.vence), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+            if (ordem.semConfirmacao) Text(t("Sem confirmação da CoW"), style = estilo(Tipo.nota), color = Paleta.cautela)
         }
         val fracao = ordem.fracao
         if (fracao != null) AnelDoPreenchimento(fracao, 44.dp)
@@ -259,14 +260,18 @@ private fun FolhaDaOrdem(ordem: LinhaDaOrdem, podeAssinar: Boolean, aoFechar: ()
             Text(
                 when {
                     !podeAssinar -> t("Esta carteira só acompanha: para mudar ou cancelar, abra a carteira que assina.")
-                    ordem.podeCancelar -> t("Uma ordem assinada não muda. Editar abre esta ordem com os valores dela; na revisão, ela é cancelada e a nova é criada, nesta ordem.")
+                    ordem.semConfirmacao -> t("A CoW disse que recusou esta ordem, ou não respondeu com certeza. A ordem assinada vale até vencer, e só o cancelamento na cadeia garante que ela não executa.")
+                    ordem.podeEditar -> t("Uma ordem assinada não muda. Editar abre esta ordem com os valores dela; na revisão, ela é cancelada e a nova é criada, nesta ordem.")
                     else -> ordem.explicacao
                 },
                 style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.sm),
             )
             if (ordem.podeCancelar) {
-                BotaoSecundario(t("Editar a ordem"), Modifier.padding(top = Espaco.md)) { fechar(aoEditar) }
-                BotaoTerciario(t("Cancelar a ordem"), Modifier.fillMaxWidth(), cor = Paleta.baixa) { fechar(aoCancelar) }
+                // A guardada so cancela: editar criaria outra ordem pela mesma CoW que nao confirmou esta.
+                if (ordem.podeEditar) BotaoSecundario(t("Editar a ordem"), Modifier.padding(top = Espaco.md)) { fechar(aoEditar) }
+                BotaoTerciario(
+                    t("Cancelar a ordem"), Modifier.fillMaxWidth().padding(top = if (ordem.podeEditar) 0.dp else Espaco.md), cor = Paleta.baixa,
+                ) { fechar(aoCancelar) }
             }
         }
     }

@@ -123,6 +123,16 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
 
     /// PUT e DELETE com corpo JSON, pelas mesmas regras de `get`/`post`. A CoW so aceita
     /// cancelamento em `DELETE /api/v1/orders` e registro de appData em `PUT`.
+    /// PUT que, numa recusa 4xx, devolve o corpo (ate 16 KB) em `Refusal`, como o `postKeepingRefusal`:
+    /// o registro do appData da CoW diz por que recusou (segunda passada da auditoria de 03/11/2026).
+    public func putKeepingRefusal(_ url: URL, json body: Data, timeout: TimeInterval = 10) async throws -> Data {
+        var request = URLRequest(url: url, timeoutInterval: timeout)
+        request.httpMethod = "PUT"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return try await perform(request, keepsRefusal: true)
+    }
+
     public func send(_ method: String, _ url: URL, json body: Data?, headers: [String: String] = [:], timeout: TimeInterval = 10) async throws -> Data {
         guard ["PUT", "DELETE"].contains(method) else { throw Failure.invalidResponse }
         var request = URLRequest(url: url, timeoutInterval: timeout)
@@ -285,9 +295,10 @@ extension HTTPClient: URLSessionDataDelegate {
         if let http = response as? HTTPURLResponse {
             if (300..<400).contains(http.statusCode) { refusal = .redirectRefused }
             else if transfer.keepsRefusal, (400..<500).contains(http.statusCode) {
-                // O corpo da recusa e lido, ate 16 KB, para quem pediu o motivo.
+                // O corpo da recusa e lido, ate 16 KB, para quem pediu o motivo. Anunciado maior,
+                // nem chega: fica a recusa sem o motivo (auditoria de 03/11/2026).
                 lock.withLock { transfer.refusedStatus = http.statusCode }
-                refusal = nil
+                refusal = http.expectedContentLength > Int64(HTTPClient.maxRefusalBytes) ? .status(http.statusCode) : nil
             }
             else if !(200..<300).contains(http.statusCode) { refusal = .status(http.statusCode) }
             else if http.expectedContentLength > Int64(transfer.limit) { refusal = .tooLarge }
@@ -297,8 +308,9 @@ extension HTTPClient: URLSessionDataDelegate {
         }
         lock.withLock {
             transfer.failure = refusal
+            // Nunca reserva mais que o teto desta resposta: o tamanho anunciado vem de fora.
             if refusal == nil, response.expectedContentLength > 0 {
-                transfer.data.reserveCapacity(Int(response.expectedContentLength))
+                transfer.data.reserveCapacity(min(Int(clamping: response.expectedContentLength), transfer.currentLimit))
             }
         }
         completionHandler(refusal == nil ? .allow : .cancel)

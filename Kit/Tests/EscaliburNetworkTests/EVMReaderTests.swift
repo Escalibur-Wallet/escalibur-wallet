@@ -406,6 +406,59 @@ struct EVMReaderTests {
         #expect(try EVMReader.parseReceipt(.object(fields))?.success == false)
     }
 
+    // MARK: Fila de nonces
+
+    static let pendingHash = "0x" + String(repeating: "ab", count: 32)
+
+    static func pendingTx(from: String = owner.description, nonce: String = "0x5") -> Data {
+        Data(#"{"jsonrpc":"2.0","id":1,"result":{"hash":"\#(pendingHash)","from":"\#(from.lowercased())","nonce":"\#(nonce)"}}"#.utf8)
+    }
+
+    static let noTx = Data(#"{"jsonrpc":"2.0","id":1,"result":null}"#.utf8)
+
+    static func sighting(_ answers: [String: Data], providers: [ProviderPool.Provider]) async throws -> EVMReader.Sighting {
+        let transport = try Self.transport(overrides: answers.mapValues { ["eth_getTransactionByHash": $0] })
+        let reader = EVMReader(transport: transport, rpc: ["ethereum": providers], history: [:], privateRelays: testProviders("relay1", "relay2"))
+        return try await reader.sighting(pendingHash, chain: .ethereum, from: owner.description, nonce: 5)
+    }
+
+    static func providers(_ names: String...) -> [ProviderPool.Provider] {
+        names.map { ProviderPool.Provider(name: $0, baseURL: URL(string: "https://\($0).test")!) }
+    }
+
+    @Test("Vista so com dois operadores; o mesmo operador em dois enderecos conta uma vez (sexta passada de 03/11/2026)")
+    func sightingNeedsTwoOperators() async throws {
+        #expect(try await Self.sighting(["a.test": Self.pendingTx(), "b.test": Self.pendingTx()], providers: Self.providers("a", "b")) == .seen)
+        let sameOwner = [ProviderPool.Provider(name: "a", baseURL: URL(string: "https://a.test")!, operatorName: "x"),
+                         ProviderPool.Provider(name: "a2", baseURL: URL(string: "https://a2.test")!, operatorName: "x"),
+                         ProviderPool.Provider(name: "c", baseURL: URL(string: "https://c.test")!, operatorName: "c")]
+        let twice = try await Self.sighting(["a.test": Self.pendingTx(), "a2.test": Self.pendingTx(), "c.test": Self.noTx], providers: sameOwner)
+        #expect(twice == .partial)
+    }
+
+    @Test("Outra conta ou outro nonce com o mesmo hash nao conta; uma vista e uma falha ficam em partial")
+    func sightingRejectsMismatch() async throws {
+        let otherFrom = try await Self.sighting(["a.test": Self.pendingTx(), "b.test": Self.pendingTx(from: Self.destination.description)],
+                                                providers: Self.providers("a", "b"))
+        #expect(otherFrom == .partial)
+        let otherNonce = try await Self.sighting(["a.test": Self.pendingTx(), "b.test": Self.pendingTx(nonce: "0x6")], providers: Self.providers("a", "b"))
+        #expect(otherNonce == .partial)
+        let failing = try await Self.sighting(["a.test": Self.pendingTx(), "b.test": Data("nao e json".utf8)], providers: Self.providers("a", "b"))
+        #expect(failing == .partial)
+    }
+
+    @Test("Desconhecida so depois de perguntar a todos: dois sem ela e um terceiro com ela nao a dao por perdida")
+    func unknownAsksEveryone() async throws {
+        #expect(try await Self.sighting(["a.test": Self.noTx, "b.test": Self.noTx], providers: Self.providers("a", "b")) == .unknown)
+        let third = try await Self.sighting(["a.test": Self.noTx, "b.test": Self.noTx, "c.test": Self.pendingTx()], providers: Self.providers("a", "b", "c"))
+        #expect(third == .partial)
+        // O terceiro sem resposta (fora do ar, 429, no banco): pode ser o que tem a transacao (setima passada).
+        let silent = try await Self.sighting(["a.test": Self.noTx, "b.test": Self.noTx, "c.test": Data("nao e json".utf8)], providers: Self.providers("a", "b", "c"))
+        #expect(silent == .partial)
+        let allNull = try await Self.sighting(["a.test": Self.noTx, "b.test": Self.noTx, "c.test": Self.noTx], providers: Self.providers("a", "b", "c"))
+        #expect(allNull == .unknown)
+    }
+
     // MARK: Historico
 
     @Test("Blockscout: po do sosia e token falso escondidos, envios do dono aparecem")

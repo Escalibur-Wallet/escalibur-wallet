@@ -188,6 +188,7 @@ struct BridgeReviewFlow: View {
         }
         await NonceQueue.prune(session, wallet: wallet.id, chain: intent.from.chain, address: account.address)
         let queue = NonceQueue.queue(session, wallet: wallet.id, chain: intent.from.chain, address: account.address)
+        guard !sellsInFlight(wallet: wallet.id, address: account.address) else { return }
         do {
             let options = try await BridgeEngine.shared.quotes(intent)
             guard let fresh = options.first(where: { $0.route == item.route }) ?? options.first else {
@@ -208,6 +209,16 @@ struct BridgeReviewFlow: View {
             }
             self.error = (error as? LocalizedError)?.errorDescription ?? String(localized: "Não foi possível montar agora. Tente de novo.")
         }
+    }
+
+    /// Uma transacao anterior desta conta que a rede ainda nao viu, ou com o ativo da ponte e ainda sem
+    /// confirmar: o plano pularia o nonce dela, ou leria o saldo de antes dela (auditoria de 03/11/2026).
+    /// Ler depois do `prune`. Mostra o motivo e devolve true.
+    private func sellsInFlight(wallet: UUID, address: String) -> Bool {
+        guard let reason = NonceQueue.blockedReason(session, wallet: wallet, chain: intent.from.chain, address: address, asset: sellAsset)
+        else { return false }
+        error = reason
+        return true
     }
 
     /// Desta carteira e da rede de origem; sai exatamente o valor pedido; chega pelo
@@ -237,7 +248,15 @@ struct BridgeReviewFlow: View {
             return
         }
         guard planMatches(plan, quote: quote) else { return }
+        // Ate a assinatura: uma troca ou um envio deste ativo pode ter saido depois da revisao.
+        if let account = session.selectedWallet?.account(intent.from.chain), sellsInFlight(wallet: plan.walletID, address: account.address) { return }
         guard await VoiceGate.shared.confirm(.send(fiat: fiat), session: session) else { return }
+        // O autoteste da assinatura antes da passphrase e do PIN, fora da thread principal: com um defeito do aparelho,
+        // nada e pedido a toa (o Signer confere de novo antes de abrir o cofre; revisao da decima terceira passada).
+        guard (try? await Offload.run({ SigningSelfTest.passed(for: plan) })) == true else {
+            error = SigningSelfTest.Failure().errorDescription
+            return
+        }
         // Carteira com passphrase: a passphrase antes do Face ID ou do PIN, conferida dentro
         // do assinador (pedido do dono, 16/10/2026).
         var typedPassphrase: SecureBytes?
@@ -292,7 +311,9 @@ struct BridgeReviewFlow: View {
             stage = unsureSigned == nil ? .review : .unsure
             return
         }
-        NonceQueue.record(session, wallet: wallet.id, chain: intent.from.chain, address: account.address, plan: plan, signed: signed)
+        // Na Ethereum a ponte sai pela rota privada (protecao de MEV), e a poda espera mais por ela.
+        NonceQueue.record(session, wallet: wallet.id, chain: intent.from.chain, address: account.address, plan: plan, signed: signed,
+                          sells: sellAsset?.id, privately: intent.from.chain.evmChainID == 1)
         stage = .sending
         do {
             VoiceGate.shared.noteSendTransmitted(session: session)

@@ -94,6 +94,11 @@ object Icones {
     val trocarVertical = traco("trocarVertical", "M8 20 V5 M4 9 L8 5 L12 9 M16 4 V19 M12 15 L16 19 L20 15")
     val setaDiagonal = traco("setaDiagonal", "M7 17 L17 7 M9 7 H17 V15")
     val atualizar = traco("atualizar", "M19.5 12 A7.5 7.5 0 1 1 17.3 6.7 M19.5 4 V8.5 H15")
+    // O fuelpump do iOS: a bomba com o visor no alto e a mangueira descendo pela direita (taxa de rede).
+    val bomba = traco(
+        "bomba", "M5 20.5 V5.5 A1.5 1.5 0 0 1 6.5 4 H12.5 A1.5 1.5 0 0 1 14 5.5 V20.5", "M3.5 20.5 H15.5", "M7.5 7.5 H11.5 V10.5 H7.5 Z",
+        "M14 11 H15.5 A1.5 1.5 0 0 1 17 12.5 V16 A1.75 1.75 0 0 0 20.5 16 V8.5 L18 6", espessura = 1.8f,
+    )
 
     // O doc.on.doc do iOS: duas folhas com a ponta dobrada, a da frente embaixo e a esquerda, a de
     // tras aparecendo em volta dela (medido na foto, 22/10/2026). Ocupa a altura toda: no iOS o
@@ -199,6 +204,11 @@ object Icones {
         "M5.5 4.5 H18.5 A2.5 2.5 0 0 1 21 7 V14.5 A2.5 2.5 0 0 1 18.5 17 H10.5 L6.5 20.5 V17 H5.5 A2.5 2.5 0 0 1 3 14.5 V7 A2.5 2.5 0 0 1 5.5 4.5 Z",
         "M9.1 10.8 A1.1 1.1 0 1 0 6.9 10.8 A1.1 1.1 0 1 0 9.1 10.8 Z M13.1 10.8 A1.1 1.1 0 1 0 10.9 10.8 A1.1 1.1 0 1 0 13.1 10.8 Z " +
             "M17.1 10.8 A1.1 1.1 0 1 0 14.9 10.8 A1.1 1.1 0 1 0 17.1 10.8 Z", 1.8f)
+    // O text.bubble do iOS: o balao com duas linhas de texto (o que o aviso diz).
+    val balaoTexto = traco(
+        "balaoTexto", "M5.5 4.5 H18.5 A2.5 2.5 0 0 1 21 7 V14.5 A2.5 2.5 0 0 1 18.5 17 H10.5 L6.5 20.5 V17 H5.5 A2.5 2.5 0 0 1 3 14.5 V7 A2.5 2.5 0 0 1 5.5 4.5 Z",
+        "M7.5 9 H16.5 M7.5 12.5 H13.5", espessura = 1.8f,
+    )
     val documentoLupa = traco("documentoLupa",
         "M12.5 21 H6.5 A1.5 1.5 0 0 1 5 19.5 V4.5 A1.5 1.5 0 0 1 6.5 3 H13.5 L19 8.5 V11.5", "M13.5 3 V8.5 H19", "M8 9.5 H11 M8 13 H12 M8 16.5 H10",
         "M16.5 19.3 A2.6 2.6 0 1 0 16.5 14.1 A2.6 2.6 0 1 0 16.5 19.3 Z", "M18.4 19.1 L20.6 21.3")

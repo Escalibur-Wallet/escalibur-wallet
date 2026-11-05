@@ -40,32 +40,26 @@ struct EVMCoWSwapTests {
 
     // MARK: Cotacao
 
-    @Test("A CoW garante mais: a troca vai pela CoW, com o minimo exato da cotacao menos a tolerancia")
-    func cowWins() async throws {
-        let (maxExpected, _) = try Self.aggregators()
-        let bought = Self.scaled(maxExpected, 1_010, 1_000)
-        let quote = try await engine(cow: FakeCoW(quotes: [F.amount: bought])).quote(F.request())
-        #expect(quote.execution == .order)
-        #expect(quote.legs.count == 1 && quote.legs[0].provider == "CoW" && quote.legs[0].amountIn == F.amount)
-        #expect(quote.expectedOut == bought)
-        #expect(quote.minimumOut == bought * BigUInt(9_950) / BigUInt(10_000))
-        #expect(quote.alternatives.count == 6 && quote.providersCompared == 7)
-        #expect(quote.needsApproval)
-        #expect(quote.parts == nil)
-        #expect(quote.providerFeeNote?.contains("já saíram da cotação") == true)
+    @Test("A CoW garante mais: a troca imediata continua numa transacao dos agregadores, sem leilao")
+    func cowBetterStaysInstant() async throws {
+        let (maxExpected, best) = try Self.aggregators()
+        let quote = try await engine(cow: FakeCoW(quotes: [F.amount: Self.scaled(maxExpected, 1_010, 1_000)])).quote(F.request())
+        #expect(quote.execution == .transactions)
+        #expect(quote.legs.count == 1 && quote.legs[0].provider == best.quote.provider.displayName)
+        #expect(quote.minimumOut == best.quote.guaranteedOut)
+        #expect(!quote.alternatives.contains { $0.provider == "CoW" })
+        #expect(quote.providersCompared == 6)
     }
 
-    @Test("A CoW garante menos: fica a dos agregadores, com a CoW entre as alternativas")
+    @Test("A CoW garante menos: fica a dos agregadores, e a CoW nao entra nas alternativas")
     func aggregatorWins() async throws {
         let (maxExpected, best) = try Self.aggregators()
-        let bought = Self.scaled(maxExpected, 980, 1_000)
-        let quote = try await engine(cow: FakeCoW(quotes: [F.amount: bought])).quote(F.request())
+        let quote = try await engine(cow: FakeCoW(quotes: [F.amount: Self.scaled(maxExpected, 980, 1_000)])).quote(F.request())
         #expect(quote.execution == .transactions)
         #expect(quote.legs[0].provider == best.quote.provider.displayName)
         #expect(quote.minimumOut == best.quote.guaranteedOut)
-        let cow = try #require(quote.alternatives.first { $0.provider == "CoW" })
-        #expect(cow.out == bought * BigUInt(9_950) / BigUInt(10_000))
-        #expect(quote.providersCompared == 7)
+        #expect(!quote.alternatives.contains { $0.provider == "CoW" })
+        #expect(quote.providersCompared == 6)
     }
 
     @Test("Sem referencia, cotacao da CoW mais de 5% acima dos agregadores e inflada: fica de fora")
@@ -115,7 +109,7 @@ struct EVMCoWSwapTests {
         let sample = Self.scaled(maxExpected, 1_010, 4_000)
         let cow = FakeCoW(quotes: [F.amount: full, F.amount / 4: sample])
         let quote = try await engine(cow: cow, prices: Self.prices(reference: reference)).quote(F.request())
-        #expect(quote.execution == .order)
+        #expect(quote.execution == .transactions)
         let parts = try #require(quote.parts)
         #expect(parts.expectedOut == sample * F.amount / (F.amount / 4))
         #expect(parts.minimumOut == parts.expectedOut * BigUInt(9_950) / BigUInt(10_000))
@@ -141,32 +135,28 @@ struct EVMCoWSwapTests {
 
     // MARK: Plano e envio
 
-    @Test("Plano pela CoW: ordem assinada com exatamente o minimo mostrado, execucao parcial, 30 minutos, revisao de troca")
+    @Test("Plano pela CoW em partes: ordem assinada com exatamente o minimo mostrado, execucao parcial, envio")
     func plan() async throws {
         let (maxExpected, _) = try Self.aggregators()
-        let cow = FakeCoW(quotes: [F.amount: Self.scaled(maxExpected, 1_010, 1_000)])
+        let cow = FakeCoW(quotes: [F.amount: Self.scaled(maxExpected, 1_001, 1_000), F.amount / 4: Self.scaled(maxExpected, 1_010, 4_000)])
         let transport = try H.baseTransport()
-        let engine = try engine(cow: cow, transport: transport)
+        let engine = try engine(cow: cow, prices: Self.prices(reference: Self.scaled(maxExpected, 1_020, 1_000)), transport: transport)
         let quote = try await engine.quote(F.request())
-        let plan = try await engine.plan(F.request(), quote: quote)
+        let parts = try #require(quote.parts)
+        let request = TradeRequest(walletID: UUID(), chain: .base, account: try EVMTestAccounts.testAccount(on: .base), sell: F.usdc,
+                                   buy: .native(.base), amountIn: F.amount, slippageBasisPoints: 50, inParts: true)
+        let plan = try await engine.plan(request, quote: quote)
 
         #expect(plan.review.kind == .swap)
         #expect(plan.review.transactionCount == 2)
         let approve = try #require(plan.transactions.first as? EVMTransaction)
         #expect(approve.data == ERC20.approve(spender: CoWProtocol.vaultRelayer, amount: F.amount))
         let order = try #require(plan.transactions.last as? EIP712ValidatedMessage)
-        #expect(order.typedData.message["buyAmount"] == .string(quote.minimumOut.decimalString))
+        #expect(order.typedData.message["buyAmount"] == .string(parts.minimumOut.decimalString))
         #expect(order.typedData.message["sellAmount"] == .string(F.amount.decimalString))
         #expect(order.typedData.message["partiallyFillable"] == .bool(true))
-        if case .number(let text)? = order.typedData.message["validTo"], let validTo = Double(text) {
-            #expect(abs(validTo - Date().timeIntervalSince1970 - CoWProtocol.instantValidity) < 30)
-        } else {
-            Issue.record("validTo")
-        }
-        #expect(plan.review.incomingMinimum?.amount == quote.minimumOut)
+        #expect(plan.review.incomingMinimum?.amount == parts.minimumOut)
         #expect(plan.review.lines.contains { $0.label == "Entra, no mínimo" })
-        #expect(plan.review.lines.contains { $0.label == "Prazo" && $0.value.hasPrefix("30 minutos") })
-        #expect(!plan.review.title.contains("em partes"))
 
         let signed = try EVMTestAccounts.sign(plan)
         let result = try await engine.submit(signed, plan: plan)
@@ -199,7 +189,7 @@ struct EVMCoWSwapTests {
         #expect(plan.review.lines.contains { $0.label == "Prazo" && $0.value.hasPrefix("60 minutos") })
     }
 
-    @Test("Cotacao sem opcao em partes nao planeja em partes; cotacao dos agregadores nao vira ordem")
+    @Test("Cotacao sem opcao em partes nao planeja em partes; a troca de uma vez nunca vira ordem")
     func refusesMismatchedExecution() async throws {
         let (maxExpected, _) = try Self.aggregators()
         let engine = try engine(cow: FakeCoW(quotes: [F.amount: Self.scaled(maxExpected, 980, 1_000)]))

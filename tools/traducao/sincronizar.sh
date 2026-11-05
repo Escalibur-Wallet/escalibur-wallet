@@ -25,4 +25,4 @@ while IFS= read -r arquivo; do lista+=(--stringsdata "$arquivo"); done < <(
 )
 [ ${#lista[@]} -gt 0 ] || { echo "nenhum .stringsdata: a compilacao nao extraiu os textos" >&2; exit 1; }
 xcrun xcstringstool sync "$catalogo" "${lista[@]}"
-python3 tools/traducao/conferir.py --resumo
+python3 -I tools/traducao/conferir.py --resumo

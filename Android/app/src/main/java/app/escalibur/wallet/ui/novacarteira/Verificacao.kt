@@ -179,10 +179,14 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
         fun root(contexto: Context): Checagem {
             val caminhos = listOf(
                 "/system/bin/su", "/system/xbin/su", "/sbin/su", "/system/sbin/su", "/vendor/bin/su", "/su/bin/su", "/data/local/xbin/su",
-                "/data/local/bin/su", "/system/app/Superuser.apk", "/data/adb/magisk", "/sbin/.magisk", "/data/adb/ksu", "/data/adb/ap",
+                // Nada em /data/adb: a pasta e 0700 de root, e File.exists() responde falso para qualquer app
+                // (auditoria Android de 31/10/2026, AA-03).
+                "/data/local/bin/su", "/system/app/Superuser.apk", "/sbin/.magisk",
             )
             val achado = caminhos.firstOrNull { File(it).exists() }
             val chavesDeTeste = Build.TAGS?.contains("test-keys") == true
+            // Os quatro estao em <queries> no manifesto: sem isso, do Android 11 em diante o sistema responde que
+            // nenhum existe, mesmo instalado (auditoria Android de 31/10/2026, AA-03).
             val pacotes = listOf("com.topjohnwu.magisk", "eu.chainfire.supersu", "me.weishu.kernelsu", "me.bmax.apatch")
             val app = pacotes.firstOrNull { runCatching { contexto.packageManager.getPackageInfo(it, 0) }.isSuccess }
             return if (achado != null || chavesDeTeste || app != null) {

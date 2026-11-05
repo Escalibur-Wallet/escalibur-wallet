@@ -21,6 +21,10 @@ protocol EVMTradeChainReading: Sendable {
     func simulateSequence(_ legs: [TradeSimulationLeg]) async throws -> [TradeSimulation]
     func readCoW(intent: CoWLimitOrderIntent, openOrdersSellTotal: BigUInt, localNextNonce: UInt64?) async throws -> CoWChainState
     func readCancellation(chain: Chain, owner: EVMAddress, uid: [UInt8], localNextNonce: UInt64?) async throws -> EVMNetworkState
+    /// Quanto da ordem da CoW a cadeia ja liquidou (o maximo depois do cancelamento), o menor de duas fontes.
+    func cowFilledAmount(chain: Chain, uid: [UInt8]) async throws -> BigUInt
+    /// O tempo do ultimo bloco, o menor de duas fontes.
+    func latestBlockTimestamp(chain: Chain) async throws -> UInt64
 }
 
 extension TradeStateReader: EVMTradeChainReading {}
@@ -35,7 +39,7 @@ protocol EVMCoWService: Sendable {
     func registerAppData(_ appData: CoWAppData, chain: Chain) async throws
     func submit(_ plan: CoWLimitOrderPlan, signature: SignedTransaction) async throws -> [UInt8]
     func openSellTotal(owner: EVMAddress, sellToken: EVMAddress, chain: Chain) async throws -> BigUInt
-    func openOrders(owner: EVMAddress, chain: Chain, now: Date) async throws -> [CoWOrderStatus]
+    func openOrders(owner: EVMAddress, chain: Chain) async throws -> [CoWOrderStatus]
     func cancel(uids: [[UInt8]], chain: Chain, owner: EVMAddress, signature: SignedTransaction) async throws
 }
 
@@ -63,22 +67,66 @@ struct EVMConfirmationPolicy: Sendable {
 ///
 /// O contrato do motor devolve so o `SigningPlan`, e o envio a CoW precisa da ordem, do
 /// UID e do appData que o planejador calculou junto. Guarda so dado publico, na memoria,
-/// e cada entrada sai no envio ou vence em 10 minutos.
+/// e cada entrada sai quando a CoW responde com certeza, ou vence: em 10 minutos se a ordem
+/// ainda nao foi a CoW, no validTo dela se ja foi (terceira passada da auditoria de 03/11/2026).
 actor EVMPendingLimitOrders {
     static let shared = EVMPendingLimitOrders()
     static let lifetime: TimeInterval = 10 * 60
 
-    private var plans: [UUID: (plan: CoWLimitOrderPlan, storedAt: Date)] = [:]
+    struct Entry {
+        let plan: CoWLimitOrderPlan
+        let storedAt: Date
+        /// A autorizacao e o embrulho ja foram transmitidos uma vez: o reenvio confere o recibo antes.
+        var prerequisitesSent = false
+        /// A autorizacao e o embrulho ja confirmaram: o reenvio nao os manda de novo.
+        var prerequisitesDone = false
+        /// O appData ja esta registrado: o reenvio nao o registra de novo.
+        var appDataDone = false
+        /// A ordem assinada ja saiu para a CoW (ou pode ter saido): toda saida dali em diante leva a ordem,
+        /// para o dono cancelar na cadeia.
+        var orderSent = false
 
-    func store(_ plan: CoWLimitOrderPlan, now: Date = .now) {
-        plans = plans.filter { now.timeIntervalSince($0.value.storedAt) < Self.lifetime }
-        plans[plan.signingPlan.id] = (plan, now)
+        func alive(_ now: Date) -> Bool {
+            if orderSent, let validTo = CoWProtocol.validTo(ofUID: plan.uid) { return now.timeIntervalSince1970 < TimeInterval(validTo) }
+            return now.timeIntervalSince(storedAt) < EVMPendingLimitOrders.lifetime
+        }
     }
 
-    /// Tira a ordem do registro: um plano e enviado uma vez so.
-    func take(_ id: UUID, now: Date = .now) -> CoWLimitOrderPlan? {
-        guard let entry = plans.removeValue(forKey: id), now.timeIntervalSince(entry.storedAt) < Self.lifetime else { return nil }
-        return entry.plan
+    private var plans: [UUID: Entry] = [:]
+
+    func store(_ plan: CoWLimitOrderPlan, now: Date = .now) {
+        plans = plans.filter { $0.value.alive(now) }
+        plans[plan.signingPlan.id] = Entry(plan: plan, storedAt: now)
+    }
+
+    /// A ordem do plano, que fica no registro ate a CoW responder com certeza: o "Enviar de novo" de um
+    /// envio incerto manda a mesma ordem assinada outra vez, e a CoW reconhece o UID (segunda passada da
+    /// auditoria de 03/11/2026; antes ela saia no primeiro envio, e o reenvio dizia que a ordem venceu).
+    /// `prerequisitesDone`: a autorizacao e o embrulho ja confirmaram, e o reenvio nao os manda de novo.
+    func entry(_ id: UUID, now: Date = .now) -> Entry? {
+        guard let entry = plans[id], entry.alive(now) else { return nil }
+        return entry
+    }
+
+    func markPrerequisitesDone(_ id: UUID) {
+        plans[id]?.prerequisitesDone = true
+    }
+
+    func markPrerequisitesSent(_ id: UUID) {
+        plans[id]?.prerequisitesSent = true
+    }
+
+    func markAppDataDone(_ id: UUID) {
+        plans[id]?.appDataDone = true
+    }
+
+    func markOrderSent(_ id: UUID) {
+        plans[id]?.orderSent = true
+    }
+
+    /// A CoW respondeu com certeza (criou ou recusou): a ordem sai do registro.
+    func finish(_ id: UUID) {
+        plans[id] = nil
     }
 }
 

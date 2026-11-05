@@ -255,12 +255,14 @@ private class ConexaoDoSegredo(vista: View, private val segredo: Segredo, conclu
     }
 
     override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
+        if (fechadoPelaAcessibilidade(segredo)) return true
         desfazerComposicao()
         if (text != null) segredo.acrescentar(text)
         return true
     }
 
     override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
+        if (fechadoPelaAcessibilidade(segredo)) return true
         desfazerComposicao()
         if (!text.isNullOrEmpty()) {
             segredo.acrescentar(text)
@@ -305,6 +307,17 @@ private class ConexaoDoSegredo(vista: View, private val segredo: Segredo, conclu
 }
 
 /**
+ * Com um servico de acessibilidade de fora ligado, nada escreve no segredo: nem o teclado do celular que ja
+ * estava aberto quando o servico ligou, nem o teclado fisico, cujas teclas um servico que filtra teclas
+ * recebe antes do app. O que ja foi digitado sai (terceira passada da auditoria de 03/11/2026).
+ */
+private fun fechadoPelaAcessibilidade(segredo: Segredo): Boolean {
+    if (app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isEmpty()) return false
+    if (segredo.tamanho > 0) segredo.clearText()
+    return true
+}
+
+/**
  * Uma tecla de verdade (do teclado fisico, ou a que o teclado manda como tecla): apagar, Ir e cada
  * caractere, com o acento morto (´ e depois e vira é) como o Android compoe nos outros campos. Atalho
  * com Ctrl, setas e Tab ficam para o sistema.
@@ -313,6 +326,8 @@ private class Teclas(var segredo: Segredo, val concluir: () -> Unit) {
     private var acento = 0
 
     fun tecla(evento: KeyEvent): Boolean {
+        // O teclado fisico tambem para: o servico que filtra teclas as recebe antes do app.
+        if (fechadoPelaAcessibilidade(segredo)) return true
         if (evento.action != KeyEvent.ACTION_DOWN) return false
         when (evento.keyCode) {
             KeyEvent.KEYCODE_DEL -> { acento = 0; segredo.apagarUltimo(); return true }

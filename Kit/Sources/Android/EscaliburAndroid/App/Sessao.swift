@@ -55,6 +55,8 @@ final class Sessao: @unchecked Sendable {
         case passphraseVazia
         /// Abrir com passphrase a partir de uma carteira que ja tem passphrase.
         case baseComPassphrase
+        /// A carteira que ja estava aqui quando o cofre abriu saiu no meio: nada foi gravado.
+        case listaMudou
     }
 
     private let trava = NSLock()
@@ -233,6 +235,33 @@ final class Sessao: @unchecked Sendable {
             return depoisDeDestravar
         }
         if !pendentes.isEmpty { try? alterar { metadata in for corpo in pendentes { corpo(&metadata) } } }
+        // Uma vez, depois de atualizar: os avisos de fim do prazo da versao anterior saem do formato antigo (setima
+        // passada da auditoria de 03/11/2026).
+        let renovadas = (lidos.limitRenewals ?? []).filter { renovacao in
+            lidos.wallets.first { $0.id == renovacao.walletID }?.hasPassphrase == false
+        }.map(\.orderID)
+        VigiaDeOrdens.migrarAvisos(renovadas: renovadas)
+        // O cache de saldo e o historico de carteira que nao existe mais saem, como no iOS (decima terceira passada e a
+        // revisao dela): uma leitura que terminou depois de remover a carteira nao deixa o rastro dela.
+        let carteiras = Set(lidos.wallets.map(\.id))
+        let prefixos = carteiras.map { $0.uuidString + "|" }
+        if lidos.balanceCache.keys.contains(where: { !carteiras.contains($0) })
+            || (lidos.activityCache ?? [:]).keys.contains(where: { !carteiras.contains($0) })
+            || (lidos.activityFetched ?? [:]).keys.contains(where: { !carteiras.contains($0) })
+            || (lidos.pendingEVM ?? [:]).keys.contains(where: { chave in !prefixos.contains { chave.hasPrefix($0) } }) {
+            try? alterar { metadata in
+                metadata.balanceCache = metadata.balanceCache.filter { carteiras.contains($0.key) }
+                metadata.activityCache = metadata.activityCache?.filter { carteiras.contains($0.key) }
+                metadata.activityFetched = metadata.activityFetched?.filter { carteiras.contains($0.key) }
+                metadata.pendingEVM = metadata.pendingEVM?.filter { item in prefixos.contains { item.key.hasPrefix($0) } }
+            }
+        }
+        // E os mapas por ativo com o que nenhuma carteira tem mais.
+        var podado = lidos
+        Saldos.podarPorAtivo(&podado)
+        if podado.quoteCache != lidos.quoteCache || podado.recognizedTokens != lidos.recognizedTokens || podado.unrecognizedChecks != lidos.unrecognizedChecks {
+            try? alterar { Saldos.podarPorAtivo(&$0) }
+        }
     }
 
     func travar() {
@@ -248,6 +277,7 @@ final class Sessao: @unchecked Sendable {
         }
         Saldos.shared.esquecer()
         Atividade.shared.esquecer()
+        Renovacoes.esquecer(carteira: nil)
         PortaDaPassphrase.encerrarFolgas()
         Envio.encerrar()
         Silencio.ligar(false)
@@ -370,18 +400,28 @@ final class Sessao: @unchecked Sendable {
     ) throws -> WalletMeta {
         let id = UUID()
         let temPassphrase = secret.passphrase.count > 0
-        let (contas, digital): ([DerivedAccount], [UInt8]) = try comChaveRaiz(credencial) { rk in
+        // O autoteste antes de abrir a RK, e a derivacao antes de gravar: se ela falha, nada fica no cofre (a frase ficava
+        // guardada sem carteira, longe do "Remover"; revisao da decima terceira passada).
+        do { try DerivationSelfTest.require() } catch { secret.wipe(); credencial.zerar(); throw error }
+        // A carteira que ja esta aqui nao e gravada de novo: gravar e depois apagar deixava um registro se o apagar falhasse
+        // (revisao da decima terceira passada).
+        let conhecidas = Set(metadata.wallets.filter { !$0.isWatchOnly }.map(\.fingerprint))
+        let (contas, digital, gravada): ([DerivedAccount], [UInt8], Bool) = try comChaveRaiz(credencial) { rk in
             defer { secret.wipe() }
+            let derivadas = try AccountDeriver.derive(secret)
+            guard !conhecidas.contains(derivadas.fingerprint.hex) else { return (derivadas.accounts, derivadas.fingerprint, false) }
             try Chaves.wallets.save(secret, walletID: id, rk: rk)
-            return try AccountDeriver.derive(secret)
+            return (derivadas.accounts, derivadas.fingerprint, true)
         }
         // A frase ja foi guardada: se a lista nao grava (o app travou no meio), ela sai, ou ficaria no
         // cofre sem carteira nenhuma, longe do "Remover" (caca de bugs de 27/10/2026).
         do { return try alterar { metadata in
             if let existente = metadata.wallets.first(where: { $0.fingerprint == digital.hex && !$0.isWatchOnly }) {
-                try? Chaves.wallets.delete(id)
+                if gravada { try? Chaves.wallets.delete(id) }
                 throw Falha.jaImportada(existente.name)
             }
+            // Estava aqui quando o cofre abriu e saiu no meio: nada foi gravado, e nada e criado.
+            guard gravada else { throw Falha.listaMudou }
             var wallet = WalletMeta(
                 id: id, name: Self.nomeUnico(nome, origem: origem, em: metadata), kind: .phrase(wordCount: palavras), origin: origem,
                 createdAt: .now, accounts: contas, fingerprint: digital.hex, hasPassphrase: temPassphrase,
@@ -389,10 +429,12 @@ final class Sessao: @unchecked Sendable {
             )
             if tronComOutraChave { wallet.tronForeignControl = true }
             metadata.wallets.append(wallet)
+            // A mesma conta de volta (removida e importada de novo nesta sessao) volta a ter os avisos de ordem.
+            VigiaDeOrdens.lembrar(donos: Self.donosEVM(wallet))
             if selecionar || metadata.selectedWalletID == nil { metadata.selectedWalletID = id }
             return wallet
         } } catch {
-            try? Chaves.wallets.delete(id)
+            if gravada { try? Chaves.wallets.delete(id) }
             throw error
         }
     }
@@ -429,12 +471,17 @@ final class Sessao: @unchecked Sendable {
             credencial.zerar()
             throw Falha.passphraseLonga
         }
+        // O autoteste antes da porta (que conta a tentativa) e da RK; a derivacao, antes de gravar (revisao da decima
+        // terceira passada).
+        do { try DerivationSelfTest.require() } catch { credencial.zerar(); throw error }
         do { try PortaDaPassphrase.comecar(id, criacao: true) } catch { credencial.zerar(); throw error }
         let novo = UUID()
         let contas: [DerivedAccount]
         let digital: [UInt8]
+        let gravada: Bool
+        let conhecidas = Set(metadata.wallets.filter { !$0.isWatchOnly }.map(\.fingerprint))
         do {
-            (contas, digital) = try comChaveRaiz(credencial) { rk in
+            (contas, digital, gravada) = try comChaveRaiz(credencial) { rk in
                 let original = try Chaves.wallets.open(walletID: id, rk: rk)
                 defer { original.wipe() }
                 let entropia = SecureBytes(capacity: original.entropy.count)
@@ -450,8 +497,11 @@ final class Sessao: @unchecked Sendable {
                 }
                 let secret = WalletSecret(entropy: entropia, language: original.language, passphrase: normalizada)
                 defer { secret.wipe() }
+                let derivadas = try AccountDeriver.derive(secret)
+                // A mesma frase com a mesma passphrase ja aberta: nada e gravado de novo.
+                guard !conhecidas.contains(derivadas.fingerprint.hex) else { return (derivadas.accounts, derivadas.fingerprint, false) }
                 try Chaves.wallets.save(secret, walletID: novo, rk: rk)
-                return try AccountDeriver.derive(secret)
+                return (derivadas.accounts, derivadas.fingerprint, true)
             }
         } catch {
             PortaDaPassphrase.devolver(id, criacao: true)
@@ -462,20 +512,23 @@ final class Sessao: @unchecked Sendable {
         let resultado: (WalletMeta, jaAberta: Bool)
         do { resultado = try alterar { metadata -> (WalletMeta, jaAberta: Bool) in
             if let existente = metadata.wallets.first(where: { $0.fingerprint == digital.hex && !$0.isWatchOnly }) {
-                try? Chaves.wallets.delete(novo)
+                if gravada { try? Chaves.wallets.delete(novo) }
                 metadata.selectedWalletID = existente.id
                 return (existente, true)
             }
+            guard gravada else { throw Falha.listaMudou }
             let wallet = WalletMeta(
                 id: novo, name: Self.nomeUnico(nome, origem: base.origin, em: metadata), kind: .phrase(wordCount: palavras), origin: base.origin,
                 createdAt: .now, accounts: contas, fingerprint: digital.hex, hasPassphrase: true, backupConfirmedAt: base.backupConfirmedAt
             )
             metadata.wallets.append(wallet)
+            // A mesma conta de volta (removida e importada de novo nesta sessao) volta a ter os avisos de ordem.
+            VigiaDeOrdens.lembrar(donos: Self.donosEVM(wallet))
             metadata.selectedWalletID = novo
             return (wallet, false)
         } } catch {
             // A carteira guardada sai se a lista nao gravou, como em `adicionarCarteira`.
-            try? Chaves.wallets.delete(novo)
+            if gravada { try? Chaves.wallets.delete(novo) }
             throw error
         }
         if !resultado.jaAberta { trava.withLock { recemAbertas[resultado.0.id] = PINPolicy.uptime } }
@@ -519,6 +572,8 @@ final class Sessao: @unchecked Sendable {
         )
         try alterar { metadata in
             metadata.wallets.append(wallet)
+            // A mesma conta de volta (removida e importada de novo nesta sessao) volta a ter os avisos de ordem.
+            VigiaDeOrdens.lembrar(donos: Self.donosEVM(wallet))
             metadata.selectedWalletID = wallet.id
         }
         return wallet
@@ -546,6 +601,13 @@ final class Sessao: @unchecked Sendable {
     }
 
     /// A carteira so sai da lista depois de o armazenamento confirmar que a frase saiu.
+    /// Os enderecos EVM da carteira, em hex minusculo sem `0x`: o dono que o UID da CoW traz.
+    static func donosEVM(_ meta: WalletMeta) -> Set<String> {
+        Set(Chain.all.filter { $0.family == .evm }.compactMap { rede in
+            meta.account(rede).map { $0.address.lowercased().replacingOccurrences(of: "0x", with: "") }
+        })
+    }
+
     func remover(_ id: UUID) throws {
         guard let wallet = metadata.wallets.first(where: { $0.id == id }) else { throw Falha.carteiraNaoEncontrada }
         if !wallet.isWatchOnly {
@@ -553,8 +615,19 @@ final class Sessao: @unchecked Sendable {
             guard Chaves.wallets.probe(id) == .absent else { throw Falha.remocaoFalhou }
         }
         var ficouSemCarteira = false
+        // As ordens assinadas guardadas e os avisos de ordem limite dela: o UID traz o endereco, e o arquivo dos
+        // avisos abre com o app travado (quarta passada da auditoria de 03/11/2026).
+        // So os enderecos que nenhuma carteira que fica usa (uma carteira so para ver o mesmo endereco segue com os
+        // avisos dela).
+        let donos = Self.donosEVM(wallet).subtracting(metadata.wallets.filter { $0.id != id }.flatMap(Self.donosEVM))
+        let guardadas = Set((metadata.signedOrders ?? []).filter { $0.walletID == id }.map(\.id))
+        // Os donos esquecidos antes de gravar, e as renovacoes lidas dentro da gravacao: um registro que caisse entre a
+        // leitura e a marca deixava um aviso de fim do prazo que ninguem tirava (revisao da decima terceira passada).
+        VigiaDeOrdens.esquecer(donos: donos, ids: guardadas)
+        var renovadas: [String] = []
         try alterar { metadata in
             guard metadata.wallets.contains(where: { $0.id == id }) else { throw Falha.carteiraNaoEncontrada }
+            renovadas = (metadata.limitRenewals ?? []).filter { $0.walletID == id }.map(\.orderID)
             metadata.wallets.removeAll { $0.id == id }
             ficouSemCarteira = metadata.wallets.isEmpty
             // Tudo o que leva enderecos ou o rastro desta carteira sai junto (revisao de seguranca de
@@ -566,6 +639,8 @@ final class Sessao: @unchecked Sendable {
             let prefixo = id.uuidString + "|"
             metadata.pendingEVM = metadata.pendingEVM?.filter { !$0.key.hasPrefix(prefixo) }
             metadata.limitRenewals?.removeAll { $0.walletID == id }
+            metadata.signedOrders?.removeAll { $0.walletID == id }
+            Saldos.podarPorAtivo(&metadata)
             PortaDaPassphrase.esquecer(&metadata, id)
             if metadata.selectedWalletID == id { metadata.selectedWalletID = metadata.wallets.first?.id }
         }
@@ -573,6 +648,12 @@ final class Sessao: @unchecked Sendable {
         // (pedido do dono, 24/10/2026). Nada da carteira de antes fica para a proxima. A decisao vem
         // de dentro da gravacao: relida depois, a lista podia ser a vazia de um travar() no meio
         // (caca de bugs de 25/10/2026, B5).
+        // Os avisos de refazer quando vencer dela tambem saem (quinta passada de 03/11/2026).
+        for ordem in renovadas { VigiaDeOrdens.desmarcarFimDoPrazo(ordem) }
+        // O que esta na memoria sai tambem: uma leitura em curso dela nao grava mais nada.
+        Saldos.shared.esquecer()
+        Atividade.shared.esquecer()
+        Renovacoes.esquecer(carteira: id)
         if ficouSemCarteira { apagarTudo() }
     }
 
@@ -594,11 +675,18 @@ final class Sessao: @unchecked Sendable {
             metadata.balanceCache[id] = nil
             metadata.activityCache?[id] = nil
             metadata.activityFetched?[id] = nil
+            // O que leva o endereco dela: as transacoes em transito e as ordens guardadas (quarta passada de 03/11/2026).
+            metadata.pendingEVM = metadata.pendingEVM?.filter { !$0.key.hasPrefix(id.uuidString + "|") }
+            metadata.signedOrders?.removeAll { $0.walletID == id }
+            Saldos.podarPorAtivo(&metadata)
             PortaDaPassphrase.esquecer(&metadata, id)
             let volta = anterior.flatMap { anterior in metadata.wallets.contains { $0.id == anterior } ? anterior : nil }
             metadata.selectedWalletID = volta ?? metadata.wallets.first?.id
         }
         trava.withLock { recemAbertas[id] = nil }
+        Saldos.shared.esquecer()
+        Atividade.shared.esquecer()
+        Renovacoes.esquecer(carteira: id)
     }
 
     /// Apaga tudo deste aparelho: as chaves do Keystore e os itens do cofre primeiro.
@@ -616,6 +704,7 @@ final class Sessao: @unchecked Sendable {
         }
         Saldos.shared.esquecer()
         Atividade.shared.esquecer()
+        Renovacoes.esquecer(carteira: nil)
         PortaDaPassphrase.encerrarFolgas()
         Envio.encerrar()
         Silencio.ligar(false)

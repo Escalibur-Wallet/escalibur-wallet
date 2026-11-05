@@ -348,7 +348,7 @@ struct TradeCoWClientTests {
     func orderStatus() throws {
         let data = try S.fixture("cow-base-order-limit")
         let response = try JSONDecoder().decode(CoWClient.OrderResponse.self, from: data)
-        let status = try CoWClient.status(response)
+        let status = try CoWClient.status(response, chain: .base)
         #expect(status.status == .fulfilled)
         #expect(status.executedSellAmount == 48_645_716)
         #expect(status.remainingSellAmount == 0)
@@ -360,7 +360,6 @@ struct TradeCoWClientTests {
         // A ordem real gravada, com o estado trocado aqui para cada caso.
         let recorded = try JSONSerialization.jsonObject(with: try S.fixture("cow-base-order-limit")) as! [String: Any]
         let owner = try EVMAddress(recorded["owner"] as! String)
-        let validTo = recorded["validTo"] as! Int
         func order(_ changes: [String: Any]) -> [String: Any] { recorded.merging(changes) { _, new in new } }
         let list: [[String: Any]] = [
             order(["status": "open", "executedSellAmount": "0"]),
@@ -369,13 +368,28 @@ struct TradeCoWClientTests {
             order(["status": "open", "executedSellAmount": recorded["sellAmount"] as! String]),
         ]
         let data = try JSONSerialization.data(withJSONObject: list)
-        let before = Date(timeIntervalSince1970: TimeInterval(validTo - 60))
-        let open = try CoWClient.openOrders(data, owner: owner, now: before)
+        // O relogio do aparelho nao entra na conta: a ordem que a API diz aberta fica, mesmo depois do validTo
+        // no relogio (quarta passada de 03/11/2026).
+        let open = try CoWClient.openOrders(data, owner: owner, chain: .base)
         #expect(open.count == 1 && open.first?.status == .open && open.first?.remainingSellAmount == BigUInt(decimal: recorded["sellAmount"] as! String))
-        // Vencida no relogio: fora.
-        #expect(try CoWClient.openOrders(data, owner: owner, now: Date(timeIntervalSince1970: TimeInterval(validTo + 1))).isEmpty)
         // De outro dono: fora (o UID diz o dono, e a API nao escolhe por ele).
-        #expect(try CoWClient.openOrders(data, owner: try EVMAddress("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"), now: before).isEmpty)
+        #expect(try CoWClient.openOrders(data, owner: try EVMAddress("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"), chain: .base).isEmpty)
+    }
+
+    @Test("Ordens listadas: os campos tem de dar o digesto do UID; um valor trocado, um campo que falta ou outra rede recusam a lista (terceira passada de 03/11/2026)")
+    func listedOrderMatchesItsUID() throws {
+        let recorded = try JSONSerialization.jsonObject(with: try S.fixture("cow-base-order-limit")) as! [String: Any]
+        let owner = try EVMAddress(recorded["owner"] as! String)
+        func listing(_ changes: [String: Any], removing: String? = nil) throws -> Data {
+            var order = recorded.merging(["status": "open", "executedSellAmount": "0"].merging(changes) { _, new in new }) { _, new in new }
+            if let removing { order[removing] = nil }
+            return try JSONSerialization.data(withJSONObject: [order])
+        }
+        #expect(try CoWClient.openOrders(try listing([:]), owner: owner, chain: .base).count == 1)
+        #expect(throws: CoWClientError.orderMismatch) { try CoWClient.openOrders(try listing(["sellAmount": "1"]), owner: owner, chain: .base) }
+        #expect(throws: CoWClientError.orderMismatch) { try CoWClient.openOrders(try listing(["kind": "buy"]), owner: owner, chain: .base) }
+        #expect(throws: CoWClientError.orderMismatch) { try CoWClient.openOrders(try listing([:], removing: "appData"), owner: owner, chain: .base) }
+        #expect(throws: CoWClientError.orderMismatch) { try CoWClient.openOrders(try listing([:]), owner: owner, chain: .ethereum) }
     }
 }
 

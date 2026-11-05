@@ -93,3 +93,42 @@ struct AddressVectorTests {
         #expect(Address.validate(noTag, for: .xrpl) == .success(.init(address: "rGWrZyQqhTp9Xu7G5Pkayo7bXjH4k4QYpf", tag: nil)))
     }
 }
+
+/// O autoteste que o app roda antes de derivar uma carteira (decima terceira passada da auditoria de 03/11/2026).
+@Suite("Autoteste da derivacao")
+struct DerivationSelfTestTests {
+    @Test("Os vetores publicos passam neste build, e a derivacao das carteiras depende deles")
+    func passes() throws {
+        #expect(try DerivationSelfTest.check())
+        #expect(DerivationSelfTest.passed)
+        try DerivationSelfTest.require()
+        // Toda familia tem um vetor, e o Bitcoin confere tambem a derivacao publica.
+        #expect(Set(DerivationSelfTest.addresses.flatMap { $0.accounts.map(\.chain.family) }) == Set(ChainFamily.allCases))
+        #expect(DerivationSelfTest.publicChildren.count == 2)
+        let secret = try WalletSecret.from(phrase: BIP39.canonical(AddressVectorTests.abandon), language: .english, passphrase: SecureBytes(capacity: 32))
+        defer { secret.wipe() }
+        let (accounts, _) = try AccountDeriver.derive(secret)
+        #expect(accounts.first { $0.chainID == Chain.ethereum.id }?.address == "0x9858EfFD232B4033E47d90003D41EC34EcaEda94")
+    }
+}
+
+/// O nonce das assinaturas deterministicas (secp256k1 nas duas plataformas, Ed25519 da BoringSSL no Android), o mesmo
+/// teste que o `Signer` roda antes de abrir o cofre (revisao da decima terceira passada da auditoria de 03/11/2026).
+@Suite("Autoteste da assinatura")
+struct SigningSelfTestTests {
+    @Test("Os vetores do RFC 6979 e do RFC 8032 passam neste build, e o Signer depende deles")
+    func passes() throws {
+        // Cada esquema passa, a Cardano inclusive (nas duas plataformas), e o plano so passa pelos esquemas que assina.
+        for scheme in SigningSelfTest.Scheme.allCases {
+            #expect(try SigningSelfTest.check(scheme), "\(scheme)")
+        }
+        #expect(SigningSelfTest.passed)
+        let one = SigningSelfTest.key([UInt8](repeating: 0, count: 31) + [1])
+        defer { one.wipe() }
+        let digest = Hash.sha256(Array(SigningSelfTest.message.utf8))
+        // Outra mensagem, outro nonce: o r muda.
+        let other = try Secp256k1.signRecoverable(digest: Hash.sha256(Array("outra".utf8)), privateKey: one).compact
+        #expect(Hex.encode(other.prefix(32)) != String(SigningSelfTest.compact.prefix(64)))
+        #expect(Hex.encode(try Secp256k1.signRecoverable(digest: digest, privateKey: one).compact) == SigningSelfTest.compact)
+    }
+}

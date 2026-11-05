@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import app.escalibur.wallet.nucleo.Cofre
 import app.escalibur.wallet.ui.Ciclo
+import app.escalibur.wallet.vigias.Vigia
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 
@@ -15,6 +16,7 @@ class EscaliburApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Cofre.iniciar(this)
+        Vigia.iniciar(this)
         // A tela do celular apagou: o app trava na hora, como no iPhone quando ele bloqueia
         // (protectedDataWillBecomeUnavailable). Quem pega o celular depois passa pelo PIN do app.
         registerReceiver(object : BroadcastReceiver() {

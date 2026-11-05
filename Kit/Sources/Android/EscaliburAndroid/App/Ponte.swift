@@ -299,6 +299,10 @@ final class Ponte: @unchecked Sendable {
         let origem = intencao.from.chain
         await FilaDeNonces.podar(carteira: carteira.id, rede: origem, endereco: conta.address)
         let fila = FilaDeNonces.fila(Sessao.shared.metadata, carteira: carteira.id, rede: origem, endereco: conta.address)
+        if let motivo = Self.emTransito(intencao, carteira: carteira.id, endereco: conta.address) {
+            trava.withLock { if rodada == numero { falhaDaMontagem = motivo } }
+            return
+        }
         do {
             let novas = try await BridgeEngine.shared.quotes(intencao)
             guard let fresca = novas.first(where: { $0.route == rotaPedida }) ?? novas.first else {
@@ -325,6 +329,13 @@ final class Ponte: @unchecked Sendable {
                 falhaDaMontagem = (error as? LocalizedError)?.errorDescription ?? Textos.t("Não foi possível montar agora. Tente de novo.")
             }
         }
+    }
+
+    /// Uma transacao anterior desta conta com o ativo da ponte (troca, envio, ponte) ainda nao
+    /// confirmou: o plano leria o saldo de antes dela (auditoria de 03/11/2026, como no iOS). Ler
+    /// depois de `podar`. Devolve o motivo para a tela.
+    private static func emTransito(_ intencao: BridgeIntent, carteira: UUID, endereco: String) -> String? {
+        FilaDeNonces.motivoDoBloqueio(carteira: carteira, rede: intencao.from.chain, endereco: endereco, ativo: intencao.asset.asset(on: intencao.from))
     }
 
     /// Desta carteira e da rede de origem; sai exatamente o valor pedido; chega pelo menos o minimo
@@ -369,10 +380,19 @@ final class Ponte: @unchecked Sendable {
             return
         }
         let dona = Sessao.shared.metadata.wallets.first { $0.id == plano.walletID }
+        // Ate a assinatura: uma troca ou um envio deste ativo pode ter saido depois da revisao.
+        if let conta = dona?.account(plano.chain), let motivo = Self.emTransito(cotada.intent, carteira: plano.walletID, endereco: conta.address) {
+            credencial.zerar()
+            trava.withLock { erroDaRevisao = motivo }
+            return
+        }
         if PortaDaPassphrase.precisa(dona), passphrase == nil {
             credencial.zerar()
             throw Nucleo.Falha(erro: "envio.pedePassphrase")
         }
+        // O autoteste da assinatura antes da porta da passphrase e da RK: com um defeito do aparelho, nada conta nem abre
+        // (o Signer confere de novo antes de abrir o cofre; revisao da decima terceira passada).
+        guard SigningSelfTest.passed(for: plano) else { credencial.zerar(); throw SigningSelfTest.Failure() }
         let conferir = PortaDaPassphrase.pede(dona) ? passphrase : nil
         if conferir != nil {
             do { try PortaDaPassphrase.comecar(plano.walletID) } catch { credencial.zerar(); throw error }
@@ -404,7 +424,9 @@ final class Ponte: @unchecked Sendable {
             return true
         }) else { return }
         if let conta = Sessao.shared.metadata.wallets.first(where: { $0.id == plano.walletID })?.account(plano.chain) {
-            FilaDeNonces.anotar(carteira: plano.walletID, rede: plano.chain, endereco: conta.address, plano: plano, assinado: assinado)
+            // Na Ethereum a ponte sai pela rota privada (protecao de MEV), e a poda espera mais por ela.
+            FilaDeNonces.anotar(carteira: plano.walletID, rede: plano.chain, endereco: conta.address, plano: plano, assinado: assinado,
+                                vende: cotada.intent.asset.asset(on: cotada.intent.from)?.id, privada: plano.chain.evmChainID == 1)
         }
         avisar()
         do {

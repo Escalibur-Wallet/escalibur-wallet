@@ -65,7 +65,9 @@ struct SolanaTradeEngine: TradeEngine {
             let expected = BigUInt(route.quotedOutAmount)
             return TradeQuote(
                 sell: request.sell, buy: request.buy, amountIn: BigUInt(route.inAmount), expectedOut: expected,
-                minimumOut: BigUInt(route.minimumOut), priceImpactPercent: proposal.priceImpactPercent, networkFeeFiat: nil,
+                minimumOut: BigUInt(route.minimumOut), priceImpactPercent: proposal.priceImpactPercent,
+                // A taxa do rascunho, com o limite maximo de CU: a real, medida na simulacao, sai menor.
+                networkFees: [.init(asset: .native(request.chain), amount: draft.draftFee)],
                 providerFeeNote: kitText("Sem taxa da Escalibur e sem taxa de plataforma da Jupiter. A taxa dos pools já está no preço."),
                 legs: [TradeQuote.Leg(provider: Self.provider, fraction: 1, amountIn: BigUInt(route.inAmount), expectedOut: expected)],
                 alternatives: [], providersCompared: 1, needsApproval: false,

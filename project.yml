@@ -13,13 +13,18 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "1.0.1"
-    CURRENT_PROJECT_VERSION: "17"
+    CURRENT_PROJECT_VERSION: "18"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     DEAD_CODE_STRIPPING: YES
     # Traducao: o compilador lista os textos de Text, String(localized:) e kitText, e o
     # catalogo (Localizable.xcstrings) guarda cada um em todos os idiomas.
     SWIFT_EMIT_LOC_STRINGS: YES
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    # Enhanced Security (Xcode 26), em Debug e Release, no app, no widget e nos testes:
+    # arm64e com autenticacao de ponteiro, alocador por tipo, pilha zerada na declaracao e
+    # os avisos de seguranca do clang. Os entitlements hardened-process estao nos dois
+    # .entitlements; o Kit sai em arm64e pelo WorkspaceSettings.xcsettings do projeto.
+    ENABLE_ENHANCED_SECURITY: YES
 targets:
   EscaliburWallet:
     type: application

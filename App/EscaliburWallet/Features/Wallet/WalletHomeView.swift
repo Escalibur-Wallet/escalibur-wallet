@@ -871,6 +871,7 @@ extension View {
 /// rede com endereco proprio, com o icone, o nome e o comeco e o fim do endereco. Copia
 /// pela area de transferencia do Receber (local, 2 minutos) e fecha com o aviso.
 struct CopyAddressSheet: View {
+    @Environment(AppSession.self) private var session
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.dismiss) private var dismiss
     let wallet: WalletMeta
@@ -921,7 +922,7 @@ struct CopyAddressSheet: View {
     }
 
     private func copy(_ target: Target) {
-        Pasteboard.copyAddress(target.address)
+        Pasteboard.copyReceiveAddress(target.address, hasPassphrase: wallet.hasPassphrase, session: session)
         withAnimation(Motion.fade) { copied = target.id }
         Task {
             try? await Task.sleep(for: .milliseconds(450))

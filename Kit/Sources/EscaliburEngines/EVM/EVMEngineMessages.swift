@@ -178,6 +178,8 @@ enum EVMEngineMessages {
         case .simulationUnavailable:
             return kitText("A simulação da troca não está disponível agora, e sem ela a carteira não troca. Tente de novo em instantes.")
         case .simulationFailed: return kitText("A simulação mostra que esta troca falharia agora. Nada foi assinado.")
+        case .simulationBelowMinimum:
+            return kitText("A simulação mostra que esta troca entregaria menos que o mínimo garantido, e o contrato a recusaria. É comum em moedas que cobram taxa na compra ou na venda: elas entregam menos que a cotação. Suba a tolerância de preço e revise de novo. Nada foi assinado.")
         case .simulationShape, .simulationSpentTooMuch, .simulationReceivedTooLittle, .simulationUnexpectedTransfer,
              .simulationUnexpectedApproval:
             return simulationMismatch
@@ -260,7 +262,8 @@ enum EVMEngineMessages {
         case "InvalidSignature", "WrongOwner", "InvalidEip1271Signature", "IncompatibleSigningScheme", "MissingFrom":
             return kitText("A CoW recusou a assinatura da ordem.")
         default:
-            return kitText("A CoW recusou a ordem. Motivo informado por ela: \(type).")
+            // O texto do servidor nunca vai para a tela: so os motivos que o app conhece (auditoria de 03/11/2026).
+            return kitText("A CoW recusou a ordem sem um motivo que o app conheça.")
         }
     }
 

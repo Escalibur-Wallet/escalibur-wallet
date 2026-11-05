@@ -40,6 +40,10 @@ public enum Signer {
                             passphrase typed: SecureBytes?) throws -> [SignedTransaction] {
         defer { rk.wipe() }
         guard !plan.isExpired() else { throw Failure.expired }
+        // O nonce conferido antes de abrir o cofre. A derivacao aqui nao passa pelo `DerivationSelfTest`, de proposito: a
+        // chave tem de bater com a `expectedPublicKey` e a assinatura e verificada, e uma derivacao errada so falha fechado.
+        // Recusar o envio por ela congelaria o saldo sem proteger nada (revisao da decima terceira passada).
+        guard SigningSelfTest.passed(for: plan) else { throw SigningSelfTest.Failure() }
 
         let secret = try vault.open(walletID: plan.walletID, rk: rk)
         rk.wipe()
@@ -117,8 +121,20 @@ public enum Signer {
 }
 
 public enum AccountDeriver {
-    /// Deriva o endereco padrao de cada rede.
+    /// Deriva o endereco padrao de cada rede, depois de o aparelho conferir os vetores publicos (`DerivationSelfTest`): com
+    /// um resultado diferente, nenhuma carteira e derivada (decima terceira passada da auditoria de 03/11/2026).
     public static func derive(_ secret: WalletSecret, chains: [Chain] = Chain.all) throws -> (accounts: [DerivedAccount], fingerprint: [UInt8]) {
+        guard DerivationSelfTest.passed else { throw DerivationSelfTest.Failure() }
+        // Duas vezes, iguais: um defeito intermitente do aparelho (memoria, otimizador) que tivesse passado no autoteste nao
+        // grava um endereco que a frase nao reabre (revisao da decima terceira passada).
+        let first = try deriveUnchecked(secret, chains: chains)
+        let second = try deriveUnchecked(secret, chains: chains)
+        guard first.accounts == second.accounts, first.fingerprint == second.fingerprint else { throw DerivationSelfTest.Failure() }
+        return first
+    }
+
+    /// A derivacao em si, sem a conferencia: so para o proprio `DerivationSelfTest`.
+    static func deriveUnchecked(_ secret: WalletSecret, chains: [Chain]) throws -> (accounts: [DerivedAccount], fingerprint: [UInt8]) {
         let seed = try secret.seed()
         defer { seed.wipe() }
         let secp = try HDKey.master(seed: seed, curve: .secp256k1)

@@ -123,6 +123,15 @@ public enum TradeSimulationSequence {
 }
 
 enum TradeSimulationCheck {
+    /// Os motivos com que os roteadores revertem quando o que chega fica abaixo do minimo: a SmartRouter
+    /// da PancakeSwap e a da Uniswap ("Too little received"), os pares v2 ("INSUFFICIENT_OUTPUT_AMOUNT"), a
+    /// 1inch ("Return amount is not enough") e o 0x ("TooMuchSlippage").
+    static func belowMinimum(_ error: String?) -> Bool {
+        guard let text = error?.lowercased() else { return false }
+        return ["too little received", "insufficient_output_amount", "insufficient output amount", "return amount is not enough",
+                "returnamountisnotenough", "toomuchslippage", "too much slippage", "minreturn"].contains { text.contains($0) }
+    }
+
     static let transferTopic = Hash.keccak256(Array("Transfer(address,address,uint256)".utf8))
     static let approvalTopic = Hash.keccak256(Array("Approval(address,address,uint256)".utf8))
     static let approvalForAllTopic = Hash.keccak256(Array("ApprovalForAll(address,address,bool)".utf8))
@@ -137,6 +146,11 @@ enum TradeSimulationCheck {
     ) throws -> (approvals: [UInt64], permit2: UInt64?, swap: UInt64) {
         let sources = Set(simulations.map(\.source))
         guard sources.count >= 2 else { throw TradeRefusal.simulationUnavailable }
+        // A troca que reverteria pelo minimo so e dita assim quando todas as fontes falham nela por isso: um
+        // provedor sozinho nao faz a tela pedir mais tolerancia (quarta passada da auditoria de 03/11/2026).
+        if simulations.allSatisfy({ $0.calls.last.map { !$0.success && belowMinimum($0.error) } ?? false }) {
+            throw TradeRefusal.simulationBelowMinimum(call: request.approvals.count + (request.permit2 == nil ? 0 : 1))
+        }
         var approvalGas = [UInt64](repeating: .max, count: request.approvals.count)
         var permit2Gas: UInt64?
         var swapGas = UInt64.max

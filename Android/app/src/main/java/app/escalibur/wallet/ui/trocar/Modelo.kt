@@ -169,7 +169,8 @@ class RetratoDaTroca(json: JSONObject) {
         val erro: String? = j.opcional("erro")
     }
 
-    class Resultado(val id: String?, val explorador: String, val url: String?, val situacao: String, val detalhe: String?, val ordem: Boolean)
+    class Resultado(val id: String?, val explorador: String, val url: String?, val situacao: String, val detalhe: String?, val ordem: Boolean,
+                    val parcial: Boolean = false)
     class Andamento(val estado: String, val fracao: Double, val recebido: String, val garantido: String)
 
     val frases: Frases? = e.optJSONObject("frases")?.let(::Frases)
@@ -180,7 +181,8 @@ class RetratoDaTroca(json: JSONObject) {
     val cancelou: Boolean = e.getBoolean("cancelou")
     val revisao: Revisao? = e.optJSONObject("revisao")?.let(::Revisao)
     val resultado: Resultado? = e.optJSONObject("resultado")?.let {
-        Resultado(it.opcional("id"), it.getString("explorador"), it.opcional("url"), it.getString("situacao"), it.opcional("detalhe"), it.getBoolean("ordem"))
+        Resultado(it.opcional("id"), it.getString("explorador"), it.opcional("url"), it.getString("situacao"), it.opcional("detalhe"), it.getBoolean("ordem"),
+                  it.optBoolean("parcial"))
     }
     val andamento: Andamento? = e.optJSONObject("andamento")?.let {
         Andamento(it.getString("estado"), it.getDouble("fracao"), it.getString("recebido"), it.getString("garantido"))
@@ -189,6 +191,9 @@ class RetratoDaTroca(json: JSONObject) {
     val detalheIncerto: String? = e.opcional("detalheIncerto")
     /** A CoW recusou com certeza: o motivo exato (etapa "recusada"). */
     val motivoDaRecusa: String? = e.opcional("motivoDaRecusa")
+    /** O que ja tinha entrado na rede antes da recusa, e a ordem assinada para cancelar na cadeia. */
+    val notasDaRecusa: List<String> = e.optJSONArray("notasDaRecusa")?.textos() ?: emptyList()
+    val ordemRecusada: String? = e.opcional("ordemRecusada")
     val valorEmMoeda: Double? = e.duplo("valorEmMoeda")
 }
 
@@ -197,6 +202,8 @@ class OpcaoDeToken(j: JSONObject) {
     val ativo = AtivoDaTroca(j.getJSONObject("ativo"))
     val quantidade: String? = j.opcional("quantidade")
     val fora: Boolean = j.getBoolean("fora")
+    /** Uma moeda que a carteira tem em outra rede: escolher leva a troca para la. */
+    val outraRede: Boolean = j.optBoolean("outraRede")
 }
 
 /**
@@ -227,7 +234,7 @@ class ControleDaTroca(val alvo: String) {
     private val fila = Mutex()
 
     /** As que vao a rede: fora da fila, para nao segurar a digitacao. */
-    private val longas = setOf("troca.cotar", "troca.revisar", "troca.remontar", "troca.cancelar", "troca.retransmitir", "troca.acompanhar")
+    private val longas = setOf("troca.cotar", "troca.revisar", "troca.remontar", "troca.cancelar", "troca.retransmitir", "troca.acompanhar", "troca.lerSaldo")
 
     suspend fun chamar(metodo: String, corpo: JSONObject = JSONObject()): Boolean = try {
         corpo.put("alvo", alvo)
@@ -305,9 +312,13 @@ class LinhaDaOrdem(j: JSONObject) {
     val criada: Long? = j.duplo("criada")?.toLong()
     val onde: String = j.getString("onde")
     val podeCancelar: Boolean = j.getBoolean("podeCancelar")
+    /** Editar precisa dos dois ativos conhecidos e de uma ordem que a CoW lista. */
+    val podeEditar: Boolean = j.optBoolean("podeEditar")
     val explicacao: String = j.getString("explicacao")
     /** "Refazer quando vencer" ligado nesta ordem; nulo sem prazo ou na rede sem refazer. */
     val refazer: Boolean? = if (j.has("refazer") && !j.isNull("refazer")) j.getBoolean("refazer") else null
+    /** A ordem assinada que so este aparelho conhece (a CoW disse que recusou, ou nao respondeu): avisa e so cancela na cadeia. */
+    val semConfirmacao: Boolean = j.optBoolean("semConfirmacao")
 }
 
 class OrdemTerminada(j: JSONObject) {

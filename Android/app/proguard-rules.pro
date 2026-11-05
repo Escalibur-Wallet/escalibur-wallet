@@ -32,3 +32,11 @@
 -keep class app.escalibur.wallet.nucleo.Eventos {
     public static void emitir(java.lang.String, java.lang.String);
 }
+
+# O commit e a arvore de onde o app saiu ficam inteiros no dex: o gerar-aab.sh confere os dois no APK e no AAB,
+# e quem audita le no pacote. Sem isto o R8 calculava o que a tela de Ajustes usa e apagava o resto
+# (quarta passada da auditoria de 03/11/2026).
+-keep class app.escalibur.wallet.BuildConfig {
+    public static final java.lang.String COMMIT_DE_ORIGEM;
+    public static final java.lang.String ARVORE_DE_ORIGEM;
+}

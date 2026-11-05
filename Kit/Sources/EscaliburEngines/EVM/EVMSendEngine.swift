@@ -230,8 +230,13 @@ public struct EVMSendEngine: SendEngine {
                 throw EVMEngineFailure.batchMismatch
             }
             let local = Hex.encode(Hash.keccak256(transaction.raw), prefix: true)
-            let receipt = try await reader.broadcast(transaction, chain: chain, route: .publicMempool)
-            guard receipt.id.lowercased() == local else { throw ReaderError.broadcastMismatch }
+            do {
+                let receipt = try await reader.broadcast(transaction, chain: chain, route: .publicMempool)
+                guard receipt.id.lowercased() == local else { throw ReaderError.broadcastMismatch }
+            } catch {
+                // O reenvio dos mesmos bytes, que ja entraram num bloco: saiu.
+                guard await EVMEngineSupport.alreadyMined(error, id: local, chain: chain, reader: reader) else { throw error }
+            }
             return local
         } catch {
             throw EVMEngineMessages.userFacing(error, .broadcast, chain: self.chain)
@@ -241,6 +246,11 @@ public struct EVMSendEngine: SendEngine {
     public func status(_ id: String, chain: Chain) async -> TransferStatus {
         guard chain.id == self.chain.id, let status = try? await reader.status(of: id, chain: chain) else { return .pending }
         return Self.transferStatus(status)
+    }
+
+    public func sighting(_ id: String, chain: Chain, from: String, nonce: UInt64) async -> EVMReader.Sighting? {
+        guard chain.id == self.chain.id else { return nil }
+        return try? await reader.sighting(id, chain: chain, from: from, nonce: nonce)
     }
 
     /// Confirmado so com dois provedores de acordo no recibo (o leitor exige).

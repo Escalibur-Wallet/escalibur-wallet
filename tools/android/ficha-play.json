@@ -9,7 +9,7 @@
     "en-US": {
       "titulo": "Escalibur Wallet",
       "curta": "Self-custody crypto wallet. Only you hold the keys.",
-      "completa": "Escalibur Wallet is a self-custody crypto wallet. Your keys stay on your phone, protected by the Android Keystore and your PIN, outside the Google backup. There is no account, no sign-up and no Escalibur server.\n\nSend and receive on Bitcoin, Ethereum, Solana, XRP Ledger, Stellar, TON, Tron and 19 more networks. Swap coins through each network's public protocols, place limit orders, move USDC, ETH and USDT between networks with the bridge, and get price and incoming-payment alerts computed on the phone itself.\n\nBefore you sign, the app shows the destination, amount and fee, and checks what will be signed. Keep your recovery phrase in an envelope encrypted with its own password.\n\nThe code is published for audit.",
+      "completa": "Escalibur Wallet is a self-custody crypto wallet. Your keys stay on your phone, protected by your phone's hardware vault and your PIN, outside the Google backup. There is no account, no sign-up and no Escalibur server.\n\nSend and receive on Bitcoin, Ethereum, Solana, XRP Ledger, Stellar, TON, Tron and 19 more networks. Swap coins through each network's public protocols, place limit orders, move USDC, ETH and USDT between networks with the bridge, and get price and incoming-payment alerts computed on the phone itself.\n\nBefore you sign, the app shows the destination, amount and fee, and checks what will be signed. Keep your recovery phrase in an envelope encrypted with its own password.\n\nThe code is published for audit.",
       "destaque": "build/loja-android/grafico/destaque-lima.png",
       "telas": [
         "build/loja-android/telas-lima/01.png",
@@ -24,14 +24,14 @@
     "pt-BR": {
       "titulo": "Escalibur Wallet",
       "curta": "Carteira cripto self-custody. Só você tem as chaves.",
-      "completa": "Escalibur Wallet é uma carteira de criptoativos self-custody. As chaves ficam no seu celular, protegidas pelo Android Keystore e pelo seu PIN, fora do backup do Google. Não existe conta, cadastro nem servidor da Escalibur.\n\nEnvie e receba em Bitcoin, Ethereum, Solana, XRP Ledger, Stellar, TON, Tron e mais 19 redes. Troque moedas pelos protocolos públicos de cada rede, crie ordens limite, leve USDC, ETH e USDT entre redes pela ponte e receba alertas de preço e de recebimento gerados no próprio celular.\n\nAntes de assinar, o app mostra destino, valor e taxa, e confere o que será assinado. Guarde a senha da carteira num envelope cifrado com senha própria.\n\nO código é publicado para auditoria.",
+      "completa": "Escalibur Wallet é uma carteira de criptoativos self-custody. As chaves ficam no seu celular, protegidas pelo cofre de hardware do celular e pelo seu PIN, fora do backup do Google. Não existe conta, cadastro nem servidor da Escalibur.\n\nEnvie e receba em Bitcoin, Ethereum, Solana, XRP Ledger, Stellar, TON, Tron e mais 19 redes. Troque moedas pelos protocolos públicos de cada rede, crie ordens limite, leve USDC, ETH e USDT entre redes pela ponte e receba alertas de preço e de recebimento gerados no próprio celular.\n\nAntes de assinar, o app mostra destino, valor e taxa, e confere o que será assinado. Guarde a senha da carteira num envelope cifrado com senha própria.\n\nO código é publicado para auditoria.",
       "destaque": null,
       "telas": []
     }
   },
   "notasDaVersao": {
-    "en-US": "Bridge transfers no longer fail for lack of network fee, and the bridge opens on the stablecoin you hold most. The lock screen tells a locked phone apart from a wrong PIN, and \"Forgot PIN\" now waits 24 hours before erasing. Plus the address check in character boxes and other fixes.",
-    "pt-BR": "A ponte entre redes não falha mais por falta de taxa de rede e já abre na stablecoin que você mais tem. A tela de bloqueio separa celular travado de PIN errado, e \"Esqueci o PIN\" agora espera 24 horas antes de apagar. E mais: conferência do endereço em caixas e outras correções."
+    "en-US": "Seeing the words now shows only the words, never the passphrase. The wallet stays closed while an outside app is reading the screen, the most common Android scam. Limit orders are listed newest first, sending to another wallet of yours skips the address check, and there are new protections in send tracking and against Tron account scams.",
+    "pt-BR": "Ver as palavras agora mostra só as palavras, nunca a passphrase. A carteira fica fechada enquanto um app de fora estiver lendo a tela, o golpe mais comum no Android. Ordens limite da mais nova para a mais antiga, envio para outra carteira sua sem a conferência do endereço, e proteções novas no acompanhamento dos envios e contra golpes com contas da Tron."
   },
   "icone": "build/loja-android/grafico/icone-512-lima.png"
 }

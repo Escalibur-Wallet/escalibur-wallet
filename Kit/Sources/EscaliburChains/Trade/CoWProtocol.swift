@@ -245,4 +245,31 @@ public struct CoWOrder: Sendable, Equatable {
     public func uid(owner: EVMAddress) throws -> [UInt8] {
         try digest() + owner.bytes + withUnsafeBytes(of: validTo.bigEndian) { Array($0) }
     }
+
+    /// O digesto EIP-712 de uma ordem como a API da CoW a lista, de qualquer forma (compra, com taxa, saldo
+    /// fora do ERC-20): so para conferir que os campos listados dao o UID, e nunca para assinar (terceira
+    /// passada da auditoria de 03/11/2026: a API podia listar uma ordem viva com outros valores).
+    public static func listedDigest(
+        chain: Chain, sellToken: EVMAddress, buyToken: EVMAddress, receiver: EVMAddress, sellAmount: BigUInt, buyAmount: BigUInt,
+        validTo: UInt32, appData: [UInt8], feeAmount: BigUInt, kind: String, partiallyFillable: Bool, sellTokenBalance: String,
+        buyTokenBalance: String
+    ) throws -> [UInt8] {
+        try EIP712TypedData(
+            types: ["Order": orderFields], primaryType: "Order", domain: domain(chain),
+            message: [
+                "sellToken": .string(sellToken.checksummed),
+                "buyToken": .string(buyToken.checksummed),
+                "receiver": .string(receiver.checksummed),
+                "sellAmount": .string(sellAmount.decimalString),
+                "buyAmount": .string(buyAmount.decimalString),
+                "validTo": .number(String(validTo)),
+                "appData": .string(Hex.encode(appData, prefix: true)),
+                "feeAmount": .string(feeAmount.decimalString),
+                "kind": .string(kind),
+                "partiallyFillable": .bool(partiallyFillable),
+                "sellTokenBalance": .string(sellTokenBalance),
+                "buyTokenBalance": .string(buyTokenBalance),
+            ]
+        ).signingDigest()
+    }
 }

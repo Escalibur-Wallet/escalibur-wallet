@@ -56,7 +56,7 @@ jobs:
       # tem de abrir em toda versao seguinte). O primeiro iPhone disponivel no runner.
       - name: Testes de unidade do app
         run: |
-          destino=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          destino=$(xcrun simctl list devices available -j | python3 -I -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
           xcodebuild -project EscaliburWallet.xcodeproj -scheme EscaliburWallet -sdk iphonesimulator \
             -destination "id=$destino" -derivedDataPath build/ci-testes -only-testing:EscaliburWalletTests \
             CODE_SIGNING_ALLOWED=NO test -quiet
@@ -64,6 +64,6 @@ jobs:
       # Dependencias fixadas por versao e por hash: um pacote trocado no PyPI nao entra.
       - name: Envelope da carteira aberto pelo decifrar.py embarcado
         run: |
-          python3 -m venv "$RUNNER_TEMP/venv"
-          "$RUNNER_TEMP/venv/bin/python" -m pip install --disable-pip-version-check --require-hashes -r tools/requisitos-ci.txt
+          python3 -I -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -I -m pip install --disable-pip-version-check --require-hashes -r tools/requisitos-ci.txt
           PATH="$RUNNER_TEMP/venv/bin:$PATH" ./tools/conferir-envelope.sh

@@ -70,6 +70,27 @@ enum Vigias {
         trava.withLock { fila.append(aviso) }
     }
 
+    /// O aviso de quem leu a rede antes: nao entra se um apagar tudo passou no meio (decima primeira passada).
+    static func enfileirar(_ aviso: Aviso, epoca: Int) {
+        trava.withLock { if epocaDoApagar == epoca { fila.append(aviso) } }
+    }
+
+    /// A epoca de agora, lida antes de ler a rede para acompanhar ou assentar uma ordem.
+    static var epocaAgora: Int { trava.withLock { epocaDoApagar } }
+
+    /// A etiqueta sorteada de um aviso (12 bytes em hex), o unico jeito de montar uma: nada da ordem, da rede, do ativo
+    /// nem da hora, que um leitor de notificacao cruzaria com a cadeia (oitava e nona passadas de 03/11/2026).
+    static func etiquetaSorteada() -> String? {
+        guard let sorteio = try? SecureRandom.bytes(12), sorteio.count == 12 else { return nil }
+        return Hex.encode(sorteio)
+    }
+
+    /// A carteira removida: os avisos de ordem que esperavam a proxima conferencia nao saem (o resumo nao diz de
+    /// quem e a ordem, entao saem todos os de ordem; sexta passada da auditoria de 03/11/2026).
+    static func tirarDaFila(canal: String) {
+        trava.withLock { fila.removeAll { $0.canal == canal } }
+    }
+
     /// A conferencia: os tres vigias e o que ficou na fila. `forcar` ignora o intervalo minimo
     /// (a checagem do segundo plano e a moeda nova na lista).
     static func conferir(forcar: Bool) async -> [Aviso] {
@@ -92,12 +113,21 @@ enum Vigias {
         return (precos.enabled && !precos.coins.isEmpty) || AvisoDeRecebimento.arquivo().enabled || !ordens.orders.isEmpty || !(ordens.notices?.isEmpty ?? true)
     }
 
-    /// Apagar tudo (as carteiras sairam do aparelho): nenhum arquivo fica.
+    /// Sobe a cada apagar tudo: a conferencia que esperava a rede para, sem mandar mais UID a CoW nem avisar (decima
+    /// passada da auditoria de 03/11/2026, como no iOS).
+    nonisolated(unsafe) static var epocaDoApagar = 0
+
+    /// Apagar tudo (as carteiras sairam do aparelho): nenhum arquivo fica, nem a chave dos avisos.
     static func apagarTudo() {
-        trava.withLock { fila = [] }
+        trava.withLock {
+            fila = []
+            epocaDoApagar &+= 1
+        }
         AlertasDePreco.apagar()
         AvisoDeRecebimento.desligar()
         VigiaDeOrdens.apagar()
+        VigiaDeOrdens.apagarChave()
+        Vigias.apagar(VigiaDeOrdens.nomeDoFormato)
     }
 
     struct Estado: Encodable {
@@ -262,7 +292,7 @@ struct ReceiptWatchFile: Codable, Equatable {
         /// A conta, sem endereco: um resumo da rede e do primeiro endereco dela. E a chave do saldo
         /// visto, que nao muda quando o endereco UTXO de recebimento anda.
         var owner: String? = nil
-        /// De uma carteira de so observar: so entra com `includeWatchOnly`.
+        /// De uma carteira de so observar, num arquivo de antes de 02/11/2026: nunca entra.
         var watchOnly: Bool? = nil
 
         var key: String { owner ?? addresses.first ?? "" }
@@ -287,13 +317,10 @@ struct ReceiptWatchFile: Codable, Equatable {
     /// Nas redes UTXO, o ultimo valor confirmado de cada endereco ("rede|endereco"): a conferencia e
     /// endereco por endereco (`BalanceService.receiptBalance`).
     var addressSeen: [String: UInt64]?
-    /// As carteiras de so observar tambem entram. Comeca desligado: em geral e a carteira fria, e
-    /// conferi-la junto com as outras liga as duas no provedor.
-    var includeWatchOnly: Bool?
-
-    /// As contas que entram, pela escolha de so observar.
+    /// As contas que entram. As de so observar ficam sempre de fora (pedido do dono, 02/11/2026): em
+    /// geral e a carteira fria, e conferi-la junto com as outras ligaria as duas no provedor.
     func admitted(_ all: [Account]) -> [Account] {
-        includeWatchOnly == true ? all : all.filter { $0.watchOnly != true }
+        all.filter { $0.watchOnly != true }
     }
 }
 
@@ -321,24 +348,21 @@ enum AvisoDeRecebimento {
     }
 
     /// As contas que o aviso confere: as das carteiras que podem receber, nas redes ligadas, so os
-    /// enderecos publicos. As de so observar vem marcadas, e so entram se o dono quiser
-    /// (`ReceiptWatchFile.includeWatchOnly`). A carteira com passphrase fica de fora: o arquivo abre com o app travado,
+    /// enderecos publicos. As de so observar ficam de fora (pedido do dono, 02/11/2026). A carteira com passphrase fica de fora: o arquivo abre com o app travado,
     /// e com ela nele quem extrai os dados do aparelho acha a carteira que o dono quis esconder. A
     /// que ainda nao tem copia conferida tambem: ela nao recebe.
     static func contas(_ metadata: Metadata) -> [ReceiptWatchFile.Account] {
         let desligadas = metadata.settings.disabledChainIDs
         var saida: [ReceiptWatchFile.Account] = []
         var vistas = Set<String>()
-        // As de so observar por ultimo: com o mesmo endereco numa carteira normal, vale a normal.
-        let carteiras = metadata.wallets.filter { !$0.isWatchOnly } + metadata.wallets.filter(\.isWatchOnly)
-        for carteira in carteiras where !carteira.hasPassphrase && (carteira.hasBackup || carteira.isWatchOnly) {
+        for carteira in metadata.wallets where !carteira.isWatchOnly && !carteira.hasPassphrase && carteira.hasBackup {
             for conta in carteira.accounts {
                 guard let rede = Chain.all.first(where: { $0.id == conta.chainID }), !desligadas.contains(rede.id) else { continue }
                 // A conta da Tron com outra chave no controle nao recebe por caminho nenhum.
                 if rede.family == .tron, carteira.tronForeignControl == true { continue }
                 let enderecos = enderecosDoAviso(conta, rede: rede, uso: carteira.utxoUsage[rede.id])
                 guard vistas.insert("\(rede.id)|\(conta.address)").inserted else { continue }
-                saida.append(.init(chainID: rede.id, addresses: enderecos, owner: dono(rede, conta.address), watchOnly: carteira.isWatchOnly))
+                saida.append(.init(chainID: rede.id, addresses: enderecos, owner: dono(rede, conta.address)))
             }
         }
         return saida
@@ -360,13 +384,13 @@ enum AvisoDeRecebimento {
     }
 
     /// Liga com as contas de agora. A primeira leitura so marca o saldo de partida: ligar nao
-    /// avisa do que ja estava na carteira. Ligado pelo dono em Ajustes, vem junto o valor e a moeda;
-    /// ligado de fabrica, a tela bloqueada so diz que entrou moeda.
-    static func ligar(contas: [ReceiptWatchFile.Account], detalhes: Bool) {
+    /// avisa do que ja estava na carteira. O valor e a moeda comecam desligados: a tela bloqueada so
+    /// diz que entrou moeda, e o dono liga se quiser (pedido do dono, 02/11/2026).
+    static func ligar(contas: [ReceiptWatchFile.Account]) {
         mudar { arquivo in
             arquivo.enabled = true
             arquivo.chosen = true
-            arquivo.showDetails = detalhes
+            arquivo.showDetails = false
             arquivo.salt = arquivo.salt ?? (try? SecureRandom.uint64())
             arquivo.accounts = arquivo.admitted(contas)
             arquivo.seen = [:]
@@ -412,10 +436,12 @@ enum AvisoDeRecebimento {
         defer { Vigias.trava.withLock { conferindo = false } }
 
         let sal = antes.salt ?? 0
+        // O arquivo de antes de 02/11/2026 pode ter conta de so observar ate o app abrir: fica de fora.
+        let contas = antes.admitted(antes.accounts)
         let saldos = await withTaskGroup(of: (ReceiptWatchFile.Account, ChainBalance?).self) { grupo in
             // Em ordem sorteada e cada rede com um atraso proprio: as consultas de todas as redes
             // nao saem juntas, no mesmo segundo, a cada rodada.
-            for conta in (try? SecureRandom.mixed(antes.accounts)) ?? antes.accounts {
+            for conta in (try? SecureRandom.mixed(contas)) ?? contas {
                 guard let rede = Chain.all.first(where: { $0.id == conta.chainID }), !conta.addresses.isEmpty else { continue }
                 let (visto, vistoPorEndereco) = vistos(de: conta, em: antes)
                 // So o que ja entrou num bloco, e toda mudanca conferida por outro dono: o aviso diz que
@@ -445,11 +471,13 @@ enum AvisoDeRecebimento {
         guard depois.showDetails else {
             return [Aviso(id: "recebimento.discreto", canal: "recebimentos", tipo: "discreto")]
         }
-        let marca = Int(agora.timeIntervalSince1970)
-        var saida = eventos.prefix(maximoPorVez).map { evento -> Aviso in
+        // A etiqueta, que todo app com acesso as notificacoes le, e sorteada: rede, ativo e hora nela cruzavam com as
+        // transferencias publicas da cadeia e chegavam ao endereco (oitava passada da auditoria de 03/11/2026).
+        var saida = eventos.prefix(maximoPorVez).compactMap { evento -> Aviso? in
             let rede = Chain.all.first { $0.id == evento.chainID }?.name ?? evento.chainID
             let simbolo = Vigias.simboloSeguro(evento.symbol)
-            return Aviso(id: "recebimento.\(evento.chainID).\(simbolo).\(marca)", canal: "recebimentos", tipo: "recebeu",
+            guard let sorteio = Vigias.etiquetaSorteada() else { return nil }
+            return Aviso(id: "recebimento.\(sorteio)", canal: "recebimentos", tipo: "recebeu",
                          quantia: Fmt.cripto(evento.amount, casas: evento.decimals, simbolo: simbolo), rede: rede)
         }
         if eventos.count > maximoPorVez {
@@ -550,23 +578,85 @@ enum VigiaDeOrdens {
 
     /// Uma ordem da CoW, nova ou vista na lista de abertas: passa a ser acompanhada. Ja
     /// acompanhada, nada muda.
-    static func acompanhar(id: String, rede: Chain, venceEm: Date, agora: Date = .now) {
+    static func acompanhar(id: String, rede: Chain, venceEm: Date, agora: Date = .now, epoca: Int) {
         guard venceEm > agora, CoWProtocol.supports(rede), id.hasPrefix("0x"), Hex.decode(id)?.count == CoWProtocol.uidLength else { return }
+        // Dono de carteira removida nesta sessao: uma leitura que terminou depois da remocao nao volta a acompanhar.
+        // Conferido dentro da mesma trava do `esquecer`: conferido antes, a gravacao podia cair depois dele.
+        let dono = String(String(id.lowercased().dropFirst(2)).dropFirst(64).prefix(40))
+        // E a epoca do apagar tudo, na mesma trava: a ordem lida antes dele nao volta ao arquivo (decima primeira passada).
         mudar { arquivo in
-            guard !arquivo.orders.contains(where: { $0.id == id }) else { return }
+            guard Vigias.epocaDoApagar == epoca, !donosEsquecidos.contains(dono), !arquivo.orders.contains(where: { $0.id == id }) else { return }
             let semAviso = venceEm.timeIntervalSince(agora) - antecedencia < folga
             arquivo.orders.append(.init(id: id, chainID: rede.id, expiresAt: venceEm, warned: semAviso))
         }
     }
 
-    /// O resumo do UID que o aviso do fim do prazo guarda: nao volta ao UID nem ao endereco.
-    private static func resumo(_ id: String) -> String {
+    /// O resumo do UID que o aviso do fim do prazo guarda no arquivo: nao volta ao UID nem ao endereco sem a chave. O
+    /// UID traz o dono nos bytes 32 a 52 (sexta passada da auditoria de 03/11/2026, como no iOS). A etiqueta da
+    /// notificacao nao leva nem este resumo (`avisoDeOrdem`).
+    private static func resumo(_ id: String, epoca: Int? = nil) -> String? {
+        chave(epoca: epoca).map { Hex.encode(Array(Hash.hmacSHA256(key: $0, data: Array(id.utf8)).prefix(12))) }
+    }
+
+    /// O aviso de ordem, o unico jeito de montar um: a etiqueta e sorteada a cada aviso (12 bytes), e nao um resumo da
+    /// ordem. O mesmo resumo no "24h" e na "executada" ligava as duas horas da mesma ordem para um leitor de
+    /// notificacao, que as cruzava com os eventos publicos da cadeia (setima passada da auditoria de 03/11/2026). Sem
+    /// sorteio, nenhum aviso. O toque so diz que e uma ordem.
+    private static func avisoDeOrdem(_ etiqueta: String) -> Aviso? {
+        guard let tipo = ["executada": "executada", "24h": "vence24h", "prazo": "prazo"][etiqueta] else { return nil }
+        guard let sorteio = Vigias.etiquetaSorteada() else { return nil }
+        return Aviso(id: "ordem-limite.\(etiqueta).\(sorteio)", canal: "ordens", tipo: tipo, ordem: tipo == "prazo" ? "" : "1")
+    }
+
+    /// O resumo sem chave da versao anterior: so para tirar o que ela marcou.
+    private static func resumoAntigo(_ id: String) -> String {
         Hex.encode(Array(Hash.sha256(Array(id.utf8)).prefix(12)))
     }
 
-    static func marcarFimDoPrazo(_ id: String, em: Date) {
-        let chave = resumo(id)
+    /// A chave dos resumos: 32 bytes aleatorios por instalacao, ao lado dos arquivos dos vigias (a pasta sem backup
+    /// do app), que somem no apagar tudo. Sem ela, o resumo se desfazia por dicionario: o UID de toda ordem executada
+    /// e publico na cadeia (sexta passada da auditoria de 03/11/2026, como no iOS).
+    static let nomeDaChave = "avisos.chave"
+    private static let travaDaChave = NSLock()
+    nonisolated(unsafe) private static var chaveLida: [UInt8]?
+
+    /// `epoca`: a de quem vai gravar. Uma chave nova so nasce nessa epoca: entre a conferencia de quem chama e aqui, um
+    /// apagar tudo recriava a chave que ele tinha acabado de tirar (decima terceira passada da auditoria de 03/11/2026).
+    private static func chave(epoca: Int? = nil) -> [UInt8]? {
+        travaDaChave.withLock {
+            if let chaveLida { return chaveLida }
+            if let url = Vigias.arquivo(nomeDaChave), let dados = try? Data(contentsOf: url), dados.count == 32 {
+                chaveLida = Array(dados)
+                return Array(dados)
+            }
+            if let epoca, Vigias.epocaAgora != epoca { return nil }
+            // Sem sorteio, nenhum resumo e nenhum aviso de ordem: uma chave fixa voltaria ao dicionario.
+            guard let nova = try? SecureRandom.bytes(32), nova.count == 32 else { return nil }
+            if let pasta = Vigias.pasta, let url = Vigias.arquivo(nomeDaChave) {
+                try? FileManager.default.createDirectory(at: pasta, withIntermediateDirectories: true)
+                try? Data(nova).write(to: url, options: .atomic)
+            }
+            chaveLida = nova
+            return nova
+        }
+    }
+
+    static func apagarChave() {
+        travaDaChave.withLock {
+            chaveLida = nil
+            Vigias.apagar(nomeDaChave)
+        }
+    }
+
+    static func marcarFimDoPrazo(_ id: String, em: Date, epoca: Int) {
+        // Antes do resumo, que recriaria a chave dos avisos depois de um apagar tudo, e de novo na trava da gravacao
+        // (decima segunda passada da auditoria de 03/11/2026).
+        // E a carteira removida: o dono no UID, como no `acompanhar` (decima terceira passada).
+        let dono = String(String(id.lowercased().dropFirst(2)).dropFirst(64).prefix(40))
+        guard Vigias.trava.withLock({ !donosEsquecidos.contains(dono) }) else { return }
+        guard Vigias.epocaAgora == epoca, let chave = resumo(id, epoca: epoca) else { return }
         mudar { arquivo in
+            guard Vigias.epocaDoApagar == epoca, !donosEsquecidos.contains(dono) else { return }
             var lista = arquivo.notices ?? []
             lista.removeAll { $0.key == chave }
             lista.append(.init(key: chave, at: em))
@@ -574,27 +664,85 @@ enum VigiaDeOrdens {
         }
     }
 
-    static func desmarcarFimDoPrazo(_ id: String) {
-        let chave = resumo(id)
-        mudar { $0.notices?.removeAll { $0.key == chave } }
+    /// Uma vez por formato: os avisos de fim do prazo guardados pela versao anterior tinham o resumo sem chave (que se
+    /// desfaz por dicionario) e valiam tambem para a carteira com passphrase. Ficam so os das ordens a refazer das
+    /// carteiras sem passphrase, com o resumo com chave e a mesma hora (setima passada da auditoria de 03/11/2026).
+    static let nomeDoFormato = "avisos.formato-2"
+
+    static func migrarAvisos(renovadas: [String]) {
+        guard let url = Vigias.arquivo(nomeDoFormato), !FileManager.default.fileExists(atPath: url.path) else { return }
+        var pares: [(antigas: Set<String>, nova: String)] = []
+        for id in renovadas {
+            guard let nova = resumo(id) else { return }
+            pares.append(([nova, resumoAntigo(id)], nova))
+        }
+        mudar { arquivo in
+            guard let lista = arquivo.notices else { return }
+            arquivo.notices = lista.compactMap { aviso in
+                pares.first { $0.antigas.contains(aviso.key) }.map { LimitOrderWatchFile.Notice(key: $0.nova, at: aviso.at) }
+            }
+        }
+        try? Data().write(to: url, options: .atomic)
     }
 
-    /// A ordem terminou (ou o dono cancelou): sai do arquivo.
-    static func esquecer(_ id: String) {
-        mudar { $0.orders.removeAll { $0.id == id } }
+    static func desmarcarFimDoPrazo(_ id: String) {
+        // Sem aviso guardado, nada a tirar: o resumo recriaria a chave dos avisos (decima segunda passada).
+        guard !(arquivo().notices?.isEmpty ?? true) else { return }
+        let chaves = Set([resumo(id), resumoAntigo(id)].compactMap { $0 })
+        mudar { $0.notices?.removeAll { chaves.contains($0.key) } }
+    }
+
+    /// A ordem terminou (ou o dono cancelou): sai do arquivo. Devolve se ainda estava nele.
+    @discardableResult
+    static func esquecer(_ id: String) -> Bool {
+        var estava = false
+        mudar { arquivo in
+            estava = arquivo.orders.contains { $0.id == id }
+            arquivo.orders.removeAll { $0.id == id }
+        }
+        return estava
+    }
+
+    /// A carteira removida: saem as ordens dela, pelo dono no UID (bytes 32 a 52) ou pelo id (o
+    /// `forget(owners:ids:)` do iOS, quarta passada da auditoria de 03/11/2026).
+    /// Os donos de carteiras removidas nesta sessao: `acompanhar` recusa as ordens deles, como no iOS. So muda dentro
+    /// da trava dos vigias (`mudar`), e a carteira que volta a ser adicionada sai dele (sexta passada de 03/11/2026).
+    nonisolated(unsafe) private static var donosEsquecidos: Set<String> = []
+
+    static func lembrar(donos: Set<String>) {
+        guard !donos.isEmpty else { return }
+        mudar { _ in donosEsquecidos.subtract(donos) }
+    }
+
+    /// O dono no UID da ordem (bytes 32 a 52), em hex minusculo sem o 0x; vazio se o UID nao tem o tamanho certo.
+    private static func dono(daOrdem id: String) -> String {
+        let hex = id.lowercased().hasPrefix("0x") ? String(id.lowercased().dropFirst(2)) : id.lowercased()
+        return hex.count == 112 ? String(hex.dropFirst(64).prefix(40)) : ""
+    }
+
+    static func esquecer(donos: Set<String>, ids: Set<String>) {
+        defer { Vigias.tirarDaFila(canal: "ordens") }
+        mudar { arquivo in
+            donosEsquecidos.formUnion(donos)
+            arquivo.orders.removeAll { ordem in
+                ids.contains(ordem.id.lowercased()) || donos.contains(dono(daOrdem: ordem.id))
+            }
+        }
     }
 
     /// A lista de ordens abertas viu a ordem sair com o andamento final. Executada avisa (se ainda
     /// estava acompanhada: o aviso sai uma vez so); o resto so sai do arquivo.
-    static func assentar(_ id: String, executada: Bool) {
-        let acompanhada = arquivo().orders.contains { $0.id == id }
-        esquecer(id)
-        if executada, acompanhada { Vigias.enfileirar(Aviso(id: "ordem-limite.executada.\(id)", canal: "ordens", tipo: "executada", ordem: id)) }
+    static func assentar(_ id: String, executada: Bool, epoca: Int) {
+        guard Vigias.epocaAgora == epoca else { return }
+        if esquecer(id), executada, let aviso = avisoDeOrdem("executada") { Vigias.enfileirar(aviso, epoca: epoca) }
     }
 
     /// O aviso de 24 horas das que estao perto do fim, e a pergunta a CoW pelo andamento de cada
     /// uma. Sem resposta, fica para a proxima vez. Os avisos nao dizem ativo nem valor.
     static func conferir(agora: Date = .now) async -> [Aviso] {
+        // A epoca antes do arquivo: aqui roda em threads, e um apagar tudo entre a leitura do arquivo e a da epoca
+        // mandava a CoW o UID das ordens lidas antes dele (decima segunda passada da auditoria de 03/11/2026).
+        let epoca = Vigias.epocaAgora
         let lido = arquivo()
         let ordens = lido.orders
         guard !ordens.isEmpty || !(lido.notices?.isEmpty ?? true), Vigias.trava.withLock({ () -> Bool in
@@ -604,39 +752,70 @@ enum VigiaDeOrdens {
         }) else { return [] }
         defer { Vigias.trava.withLock { conferindo = false } }
         var saida: [Aviso] = []
-        // O fim do prazo das que o dono pediu para refazer: nao precisa de rede.
-        let venceram = (lido.notices ?? []).filter { $0.at <= agora }
+        // O fim do prazo das que o dono pediu para refazer: nao precisa de rede. So depois da migracao dos avisos (o
+        // primeiro destravar depois de atualizar): antes dela, o arquivo ainda tem os da carteira com passphrase
+        // (oitava passada da auditoria de 03/11/2026).
+        let migrado = Vigias.arquivo(nomeDoFormato).map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+        let venceram = migrado ? (lido.notices ?? []).filter { $0.at <= agora } : []
         if !venceram.isEmpty {
             let chaves = Set(venceram.map(\.key))
-            mudar { $0.notices?.removeAll { chaves.contains($0.key) } }
-            saida += venceram.map { Aviso(id: "ordem-limite.prazo.\($0.key)", canal: "ordens", tipo: "prazo", ordem: "") }
+            var tiradas = 0
+            mudar { arquivo in
+                guard Vigias.epocaDoApagar == epoca else { return }
+                let antes = arquivo.notices?.count ?? 0
+                arquivo.notices?.removeAll { chaves.contains($0.key) }
+                tiradas = antes - (arquivo.notices?.count ?? 0)
+            }
+            saida += (0..<tiradas).compactMap { _ in avisoDeOrdem("prazo") }
         }
+        // Os avisos de ordem levam o dono: a carteira removida durante a pergunta a rede nao avisa no fim.
+        var comDono: [(dono: String, aviso: Aviso)] = []
         let perto = ordens.filter { !$0.warned && $0.expiresAt > agora && $0.expiresAt.timeIntervalSince(agora) <= antecedencia }
         if !perto.isEmpty {
+            // So as que ainda estao no arquivo e sem aviso, conferidas na mesma trava em que sao marcadas: a ordem da
+            // carteira removida durante a conferencia nao avisa (sexta passada da auditoria de 03/11/2026).
             let ids = Set(perto.map(\.id))
+            var marcadas: [String] = []
             mudar { arquivo in
-                for indice in arquivo.orders.indices where ids.contains(arquivo.orders[indice].id) { arquivo.orders[indice].warned = true }
+                guard Vigias.epocaDoApagar == epoca else { return }
+                for indice in arquivo.orders.indices where ids.contains(arquivo.orders[indice].id) && !arquivo.orders[indice].warned {
+                    arquivo.orders[indice].warned = true
+                    marcadas.append(arquivo.orders[indice].id)
+                }
             }
-            saida += perto.map { Aviso(id: "ordem-limite.24h.\($0.id)", canal: "ordens", tipo: "vence24h", ordem: $0.id) }
+            comDono += marcadas.compactMap { id in avisoDeOrdem("24h").map { (dono(daOrdem: id), $0) } }
         }
         let cliente = CoWClient()
         for ordem in ordens {
+            guard Vigias.trava.withLock({ Vigias.epocaDoApagar }) == epoca else { return [] }
             guard let rede = Chain.all.first(where: { $0.id == ordem.chainID }), let uid = Hex.decode(ordem.id) else {
                 esquecer(ordem.id)
                 continue
             }
+            // Vencida, sai mesmo sem resposta: a ordem que a CoW nunca teve (a recusada) respondia 404
+            // para sempre, e o UID, que traz o endereco, ia a ela a cada checagem (auditoria de 03/11/2026).
+            if ordem.expiresAt <= agora {
+                esquecer(ordem.id)
+                continue
+            }
             guard let andamento = try? await cliente.order(uid: uid, chain: rede) else { continue }
+            guard Vigias.trava.withLock({ Vigias.epocaDoApagar }) == epoca else { return [] }
             switch andamento.status {
             case .fulfilled:
-                esquecer(ordem.id)
-                saida.append(Aviso(id: "ordem-limite.executada.\(ordem.id)", canal: "ordens", tipo: "executada", ordem: ordem.id))
+                // So a que ainda estava acompanhada: removida a carteira durante a pergunta, nao avisa.
+                if esquecer(ordem.id), let aviso = avisoDeOrdem("executada") { comDono.append((dono(daOrdem: ordem.id), aviso)) }
             case .cancelled, .expired:
                 esquecer(ordem.id)
             case .open, .presignaturePending, .unknown:
                 if andamento.invalidated || TimeInterval(andamento.validTo) <= agora.timeIntervalSince1970 { esquecer(ordem.id) }
             }
         }
-        return saida
+        // Um apagar tudo no fim: nenhum aviso das ordens lidas antes dele. E a carteira removida no meio: nenhum aviso de
+        // executada dela, conferido na mesma trava em que o remover esquece o dono (revisao da decima terceira passada).
+        return Vigias.trava.withLock { () -> [Aviso] in
+            guard Vigias.epocaDoApagar == epoca else { return [] }
+            return saida + comDono.filter { !donosEsquecidos.contains($0.dono) }.map(\.aviso)
+        }
     }
 }
 
@@ -657,7 +836,6 @@ extension Vigias {
     struct EstadoDoRecebimento: Encodable {
         let ligado: Bool
         let detalhes: Bool
-        let soObservar: Bool
     }
 
     static func estadoDosAlertas() -> EstadoDosAlertas {
@@ -668,7 +846,7 @@ extension Vigias {
 
     static func estadoDoRecebimento() -> EstadoDoRecebimento {
         let arquivo = AvisoDeRecebimento.arquivo()
-        return EstadoDoRecebimento(ligado: arquivo.enabled, detalhes: arquivo.showDetails, soObservar: arquivo.includeWatchOnly == true)
+        return EstadoDoRecebimento(ligado: arquivo.enabled, detalhes: arquivo.showDetails)
     }
 
     static func chamar(_ metodo: String, _ pedido: JSONValue) throws -> Data {
@@ -715,16 +893,10 @@ extension Vigias {
             return try Nucleo.json(estadoDoRecebimento())
         case "recebimentos.ligar":
             guard Sessao.shared.fase == .unlocked else { throw Nucleo.Falha(erro: "sessao.travada") }
-            AvisoDeRecebimento.ligar(contas: AvisoDeRecebimento.contas(Sessao.shared.metadata), detalhes: true)
+            AvisoDeRecebimento.ligar(contas: AvisoDeRecebimento.contas(Sessao.shared.metadata))
             return try Nucleo.json(estadoDoRecebimento())
         case "recebimentos.desligar":
             AvisoDeRecebimento.desligar(escolhido: true)
-            return try Nucleo.json(estadoDoRecebimento())
-        case "recebimentos.soObservar":
-            // Carteiras de so observar no aviso, ou fora dele.
-            let ligado = pedido["ligado"]?.boolValue ?? false
-            AvisoDeRecebimento.mudar { $0.includeWatchOnly = ligado }
-            if Sessao.shared.fase == .unlocked { AvisoDeRecebimento.acompanhar(contas: AvisoDeRecebimento.contas(Sessao.shared.metadata)) }
             return try Nucleo.json(estadoDoRecebimento())
         case "recebimentos.detalhes":
             let ligado = pedido["ligado"]?.boolValue ?? false

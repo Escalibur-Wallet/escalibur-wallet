@@ -95,9 +95,14 @@ final class TradeModel {
         return Fmt.parseAmount(receiveText, decimals: buy.decimals)
     }
 
+    /// O "Max" na moeda nativa, a espera da primeira cotacao: ela diz a taxa, e o valor desce para
+    /// deixar a taxa maxima de fora (auditoria de 03/11/2026).
+    var maxNative = false
+
     /// O dono digitou em "Voce paga" (ou "Voce vende"): volta a valer o valor de entrada.
     func typePay(_ text: String) {
         amountText = text
+        maxNative = false
         clearExactOut()
     }
 
@@ -144,6 +149,8 @@ struct TradeView: View {
     @State private var receivingAsset: Asset?
     /// Sobe quando uma ordem foi criada: as ordens abertas releem.
     @State private var ordersRefresh = 0
+    /// Sobe para ler de novo o saldo da rede da troca (depois de uma troca enviada).
+    @State private var balanceRound = 0
     /// A ordem aberta em edicao, na tela propria de editar.
     @State private var editingOrder: LimitEdit?
     /// Esta tela e a de editar uma ordem (pedido do dono, 17/10/2026): so a ordem limite,
@@ -222,8 +229,44 @@ struct TradeView: View {
         .task(id: session.selectedWallet?.id) { await portfolio.ensureLoaded(session.selectedWallet, session: session) }
     }
 
+    /// As redes onde a moeda escolhida pode levar a troca: no modo limite, so as que tem ordem limite.
+    /// Editando uma ordem, nenhuma outra: a ordem nova cancela a antiga na rede dela, e outra rede
+    /// deixaria as duas abertas (auditoria de 03/11/2026).
+    private var pickerChains: [Chain] {
+        if fixedEdit != nil || model.editing != nil { return [] }
+        return mode == .limit ? tradeChains.filter { TradeEngines.engine(for: $0)?.supportsLimitOrders == true } : tradeChains
+    }
+
+    /// Ordem limite (fora da edicao): a moeda do outro lado aparece na lista, e escolhe-la inverte os lados,
+    /// sem botao de inverter (pedido do dono, 04/11/2026).
+    private var pickerSwapsSides: Bool { mode == .limit && model.editing == nil && fixedEdit == nil }
+
     private func tokenPicker(_ side: Side) -> some View {
-        TokenPickerSheet(chain: model.chain, exclude: side == .sell ? model.buy : model.sell, selling: side == .sell) { asset in
+        let other = side == .sell ? model.buy : model.sell
+        return TokenPickerSheet(chain: model.chain, chains: pickerChains, exclude: pickerSwapsSides ? nil : other, selling: side == .sell) { asset in
+            if pickerSwapsSides, let other, asset.id == other.id {
+                // O valor e o preco eram do sentido anterior: saem, e o preco de agora volta pelo `prefillTarget`.
+                let sell = model.sell
+                model.sell = model.buy
+                model.buy = sell
+                model.amountText = ""
+                model.quote = nil
+                model.clearExactOut()
+                model.targetPriceText = ""
+                model.autoTarget = nil
+                model.acceptedLimitPrice = nil
+                picking = nil
+                return
+            }
+            // Uma moeda de outra rede leva a troca para a rede dela (pedido do dono, 02/11/2026): a rede
+            // la em cima muda sozinha, e o outro lado volta ao padrao da rede nova.
+            if let other = asset.chain, other.id != model.chain.id {
+                withAnimation(Motion.fade) { model.reset(to: other) }
+                // O padrao da rede nova (nativa por stablecoin) nao pode ficar igual a moeda escolhida.
+                let stable = TokenRegistry.tokens.first { $0.chainID == other.id && $0.isStablecoin }
+                if side == .sell, model.buy?.id == asset.id { model.buy = asset.id == Asset.native(other).id ? stable : .native(other) }
+                if side == .buy, model.sell?.id == asset.id { model.sell = stable }
+            }
             if side == .sell { model.sell = asset } else { model.buy = asset }
             model.quote = nil
             // Outra moeda a receber: o recebido digitado era em outra unidade.
@@ -328,8 +371,14 @@ struct TradeView: View {
         }
         .onChange(of: router.tradePreset?.asset.id) { _, _ in applyPreset() }
         .onChange(of: router.limitEdit?.order.id) { _, _ in applyEdit() }
-        // Outro modo: o recebido digitado era do anterior (o valor a pagar fica).
-        .onChange(of: router.tradeMode) { _, _ in model.clearExactOut() }
+        // Outro modo: o recebido digitado era do anterior (o valor a pagar fica), e o preco e o aceite da ordem
+        // limite tambem saem: o preco de agora volta pelo `prefillTarget` (quinta passada de 03/11/2026).
+        .onChange(of: router.tradeMode) { _, _ in
+            model.clearExactOut()
+            model.targetPriceText = ""
+            model.autoTarget = nil
+            model.acceptedLimitPrice = nil
+        }
         .sheet(item: $picking) { side in tokenPicker(side) }
         .sheet(item: $receivingAsset) { asset in ReceiveSheet(preselected: asset) }
         .sheet(isPresented: $routeSheet) {
@@ -348,8 +397,11 @@ struct TradeView: View {
                 reviewing = nil
                 if completed { ordersRefresh += 1 }
                 if completed {
+                    rereadBalance(after: item.chain)
                     model.amountText = ""
                     model.targetPriceText = ""
+                    // O aceite do preco vale por ordem: a proxima, mesmo par e mesmo preco, pede de novo (sexta passada).
+                    model.acceptedLimitPrice = nil
                     model.quote = nil
                     model.editing = nil
                 }
@@ -380,6 +432,20 @@ struct TradeView: View {
             prefillTarget()
         }
         .task(id: session.selectedWallet?.id) { await portfolio.ensureLoaded(session.selectedWallet, session: session) }
+        // O saldo da rede da troca lido de novo ao abrir, ao trocar de rede e depois de cada troca:
+        // o "Max" usa ele, e um saldo velho pedia mais do que a conta tem (visto pelo dono, 03/11/2026).
+        .task(id: "\(session.selectedWallet?.id.uuidString ?? "")|\(model.chain.id)|\(balanceRound)") {
+            await portfolio.refreshChain(model.chain, wallet: session.selectedWallet, session: session)
+        }
+    }
+
+    /// Depois de uma troca enviada: le o saldo agora e de novo quando a rede deve ter confirmado.
+    private func rereadBalance(after chain: Chain) {
+        balanceRound += 1
+        Task {
+            try? await Task.sleep(for: .seconds(chain.typicalConfirmationSeconds + 10))
+            balanceRound += 1
+        }
     }
 
     /// Editar uma ordem abre a tela propria de editar, por cima da troca.
@@ -576,7 +642,7 @@ struct TradeView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                Text(feeText(quote)).typeStyle(.note).foregroundStyle(Palette.inkSoft)
+                feeLine(quote)
                 if model.exactOut, model.shortOfTarget {
                     Text("A liquidez de agora não chega a \(model.receiveText) \(buy.symbol). O garantido fica em \(Fmt.crypto(model.shownMinimum ?? quote.minimumOut, decimals: buy.decimals, symbol: buy.symbol, style: .full)).")
                         .typeStyle(.note).foregroundStyle(Palette.caution).fixedSize(horizontal: false, vertical: true)
@@ -685,9 +751,25 @@ struct TradeView: View {
         return "\(units[index]) \(base) = \(Fmt.grouped(scaled, fractionDigits: scaled < 1 ? 6 : 4, trimZeros: true)) \(quote)"
     }
 
-    private func feeText(_ quote: TradeQuote) -> String {
-        guard let fee = quote.networkFeeFiat else { return String(localized: "Sem taxa da Escalibur. A taxa da rede aparece na revisão.") }
-        return String(localized: "Taxas: rede \(Fmt.fiat(fee, session.currency)) · sem taxa da Escalibur")
+    /// A bomba de combustivel e a taxa da rede na moeda do dono. Sem estimativa ou sem preco,
+    /// o aviso de que ela aparece na revisao.
+    @ViewBuilder
+    private func feeLine(_ quote: TradeQuote) -> some View {
+        // A taxa e a estimada pelo provedor da troca, e nao a do plano: por isso o "≈". Em partes, a
+        // conta e outra (aprovacao, embrulho e a taxa da CoW no token): fica a da revisao
+        // (auditoria de 03/11/2026).
+        if !(model.inParts && quote.parts != nil), let fee = quote.networkFeeFiat(price: price) {
+            let value = Fmt.fiat(fee, session.currency)
+            HStack(spacing: 5) {
+                Image(systemName: "fuelpump").font(.system(size: 12, weight: .semibold))
+                Text("\("≈ " + value) · sem taxa da Escalibur").typeStyle(.note)
+            }
+            .foregroundStyle(Palette.inkSoft)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(String(localized: "Taxa da rede \(value), sem taxa da Escalibur"))
+        } else {
+            Text("Sem taxa da Escalibur. A taxa da rede aparece na revisão.").typeStyle(.note).foregroundStyle(Palette.inkSoft)
+        }
     }
 
     // MARK: Ordem limite
@@ -815,6 +897,17 @@ struct TradeView: View {
     /// O preco de agora no campo, se ele esta vazio ou ainda com o que o app preencheu.
     private func prefillTarget() {
         guard mode == .limit, model.targetPriceText.isEmpty || model.targetPriceText == model.autoTarget else { return }
+        // Sem o preco de mercado do par novo, o preco que o app preencheu para o par anterior sai do campo, e
+        // volta quando o preco chegar: senao o "Voce recebe" seria a conta na moeda de antes com o nome da nova
+        // (o BNBFROG por BNB mostrava o valor em USDT, 03/11/2026).
+        guard marketRate != nil else {
+            if !model.targetPriceText.isEmpty {
+                model.targetPriceText = ""
+                model.autoTarget = nil
+                limitPriceChanged()
+            }
+            return
+        }
         setTarget(0)
     }
 
@@ -833,18 +926,22 @@ struct TradeView: View {
         return .fine
     }
 
+    /// O aceite do preco vale para este par, neste sentido, com este preco: o mesmo numero no par invertido
+    /// nao herda o aceite (quinta passada da auditoria de 03/11/2026).
+    private var limitAcceptKey: String { "\(model.sell?.id ?? "")>\(model.buy?.id ?? "")|\(model.targetPriceText)" }
+
     private var limitPriceConfirmed: Bool {
         switch limitSanity {
         case .fine, .farAbove: return true
         case .farBelow: return false
-        case .below, .unknown: return model.acceptedLimitPrice == model.targetPriceText
+        case .below, .unknown: return model.acceptedLimitPrice == limitAcceptKey
         }
     }
 
     @ViewBuilder
     private var limitSanityLine: some View {
-        let confirm = Binding(get: { model.acceptedLimitPrice == model.targetPriceText },
-                              set: { model.acceptedLimitPrice = $0 ? model.targetPriceText : nil })
+        let confirm = Binding(get: { model.acceptedLimitPrice == limitAcceptKey },
+                              set: { model.acceptedLimitPrice = $0 ? limitAcceptKey : nil })
         switch limitSanity {
         case .fine:
             EmptyView()
@@ -924,8 +1021,11 @@ struct TradeView: View {
                                             amountIn: amount, minimumOut: minimum, validFor: model.validFor)
             var item = TradeReviewFlow.Item(kind: .limit(request), chain: model.chain, fiat: fiat,
                                             renewLimit: model.renewOnExpiry && model.validFor != nil && LimitRenewalCenter.supports(model.chain))
-            // Editando: a revisao cancela a ordem atual antes de criar esta.
-            if let edit = model.editing, edit.order.chain.id == model.chain.id {
+            // Editando: a revisao cancela a ordem atual antes de criar esta. Em outra rede nao
+            // haveria o que cancelar e as duas ficariam abertas: nao segue (o seletor ja nao leva
+            // a edicao para outra rede).
+            if let edit = model.editing {
+                guard edit.order.chain.id == model.chain.id else { return }
                 item.cancelFirst = TradeReviewFlow.Replacement(order: edit.order, via: edit.via)
                 item.replacesRenewal = edit.order.id
             }
@@ -1049,8 +1149,12 @@ struct TradeView: View {
     // MARK: Acoes
 
     private func holding(_ asset: Asset?) -> Holding? {
-        guard let asset, let chain = asset.chain else { return nil }
-        return portfolio.balance(chain)?.holdings.first { $0.asset.id == asset.id }
+        guard let asset, let chain = asset.chain, let balance = portfolio.balance(chain) else { return nil }
+        if let held = balance.holdings.first(where: { $0.asset.id == asset.id }) { return held }
+        // A moeda fora da lista que esta na conta (a comprada pela busca ou pelo Mercado): o saldo dela tambem
+        // conta, como no Android. Antes a tela mostrava saldo zero depois da compra, e o dono comprava de novo
+        // achando que nao tinha saido (03/11/2026).
+        return balance.unlisted?.first { $0.asset.id == asset.id }.map { Holding(asset: $0.asset, amount: $0.amount) }
     }
 
     private func balance(_ asset: Asset?) -> String? {
@@ -1077,8 +1181,14 @@ struct TradeView: View {
     private func setFraction(_ fraction: Double) {
         guard let sell = model.sell else { return }
         let total = free(sell)
-        let part = fraction >= 1 ? total : total * BigUInt(UInt64((fraction * 100).rounded())) / BigUInt(100)
+        var part = fraction >= 1 ? total : total * BigUInt(UInt64((fraction * 100).rounded())) / BigUInt(100)
+        // Na nativa, tudo nao sobra para a taxa: a Solana ja deixa a reserva antes de cotar, e a cotacao
+        // ajusta o resto (ver `maxNative`).
+        if fraction >= 1, sell.kind == .native, let chain = sell.chain {
+            part = part.subtractingReportingUnderflow(TradeQuote.nativeReserveBeforeQuote(chain)) ?? BigUInt()
+        }
         model.typePay(Fmt.plainDecimal(part, decimals: sell.decimals))
+        model.maxNative = fraction >= 1 && sell.kind == .native
     }
 
     private func flip() {
@@ -1090,6 +1200,10 @@ struct TradeView: View {
             model.amountText = ""
             model.quote = nil
             model.clearExactOut()
+            // O preco e o aceite eram do sentido anterior, como no seletor (quinta passada de 03/11/2026).
+            model.targetPriceText = ""
+            model.autoTarget = nil
+            model.acceptedLimitPrice = nil
         }
     }
 
@@ -1149,6 +1263,16 @@ struct TradeView: View {
                     model.quote = model.applyingChoice(fresh)
                     model.recalculating = false
                     model.estimate = nil
+                }
+                // "Max" na moeda nativa: o valor desce para deixar a taxa maxima de fora (o plano
+                // recusaria tudo). O valor novo recota sozinho.
+                if model.maxNative, let reserve = fresh.nativeReserveForMax() {
+                    let fitted = free(sell).subtractingReportingUnderflow(reserve) ?? BigUInt()
+                    if fitted < amount {
+                        model.typePay(Fmt.plainDecimal(fitted, decimals: sell.decimals))
+                        return
+                    }
+                    model.maxNative = false
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -1436,6 +1560,9 @@ struct TokenPickerSheet: View {
     @Environment(AppSession.self) private var session
     @Environment(\.dismiss) private var dismiss
     let chain: Chain
+    /// As redes da troca: as moedas que a carteira tem nelas aparecem tambem (pedido do dono,
+    /// 02/11/2026), e escolher uma de outra rede leva a troca para la.
+    var chains: [Chain] = []
     let exclude: Asset?
     /// "Voce vende": so o que a carteira tem nesta rede (pedido do dono, 17/10/2026).
     var selling = false
@@ -1453,8 +1580,21 @@ struct TokenPickerSheet: View {
     }
 
     private func amount(_ asset: Asset) -> BigUInt? {
-        if let held = portfolio.balance(chain)?.holdings.first(where: { $0.asset.id == asset.id })?.amount { return held }
-        return portfolio.balance(chain)?.unlisted?.first { $0.asset.id == asset.id }?.amount
+        let network = asset.chain ?? chain
+        if let held = portfolio.balance(network)?.holdings.first(where: { $0.asset.id == asset.id })?.amount { return held }
+        return portfolio.balance(network)?.unlisted?.first { $0.asset.id == asset.id }?.amount
+    }
+
+    /// O que a carteira tem nas outras redes da troca: da lista e, onde a troca aceita, fora dela
+    /// (sem suspeita).
+    private var heldElsewhere: [Asset] {
+        chains.filter { $0.id != chain.id }.flatMap { other -> [Asset] in
+            let balance = portfolio.balance(other)
+            let listed = (balance?.holdings ?? []).filter { !$0.amount.isZero }.map(\.asset)
+            let outside = TradeAccess.supportsUnlisted(other)
+                ? (balance?.unlisted ?? []).filter { !$0.isSuspicious && !$0.amount.isZero }.map(\.asset) : []
+            return listed + outside
+        }
     }
 
     private func matches(_ asset: Asset) -> Bool {
@@ -1482,6 +1622,7 @@ struct TokenPickerSheet: View {
     var body: some View {
         let verified = ordered(TokenRegistry.assets(on: chain).filter { $0.id != exclude?.id && matches($0) })
         let others = ordered(unlisted.filter { $0.id != exclude?.id && matches($0) })
+        let elsewhere = ordered(heldElsewhere.filter { $0.id != exclude?.id && matches($0) })
         VStack(alignment: .leading, spacing: 0) {
             SheetHeader(title: String(localized: "Escolher token")) { dismiss() }
             TextField("", text: $query, prompt: Text("Buscar por nome").foregroundColor(Palette.inkDead))
@@ -1493,13 +1634,18 @@ struct TokenPickerSheet: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     // As verificadas primeiro; as de fora da lista, embaixo delas (pedido do dono,
                     // 17/10/2026).
-                    if !others.isEmpty, !verified.isEmpty { section(String(localized: "Verificadas")) }
+                    if !others.isEmpty || !elsewhere.isEmpty, !verified.isEmpty { section(String(localized: "Verificadas")) }
                     ForEach(verified) { row($0) }
                     if !others.isEmpty {
                         section(String(localized: "Fora da lista verificada"))
                         ForEach(others) { row($0) }
                     }
-                    if selling, verified.isEmpty, others.isEmpty {
+                    // As moedas que a carteira tem nas outras redes: escolher uma muda a rede la em cima.
+                    if !elsewhere.isEmpty {
+                        section(String(localized: "Suas moedas em outras redes"))
+                        ForEach(elsewhere) { row($0) }
+                    }
+                    if selling, verified.isEmpty, others.isEmpty, elsewhere.isEmpty {
                         Text(query.isEmpty ? String(localized: "Nada para vender na \(chain.name) ainda. Receba ou troque em outra rede primeiro.")
                                            : String(localized: "Nada com este nome entre o que você tem na \(chain.name)."))
                             .typeStyle(.note).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true)

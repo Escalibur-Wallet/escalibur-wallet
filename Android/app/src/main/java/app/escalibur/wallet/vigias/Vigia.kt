@@ -44,7 +44,9 @@ import kotlin.math.floor
  * A tela bloqueada: a versao publica de cada uma ("Alerta de preço", "Recebimento") so vale se o
  * dono escondeu o conteudo sensivel nos ajustes do Android, e o padrao do sistema mostra tudo. Por
  * isso o recebimento com valor nunca vai para a tela bloqueada: com o celular travado, sai o texto
- * discreto; destravado, sai com o valor e some da tela bloqueada (VISIBILITY_SECRET).
+ * discreto; destravado, sai com o valor e some da tela bloqueada (VISIBILITY_SECRET). Com um leitor de
+ * fora ligado (app de relogio, assistente de notificacoes, servico de acessibilidade), tambem sai o
+ * discreto, e o valor que sai some da gaveta em 10 minutos (auditoria de 03/11/2026).
  */
 object Vigia {
     private const val TRABALHO = 4107
@@ -57,6 +59,13 @@ object Vigia {
     private const val FLEXIBILIDADE = 15 * 60 * 1000L
     /** O lima do icone do app, atras da espada. */
     private const val LIMA = 0xFFE1FF00.toInt()
+    private val ETIQUETAS = mapOf(
+        "ordens" to Regex("^ordem-limite\\.(executada|24h|prazo)\\.[0-9a-f]{24}$"),
+        "recebimentos" to Regex("^recebimento\\.([0-9a-f]{24}|discreto|mais)$"),
+        "precos" to Regex("^(preco\\.[a-z0-9._-]+|precos\\.(discreto|mais))$"),
+        "pontes" to Regex("^ponte\\.[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$"),
+    )
+    private val SEQUENCIA_DE_ENDERECO = Regex("[0-9a-fA-F]{40}")
 
     /** O toque numa notificacao, esperando o app destravar. */
     var pedido by mutableStateOf<Pedido?>(null)
@@ -89,6 +98,40 @@ object Vigia {
             }
             gerente.createNotificationChannel(canal)
         }
+    }
+
+    /** O contexto do app, para tirar as notificacoes da gaveta de qualquer tela. */
+    private lateinit var aplicativo: Context
+
+    fun iniciar(contexto: Context) {
+        aplicativo = contexto.applicationContext
+        tirarFormatoAntigo()
+    }
+
+    /**
+     * Uma vez, depois de atualizar: as notificacoes de ordem ja mostradas pela versao anterior, com o UID ou o resumo
+     * sem chave na etiqueta, saem da gaveta (setima passada da auditoria de 03/11/2026).
+     */
+    private fun tirarFormatoAntigo() {
+        val marca = File(aplicativo.noBackupFilesDir, "gaveta.formato-2")
+        if (marca.exists()) return
+        val gerente = aplicativo.getSystemService(NotificationManager::class.java) ?: return
+        runCatching {
+            for (mostrada in gerente.activeNotifications) {
+                if (mostrada.tag?.startsWith("ordem-limite.") == true) gerente.cancel(mostrada.tag, mostrada.id)
+            }
+            marca.writeText("")
+        }
+    }
+
+    /**
+     * Carteira removida ou app apagado: as notificacoes ja mostradas saem da gaveta. A de ordem e a de recebimento
+     * podem ser da carteira, e a etiqueta de uma versao anterior levava o UID da ordem, com o endereco (sexta passada
+     * da auditoria de 03/11/2026, como no iPhone).
+     */
+    fun limparGaveta() {
+        if (!::aplicativo.isInitialized) return
+        aplicativo.getSystemService(NotificationManager::class.java)?.cancelAll()
     }
 
     /** Notificacoes ligadas para o app (e, do Android 13 em diante, a permissao dada). */
@@ -152,29 +195,70 @@ object Vigia {
         for (indice in 0 until avisos.length()) {
             val aviso = avisos.optJSONObject(indice) ?: continue
             val canal = aviso.optString("canal", "precos")
-            // "Recebeu 10.000 USDT" na tela bloqueada marca o dono como alvo (pentest de 14/10/2026, B1).
+            // A etiqueta vai a todo app com acesso as notificacoes: so o formato fechado de cada canal (a de ordem e a
+            // de recebimento sorteadas), o toque da ordem so dizendo que e uma ordem, e nenhuma com 40 hexadecimais
+            // seguidos (um endereco); canal desconhecido nao sai (setima e oitava passadas).
+            if (ETIQUETAS[canal]?.matches(aviso.optString("id")) != true) continue
+            if (canal == "ordens" && aviso.optString("ordem") !in setOf("", "1")) continue
+            if (SEQUENCIA_DE_ENDERECO.containsMatchIn(aviso.optString("id"))) continue
+            // "Recebeu 10.000 USDT" na tela bloqueada marca o dono como alvo (pentest de 14/10/2026, B1). E um app de
+            // relogio, um assistente de notificacoes ou um servico de acessibilidade le a notificacao inteira, mesmo
+            // a secreta e a so deste celular: com qualquer um que nao veio com o celular, o valor nao vai, mesmo com
+            // "mostrar o valor" ligado (terceira e quarta passadas da auditoria de 03/11/2026).
             val comValor = canal == "recebimentos" && aviso.optString("tipo") in setOf("recebeu", "mais")
-            val (titulo, texto) = if (comValor && travado) t("Entrou moeda na carteira") to t("Abra a Escalibur para ver.") else textos(aviso)
+            val discreto = comValor && (travado || leitoresDeFora(contexto).isNotEmpty())
+            val (titulo, texto) = if (discreto) t("Entrou moeda na carteira") to t("Abra a Escalibur para ver.") else textos(aviso)
             val id = aviso.optString("id")
-            val publica = Notification.Builder(contexto, canal)
+            val publica = soNesteCelular(contexto, canal)
                 .setSmallIcon(R.drawable.ic_notificacao)
                 .setColor(LIMA)
                 .setContentTitle(publico(canal))
+                .setLocalOnly(true)
                 .build()
-            val notificacao = Notification.Builder(contexto, canal)
+            val notificacao = soNesteCelular(contexto, canal)
                 .setSmallIcon(R.drawable.ic_notificacao)
                 .setColor(LIMA)
                 .setContentTitle(titulo)
                 .setContentText(texto)
                 .setStyle(Notification.BigTextStyle().bigText(texto))
                 .setAutoCancel(true)
+                // So neste celular: o relogio espelha a notificacao sem olhar a visibilidade, e mostraria o
+                // valor no pulso (segunda passada da auditoria de 03/11/2026).
+                .setLocalOnly(true)
                 .setVisibility(if (comValor && !travado) Notification.VISIBILITY_SECRET else Notification.VISIBILITY_PRIVATE)
                 .setPublicVersion(publica)
+                // O valor nao fica na gaveta: um leitor ligado depois leria as notificacoes ja postadas.
+                .apply { if (comValor && !discreto) setTimeoutAfter(600_000L) }
                 .setContentIntent(abrir(contexto, id, aviso))
                 .build()
             gerente.notify(id, 0, notificacao)
         }
     }
+
+    /**
+     * Quem le a notificacao inteira e nao veio com o celular: o app com acesso as notificacoes, o assistente de
+     * notificacoes e o servico de acessibilidade. Lido dos ajustes, sem registrar ouvinte (o trabalho em segundo
+     * plano pode nunca ter aberto a tela). Pacote que o app nao consegue ver conta como de fora.
+     */
+    private fun leitoresDeFora(contexto: Context): List<String> {
+        val ajustes = contexto.contentResolver
+        fun pacotes(chave: String) = android.provider.Settings.Secure.getString(ajustes, chave).orEmpty().split(':')
+            .mapNotNull { android.content.ComponentName.unflattenFromString(it)?.packageName }
+        val ligados = (pacotes("enabled_notification_listeners") + pacotes("enabled_notification_assistant") +
+                       pacotes(android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)).distinct()
+        return ligados.filter { pacote ->
+            val info = runCatching { contexto.packageManager.getApplicationInfo(pacote, 0) }.getOrNull()
+            info == null || info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM == 0
+        }
+    }
+
+    /**
+     * Toda notificacao do app nasce aqui, so neste celular: o relogio espelha a notificacao sem olhar a
+     * visibilidade, e mostraria o que ela diz no pulso. O `verificar.sh` recusa outro construtor de notificacao no
+     * Kotlin (quinta passada da auditoria de 03/11/2026).
+     */
+    private fun soNesteCelular(contexto: Context, canal: String): Notification.Builder =
+        Notification.Builder(contexto, canal).setLocalOnly(true)
 
     /** Um segredo so do app, na pasta sem backup, que vai em cada notificacao. */
     @Synchronized

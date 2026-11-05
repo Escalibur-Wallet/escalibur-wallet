@@ -1,5 +1,6 @@
 import EscaliburChains
 import EscaliburCore
+import EscaliburNetwork
 import Foundation
 
 /// O que o app precisa de cada rede para enviar: saber do destino, calcular o
@@ -25,6 +26,10 @@ public protocol SendEngine: Sendable {
     func broadcast(_ signed: [SignedTransaction], chain: Chain) async throws -> String
 
     func status(_ id: String, chain: Chain) async -> TransferStatus
+
+    /// O que a rede diz da transacao desta conta com este nonce (`EVMReader.Sighting`): vista por dois
+    /// operadores, desconhecida de dois, ou parcial. nil sem resposta, ou onde a rede nao tem fila de nonces.
+    func sighting(_ id: String, chain: Chain, from: String, nonce: UInt64) async -> EVMReader.Sighting?
 }
 
 public struct SendRequest: Sendable {
@@ -99,6 +104,128 @@ extension PendingNonceQueue {
             run.insert(entry, at: 0)
         }
         return PendingNonceQueue(nextNonce: last.nonce + 1, pendingHashes: run.map(\.hash))
+    }
+}
+
+/// O que a poda da fila de nonces tira, e o que a rede ja viu, a mesma regra no iOS e no Android
+/// (terceira e quarta passadas da auditoria de 03/11/2026). O app nunca pula um nonce nem reusa o de uma
+/// transacao viva:
+/// - sai a transacao confirmada ou falha num bloco;
+/// - a que a rede nao conhece depois do prazo de propagacao (recusada ou descartada) sai junto com toda a
+///   fila acima dela, e o proximo plano reusa o nonce (so uma das duas executaria);
+/// - so se pergunta pela de cima quando todas as de baixo foram vistas: uma transacao publica empilhada
+///   sobre uma privada ainda nao minerada fica parada no no, sem propagar, e pareceria perdida;
+/// - os 30 minutos so tiram a que a rede nao conhece; a conhecida fica ate sair num bloco;
+/// - a que a rede ainda nao viu (`seen`) trava a conta inteira: o plano seguinte e recusado em vez de
+///   pular o nonce dela (`NonceQueue.unseen` no iOS, `FilaDeNonces.naoVista` no Android).
+public enum NonceQueuePruning {
+    public struct Entry: Sendable, Equatable {
+        public let nonce: UInt64
+        public let hash: String
+        public let sentAt: Date
+        /// Saiu pela rota privada (protecao de MEV na Ethereum): os provedores so a veem num bloco.
+        public let privateRoute: Bool
+        /// Dois operadores ja a viram numa poda anterior: uma resposta que falha agora nao a tira em 30 minutos.
+        public let wasSeen: Bool
+        /// A ultima poda em que uma de baixo vista a segurou: o prazo dela conta dali, e nao do envio (decima passada).
+        public let heldAt: Date?
+        /// A primeira poda em que ela, ja segurada, deixou de estar: o prazo recomeca dali (decima primeira passada).
+        public let releasedAt: Date?
+
+        public init(nonce: UInt64, hash: String, sentAt: Date, privateRoute: Bool, wasSeen: Bool = false, heldAt: Date? = nil,
+                    releasedAt: Date? = nil) {
+            self.nonce = nonce
+            self.hash = hash
+            self.sentAt = sentAt
+            self.privateRoute = privateRoute
+            self.wasSeen = wasSeen
+            self.heldAt = heldAt
+            self.releasedAt = releasedAt
+        }
+    }
+
+    public struct Result: Sendable, Equatable {
+        /// Os hashes que saem da fila.
+        public let gone: Set<String>
+        /// Os que ficam e que a rede conhece agora (no mempool de um provedor).
+        public let seen: Set<String>
+        /// Os que ficam segurados por uma de baixo: vista agora, ou que ficou sem ser vista e por isso a de cima nem foi
+        /// perguntada (decima segunda passada). Quem chama grava a hora (`heldAt`) e apaga a `releasedAt`.
+        public var held: Set<String> = []
+        /// Os que estavam segurados e foram soltos nesta poda: quem chama grava a hora (`releasedAt`).
+        public var released: Set<String> = []
+    }
+
+    /// Pendente ha mais que isto, e desconhecida da rede: descartada, ou o relay desistiu.
+    public static let staleAfter: TimeInterval = 30 * 60
+
+    /// A que dois operadores ja viram e que agora so um conhece (ou faltou resposta): fica ate isto. E um limite
+    /// escolhido, e nao uma regra da rede (a transacao executavel parada pela taxa nao expira por tempo no geth): o
+    /// bastante para os provedores que falharam voltarem, sem prender a conta para sempre por um provedor fora do
+    /// ar. Antes saia em 30 minutos numa poda so, e o plano seguinte pulava ou reusava o nonce de uma transacao viva
+    /// (sexta passada de 03/11/2026).
+    public static let seenStaleAfter: TimeInterval = 3 * 60 * 60
+
+    /// Ate quando a rede pode ainda nao conhecer a transacao: a publica aparece nos provedores em segundos;
+    /// a da rota privada so aparece num bloco, e os relays desistem depois de uns 25 blocos.
+    public static func grace(privateRoute: Bool) -> TimeInterval { privateRoute ? 10 * 60 : 30 }
+
+    /// `settled`: a rede ja confirmou ou recusou num bloco. `known`: o que a rede diz da transacao. Vista so com
+    /// dois operadores (`seen`); a que so um conhece, ou sem resposta, fica sem contar como vista e, depois dos
+    /// 30 minutos, segue a regra da desconhecida (quinta passada da auditoria de 03/11/2026).
+    public static func pruned(_ entries: [Entry], now: Date = Date(), settled: @Sendable (Entry) async -> Bool,
+                              known: @Sendable (Entry) async -> EVMReader.Sighting?) async -> Result {
+        var gone = Set<String>()
+        var seen = Set<String>()
+        var held = Set<String>()
+        var released = Set<String>()
+        var lowerSeen = true
+        var lostFrom: UInt64?
+        // O prazo mais tarde das de baixo que ficam, como instante (o "Enviar de novo" refaz a hora do envio da de
+        // baixo): a de cima nao perguntada nunca sai por tempo antes delas. Saindo antes, a fila dava o nonce dela como
+        // o proximo quando a de baixo voltasse, com ela viva (oitava e nona passadas de 03/11/2026).
+        var lowerDeadline = Date.distantPast
+        for entry in entries.sorted(by: { $0.nonce < $1.nonce }) {
+            if await settled(entry) {
+                gone.insert(entry.hash)
+                continue
+            }
+            guard lostFrom == nil else { continue }
+            let age = now.timeIntervalSince(entry.sentAt)
+            let answer = lowerSeen ? await known(entry) : nil
+            if answer == .seen {
+                seen.insert(entry.hash)
+                // Vista agora: fica ate sair num bloco, e a de cima nao sai por tempo enquanto ela estiver na rede
+                // (nona passada da auditoria de 03/11/2026).
+                lowerDeadline = .distantFuture
+                continue
+            }
+            // O prazo conta do envio, da ultima poda em que uma de baixo vista a segurou, ou da poda em que foi solta:
+            // confirmada a de baixo, a de cima nao sai na mesma poda por um prazo que ja tinha passado enquanto esperava
+            // (decima passada), nem quando a poda que a solta vem horas depois, com o app fechado (decima primeira).
+            let soltaAgora = entry.heldAt != nil && entry.releasedAt == nil && lowerDeadline != .distantFuture
+            let base = soltaAgora ? now : max(entry.sentAt, entry.heldAt ?? entry.sentAt, entry.releasedAt ?? entry.sentAt)
+            let deadline = max(base.addingTimeInterval(entry.wasSeen ? seenStaleAfter : staleAfter), lowerDeadline)
+            if lowerSeen, answer == .unknown, age > grace(privateRoute: entry.privateRoute) {
+                lostFrom = entry.nonce
+            } else if now > deadline {
+                lostFrom = entry.nonce
+            } else if lowerDeadline == .distantFuture || !lowerSeen {
+                // Segurada por uma de baixo vista agora, ou nao perguntada porque uma de baixo ficou: o prazo dela recomeca
+                // quando for solta. Antes, a nao perguntada corria o prazo proprio enquanto esperava, e saia na mesma poda
+                // em que a de baixo confirmava (decima segunda passada da auditoria de 03/11/2026).
+                held.insert(entry.hash)
+            } else if soltaAgora {
+                released.insert(entry.hash)
+            }
+            lowerDeadline = deadline
+            lowerSeen = false
+        }
+        if let lostFrom { gone.formUnion(entries.filter { $0.nonce >= lostFrom }.map(\.hash)) }
+        var result = Result(gone: gone, seen: seen.subtracting(gone))
+        result.held = held.subtracting(gone)
+        result.released = released.subtracting(gone)
+        return result
     }
 }
 
@@ -212,4 +339,6 @@ extension SendEngine {
     /// Depois de um envio, o novo uso de enderecos UTXO (indice de troco que
     /// avancou). Nil quando a rede nao tem isso ou nada mudou.
     public func usage(after plan: SigningPlan, current: UTXOUsage?) -> UTXOUsage? { nil }
+
+    public func sighting(_ id: String, chain: Chain, from: String, nonce: UInt64) async -> EVMReader.Sighting? { nil }
 }

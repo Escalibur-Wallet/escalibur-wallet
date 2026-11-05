@@ -96,7 +96,7 @@ fun RevisaoDaTroca(controle: ControleDaTroca, encerra: Boolean = false, aoSair: 
     val r = controle.retrato
     val etapa = r?.etapa ?: "formulario"
     LaunchedEffect(pediu, etapa) { if (pediu && etapa == "formulario") Navegacao.fechar() }
-    val transmitindo = etapa == "enviando"
+    val transmitindo = etapa == "enviando" || etapa == "esperandoCancelamento"
     fun fechar() {
         val saiu = r != null && (r.etapa == "enviada" || r.etapa == "incerta" || r.cancelou)
         escopo.launch {
@@ -126,6 +126,8 @@ fun RevisaoDaTroca(controle: ControleDaTroca, encerra: Boolean = false, aoSair: 
                 }
                 "revisao" -> Revisao(controle, r, frases)
                 "enviando" -> Espera(r, frases.passo, r.revisao?.nota ?: t("Não feche o app até terminar."), frases.enviando)
+                "esperandoCancelamento" -> Espera(r, frases.passo, t("A ordem nova é montada depois que o cancelamento da antiga confirmar."),
+                                                  t("Esperando o cancelamento confirmar na rede"))
                 "enviada" -> Enviada(controle, r, frases) { fechar() }
                 "incerta" -> Incerta(controle, r, frases) { fechar() }
                 "recusada" -> Recusada(r) { fechar() }
@@ -315,21 +317,40 @@ private fun ColumnScope.Enviada(controle: ControleDaTroca, r: RetratoDaTroca, fr
     }
     Spacer(Modifier.weight(1f))
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        // A troca imediata: a rede aceitar a transmissao nao quer dizer que a troca saiu. Ate a rede responder, a
+        // espera, sem o visto; confirmada, o visto e "Troca concluida"; revertida no bloco, a falha (moeda com taxa,
+        // 03/11/2026: o visto logo na transmissao parecia troca feita), como no iOS.
+        val trocaImediata = frases.tipo == "troca" && resultado != null
         if (resultado?.ordem == true) {
             AndamentoDaOrdem(r)
         } else if (resultado?.situacao == "falhou") {
             Icone(Icones.falha, Paleta.baixa, tamanho = 44.dp)
-            Text(t("A rede recusou o envio"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.md))
+            Text(if (trocaImediata) t("A troca falhou na rede") else t("A rede recusou o envio"), style = estilo(Tipo.titulo), color = Paleta.tinta,
+                 modifier = Modifier.padding(top = Espaco.md))
             Text(resultado.detalhe ?: "", style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
+            if (trocaImediata) {
+                // So diz que o valor ficou quando nenhuma parte da troca saiu (a troca dividida pode ter saido em parte).
+                Text(if (resultado.parcial) t("Parte da troca saiu antes da falha. Confira o saldo e a Atividade.")
+                     else t("Moedas que cobram taxa na compra ou na venda costumam falhar assim. O que você vendia continua na carteira."),
+                     style = estilo(Tipo.nota), color = Paleta.tintaApagada, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
+            }
+        } else if (trocaImediata && resultado?.situacao != "confirmado") {
+            IndicadorDaTroca({ LogoDaTroca(r.revisaoVende) }, { LogoDaTroca(r.revisaoCompra) })
+            Text(t("Troca enviada"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.lg))
+            Text(t("Esperando a rede confirmar. Pode fechar: a Atividade mostra o resultado."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave,
+                 textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xs))
         } else {
             // A moeda da troca e o visto, girando como uma moeda jogada.
             MoedaQueVira({
                 LogoDaMoeda(r.revisaoVende?.coingecko, r.revisaoVende?.simbolo ?: "", 80.dp, rede = r.revisaoVende?.rede,
                             redeCoingecko = r.revisaoVende?.redeCoingecko, anel = Paleta.corpo, naoConferido = r.revisaoVende?.conferido == false)
             })
-            Text(frases.feito, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.lg))
-            Text(frases.mensagemDoFeito, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
-                 modifier = Modifier.padding(top = Espaco.xs))
+            Text(if (trocaImediata) t("Troca concluída") else frases.feito, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
+                 modifier = Modifier.padding(top = Espaco.lg))
+            if (!trocaImediata) {
+                Text(frases.mensagemDoFeito, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
+                     modifier = Modifier.padding(top = Espaco.xs))
+            }
             if (resultado?.situacao == "confirmado") {
                 Row(Modifier.padding(top = Espaco.md), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                     Icone(Icones.vistoCheio, Paleta.alta, tamanho = 15.dp)
@@ -386,15 +407,22 @@ private fun AndamentoDaOrdem(r: RetratoDaTroca) {
     }
 }
 
-/** A CoW recusou com certeza e disse por que: nada foi criado, e enviar de novo nao muda nada (01/11/2026). */
+/**
+ * A CoW diz que recusou e disse por que: enviar de novo nao muda nada (01/11/2026). E a palavra dela
+ * (auditoria de 03/11/2026): as notas dizem o que ja entrou na rede, e a ordem assinada pode ser
+ * cancelada na cadeia, o unico jeito que nao depende da CoW. Como no iOS.
+ */
 @Composable
 private fun ColumnScope.Recusada(r: RetratoDaTroca, aoFechar: () -> Unit) {
     Spacer(Modifier.weight(1f))
     Icone(Icones.fechar, Paleta.baixa, tamanho = 44.dp)
-    Text(if (r.modo == "limite") t("A ordem não foi criada") else t("A troca não foi enviada"), style = estilo(Tipo.titulo), color = Paleta.tinta,
-         modifier = Modifier.padding(top = Espaco.md))
+    Text(t("A CoW diz que recusou a ordem"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.md))
     r.motivoDaRecusa?.let { Text(it, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs)) }
+    for (nota in r.notasDaRecusa) Text(nota, style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
     Spacer(Modifier.weight(1f))
+    r.ordemRecusada?.let { ordem ->
+        BotaoSecundario(t("Cancelar ordem limite na cadeia"), Modifier.padding(bottom = Espaco.sm)) { Navegacao.cobrir { RevisaoDoCancelamento(ordem) } }
+    }
     BotaoPrimario(t("Voltar"), acao = aoFechar)
 }
 
@@ -416,7 +444,14 @@ private fun ColumnScope.Incerta(controle: ControleDaTroca, r: RetratoDaTroca, fr
     Text(t("A resposta não veio com certeza, e o que foi assinado pode já estar a caminho. Não monte de novo: enviar de novo usa os mesmos dados e não paga duas vezes. Confira na Atividade antes de qualquer outra operação."),
          style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs))
     r.detalheIncerto?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.sm)) }
+    // A ordem que pode estar com a CoW: o que ja entrou na rede e o cancelamento na cadeia, como no iOS.
+    if (r.ordemRecusada != null) {
+        for (nota in r.notasDaRecusa) Text(nota, style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
+    }
     Spacer(Modifier.weight(1f))
+    r.ordemRecusada?.let { ordem ->
+        BotaoSecundario(t("Cancelar ordem limite na cadeia"), Modifier.padding(bottom = Espaco.sm)) { Navegacao.cobrir { RevisaoDoCancelamento(ordem) } }
+    }
     val resultado = r.resultado
     val url = resultado?.url
     if (url != null) {

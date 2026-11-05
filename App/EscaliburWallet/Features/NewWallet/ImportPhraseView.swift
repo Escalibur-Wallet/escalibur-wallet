@@ -772,7 +772,7 @@ struct ImportPhraseView: View {
                     throw error
                 }
             } catch {
-                message = String(localized: "Não foi possível importar a carteira.") + Self.debugDetail(error)
+                message = AuthCoordinator.refusalMessage(error) ?? (String(localized: "Não foi possível importar a carteira.") + Self.debugDetail(error))
             }
         case .wrongLength(let count):
             message = String(localized: "Faltam palavras: \(count) de \(entry.count).")

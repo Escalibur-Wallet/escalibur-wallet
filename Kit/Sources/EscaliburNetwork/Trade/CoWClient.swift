@@ -151,7 +151,13 @@ public struct CoWClient: Sendable {
 
     public func registerAppData(_ appData: CoWAppData, chain: Chain) async throws {
         let body = try JSONEncoder().encode(["fullAppData": appData.json])
-        _ = try await client.send("PUT", try api(chain).appendingPathComponent("app_data/\(appData.hashHex)"), json: body)
+        do {
+            _ = try await client.putKeepingRefusal(try api(chain).appendingPathComponent("app_data/\(appData.hashHex)"), json: body)
+        } catch let refusal as HTTPClient.Refusal {
+            // A recusa com motivo: o motor diz o que ja tinha entrado na rede (segunda passada da auditoria de 03/11/2026).
+            if let type = Self.errorType(refusal.body) { throw CoWClientError.rejected(type) }
+            throw HTTPClient.Failure.status(refusal.status)
+        }
     }
 
     // MARK: Envio
@@ -235,6 +241,13 @@ public struct CoWClient: Sendable {
         let executedSellAmount: String?
         let executedBuyAmount: String?
         let creationDate: String?
+        /// O resto do que a ordem assinada e: os campos listados tem de dar o digesto do UID.
+        let appData: String?
+        let feeAmount: String?
+        let kind: String?
+        let partiallyFillable: Bool?
+        let sellTokenBalance: String?
+        let buyTokenBalance: String?
     }
 
     /// "2026-10-17T12:34:56.789Z", com ou sem fracao de segundo.
@@ -245,7 +258,7 @@ public struct CoWClient: Sendable {
         return fractional.date(from: text) ?? ISO8601DateFormatter().date(from: text)
     }
 
-    static func status(_ response: OrderResponse) throws -> CoWOrderStatus {
+    static func status(_ response: OrderResponse, chain: Chain) throws -> CoWOrderStatus {
         func address(_ text: String, _ field: String) throws -> EVMAddress {
             guard text.hasPrefix("0x"), let bytes = Hex.decode(String(text.dropFirst(2))), let value = EVMAddress(bytes: bytes) else {
                 throw CoWClientError.badResponse(field)
@@ -263,6 +276,20 @@ public struct CoWClient: Sendable {
         guard CoWProtocol.owner(ofUID: uid) == owner, CoWProtocol.validTo(ofUID: uid) == response.validTo else {
             throw CoWClientError.orderMismatch
         }
+        // Os campos listados dao o UID: o digesto EIP-712 deles e o comeco dele. Senao a API mente nos valores
+        // de uma ordem viva (a ordem "recusada" listada com 1 wei, para o dono nao cancelar), e a lista inteira
+        // desta rede e recusada (terceira passada da auditoria de 03/11/2026).
+        guard let appDataText = response.appData, appDataText.hasPrefix("0x"), let appData = Hex.decode(String(appDataText.dropFirst(2))),
+              appData.count == 32, let kind = response.kind, let partiallyFillable = response.partiallyFillable,
+              let sellTokenBalance = response.sellTokenBalance, let buyTokenBalance = response.buyTokenBalance,
+              let digest = try? CoWOrder.listedDigest(
+                  chain: chain, sellToken: try address(response.sellToken, "sellToken"), buyToken: try address(response.buyToken, "buyToken"),
+                  receiver: try address(response.receiver, "receiver"), sellAmount: try amount(response.sellAmount, "sellAmount"),
+                  buyAmount: try amount(response.buyAmount, "buyAmount"), validTo: response.validTo, appData: appData,
+                  feeAmount: try amount(response.feeAmount, "feeAmount"), kind: kind, partiallyFillable: partiallyFillable,
+                  sellTokenBalance: sellTokenBalance, buyTokenBalance: buyTokenBalance),
+              digest == Array(uid.prefix(32))
+        else { throw CoWClientError.orderMismatch }
         return CoWOrderStatus(
             uid: uid, status: CoWOrderStatus.Status(rawValue: response.status) ?? .unknown,
             invalidated: response.invalidated ?? false, owner: owner,
@@ -281,7 +308,7 @@ public struct CoWClient: Sendable {
         let data = try await client.get(try api(chain).appendingPathComponent("orders/\(Self.hex(uid))"), timeout: 10)
         let response: OrderResponse
         do { response = try JSONDecoder().decode(OrderResponse.self, from: data) } catch { throw CoWClientError.badResponse("ordem") }
-        let status = try Self.status(response)
+        let status = try Self.status(response, chain: chain)
         guard status.uid == uid else { throw CoWClientError.uidMismatch }
         if let expected, !status.matches(expected) { throw CoWClientError.orderMismatch }
         return status
@@ -296,20 +323,22 @@ public struct CoWClient: Sendable {
     }
 
     /// As ordens abertas do dono (`GET /account/{dono}/orders`): so as do proprio dono,
-    /// abertas, nao invalidadas na cadeia e ainda no prazo, cada uma com o UID conferido
-    /// (dono e validTo gravados nele). A CoW e a unica fonte do livro de ordens.
-    public func openOrders(owner: EVMAddress, chain: Chain, now: Date = .now) async throws -> [CoWOrderStatus] {
+    /// abertas pela API (que marca a vencida), nao invalidadas na cadeia e com o que vender, cada uma com o UID
+    /// conferido (dono e validTo gravados nele). A CoW e a unica fonte do livro de ordens.
+    public func openOrders(owner: EVMAddress, chain: Chain) async throws -> [CoWOrderStatus] {
         let url = try TradeWire.url(try api(chain), "account/\(TradeWire.lower(owner))/orders", [("limit", "1000")])
         let data = try await client.get(url, timeout: 10)
-        return try Self.openOrders(data, owner: owner, now: now)
+        return try Self.openOrders(data, owner: owner, chain: chain)
     }
 
-    static func openOrders(_ data: Data, owner: EVMAddress, now: Date) throws -> [CoWOrderStatus] {
+    /// So as do dono, abertas, nao invalidadas e com o que vender. O relogio do aparelho nao tira nenhuma: a
+    /// API marca a vencida, e o adiantado escondia uma ordem viva de Ordens abertas e da soma presa (quarta
+    /// passada da auditoria de 03/11/2026).
+    static func openOrders(_ data: Data, owner: EVMAddress, chain: Chain) throws -> [CoWOrderStatus] {
         let responses: [OrderResponse]
         do { responses = try JSONDecoder().decode([OrderResponse].self, from: data) } catch { throw CoWClientError.badResponse("ordens") }
-        let current = UInt32(clamping: Int64(now.timeIntervalSince1970))
-        return try responses.map(Self.status).filter {
-            $0.owner == owner && $0.status == .open && !$0.invalidated && $0.validTo > current && !$0.remainingSellAmount.isZero
+        return try responses.map { try Self.status($0, chain: chain) }.filter {
+            $0.owner == owner && $0.status == .open && !$0.invalidated && !$0.remainingSellAmount.isZero
         }
     }
 

@@ -40,7 +40,9 @@ enum Renovacoes {
     nonisolated(unsafe) private static var vencidas: [Vencida] = []
     /// Deixadas para depois nesta abertura do app.
     nonisolated(unsafe) private static var depois: Set<String> = []
-    nonisolated(unsafe) private static var lendo = false
+    /// Cada leitura sobe a geracao, e so a ultima grava: uma leitura da carteira de antes, ou de antes de travar, nao
+    /// poe as vencidas dela na pergunta de outra (revisao da decima terceira passada).
+    nonisolated(unsafe) private static var geracao = 0
 
     /// So as redes com andamento de ordem lido da rede: a CoW. No XRP Ledger e na Stellar a oferta
     /// que some pode ter executado, e o app nao saberia se refaz.
@@ -52,8 +54,12 @@ enum Renovacoes {
 
     /// Depois de a ordem ir para a rede: guarda os dados e marca o aviso do fim do prazo, lido do
     /// proprio UID (os ultimos 4 bytes sao o `validTo`).
-    static func registrar(_ id: String, pedido: LimitOrderRequest) {
-        guard suporta(pedido.chain), id.hasPrefix("0x"), let uid = Hex.decode(id), let vence = CoWProtocol.validTo(ofUID: uid) else { return }
+    /// `avisar`: o aviso do fim do prazo. A carteira com passphrase fica sem ele: a hora do aviso e o fim do prazo
+    /// que o UID traz, e liga o aviso a ordem e ao dono; a pergunta aparece ao destravar (setima passada de 03/11/2026).
+    /// `epoca`: a do apagar tudo, lida antes do envio: depois de um apagar, a ordem antiga nao entra (decima segunda passada).
+    static func registrar(_ id: String, pedido: LimitOrderRequest, avisar: Bool, epoca: Int) {
+        guard Vigias.epocaAgora == epoca, suporta(pedido.chain), id.hasPrefix("0x"), let uid = Hex.decode(id),
+              let vence = CoWProtocol.validTo(ofUID: uid) else { return }
         let registro = LimitRenewal(
             orderID: id, walletID: pedido.walletID, chainID: pedido.chain.id, sellAssetID: pedido.sell.id, buyAssetID: pedido.buy.id,
             amountIn: pedido.amountIn, minimumOut: pedido.minimumOut, validFor: pedido.validFor ?? CoWProtocol.untilCancelledValidity,
@@ -61,12 +67,29 @@ enum Renovacoes {
         )
         // Depois do envio da ordem: vale mesmo que o app tenha travado durante ele.
         Sessao.shared.alterarOuDepois { metadata in
+            // A carteira da ordem ainda esta aqui: depois de um apagar tudo, o destravar seguinte e o de outra.
+            guard metadata.wallets.contains(where: { $0.id == pedido.walletID }) else { return }
             var lista = metadata.limitRenewals ?? []
             lista.removeAll { $0.orderID == id }
             lista.append(registro)
             metadata.limitRenewals = lista
         }
-        VigiaDeOrdens.marcarFimDoPrazo(id, em: registro.expiresAt.addingTimeInterval(60))
+        if avisar { VigiaDeOrdens.marcarFimDoPrazo(id, em: registro.expiresAt.addingTimeInterval(60), epoca: epoca) }
+    }
+
+    /// Ao travar e ao apagar tudo (`carteira` nil): nada da leitura de antes fica para a pergunta, e a leitura em curso nao
+    /// grava. Ao remover uma carteira, so as vencidas dela saem (a leitura em curso ja confere se a carteira existe).
+    static func esquecer(carteira: UUID?) {
+        trava.withLock {
+            guard let carteira else {
+                vencidas = []
+                depois = []
+                geracao += 1
+                return
+            }
+            vencidas.removeAll { $0.registro.walletID == carteira }
+            geracao += 1
+        }
     }
 
     static func esquecer(_ id: String) {
@@ -89,13 +112,11 @@ enum Renovacoes {
     /// Le na rede as ordens vencidas da carteira escolhida. Executada ou cancelada sai da lista;
     /// vencida com algo a vender vira pergunta; sem resposta da rede, fica para a proxima vez.
     static func atualizar() async {
-        guard Sessao.shared.fase == .unlocked, let carteira = Sessao.shared.metadata.selectedWallet, !carteira.isWatchOnly,
-              trava.withLock({ () -> Bool in
-                  guard !lendo else { return false }
-                  lendo = true
-                  return true
-              }) else { return }
-        defer { trava.withLock { lendo = false } }
+        guard Sessao.shared.fase == .unlocked, let carteira = Sessao.shared.metadata.selectedWallet, !carteira.isWatchOnly else { return }
+        let minha = trava.withLock { () -> Int in
+            geracao += 1
+            return geracao
+        }
         let agora = Date()
         var achadas: [Vencida] = []
         for registro in Sessao.shared.metadata.limitRenewals ?? [] where registro.walletID == carteira.id && registro.expiresAt <= agora {
@@ -120,11 +141,24 @@ enum Renovacoes {
                                        minimo: minimo(registro, resta: resta), fracao: andamento.fraction))
             }
         }
-        trava.withLock { vencidas = achadas }
+        // A carteira ainda e a escolhida, ainda existe e o app nao travou no meio.
+        let metadata = Sessao.shared.metadata
+        guard Sessao.shared.fase == .unlocked, metadata.selectedWalletID == carteira.id, metadata.wallets.contains(where: { $0.id == carteira.id })
+        else { return }
+        trava.withLock {
+            guard geracao == minha else { return }
+            vencidas = achadas
+        }
+    }
+
+    /// So as da carteira escolhida: a de outra carteira nunca vira pergunta nem ordem nesta.
+    private static func daEscolhida(_ lista: [Vencida]) -> [Vencida] {
+        let escolhida = Sessao.shared.metadata.selectedWalletID
+        return lista.filter { $0.registro.walletID == escolhida }
     }
 
     static func vencida(_ id: String) -> Vencida? {
-        trava.withLock { vencidas.first { $0.registro.orderID == id } }
+        daEscolhida(trava.withLock { vencidas }).first { $0.registro.orderID == id }
     }
 
     static func adiar(_ id: String) {
@@ -151,7 +185,7 @@ enum Renovacoes {
 
     /// A primeira vencida que o dono nao deixou para depois.
     static func pergunta() -> Pergunta? {
-        let pendentes = trava.withLock { vencidas.filter { !depois.contains($0.registro.orderID) } }
+        let pendentes = daEscolhida(trava.withLock { vencidas.filter { !depois.contains($0.registro.orderID) } })
         guard let v = pendentes.first else { return nil }
         let quantia = Saldos.decimal(v.quantia, casas: v.vende.decimals)
         let alvo = quantia > 0 ? Saldos.decimal(v.minimo, casas: v.compra.decimals) / quantia : 0

@@ -62,6 +62,10 @@ struct Metadata: Codable, Equatable {
     /// Pontes entre redes (`BridgeRecord`): a transferencia assinada e o deposito, para
     /// acompanhar ate a entrega conferida no destino. Nada de segredo.
     var bridges: [BridgeRecord]?
+    /// Ordens limite da CoW assinadas aqui que a CoW disse ter recusado, ou sem resposta certa
+    /// (`SignedOrderRecord`): ate vencer ou a cadeia dizer que terminaram, aparecem em Ordens
+    /// abertas com o cancelamento na cadeia. Opcional para os metadados gravados antes deste campo.
+    var signedOrders: [SignedOrderRecord]?
 
     var selectedWallet: WalletMeta? {
         wallets.first { $0.id == selectedWalletID } ?? wallets.first
@@ -345,11 +349,43 @@ enum MetadataStore {
         try prepareDirectory()
         let plain = try JSONEncoder().encode(metadata)
         let sealed = try IndexCipher.seal(plain, key: key)
-        try sealed.write(to: file, options: [.atomic, .completeFileProtection])
+        try writeDurably(sealed, to: file)
         var url = file
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         try? url.setResourceValues(values)
+    }
+
+    /// Grava e troca de uma vez, e so volta com a troca no disco: F_FULLFSYNC do arquivo novo, rename e
+    /// F_FULLFSYNC da pasta. O `.atomic` do Foundation faz o rename sem forcar o disco: e nos metadados
+    /// que mora a conta de passphrases erradas de cada carteira, e um desligamento forcado logo depois
+    /// de um chute podia devolver a conta e a espera (auditoria iOS de 31/10/2026, AI-02), como no f2fs
+    /// do Android (`gravarDuravel`, em `Kit/Sources/Android/EscaliburAndroid/App/Metadados.swift`).
+    static func writeDurably(_ data: Data, to destination: URL) throws {
+        let temporary = destination.appendingPathExtension("novo")
+        // Nasce vazio e ja na classe A; o conteudo vai pelo descritor, e o rename leva a protecao junto.
+        try Data().write(to: temporary, options: [.completeFileProtection])
+        let handle = try FileHandle(forWritingTo: temporary)
+        do {
+            try handle.write(contentsOf: data)
+            guard fcntl(handle.fileDescriptor, F_FULLFSYNC) == 0 else { throw CocoaError(.fileWriteUnknown) }
+            try handle.close()
+        } catch {
+            try? handle.close()
+            try? FileManager.default.removeItem(at: temporary)
+            throw error
+        }
+        guard rename(temporary.path, destination.path) == 0 else {
+            try? FileManager.default.removeItem(at: temporary)
+            throw CocoaError(.fileWriteUnknown)
+        }
+        // O arquivo ja foi trocado: daqui em diante, falhar deixaria a memoria diferente do disco. O
+        // fsync da pasta e o melhor esforco.
+        let folder = open(destination.deletingLastPathComponent().path, O_RDONLY)
+        if folder >= 0 {
+            if fcntl(folder, F_FULLFSYNC) != 0 { _ = fsync(folder) }
+            close(folder)
+        }
     }
 
     static func deleteFile() {

@@ -1,5 +1,6 @@
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
+import java.security.MessageDigest
 
 plugins {
     alias(libs.plugins.android.application)
@@ -18,8 +19,15 @@ android {
         minSdk = 30
         targetSdk = 36
         // De 1001 em diante: os builds do Android nunca usam um numero de build do iOS.
-        versionCode = 1009
+        versionCode = 1010
         versionName = "1.0.1"
+        // O commit publicado de onde o app saiu e a arvore dele, que o gerar-aab.sh passa (-PcommitDeOrigem,
+        // -ParvoreDeOrigem) de uma copia limpa da main do GitHub: a tela de Ajustes mostra o commit, e a arvore
+        // sobrevive a juncao diaria (auditoria de 03/11/2026). Fora dele, vazios, e o release nao sai.
+        val commitDeOrigem = (project.findProperty("commitDeOrigem") as String?)?.takeIf { Regex("^[0-9a-f]{40}$").matches(it) } ?: ""
+        val arvoreDeOrigem = (project.findProperty("arvoreDeOrigem") as String?)?.takeIf { Regex("^[0-9a-f]{40}$").matches(it) } ?: ""
+        buildConfigField("String", "COMMIT_DE_ORIGEM", "\"$commitDeOrigem\"")
+        buildConfigField("String", "ARVORE_DE_ORIGEM", "\"$arvoreDeOrigem\"")
         // O nucleo so existe para arm64 (todos os aparelhos Android atuais e o emulador do Mac
         // com chip da Apple).
         ndk { abiFilters += listOf("arm64-v8a") }
@@ -151,7 +159,9 @@ abstract class GerarTextos : DefaultTask() {
 
 /**
  * O pacote da loja nunca leva o nucleo de depuracao (cofre.teste, o saldo de teste, o detalhe nos
- * erros): o Gradle empacota o .so que estiver na pasta, de qualquer compilacao.
+ * erros): o Gradle empacota o .so que estiver na pasta, de qualquer compilacao. Vale para o release
+ * e para o `conferencia`, que e o release minificado e tambem pode sair do Mac (auditoria Android de
+ * 31/10/2026, AA-09).
  */
 abstract class ConferirNucleoDeRelease : DefaultTask() {
     @get:InputFile abstract val nucleo: RegularFileProperty
@@ -166,7 +176,61 @@ abstract class ConferirNucleoDeRelease : DefaultTask() {
 val conferirNucleo = tasks.register<ConferirNucleoDeRelease>("conferirNucleoDeRelease") {
     nucleo.set(layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libEscaliburAndroid.so"))
 }
-tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(conferirNucleo) }
+tasks.matching { it.name == "preReleaseBuild" || it.name == "preConferenciaBuild" }.configureEach { dependsOn(conferirNucleo) }
+
+// O C do nucleo de release so chama o que esta em simbolos-c.lock, e nunca rede, programa, arquivo nem o
+// kernel direto: conferido a cada pacote, e nao so pelo compilar-nucleo.sh. Sem os objetos do build de
+// release do nucleo, falha (terceira passada da auditoria de 03/11/2026).
+val conferirCDoNucleo = tasks.register<Exec>("conferirCDoNucleo") {
+    workingDir = raiz
+    commandLine("tools/verificar.sh", "--c-android", "Release")
+}
+// O pacote de release so sai pelo gerar-aab.sh, com o commit e a arvore publicados dentro: o
+// `./gradlew bundleRelease` direto deixaria os dois vazios em silencio. E os dois tem de ser os desta pasta,
+// sem mudanca nenhuma: quaisquer 40 hexadecimais nao bastam (quarta passada da auditoria de 03/11/2026).
+val origemDoRelease = listOf("commitDeOrigem", "arvoreDeOrigem").map { (project.findProperty(it) as String?).orEmpty() }
+val pastaDoRepositorio = raiz
+val conferirOrigem = tasks.register("conferirOrigemDoRelease") {
+    doLast {
+        fun git(vararg argumentos: String): String {
+            val processo = ProcessBuilder(listOf("git", "-C", pastaDoRepositorio.path) + argumentos).redirectErrorStream(true).start()
+            val texto = processo.inputStream.bufferedReader().readText().trim()
+            check(processo.waitFor() == 0) { "git ${argumentos.joinToString(" ")} falhou: $texto" }
+            return texto
+        }
+        check(origemDoRelease.all { Regex("^[0-9a-f]{40}$").matches(it) }) {
+            "o release so sai pelo tools/android/gerar-aab.sh, com o commit e a arvore publicados na main"
+        }
+        check(origemDoRelease[0] == git("rev-parse", "HEAD") && origemDoRelease[1] == git("rev-parse", "HEAD^{tree}")) {
+            "o commit e a arvore pedidos nao sao os desta pasta"
+        }
+        check(git("status", "--porcelain=v1", "--untracked-files=all").isEmpty()) {
+            "a pasta do release tem mudanca sem commit"
+        }
+        // So na copia limpa do gerar-aab.sh (um worktree ligado em /private/tmp/escalibur-loja.*), sem nada marcado
+        // para o git nao olhar, no commit da main publicada e com o nucleo de release deste commit (quinta passada da
+        // auditoria de 03/11/2026).
+        check(git("rev-parse", "--absolute-git-dir") != git("rev-parse", "--path-format=absolute", "--git-common-dir") &&
+              git("rev-parse", "--show-toplevel").startsWith("/private/tmp/escalibur-loja.")) {
+            "o release so sai da copia limpa que o tools/android/gerar-aab.sh monta"
+        }
+        check(git("ls-files", "-v").lines().all { it.startsWith("H ") }) { "ha arquivo marcado para o git nao olhar" }
+        check(origemDoRelease[0] == git("rev-parse", "--verify", "refs/remotes/origin/main^{commit}")) {
+            "o commit do release nao e o da main publicada"
+        }
+        val nucleo = pastaDoRepositorio.resolve("Android/app/src/main/jniLibs/arm64-v8a/libEscaliburAndroid.so")
+        val libcxx = pastaDoRepositorio.resolve("Android/app/src/main/jniLibs/arm64-v8a/libc++_shared.so")
+        val carimbo = pastaDoRepositorio.resolve("build/android-kit/origem-do-nucleo.txt")
+        fun digestoDe(arquivo: File) = MessageDigest.getInstance("SHA-256").digest(arquivo.readBytes()).joinToString("") { "%02x".format(it) }
+        // So o nucleo do modo da loja (do zero, com o log do compilador conferido), e a libc++ que ele conferiu
+        // (decima primeira passada da auditoria de 03/11/2026).
+        check(carimbo.isFile && carimbo.readText().trim() == "release-loja ${origemDoRelease[0]} ${digestoDe(nucleo)} ${digestoDe(libcxx)}") {
+            "o nucleo em jniLibs nao e o da loja deste commit (tools/android/compilar-nucleo.sh release --loja, pelo gerar-aab.sh)"
+        }
+    }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(conferirOrigem, conferirCDoNucleo) }
+tasks.matching { it.name == "preConferenciaBuild" }.configureEach { dependsOn(conferirCDoNucleo) }
 
 val gerarTextos = tasks.register<GerarTextos>("gerarTextos") {
     catalogo.set(raiz.resolve("App/EscaliburWallet/Resources/Localizable.xcstrings"))

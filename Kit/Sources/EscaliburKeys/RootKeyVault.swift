@@ -165,8 +165,16 @@ public final class RootKeyVault: @unchecked Sendable {
     /// Custo fixo do PIN, so para os testes nao pagarem 256 MiB por chamada.
     private let fixedPINParameters: KDFParameters?
     private let lock = NSLock()
-    /// O rosto do Super Security ja confirmado, a espera do PIN (`hardenedFace`). Sob `lock`.
+    /// O rosto do Super Security ja confirmado, a espera do PIN (`hardenedFace`). Sob `faceLock`, uma
+    /// trava curta que nunca fica presa num pedido de biometria: descartar o rosto (o app travou ou foi
+    /// para o fundo) nao espera o Face ID que esta na tela. No Android a resposta da biometria chega pela
+    /// thread principal, e ela ficava parada esperando o cofre (auditoria de 03/11/2026). A ordem e
+    /// sempre `lock` e depois `faceLock`, nunca o contrario.
+    private let faceLock = NSLock()
     private var pendingFace: PendingFace?
+    /// Sobe a cada descarte. Sob `faceLock`: o rosto que confirma depois de um descarte (o app foi para
+    /// o fundo com o pedido na tela) nao fica valendo.
+    private var faceEpoch: UInt64 = 0
 
     public convenience init(store: any SecretStore, wrapper: any KeyWrapper) {
         self.init(store: store, wrapper: wrapper, pinParameters: nil)
@@ -860,7 +868,7 @@ public final class RootKeyVault: @unchecked Sendable {
     }
 
     private func wipeAllLocked() {
-        discardFaceLocked()
+        discardFace()
         WrapSlot.allCases.forEach(wrapper.deleteKey)
         try? store.delete(Account.rootHardened)
         try? store.delete(Account.rootByPIN)
@@ -1466,21 +1474,25 @@ extension RootKeyVault {
     /// rosto que nao confirma nao conta tentativa, como na abertura de uma chamada so.
     public func hardenedFace(reason: String, use: HardenedUse = .operation) throws -> HardenedFacePass {
         lock.lock(); defer { lock.unlock() }
-        discardFaceLocked()
+        discardFace()
+        let epoch = currentFaceEpoch()
         let (record, hold) = try hardenedPrepareLocked(use: use)
         let waiting = try rebasedAttemptsLocked().remaining()
         guard waiting <= 0 else { throw Failure.throttled(seconds: waiting) }
         let state = hardenedDomainState()
         let (middle, watch) = try openHardenedFaceLocked(record, reason: reason)
         let id = UUID()
-        pendingFace = PendingFace(id: id, record: record, middle: middle, watch: watch, hold: hold, use: use, state: state,
-                                  expires: PINPolicy.uptime + Self.facePassLifetime)
+        let face = PendingFace(id: id, record: record, middle: middle, watch: watch, hold: hold, use: use, state: state,
+                               expires: PINPolicy.uptime + Self.facePassLifetime)
+        // Descartado enquanto o Face ID estava na tela: o rosto nao fica valendo.
+        guard keepFace(face, ifEpoch: epoch) else {
+            middle.wipe()
+            throw Failure.cancelled
+        }
         // Vencido, o miolo sai da memoria sozinho, sem esperar alguem tentar usar o rosto
         // (revisao de seguranca de 01/11/2026).
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Self.facePassLifetime) { [weak self] in
-            guard let self else { return }
-            self.lock.lock(); defer { self.lock.unlock() }
-            if self.pendingFace?.id == id { self.discardFaceLocked() }
+            self?.dropFace(id: id)
         }
         return HardenedFacePass(id: id)
     }
@@ -1490,8 +1502,7 @@ extension RootKeyVault {
     /// outra vez ou ja usado, pede o rosto de novo (`biometryNotConfirmed`), sem contar.
     public func unlockHardened(pin: SecureBytes, face pass: HardenedFacePass, use: HardenedUse) throws -> SecureBytes {
         lock.lock(); defer { lock.unlock() }
-        guard let face = pendingFace, face.id == pass.id else { throw Failure.biometryNotConfirmed(remainingBeforeWipe: nil) }
-        pendingFace = nil
+        guard let face = takeFace(id: pass.id) else { throw Failure.biometryNotConfirmed(remainingBeforeWipe: nil) }
         // Vencido, para outro uso (o rosto de abrir o app nao assina) ou com o cadastro de rostos
         // trocado depois do rosto: pede o rosto de novo, sem contar (revisao de seguranca de 01/11/2026).
         guard PINPolicy.uptime <= face.expires, face.use == use, hardenedDomainState() == face.state else {
@@ -1509,13 +1520,45 @@ extension RootKeyVault {
         }
     }
 
-    /// O app travou, foi para o fundo ou o dono desistiu do PIN: o rosto ja confirmado nao vale mais.
+    /// O app travou, foi para o fundo ou o dono desistiu do PIN: o rosto ja confirmado nao vale mais, e
+    /// o que ainda esta na tela tambem nao. Nao espera a trava do cofre (ver `faceLock`).
     public func discardHardenedFace() {
-        lock.lock(); defer { lock.unlock() }
-        discardFaceLocked()
+        discardFace()
     }
 
-    private func discardFaceLocked() {
+    /// Com ou sem `lock`, nunca com `faceLock`.
+    private func discardFace() {
+        faceLock.lock(); defer { faceLock.unlock() }
+        faceEpoch &+= 1
+        pendingFace?.middle.wipe()
+        pendingFace = nil
+    }
+
+    private func currentFaceEpoch() -> UInt64 {
+        faceLock.lock(); defer { faceLock.unlock() }
+        return faceEpoch
+    }
+
+    /// Guarda o rosto se nada o descartou desde `epoch`.
+    private func keepFace(_ face: PendingFace, ifEpoch epoch: UInt64) -> Bool {
+        faceLock.lock(); defer { faceLock.unlock() }
+        guard faceEpoch == epoch else { return false }
+        pendingFace = face
+        return true
+    }
+
+    /// Tira o rosto `id` para o PIN: ele vale uma vez.
+    private func takeFace(id: UUID) -> PendingFace? {
+        faceLock.lock(); defer { faceLock.unlock() }
+        guard let face = pendingFace, face.id == id else { return nil }
+        pendingFace = nil
+        return face
+    }
+
+    /// O rosto `id` venceu: o miolo sai da memoria.
+    private func dropFace(id: UUID) {
+        faceLock.lock(); defer { faceLock.unlock() }
+        guard pendingFace?.id == id else { return }
         pendingFace?.middle.wipe()
         pendingFace = nil
     }
@@ -1541,7 +1584,7 @@ extension RootKeyVault {
     /// `kand.bio` abriu; na `.wait`, a vigia disse "o mesmo" (ou a espera foi cumprida e a
     /// vigia realinhada); na `.continue`, o hash e o gravado quando a politica passou a valer.
     private func openHardenedLocked(pin: SecureBytes, reason: String, use: HardenedUse) throws -> (rk: SecureBytes, sameEnrollment: Bool) {
-        discardFaceLocked()
+        discardFace()
         let (record, hold) = try hardenedPrepareLocked(use: use)
         // Tamanho nao e segredo; PIN fora de forma nunca gasta tentativa nem pede o rosto.
         guard Self.isWellFormed(pin), pin.count == Int(record.header.pinLength) else { throw Failure.malformedPIN }

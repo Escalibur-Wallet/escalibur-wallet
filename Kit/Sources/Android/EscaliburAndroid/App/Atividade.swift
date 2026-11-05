@@ -145,6 +145,11 @@ final class Atividade: @unchecked Sendable {
         trava.withLock {
             if carteiraID != wallet.id {
                 carteiraID = wallet.id
+                // A leitura da carteira de antes para aqui: os itens dela nao entram na tela nem no cache desta (revisao
+                // da decima terceira passada; no iOS, o load sobe a geracao).
+                geracao += 1
+                carregando = false
+                restantes = 0
                 let guardado = (metadata.activityCache?[wallet.id] ?? []).compactMap(\.entry)
                 porRede = Dictionary(grouping: guardado, by: \.chainID)
                 falhas = []
@@ -275,11 +280,17 @@ final class Atividade: @unchecked Sendable {
             }
             pendentes = ler.filter { t in falharam.contains { $0.id == t.chain.id } }
         }
-        guard trava.withLock({ geracao == minha }) else { return }
-        trava.withLock { lidaUmaVez = true }
+        // A guarda e a leitura do historico na mesma trava: uma troca de carteira entre as duas punha o da outra no cache
+        // desta (revisao da decima terceira passada).
+        guard let todos = trava.withLock({ () -> [ActivityEntry]? in
+            guard geracao == minha, carteiraID == wallet.id else { return nil }
+            lidaUmaVez = true
+            return Array(porRede.values.flatMap { $0 }.sorted { $0.date > $1.date }.prefix(CachedActivity.limit))
+        }) else { return }
         guard !ler.isEmpty else { return }
-        let todos = trava.withLock { porRede.values.flatMap { $0 }.sorted { $0.date > $1.date }.prefix(CachedActivity.limit) }
         try? Sessao.shared.alterar { metadata in
+            // So a carteira que ainda existe: a removida no meio da leitura nao volta a ter historico gravado.
+            guard metadata.wallets.contains(where: { $0.id == wallet.id }) else { return }
             var cache = metadata.activityCache ?? [:]
             cache[wallet.id] = todos.map(CachedActivity.init)
             metadata.activityCache = cache

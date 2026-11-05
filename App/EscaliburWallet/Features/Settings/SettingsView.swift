@@ -311,7 +311,7 @@ struct WalletSettingsView: View {
                                 SettingsRow(icon: "exclamationmark.octagon", title: String(localized: "Tron: controlada por outra chave"), valueColor: Palette.down, chevron: false)
                             } else if let chain = Chain.find(account.chainID) {
                                 Button {
-                                    Pasteboard.copyAddress(account.address)
+                                    Pasteboard.copyReceiveAddress(account.address, hasPassphrase: wallet.hasPassphrase, session: session)
                                     toasts.show(String(localized: "Endereço copiado."))
                                 } label: {
                                     HStack(spacing: Space.sm) {
@@ -985,6 +985,11 @@ struct AboutView: View {
                         .typeStyle(.body).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true)
                     Text("Versão \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""))")
                         .typeStyle(.note).foregroundStyle(Palette.inkMuted)
+                    // O commit de onde este app saiu, gravado pelo archive da loja (`tools/arquivar.sh`): quem
+                    // audita o GitHub confere que e este o codigo (segunda passada da auditoria de 03/11/2026).
+                    if let commit = Bundle.main.object(forInfoDictionaryKey: "EscaliburCommit") as? String, commit.count == 40 {
+                        Text("Commit \(String(commit.prefix(12)))").typeStyle(.note).foregroundStyle(Palette.inkMuted)
+                    }
                     // A auditoria aberta dentro do app, no navegador da Apple (pedido do dono,
                     // 18/10/2026; antes, no Safari). O app nao abre conexao nenhuma: quem abre e o
                     // Safari, em outro processo (`SiteBrowser`).
@@ -1075,7 +1080,7 @@ struct RemoveWalletScreen: View {
                 VStack(spacing: 0) {
                     header
                     if !wallet.isWatchOnly, !wallet.hasBackup {
-                        Banner(kind: .failure, title: WalletRemoval.warning(wallet)).padding(.top, Space.lg)
+                        Banner(kind: .failure, title: WalletRemoval.warning(wallet)).padding(.top, Space.md)
                     }
                     VStack(alignment: .leading, spacing: Space.md) {
                         if wallet.isWatchOnly {
@@ -1097,11 +1102,11 @@ struct RemoveWalletScreen: View {
                                   String(localized: "É a única carteira deste iPhone. Removida, o app volta a ser como recém-instalado: o PIN, os ajustes e os contatos são apagados."))
                         }
                     }
-                    .padding(.top, Space.lg)
+                    .padding(.top, Space.md)
                 }
                 .padding(.horizontal, Space.gutter)
-                // Um pouco abaixo do alto (pedido do dono, 24/10/2026).
-                .padding(.top, Space.xl)
+                // Colado no alto, para o ultimo ponto caber acima do deslizar (pedido do dono, 02/11/2026).
+                .padding(.top, Space.xs)
                 .padding(.bottom, Space.md)
             }
             .scrollBounceBehavior(.basedOnSize)

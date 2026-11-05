@@ -24,13 +24,56 @@ final class OpenOrdersBook {
     /// Cancelamento enviado e ainda listado pela CoW: id da ordem e quando foi enviado.
     private(set) var cancelling: [String: Date] = [:]
 
+    /// A transacao do cancelamento na cadeia de cada ordem marcada, e a rede dela: a lista confere o
+    /// resultado (terceira passada da auditoria de 03/11/2026).
+    private(set) var cancelTransactions: [String: (transaction: String, chain: Chain)] = [:]
+
     func update(_ orders: [OpenOrder]) {
         self.orders = orders
         let ids = Set(orders.map(\.id))
         cancelling = cancelling.filter { ids.contains($0.key) }
+        cancelTransactions = cancelTransactions.filter { ids.contains($0.key) }
     }
 
-    func markCancelling(_ id: String) { cancelling[id] = .now }
+    /// Marcar de novo sem a transacao (a tela que abriu a revisao) nao apaga a que ja estava.
+    func markCancelling(_ id: String, transaction: String? = nil, chain: Chain? = nil) {
+        cancelling[id] = .now
+        if let transaction, let chain { cancelTransactions[id] = (transaction, chain) }
+    }
+
+    /// O cancelamento falhou na rede: a ordem continua viva e volta a aparecer.
+    func unmarkCancelling(_ id: String) {
+        cancelling[id] = nil
+        cancelTransactions[id] = nil
+    }
+
+    /// Le o resultado dos cancelamentos na cadeia ainda marcados: o que falhou desmarca (a ordem volta, com
+    /// os avisos de executada e de vencimento, que so saem com o cancelamento confirmado); o confirmado
+    /// tira os avisos. Antes, todo cancelamento escondia a ordem e tirava os avisos ja no envio.
+    func settleCancellations() async {
+        for (id, sent) in cancelTransactions {
+            guard let engine = SendEngines.engine(for: sent.chain) else { continue }
+            switch await engine.status(sent.transaction, chain: sent.chain) {
+            case .confirmed:
+                cancelTransactions[id] = nil
+                await LimitOrderWatch.shared.forget(id)
+            case .failed:
+                unmarkCancelling(id)
+            case .pending:
+                continue
+            }
+        }
+    }
+
+    /// A ultima leitura na cadeia das ordens assinadas guardadas (`SignedOrders`): no maximo a cada
+    /// 30 segundos, e nao a cada 6 da lista.
+    private var signedCheckedAt: Date?
+
+    func signedCheckDue() -> Bool {
+        guard signedCheckedAt.map({ Date().timeIntervalSince($0) >= 30 }) ?? true else { return false }
+        signedCheckedAt = .now
+        return true
+    }
 
     /// Cancelamento enviado ha menos de 10 minutos. Se a transacao falhar na rede, a
     /// ordem volta a aparecer depois disso: uma ordem viva nunca fica escondida de vez.
@@ -143,7 +186,6 @@ struct OpenOrdersSection: View {
             TradeReviewFlow(item: item) { completed in
                 if completed, case .cancel(let order, _) = item.kind {
                     OpenOrdersBook.shared.markCancelling(order.id)
-                    Task { await LimitOrderWatch.shared.forget(order.id) }
                 }
                 reviewing = nil
                 if completed { Task { await reload() } }
@@ -252,6 +294,9 @@ struct OpenOrdersSection: View {
                     if order.filledFraction != nil {
                         OrderExpiryText(date: order.expiresAt).typeStyle(.note).foregroundStyle(Palette.inkMuted)
                     }
+                    if order.sources == 0 {
+                        Text("Sem confirmação da CoW").typeStyle(.note).foregroundStyle(Palette.caution)
+                    }
                 }
                 Spacer(minLength: Space.sm)
                 if let fraction = order.filledFraction {
@@ -318,6 +363,10 @@ struct OpenOrdersSection: View {
                         Text("Esta carteira só acompanha: para mudar ou cancelar, abra a carteira que assina.")
                             .typeStyle(.note).foregroundStyle(Palette.inkMuted).padding(.top, Space.sm)
                             .fixedSize(horizontal: false, vertical: true)
+                    } else if order.sources == 0 {
+                        Text("A CoW disse que recusou esta ordem, ou não respondeu com certeza. A ordem assinada vale até vencer, e só o cancelamento na cadeia garante que ela não executa.")
+                            .typeStyle(.note).foregroundStyle(Palette.inkMuted).padding(.top, Space.sm)
+                            .fixedSize(horizontal: false, vertical: true)
                     } else if cancellable {
                         Text("Uma ordem assinada não muda. Editar abre esta ordem com os valores dela; na revisão, ela é cancelada e a nova é criada, nesta ordem.")
                             .typeStyle(.note).foregroundStyle(Palette.inkMuted).padding(.top, Space.sm)
@@ -329,14 +378,17 @@ struct OpenOrdersSection: View {
             }
             if cancellable {
                 VStack(spacing: Space.sm) {
-                    SecondaryButton(title: String(localized: "Editar a ordem")) {
-                        detail = nil
-                        let (sell, buy) = assets(order)
-                        guard let via = Self.safest(order.cancellations), let sell, let buy else { return }
-                        router.limitEdit = LimitEdit(order: order, via: via, sell: sell, buy: buy)
-                        router.tab = .trade
+                    // A guardada so cancela: editar criaria outra ordem pela mesma CoW que nao confirmou esta.
+                    if order.sources > 0 {
+                        SecondaryButton(title: String(localized: "Editar a ordem")) {
+                            detail = nil
+                            let (sell, buy) = assets(order)
+                            guard let via = Self.safest(order.cancellations), let sell, let buy else { return }
+                            router.limitEdit = LimitEdit(order: order, via: via, sell: sell, buy: buy)
+                            router.tab = .trade
+                        }
+                        .accessibilityIdentifier("ordem-editar")
                     }
-                    .accessibilityIdentifier("ordem-editar")
                     Button { detail = nil; choosing = order } label: {
                         Text("Cancelar a ordem").typeStyle(.action).foregroundStyle(Palette.down)
                             .frame(maxWidth: .infinity).frame(height: Height.secondary)
@@ -405,6 +457,9 @@ struct OpenOrdersSection: View {
             load = .loading
             finished = []
         }
+        // A epoca dos avisos antes de qualquer leitura: um apagar tudo durante elas nao recria o arquivo das ordens.
+        let epocaDosAvisos = await LimitOrderWatch.shared.currentEpoch()
+        await OpenOrdersBook.shared.settleCancellations()
         let before: [OpenOrder]
         if case .loaded(let orders) = load { before = orders } else { before = [] }
         // Todas as redes ao mesmo tempo; a que nao responde nao segura as outras.
@@ -427,6 +482,10 @@ struct OpenOrdersSection: View {
         // Uma rede que nao respondeu agora fica com o que mostrava.
         let failedIDs = Set(failedChains.map(\.id))
         orders += before.filter { failedIDs.contains($0.chain.id) }
+        // As ordens assinadas que a CoW disse ter recusado, ou sem resposta certa: ate vencer ou a
+        // cadeia dizer que terminaram, entram como abertas e contam no que esta preso.
+        await refreshSigned(wallet: wallet.id)
+        orders = SignedOrders.merged(orders, records: session.metadata.signedOrders, wallet: wallet.id)
         orders = OpenOrder.newestFirst(orders)
         // A que saiu da lista (numa rede que respondeu) terminou: le o andamento final.
         let current = Set(orders.map(\.id))
@@ -436,18 +495,48 @@ struct OpenOrdersSection: View {
             // Executada ou vencida fica um tempo na lista com o resultado; cancelada sai de vez.
             if let progress = try? await engine.orderProgress(id: gone.id, account: account), progress.isFinal {
                 if progress.state != .cancelled { finished.append(FinishedOrder(order: gone, progress: progress)) }
-                await LimitOrderWatch.shared.settle(gone.id, filled: progress.state == .filled)
+                await LimitOrderWatch.shared.settle(gone.id, filled: progress.state == .filled, epoch: epocaDosAvisos)
             }
         }
         // Ordem da CoW aberta (criada aqui antes destes avisos, ou em outro aparelho):
         // passa a ser acompanhada para o aviso de vencimento e o de executada.
         for open in orders where !wallet.hasPassphrase && CoWProtocol.supports(open.chain) && !OpenOrdersBook.shared.isCancelling(open.id) {
             guard let expiresAt = open.expiresAt else { continue }
-            await LimitOrderWatch.shared.track(id: open.id, chainID: open.chain.id, expiresAt: expiresAt)
+            await LimitOrderWatch.shared.track(id: open.id, chainID: open.chain.id, expiresAt: expiresAt, epoch: epocaDosAvisos)
         }
         unread = failedChains.sorted { (order[$0.id] ?? .max) < (order[$1.id] ?? .max) }
         load = .loaded(orders)
         OpenOrdersBook.shared.update(orders)
+    }
+
+    /// Le na cadeia o que as ordens assinadas guardadas ja liquidaram, e tira a vencida e a terminada.
+    /// So o que foi conferido aqui muda: uma ordem guardada durante a leitura fica.
+    private func refreshSigned(wallet: UUID) async {
+        // As de carteira que ja nao existe saem antes de qualquer leitura (inclusive as de antes desta regra).
+        let live = Set(session.metadata.wallets.map(\.id))
+        if session.metadata.signedOrders?.contains(where: { !live.contains($0.walletID) }) == true {
+            session.whenUnlocked { session in
+                let alive = Set(session.metadata.wallets.map(\.id))
+                session.metadata.signedOrders?.removeAll { !alive.contains($0.walletID) }
+                if session.metadata.signedOrders?.isEmpty == true { session.metadata.signedOrders = nil }
+                try? session.persist()
+            }
+        }
+        guard let records = session.metadata.signedOrders, records.contains(where: { $0.walletID == wallet }),
+              OpenOrdersBook.shared.signedCheckDue() else { return }
+        let kept = await SignedOrders.refreshed(records, wallet: wallet, existingWallets: Set(session.metadata.wallets.map(\.id)),
+                                                skippingChains: session.metadata.settings.disabledChainIDs,
+                                                state: SignedOrders.onChainState)
+        guard kept != records else { return }
+        let checked = Set(records.map(\.id))
+        session.whenUnlocked { session in
+            // As carteiras de agora, e nao as de antes da leitura: uma removida no meio nao volta (quinta passada de
+            // 03/11/2026).
+            let alive = Set(session.metadata.wallets.map(\.id))
+            let all = ((session.metadata.signedOrders ?? []).filter { !checked.contains($0.id) } + kept).filter { alive.contains($0.walletID) }
+            session.metadata.signedOrders = all.isEmpty ? nil : all
+            try? session.persist()
+        }
     }
 
     // MARK: Textos

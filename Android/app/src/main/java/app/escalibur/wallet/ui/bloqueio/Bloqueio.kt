@@ -69,6 +69,7 @@ import app.escalibur.wallet.ui.tema.Paleta
 import app.escalibur.wallet.ui.tema.Raio
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
+import app.escalibur.wallet.vigias.Vigia
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -170,7 +171,11 @@ fun TelaDeBloqueio(vinda: Int) {
                     when (falha.codigo) {
                         "cofre.pinErrado" -> entrada.falhar(Autorizacao.mensagemDePinErrado(falha))
                         "cofre.espera" -> entrada.falhar(t("Tentativas demais. Tente de novo em %@.", Formato.duracao(falha.segundos)))
-                        "cofre.wiped" -> runCatching { App.aplicar(Api.objeto("sessao.apagarTudo")) }
+                        "cofre.wiped" -> {
+                            // O cofre ja se apagou: a gaveta sai mesmo se a limpeza do resto falhar.
+                            Vigia.limparGaveta()
+                            runCatching { App.aplicar(Api.objeto("sessao.apagarTudo")) }
+                        }
                         // Super Security com a biometria trocada em "Bloquear as carteiras": o cofre nao abre mais,
                         // e apagar nao espera as 24 horas (como o iOS).
                         "cofre.hardenedSlotLost" -> {
@@ -279,7 +284,7 @@ private fun FolhaEsqueciOPin(perdido: Boolean, aoFechar: () -> Unit) {
                 confirmar = false
                 escopo.launch {
                     // O nucleo confere de novo (espera cumprida ou cofre perdido) e pode recusar: sem derrubar o app.
-                    runCatching { App.aplicar(Api.objeto("sessao.apagarTudo")) }
+                    runCatching { App.aplicar(Api.objeto("sessao.apagarTudo")) }.onSuccess { Vigia.limparGaveta() }
                     aoFechar()
                 }
             },

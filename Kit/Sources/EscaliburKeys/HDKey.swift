@@ -44,7 +44,9 @@ public final class HDKey: @unchecked Sendable {
 
     // MARK: Raiz
 
-    public static func master(seed: SecureBytes, curve: Curve) throws -> HDKey {
+    /// So dentro do modulo: o endereco de uma carteira sai do `AccountDeriver.derive`, depois do autoteste dos vetores
+    /// publicos (revisao da decima terceira passada da auditoria de 03/11/2026).
+    static func master(seed: SecureBytes, curve: Curve) throws -> HDKey {
         guard (16...64).contains(seed.count) else { throw Failure.invalidSeed }
         let hmacKey = curve == .secp256k1 ? Array("Bitcoin seed".utf8) : Array("ed25519 seed".utf8)
         let i = Hash.hmacSHA512(key: hmacKey, secureData: seed)

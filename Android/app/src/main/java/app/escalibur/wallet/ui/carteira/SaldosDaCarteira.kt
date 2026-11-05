@@ -135,6 +135,11 @@ object Saldos {
         runCatching { retrato = lido(Api.objeto("saldos.mostrar")) }
     }
 
+    // So os precos, na moeda de agora, para os saldos da tela (depois de trocar a moeda).
+    suspend fun atualizarPrecos() {
+        runCatching { retrato = lido(Api.objeto("saldos.precos")) }
+    }
+
     suspend fun atualizar(forcar: Boolean) {
         runCatching { retrato = lido(Api.objeto("saldos.atualizar", JSONObject().put("forcar", forcar))) }
     }

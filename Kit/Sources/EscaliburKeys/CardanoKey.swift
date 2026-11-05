@@ -43,7 +43,8 @@ public final class CardanoKey: @unchecked Sendable {
 
     /// A mestra Icarus da CIP-3. A 25a palavra entra como senha do PBKDF2, em bytes UTF-8
     /// (a carteira ja guarda em NFKD).
-    public static func icarusMaster(entropy: SecureBytes, passphrase: SecureBytes) throws -> CardanoKey {
+    /// So dentro do modulo: o endereco sai do `AccountDeriver.derive`, depois do autoteste (revisao da decima terceira passada).
+    static func icarusMaster(entropy: SecureBytes, passphrase: SecureBytes) throws -> CardanoKey {
         guard [16, 20, 24, 28, 32].contains(entropy.count) else { throw Failure.invalidEntropy }
         let raw = try Hash.pbkdf2SHA512(password: passphrase, salt: entropy, rounds: 4096, length: 96)
         defer { raw.wipe() }
@@ -172,8 +173,8 @@ public final class CardanoKey: @unchecked Sendable {
 
     /// A conta Cardano de uma carteira: pagamento em m/1852'/1815'/i'/0/0, stake em
     /// m/1852'/1815'/i'/2/0, endereco base da rede principal. Guarda-se a chave publica de
-    /// pagamento, a que assina os envios.
-    public static func derivedAccount(_ secret: WalletSecret, chain: Chain = .cardano, account: UInt32 = 0) throws -> DerivedAccount {
+    /// pagamento, a que assina os envios. So dentro do modulo, pelo `AccountDeriver.derive`, depois do autoteste.
+    static func derivedAccount(_ secret: WalletSecret, chain: Chain = .cardano, account: UInt32 = 0) throws -> DerivedAccount {
         let master = try icarusMaster(entropy: secret.entropy, passphrase: secret.passphrase)
         defer { master.wipe() }
         let path = DefaultPaths.path(for: chain, account: account)

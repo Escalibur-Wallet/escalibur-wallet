@@ -243,7 +243,7 @@ struct SolanaTradeEngineTests {
             == SolanaEngineMessages.text(SolanaEngineProblem.quoteMismatch))
         let old = TradeQuote(
             sell: quote.sell, buy: quote.buy, amountIn: quote.amountIn, expectedOut: quote.expectedOut, minimumOut: quote.minimumOut,
-            priceImpactPercent: quote.priceImpactPercent, networkFeeFiat: nil, providerFeeNote: nil, legs: quote.legs, alternatives: [],
+            priceImpactPercent: quote.priceImpactPercent, networkFees: [], providerFeeNote: nil, legs: quote.legs, alternatives: [],
             providersCompared: 1, needsApproval: false, expiresAt: Date().addingTimeInterval(-1)
         )
         #expect(await message { try await engine.plan(try solToUSDC(), quote: old) } == SolanaEngineMessages.text(SolanaEngineProblem.quoteExpired))

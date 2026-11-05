@@ -97,6 +97,7 @@ struct RootView: View {
             SafeKeyboardInstaller.shared.isLocked = { session.hardenedModeOn }
             PassphraseGate.shared.toasts = toasts
             session.onLock = { [auth] in auth.cancel() }
+            session.onForget = { [portfolio] wallet in portfolio.forget(wallet) }
             SafeKeyboardInstaller.shared.start()
         }
         #if DEBUG

@@ -110,6 +110,12 @@ public struct TradeCandidate: Sendable, Equatable {
 public enum TradeRanking {
     /// O custo fixo de executar uma cotacao, em unidades do token comprado.
     public static func cost(of quote: ValidatedTradeQuote, costs: TradeCostModel) -> (inBuy: BigUInt, needsApproval: Bool) {
+        let (wei, needsApproval) = gas(of: quote, costs: costs)
+        return (costs.nativeToBuy.apply(wei), needsApproval)
+    }
+
+    /// O mesmo custo em wei do nativo: gas da troca, taxa L1 e as autorizacoes que faltam.
+    public static func gas(of quote: ValidatedTradeQuote, costs: TradeCostModel) -> (wei: BigUInt, needsApproval: Bool) {
         let intent = quote.intent
         let reported = quote.gasEstimate ?? TradeCostModel.defaultSwapGas
         let swapGas = min(max(reported, TradeCostModel.swapGasRange.lowerBound), TradeCostModel.swapGasRange.upperBound)
@@ -129,7 +135,7 @@ public enum TradeRanking {
                 wei = wei + BigUInt(costs.approveGas) * costs.gasPriceWei + costs.l1FeePerTransactionWei
             }
         }
-        return (costs.nativeToBuy.apply(wei), needsApproval)
+        return (wei, needsApproval)
     }
 
     /// Ordena pelo liquido do garantido, do melhor para o pior. Empate: maior garantido,

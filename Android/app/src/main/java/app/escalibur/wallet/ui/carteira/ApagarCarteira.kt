@@ -64,6 +64,7 @@ import app.escalibur.wallet.ui.tema.Espaco
 import app.escalibur.wallet.ui.tema.Paleta
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
+import app.escalibur.wallet.vigias.Vigia
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -91,6 +92,7 @@ object RemocaoDeCarteira {
                 }
             }
             if (removeu != null) {
+                Vigia.limparGaveta()
                 App.recarregar()
                 return true
             }
@@ -110,13 +112,15 @@ object RemocaoDeCarteira {
 @Composable
 fun TelaDeRemover(carteira: Carteira, aoFechar: (confirmou: Boolean) -> Unit) {
     Dialog(onDismissRequest = { aoFechar(false) }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        app.escalibur.wallet.ui.comp.ProtegerJanela()
         TelaComBarra({ aoFechar(false) }, iconeDoVoltar = Icones.fechar, rodape = {
             DeslizeParaSeguir(t("Deslize para remover"), true) { aoFechar(true) }
         }) { espaco ->
             Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(espaco)
-                    .padding(horizontal = Espaco.margem).padding(top = Espaco.xl, bottom = Espaco.md),
+                    .padding(horizontal = Espaco.margem).padding(top = Espaco.xs, bottom = Espaco.md),
             ) {
+                // Colado no alto, para o ultimo ponto caber acima do deslizar (pedido do dono, 02/11/2026).
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                     // A lixeira em pixels: a carteira cai nela.
                     LixeiraDePixels(Modifier.size(150.dp, 156.dp))
@@ -124,8 +128,8 @@ fun TelaDeRemover(carteira: Carteira, aoFechar: (confirmou: Boolean) -> Unit) {
                          modifier = Modifier.padding(top = Espaco.xs))
                     Text(t("Antes de deslizar, confira o que acontece."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
                 }
-                if (!carteira.observacao && !carteira.temCopia) Faixa(TipoDeFaixa.falha, RemocaoDeCarteira.aviso(carteira), Modifier.padding(top = Espaco.lg))
-                Column(Modifier.padding(top = Espaco.lg), verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
+                if (!carteira.observacao && !carteira.temCopia) Faixa(TipoDeFaixa.falha, RemocaoDeCarteira.aviso(carteira), Modifier.padding(top = Espaco.md))
+                Column(Modifier.padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.md)) {
                     if (carteira.observacao) {
                         Ponto(Icones.lista, t("Só sai da lista"), RemocaoDeCarteira.aviso(carteira))
                     } else {

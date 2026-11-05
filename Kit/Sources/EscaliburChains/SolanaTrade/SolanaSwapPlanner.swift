@@ -217,7 +217,7 @@ public struct SolanaSwapDraft: Sendable {
     let wrappedAccount: SolanaPublicKey?
     let createsDestination: Bool
     /// A maior taxa de rede que o rascunho pode cobrar (limite maximo de CU).
-    let draftFee: BigUInt
+    public let draftFee: BigUInt
     /// Quanto a cotacao fica abaixo da referencia, em bps.
     let referenceDeviationBps: Int?
 }

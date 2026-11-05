@@ -206,7 +206,9 @@ fun TelaDaCarteira() {
                 SeletorDeUnidade(unidade, unidades) { nova ->
                     escopo.launch {
                         App.aplicar(Api.objeto("ajustes.unidade", JSONObject().put("unidade", nova)))
-                        Saldos.atualizar(forcar = true)
+                        // So os precos na moeda nova, e nao a carteira inteira de novo: os da tela ja viraram a
+                        // moeda nova no nucleo (pedido do dono, 04/11/2026, como no iPhone).
+                        Saldos.atualizarPrecos()
                     }
                 }
             }

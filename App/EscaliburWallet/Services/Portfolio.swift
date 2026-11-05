@@ -139,7 +139,10 @@ final class Portfolio {
         let fresh = try? await MarketService.shared.quotes(ids: Array(ids), currency: base)
         guard walletID == wallet.id, stillIn(base, session) else { return }
         if let fresh, !fresh.isEmpty {
-            quotes = fresh
+            // Por cima do que ja estava, e nao no lugar: a resposta da fonte de reserva (o CoinGecko limita logo depois da
+            // troca de moeda) nao tem os tokens menores, e o preco convertido do BNBFROG sumia, com a linha carregando ate a
+            // leitura seguinte (relatado no iPhone). O que esta aqui ja e da moeda de agora: convertido na troca, ou nada.
+            quotes.merge(fresh) { $1 }
             if let btc = fresh["bitcoin"]?.price { bitcoinPrices[base] = btc }
         }
         recompute(wallet)
@@ -150,10 +153,51 @@ final class Portfolio {
             tokenQuotes.merge(found) { $1 }
             recompute(wallet)
         }
+        guard stillShown(wallet, session) else { return }
         var cache = quotes
         for (id, quote) in tokenQuotes { cache[Self.contractQuotePrefix + id] = quote }
         session.metadata.quoteCache = cache
+        prune(session)
         try? session.persist()
+    }
+
+    /// Os mapas por ativo so com o que alguma carteira tem, a desta tela inclusive: a carteira removida fora da tela nao
+    /// volta pela proxima gravacao desta (revisao da decima terceira passada).
+    private func prune(_ session: AppSession) {
+        let held = Set(balances.values.flatMap { $0.holdings.map(\.asset.id) + ($0.unlisted ?? []).map(\.asset.id) })
+        AppSession.pruneAssetMaps(&session.metadata, keeping: held)
+        tokenQuotes = tokenQuotes.filter { session.metadata.quoteCache[Self.contractQuotePrefix + $0.key] != nil }
+        recognizedTokens = session.metadata.recognizedTokens ?? [:]
+    }
+
+    /// A carteira ainda e a da tela, ainda existe e o app esta destravado: a guarda de todo escritor que grava o que a
+    /// leitura dela achou (decima terceira passada e a revisao dela).
+    private func stillShown(_ wallet: WalletMeta, _ session: AppSession) -> Bool {
+        walletID == wallet.id && session.phase == .unlocked && session.metadata.wallets.contains { $0.id == wallet.id }
+    }
+
+    /// Ao travar, ao apagar tudo e ao remover a carteira da tela: nada dela fica na memoria, e uma leitura em curso nao
+    /// grava mais nada (o `esquecer` do Android). `wallet` nil esquece qualquer uma.
+    func forget(_ wallet: UUID? = nil) {
+        if let wallet, wallet != walletID { return }
+        walletID = nil
+        rows = []
+        allRows = []
+        total = 0
+        change24hFiat = 0
+        failedChains = []
+        unknownTokens = 0
+        others = []
+        allOthers = []
+        suspicious = []
+        tokenQuotes = [:]
+        lastUpdated = nil
+        offline = false
+        balances = [:]
+        quotes = [:]
+        refreshedIDs = []
+        pendingRefresh = false
+        recognizedTokens = [:]
     }
 
     func show(_ wallet: WalletMeta?, session: AppSession, force: Bool = false) {
@@ -274,8 +318,10 @@ final class Portfolio {
 
     /// Guarda as logos achadas dos tokens que a carteira tem, para a proxima abertura.
     private func saveLogos(session: AppSession) async {
+        let shown = walletID
         let held = Set(balances.values.flatMap { ($0.unlisted ?? []).map(\.asset.id) + $0.holdings.map(\.asset.id) })
         let known = await TokenLogoResolver.shared.known().filter { held.contains($0.key) }
+        guard let shown, walletID == shown, session.phase == .unlocked, session.metadata.wallets.contains(where: { $0.id == shown }) else { return }
         var merged = (session.metadata.tokenLogos ?? [:]).filter { held.contains($0.key) }
         merged.merge(known) { _, new in new }
         guard merged != (session.metadata.tokenLogos ?? [:]) else { return }
@@ -394,7 +440,7 @@ final class Portfolio {
         // A moeda mudou durante a leitura (Dolar e de volta para Real): os precos daqui sao
         // da moeda antiga e nao entram, senao o dolar aparecia com R$. A leitura que a troca
         // comecou traz os da moeda nova.
-        if let newQuotes, !newQuotes.isEmpty, stillIn(base, session) { quotes = newQuotes }
+        if let newQuotes, !newQuotes.isEmpty, stillIn(base, session) { quotes.merge(newQuotes) { $1 } }
         // Rede cuja ultima leitura boa nao tinha nada (o Litecoin de quem nunca teve
         // Litecoin): a falha de agora nao muda o que a tela mostra, e o aviso so
         // assustaria. Fica o zero guardado ate a proxima leitura responder.
@@ -413,6 +459,11 @@ final class Portfolio {
         }
         await recognize(wallet, session: session)
 
+        // A leitura terminou depois das esperas: so grava no cache se a carteira ainda e a da tela e ainda existe. Trocar de
+        // carteira no meio gravava os saldos da outra no cache desta, e remover a carteira com a leitura em voo trazia o
+        // rastro dela de volta (decima terceira passada da auditoria de 03/11/2026).
+        guard walletID == wallet.id, session.phase == .unlocked,
+              session.metadata.wallets.contains(where: { $0.id == wallet.id }) else { return }
         session.metadata.balanceCache[wallet.id] = balances
         if stillIn(base, session) {
             var cache = quotes
@@ -420,6 +471,7 @@ final class Portfolio {
             session.metadata.quoteCache = cache
         }
         session.metadata.cachedAt = lastUpdated
+        prune(session)
         try? session.persist()
     }
 
@@ -599,6 +651,7 @@ final class Portfolio {
         }
         guard !pending.isEmpty else { return }
         var changed = false
+        var checked: Set<String> = []
         for (index, asset) in pending.prefix(8).enumerated() {
             if index > 0 { try? await Task.sleep(for: .milliseconds(1500)) }
             do {
@@ -609,16 +662,25 @@ final class Portfolio {
                     known[asset.id] = nil
                     misses[asset.id] = now
                 }
+                checked.insert(asset.id)
                 changed = true
             } catch {
                 continue
             }
         }
-        guard changed, walletID == wallet.id else { return }
-        session.metadata.recognizedTokens = known
-        session.metadata.unrecognizedChecks = misses
+        guard changed, stillShown(wallet, session) else { return }
+        // So o que esta rodada conferiu, por cima do que esta no disco: a foto do comeco desfazia a poda feita no meio
+        // (revisao da decima terceira passada).
+        var storedKnown = session.metadata.recognizedTokens ?? [:]
+        var storedMisses = session.metadata.unrecognizedChecks ?? [:]
+        for id in checked {
+            storedKnown[id] = known[id]
+            storedMisses[id] = misses[id]
+        }
+        session.metadata.recognizedTokens = storedKnown
+        session.metadata.unrecognizedChecks = storedMisses
         try? session.persist()
-        recognizedTokens = known
+        recognizedTokens = storedKnown
         recompute(wallet)
     }
 

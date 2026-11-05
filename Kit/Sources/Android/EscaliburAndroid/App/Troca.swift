@@ -13,7 +13,9 @@ import Foundation
 /// A aba tem a sua troca (`aba`). Editar uma ordem e cancelar uma ordem abrem outras, com o proprio
 /// formulario e a propria revisao, como as telas separadas do iOS: o formulario da aba nao muda.
 final class Troca: @unchecked Sendable {
-    enum Etapa: String, Encodable { case formulario, montando, revisao, enviando, enviada, incerta, recusada }
+    /// `esperandoCancelamento`: na edicao, o cancelamento da ordem antiga saiu e a revisao espera ele
+    /// confirmar antes de montar a nova, como no iOS (segunda passada da auditoria de 03/11/2026).
+    enum Etapa: String, Encodable { case formulario, montando, revisao, enviando, esperandoCancelamento, enviada, incerta, recusada }
     enum Modo: String, Encodable { case agora, limite }
 
     /// O que a revisao assina.
@@ -32,6 +34,15 @@ final class Troca: @unchecked Sendable {
 
         var cancela: Bool { if case .cancelar = self { return true }; return false }
         var limite: Bool { if case .limite = self { return true }; return false }
+
+        /// O ativo que esta etapa vende (a troca e a ordem limite); o cancelamento nao vende nada.
+        var vendido: Asset? {
+            switch self {
+            case .troca(let pedido, _): return pedido.sell
+            case .limite(let pedido): return pedido.sell
+            case .cancelar: return nil
+            }
+        }
     }
 
     /// A ordem aberta em edicao: a revisao cancela esta antes de criar a nova.
@@ -40,6 +51,8 @@ final class Troca: @unchecked Sendable {
         let via: OpenOrder.Cancellation
         let sell: Asset
         let buy: Asset
+        /// A carteira da ordem: o cancelamento so sai por ela (revisao da decima terceira passada).
+        let carteira: UUID?
     }
 
     // MARK: As instancias
@@ -53,7 +66,17 @@ final class Troca: @unchecked Sendable {
         ([aba] + travaDasOutras.withLock { Array(outras.values) }).contains { $0.critica }
     }
 
-    var critica: Bool { trava.withLock { [.revisao, .enviando, .incerta].contains(etapa) } }
+    /// Na edicao, a espera do cancelamento e a montagem da ordem nova tambem: fechada a tela ali (um toque numa
+    /// notificacao ou um envelope de outro app), a ordem antiga saia cancelada e a nova nunca era criada (decima
+    /// passada da auditoria de 03/11/2026).
+    var critica: Bool {
+        trava.withLock {
+            // A edicao recusada depois do cancelamento tambem: e a unica tela que diz que a ordem antiga saiu e a nova nao
+            // entrou (decima primeira passada da auditoria de 03/11/2026).
+            [.revisao, .enviando, .esperandoCancelamento, .incerta].contains(etapa)
+                || (cancelou && cancelarAntes != nil && [.montando, .recusada].contains(etapa))
+        }
+    }
 
     /// A troca de uma tela: a da aba, ou a de editar e a de cancelar uma ordem.
     static func instancia(_ alvo: String?) throws -> Troca {
@@ -78,6 +101,9 @@ final class Troca: @unchecked Sendable {
     /// Sobem quando o proprio nucleo muda o texto (fracao do saldo, inverter, outra rede, troca
     /// concluida): so entao o campo da interface copia o retrato. O que o dono digita nao sobe.
     private var versaoDoValor = 0
+    /// O "Max" na moeda nativa, a espera da primeira cotacao: ela diz a taxa, e o valor desce para
+    /// deixar a taxa maxima de fora, como no iOS (auditoria de 03/11/2026).
+    private var maxNativo = false
     private var versaoDoRecebido = 0
     private var versaoDoPreco = 0
     /// O dono digitou em "Voce recebe". Na troca imediata o valor a pagar sai do `ExactOutSolver`;
@@ -117,6 +143,9 @@ final class Troca: @unchecked Sendable {
     private var validade: TimeInterval? = 30 * 86_400
     /// O preco que o dono confirmou mesmo abaixo do mercado, como digitado.
     private var precoAceito: String?
+    /// O aceite do preco vale para este par, neste sentido, com este preco: o mesmo numero no par invertido nao
+    /// herda o aceite, como no iOS (quinta passada da auditoria de 03/11/2026). Chamar com a trava.
+    private var chaveDoAceite: String { "\(sell?.id ?? "")>\(buy?.id ?? "")|\(textoDoPreco)" }
     private enum Deriva { case preco, valor }
     /// Na ordem limite, o que acompanha o recebido digitado.
     private var deriva: Deriva = .preco
@@ -148,7 +177,15 @@ final class Troca: @unchecked Sendable {
     private var detalheIncerto: String?
     /// A CoW recusou com certeza e disse por que: nada foi criado (01/11/2026).
     private var motivoDaRecusa: String?
+    /// O que ja tinha entrado na rede antes da recusa, e a ordem assinada que a CoW diz ter recusado:
+    /// a palavra e dela, e so o cancelamento na cadeia nao depende dela (auditoria de 03/11/2026).
+    private var notasDaRecusa: [String] = []
+    private var ordemRecusada: String?
     private var situacao: TransferStatus = .pending
+    /// O que a rede ja respondeu de cada transacao da troca enviada, e se parte dela saiu antes de uma falha
+    /// (`TradeOutcome`, quarta passada da auditoria de 03/11/2026).
+    private var situacoes: [String: TransferStatus] = [:]
+    private var parcial = false
     private var andamento: OrderProgress?
     private var semAndamento = false
 
@@ -175,6 +212,15 @@ final class Troca: @unchecked Sendable {
             erro = nil
             impactoAceito = nil
             erroDoPlano = nil
+            if let edicao {
+                // A edicao e de uma ordem da carteira dela: noutra, a tela fica parada com o aviso, e nada e revisado nem
+                // assinado (o plano recusa; antes a tela virava uma ordem nova na outra carteira, e a antiga ficava aberta).
+                if edicao.carteira != id { erro = Textos.t("Esta ordem é de outra carteira. Volte para ela para mudar a ordem.") }
+            } else {
+                // A ordem vencida era da carteira de antes: nesta, nada e substituido nem refeito.
+                substitui = nil
+                refazer = false
+            }
         }
         if chain == nil, let primeira = TradeEngines.chains.first {
             reiniciar(primeira)
@@ -331,11 +377,41 @@ final class Troca: @unchecked Sendable {
             }
             if let novo = mudanca["modo"]?.stringValue.flatMap(Modo.init(rawValue:)), novo != modo, edicao == nil {
                 modo = novo
-                // Outro modo: o recebido digitado era do anterior (o valor a pagar fica).
+                // Outro modo: o recebido digitado era do anterior (o valor a pagar fica), e o preco e o aceite da
+                // ordem limite tambem saem: o preco de agora volta pelo `preencherAlvo` (quinta passada de 03/11/2026).
                 limparRecebido()
+                textoDoPreco = ""
+                precoAuto = nil
+                precoAceito = nil
+                versaoDoPreco += 1
             }
             if let id = mudanca["rede"]?.stringValue, edicao == nil, let rede = TradeEngines.chains.first(where: { $0.id == id }), rede.id != chain?.id {
                 reiniciar(rede)
+            }
+            // Uma moeda que a carteira tem em outra rede leva a troca para la (pedido do dono, 02/11/2026):
+            // a rede muda sozinha, e o outro lado volta ao padrao da rede nova sem repetir a escolhida.
+            for (chave, vende) in [("vende", true), ("compra", false)] {
+                guard let id = mudanca[chave]?.stringValue, edicao == nil, ativoDaLista(id) == nil,
+                      let ativo = tidosEmOutrasRedes().first(where: { $0.id == id }), let rede = ativo.chain else { continue }
+                reiniciar(rede)
+                let estavel = TokenRegistry.tokens.first { $0.chainID == rede.id && $0.isStablecoin && $0.id != ativo.id }
+                if vende, buy?.id == ativo.id { buy = estavel ?? .native(rede) }
+                if !vende, sell?.id == ativo.id { sell = estavel }
+            }
+            // Ordem limite: escolher a moeda do outro lado inverte os lados, sem botao de inverter (pedido do dono,
+            // 04/11/2026, como no iOS). O valor e o preco eram do sentido anterior: saem, e o preco de agora volta
+            // pelo `preencherAlvo`.
+            if modo == .limite, edicao == nil,
+               (mudanca["vende"]?.stringValue).map({ $0 == buy?.id }) == true || (mudanca["compra"]?.stringValue).map({ $0 == sell?.id }) == true {
+                swap(&sell, &buy)
+                textoDoValor = ""
+                cotacao = nil
+                limparRecebido()
+                textoDoPreco = ""
+                precoAuto = nil
+                precoAceito = nil
+                versaoDoValor += 1
+                versaoDoPreco += 1
             }
             if let id = mudanca["vende"]?.stringValue, edicao == nil, let ativo = ativoDaLista(id), ativo.id != buy?.id {
                 sell = ativo
@@ -355,15 +431,27 @@ final class Troca: @unchecked Sendable {
                 textoDoValor = ""
                 cotacao = nil
                 limparRecebido()
+                // O preco e o aceite eram do sentido anterior, como no seletor (quinta passada de 03/11/2026).
+                textoDoPreco = ""
+                precoAuto = nil
+                precoAceito = nil
+                versaoDoPreco += 1
             }
             if let texto = mudanca["valor"]?.stringValue {
                 textoDoValor = String(texto.prefix(40))
+                maxNativo = false
                 limparRecebido()
             }
             if let fracao = mudanca["fracao"]?.doubleValue, let sell {
                 let total = livre(sell)
-                let parte = fracao >= 1 ? total : total * BigUInt(UInt64((min(max(fracao, 0), 1) * 100).rounded())) / BigUInt(100)
+                var parte = fracao >= 1 ? total : total * BigUInt(UInt64((min(max(fracao, 0), 1) * 100).rounded())) / BigUInt(100)
+                // Na nativa, tudo nao sobra para a taxa: a Solana ja deixa a reserva antes de cotar, e a
+                // cotacao ajusta o resto (ver `maxNativo`), como no iOS.
+                if fracao >= 1, sell.kind == .native, let rede = sell.chain {
+                    parte = parte.subtractingReportingUnderflow(TradeQuote.nativeReserveBeforeQuote(rede)) ?? BigUInt()
+                }
                 textoDoValor = Fmt.decimalSimples(parte, casas: sell.decimals)
+                maxNativo = fracao >= 1 && sell.kind == .native
                 limparRecebido()
             }
             if let texto = mudanca["recebe"]?.stringValue {
@@ -398,7 +486,7 @@ final class Troca: @unchecked Sendable {
                 precoMudou()
             }
             if let percentual = mudanca["percentual"]?.doubleValue { definirAlvo(Int(percentual)) }
-            if let aceita = mudanca["aceitarPreco"]?.boolValue { precoAceito = aceita ? textoDoPreco : nil }
+            if let aceita = mudanca["aceitarPreco"]?.boolValue { precoAceito = aceita ? chaveDoAceite : nil }
             if let segundos = mudanca["validade"]?.doubleValue, let chain,
                Self.validades(chain).contains(where: { $0.segundos == segundos }) { validade = segundos }
             if mudanca["ateCancelar"]?.boolValue == true, let chain, Self.validades(chain).contains(where: { $0.segundos == nil }) { validade = nil }
@@ -471,6 +559,18 @@ final class Troca: @unchecked Sendable {
                     if nova.parts == nil { emPartes = false }
                     cotacao = comEscolha(nova)
                     chaveDaCotacao = chave
+                    // "Max" na moeda nativa: o valor desce para deixar a taxa maxima de fora (o plano
+                    // recusaria tudo). O valor novo muda a chave, e a tela cota de novo.
+                    if maxNativo, let reserva = nova.nativeReserveForMax() {
+                        maxNativo = false
+                        let ajustado = livre(p.sell).subtractingReportingUnderflow(reserva) ?? BigUInt()
+                        if ajustado < quantidade {
+                            textoDoValor = Fmt.decimalSimples(ajustado, casas: p.sell.decimals)
+                            versaoDoValor += 1
+                            cotacao = nil
+                            chaveDaCotacao = nil
+                        }
+                    }
                 }
             }
         } catch {
@@ -590,7 +690,7 @@ final class Troca: @unchecked Sendable {
         switch conferencia {
         case .ok, .muitoAcima: return true
         case .muitoAbaixo: return false
-        case .abaixo, .semMercado: return precoAceito == textoDoPreco
+        case .abaixo, .semMercado: return precoAceito == chaveDoAceite
         }
     }
 
@@ -610,6 +710,18 @@ final class Troca: @unchecked Sendable {
         guard chaveAgora != chaveDoAlvo else { return }
         chaveDoAlvo = chaveAgora
         guard modo == .limite, textoDoPreco.isEmpty || textoDoPreco == precoAuto else { return }
+        // Sem o preco de mercado do par novo, o preco que o app preencheu para o par anterior sai do campo, e
+        // volta quando o preco chegar: senao o "Voce recebe" seria a conta na moeda de antes com o nome da nova
+        // (o BNBFROG por BNB mostrava o valor em USDT, 03/11/2026), como no iOS.
+        guard precoDeMercado != nil else {
+            if !textoDoPreco.isEmpty {
+                textoDoPreco = ""
+                precoAuto = nil
+                precoMudou()
+                versaoDoPreco += 1
+            }
+            return
+        }
         let antes = textoDoPreco
         definirAlvo(0)
         if textoDoPreco != antes { versaoDoPreco += 1 }
@@ -701,7 +813,8 @@ final class Troca: @unchecked Sendable {
                 guard let minimo = minimoDaOrdem else { return nil }
                 operacao = .limite(LimitOrderRequest(walletID: carteira.id, chain: chain, account: conta, sell: sell, buy: buy, amountIn: quantidade,
                                                      minimumOut: minimo, validFor: validade))
-                // Editando: a revisao cancela a ordem atual antes de criar esta.
+                // Editando: a revisao cancela a ordem atual antes de criar esta, e so pela carteira dela.
+                if let edicao, edicao.carteira != carteira.id { return nil }
                 cancelarAntes = edicao.flatMap { $0.ordem.chain.id == chain.id ? ($0.ordem, $0.via) : nil }
             }
             ativosDaRevisao = (sell, buy)
@@ -740,7 +853,11 @@ final class Troca: @unchecked Sendable {
         assinadoIncerto = nil
         detalheIncerto = nil
         motivoDaRecusa = nil
+        notasDaRecusa = []
+        ordemRecusada = nil
         situacao = .pending
+        situacoes = [:]
+        parcial = false
         andamento = nil
         semAndamento = false
         rodada += 1
@@ -775,6 +892,14 @@ final class Troca: @unchecked Sendable {
         // planejador sabe o que este aparelho ja transmitiu.
         await FilaDeNonces.podar(carteira: carteira.id, rede: rede, endereco: conta.address)
         let fila = FilaDeNonces.fila(Sessao.shared.metadata, carteira: carteira.id, rede: rede, endereco: conta.address)
+        // Uma transacao anterior desta conta que a rede ainda nao viu, ou que tira o mesmo ativo e ainda nao
+        // confirmou: o plano pularia o nonce dela, ou leria o saldo de antes dela (auditoria de 03/11/2026).
+        // A transacao nao vista so pesa no plano com transacao na cadeia: conferida de novo depois de montar.
+        if let motivo = FilaDeNonces.motivoDoBloqueio(carteira: carteira.id, rede: rede, endereco: conta.address, ativo: operacao.vendido,
+                                                      usaNonce: false) {
+            trava.withLock { falhou(motivo) }
+            return
+        }
         do {
             let novo: SigningPlan
             switch operacao {
@@ -783,16 +908,24 @@ final class Troca: @unchecked Sendable {
                                                          amountIn: r.amountIn, slippageBasisPoints: r.slippageBasisPoints, nonceQueue: fila,
                                                          inParts: r.inParts), quote: cotada)
             case .limite(let r):
+                // Editando, depois do cancelamento confirmado: a ordem antiga sai da soma das abertas.
+                let substitui = trava.withLock { cancelou ? cancelarAntes?.ordem.id : nil }
                 novo = try await motor.planLimitOrder(LimitOrderRequest(walletID: r.walletID, chain: r.chain, account: r.account, sell: r.sell,
                                                                         buy: r.buy, amountIn: r.amountIn, minimumOut: r.minimumOut,
-                                                                        validFor: r.validFor, nonceQueue: fila))
+                                                                        validFor: r.validFor, nonceQueue: fila, replacing: substitui))
             case .cancelar(let ordem, let via):
                 novo = try await motor.planCancel(ordem, walletID: carteira.id, account: conta, via: via, nonceQueue: fila)
             }
+            let naoVista = FilaDeNonces.motivoDoBloqueio(carteira: carteira.id, rede: rede, endereco: conta.address, ativo: nil,
+                                                         usaNonce: novo.transactions.contains { $0 is EVMTransaction })
             trava.withLock {
                 guard rodada == numero, etapa == .montando else { return }
                 guard confere(novo) else {
                     falhou(Textos.t("O plano montado não confere com a troca pedida. Nada foi assinado."))
+                    return
+                }
+                if let naoVista {
+                    falhou(naoVista)
                     return
                 }
                 plano = novo
@@ -855,7 +988,7 @@ final class Troca: @unchecked Sendable {
     /// pede a passphrase.
     func assinar(_ credencial: Credencial, passphrase: SecureBytes?, folga: Int?) async throws {
         defer { passphrase?.wipe() }
-        let preparo = trava.withLock { () -> (SigningPlan, any TradeEngine, Int, Bool, Bool)? in
+        let preparo = trava.withLock { () -> (SigningPlan, any TradeEngine, Int, Bool, Bool, Asset?)? in
             erroDaRevisao = nil
             guard etapa == .revisao, let plano, let atual, let motor = TradeEngines.engine(for: plano.chain) else { return nil }
             guard confere(plano) else {
@@ -865,11 +998,11 @@ final class Troca: @unchecked Sendable {
             if plano.isExpired() {
                 self.plano = nil
                 etapa = .montando
-                return (plano, motor, rodada, true, atual.cancela)
+                return (plano, motor, rodada, true, atual.cancela, atual.vendido)
             }
-            return (plano, motor, rodada, false, atual.cancela)
+            return (plano, motor, rodada, false, atual.cancela, atual.vendido)
         }
-        guard let (plano, motor, numero, vencido, cancela) = preparo else {
+        guard let (plano, motor, numero, vencido, cancela, vendido) = preparo else {
             credencial.zerar()
             return
         }
@@ -881,10 +1014,21 @@ final class Troca: @unchecked Sendable {
             return
         }
         let dona = Sessao.shared.metadata.wallets.first { $0.id == plano.walletID }
+        // Ate a assinatura: outra transacao desta conta pode ter saido depois da revisao.
+        if let conta = dona?.account(plano.chain),
+           let motivo = FilaDeNonces.motivoDoBloqueio(carteira: plano.walletID, rede: plano.chain, endereco: conta.address, ativo: vendido,
+                                                      usaNonce: plano.transactions.contains { $0 is EVMTransaction }) {
+            credencial.zerar()
+            trava.withLock { erroDaRevisao = motivo }
+            return
+        }
         if !cancela, PortaDaPassphrase.precisa(dona), passphrase == nil {
             credencial.zerar()
             throw Nucleo.Falha(erro: "envio.pedePassphrase")
         }
+        // O autoteste da assinatura antes da porta da passphrase e da RK: com um defeito do aparelho, nada conta nem abre
+        // (o Signer confere de novo antes de abrir o cofre; revisao da decima terceira passada).
+        guard SigningSelfTest.passed(for: plano) else { credencial.zerar(); throw SigningSelfTest.Failure() }
         let conferir = !cancela && PortaDaPassphrase.pede(dona) ? passphrase : nil
         if conferir != nil {
             do { try PortaDaPassphrase.comecar(plano.walletID) } catch { credencial.zerar(); throw error }
@@ -913,15 +1057,27 @@ final class Troca: @unchecked Sendable {
     /// perdido depois de a rede (ou a CoW) receber. A tela diz isso e so oferece enviar de novo os
     /// mesmos bytes, que tem o mesmo id e nao pagam duas vezes.
     private func transmitir(_ assinado: [SignedTransaction], plano: SigningPlan, motor: any TradeEngine, numero: Int) async {
-        let operacao = trava.withLock { () -> Operacao? in
+        // O `cancelou` de quando o envio comecou: se a etapa 2 da edicao comecou enquanto ele estava em voo, o resultado
+        // dele nao grava nada nela (nona passada da auditoria de 03/11/2026).
+        let comeco = trava.withLock { () -> (Operacao, Bool)? in
             guard rodada == numero, let atual else { return nil }
             etapa = .enviando
-            return atual
+            return (atual, cancelou)
         }
-        guard let operacao else { return }
+        guard let (operacao, cancelouAoComecar) = comeco else { return }
         if let conta = Sessao.shared.metadata.wallets.first(where: { $0.id == plano.walletID })?.account(plano.chain) {
-            FilaDeNonces.anotar(carteira: plano.walletID, rede: plano.chain, endereco: conta.address, plano: plano, assinado: assinado)
+            // A troca imediata na Ethereum sai pela rota privada (protecao de MEV), e a poda espera mais por ela. A
+            // "em partes" e da CoW: a autorizacao e o embrulho dela saem pela publica.
+            var trocaNaEthereum = false
+            if case .troca(let r, _) = operacao { trocaNaEthereum = plano.chain.evmChainID == 1 && !r.inParts }
+            FilaDeNonces.anotar(carteira: plano.walletID, rede: plano.chain, endereco: conta.address, plano: plano, assinado: assinado,
+                                vende: operacao.vendido?.id, privada: trocaNaEthereum)
         }
+        // A carteira com passphrase fica fora dos avisos de ordem, decidido antes de enviar, pela carteira do plano:
+        // sem ela (travou), fica de fora (setima passada da auditoria de 03/11/2026, como no iOS).
+        let avisosDeOrdem = Sessao.shared.metadata.wallets.first(where: { $0.id == plano.walletID })?.hasPassphrase == false
+        // A epoca dos avisos antes do envio, como no iOS (decima primeira passada).
+        let epocaDosAvisos = Vigias.epocaAgora
         avisar()
         do {
             let novos = try await motor.submit(assinado, plan: plano)
@@ -931,46 +1087,125 @@ final class Troca: @unchecked Sendable {
                 Self.lembrar([r.sell, r.buy])
                 let (renova, velha) = trava.withLock { (refazer && podeRefazer, substitui) }
                 if let velha { Renovacoes.esquecer(velha) }
-                if renova, let uid = novos.first { Renovacoes.registrar(uid, pedido: r) }
+                if renova, let uid = novos.first { Renovacoes.registrar(uid, pedido: r, avisar: avisosDeOrdem, epoca: epocaDosAvisos) }
                 // Os avisos de 24 horas antes de vencer e de executada (fora a carteira com passphrase).
-                if let uid = novos.first, let bytes = Hex.decode(uid), let vence = CoWProtocol.validTo(ofUID: bytes),
-                   Sessao.shared.metadata.wallets.first(where: { $0.id == r.walletID })?.hasPassphrase == false {
-                    VigiaDeOrdens.acompanhar(id: uid, rede: r.chain, venceEm: Date(timeIntervalSince1970: TimeInterval(vence)))
+                if let uid = novos.first, let bytes = Hex.decode(uid), let vence = CoWProtocol.validTo(ofUID: bytes), avisosDeOrdem {
+                    VigiaDeOrdens.acompanhar(id: uid, rede: r.chain, venceEm: Date(timeIntervalSince1970: TimeInterval(vence)), epoca: epocaDosAvisos)
                 }
-            case .cancelar(let ordem, _):
-                Ordens.shared.marcarCancelando(ordem.id)
-                VigiaDeOrdens.esquecer(ordem.id)
+            case .cancelar(let ordem, let via):
+                // A ordem sai da lista ate a rede responder; os avisos so saem com o cancelamento confirmado, e
+                // o que falha devolve a ordem (terceira passada da auditoria de 03/11/2026).
+                Ordens.shared.marcarCancelando(ordem.id, transacao: via == .onchain ? novos.last : nil, rede: ordem.chain)
             }
-            // Edicao: o cancelamento saiu; a etapa 2 monta a ordem nova na mesma revisao.
-            let segue = trava.withLock { () -> Bool in
+            // Edicao: o cancelamento saiu; a etapa 2 monta a ordem nova na mesma revisao, depois de ele
+            // confirmar na rede (o pedido a CoW fora da cadeia nao tem transacao para esperar).
+            var descartado = false
+            let espera: String?? = trava.withLock { () -> String?? in
+                guard rodada == numero, cancelou == cancelouAoComecar else {
+                    descartado = true
+                    return nil
+                }
                 assinadoIncerto = nil
                 detalheIncerto = nil
-                if cancelarAntes != nil, !cancelou, operacao.cancela {
-                    cancelou = true
-                    self.plano = nil
-                    ids = []
-                    etapa = .montando
-                    return true
+                if cancelarAntes != nil, !cancelou, case .cancelar(_, let via) = operacao {
+                    if via == .onchain, let transacao = novos.last {
+                        etapa = .esperandoCancelamento
+                        return .some(transacao)
+                    }
+                    return .some(nil)
                 }
                 ids = novos
                 etapa = .enviada
-                return false
+                return nil
             }
-            if segue {
+            guard !descartado else { return }
+            if let espera {
                 avisar()
-                await montar(numero)
+                if let transacao = espera {
+                    switch await CancellationWait.untilConfirmed(transacao, chain: plano.chain) {
+                    case .confirmed: break
+                    case .failed(let motivo):
+                        // A transacao do cancelamento falhou: a ordem antiga continua aberta, e nada novo e montado.
+                        if case .cancelar(let ordem, _) = operacao { Ordens.shared.desmarcarCancelando(ordem.id) }
+                        trava.withLock {
+                            guard rodada == numero, cancelou == cancelouAoComecar else { return }
+                            motivoDaRecusa = motivo
+                            notasDaRecusa = []
+                            ordemRecusada = nil
+                            etapa = .recusada
+                        }
+                        avisar()
+                        return
+                    case .timedOut:
+                        // Sem confirmar no prazo: o reenvio dos mesmos bytes, como em qualquer envio incerto. Segue
+                        // acompanhando o cancelamento, e a etapa 2 continua sozinha quando ele confirmar, como no
+                        // iOS (terceira passada da auditoria de 03/11/2026).
+                        guard trava.withLock({ () -> Bool in
+                            guard rodada == numero, cancelou == cancelouAoComecar else { return false }
+                            ids = novos
+                            assinadoIncerto = assinado
+                            etapa = .incerta
+                            return true
+                        }) else { return }
+                        avisar()
+                        let rede = plano.chain
+                        Task {
+                            guard case .confirmed = await CancellationWait.untilConfirmed(transacao, chain: rede),
+                                  trava.withLock({ rodada == numero && etapa == .incerta && !cancelou }) else { return }
+                            await continuarEdicao(numero, de: [.incerta])
+                        }
+                        return
+                    }
+                }
+                await continuarEdicao(numero, de: espera == nil ? [.enviando] : [.esperandoCancelamento])
             }
         } catch let recusa as TradeRefusedForSure {
-            // Recusa certa, com o motivo: nada foi criado, e enviar de novo nao muda nada.
+            // A CoW diz que recusou, com o motivo: enviar de novo nao muda nada. O que entrou na rede
+            // antes e a ordem assinada ficam na tela, e a ordem continua acompanhada, como no iOS. Os ativos
+            // ficam lembrados: a ordem guardada mostra nome e casas mesmo depois de sair do saldo.
+            if case .limite(let r) = operacao { Self.lembrar([r.sell, r.buy]) }
+            if let ordem = recusa.signedOrder {
+                Ordens.shared.lembrarAssinada(ordem, carteira: plano.walletID)
+                if let bytes = Hex.decode(ordem.id), let vence = CoWProtocol.validTo(ofUID: bytes), avisosDeOrdem {
+                    VigiaDeOrdens.acompanhar(id: ordem.id, rede: ordem.chain, venceEm: Date(timeIntervalSince1970: TimeInterval(vence)), epoca: epocaDosAvisos)
+                }
+            }
             trava.withLock {
+                guard rodada == numero, cancelou == cancelouAoComecar else { return }
                 ids = []
                 assinadoIncerto = nil
                 detalheIncerto = nil
                 motivoDaRecusa = recusa.reason
+                // So o cancelamento na cadeia foi esperado ate confirmar: o pedido a CoW fora dela nao tem como.
+                // O pedido fora dela foi aceito pela CoW, sem confirmacao na cadeia: a nota diz isso, e onde conferir
+                // (decima primeira passada).
+                notasDaRecusa = recusa.notes + (!cancelou || cancelarAntes == nil ? [] : cancelarAntes?.via == .onchain
+                    ? [Textos.t("A ordem anterior já tinha sido cancelada.")]
+                    : [Textos.t("O pedido de cancelamento da ordem anterior foi aceito pela CoW. Confira em Ordens abertas.")])
+                ordemRecusada = recusa.signedOrder?.id
                 etapa = .recusada
+            }
+        } catch let incerta as TradeSubmissionUncertain {
+            // A ordem assinada saiu para a CoW sem resposta certa: o mesmo incerto, mais o que ja entrou na
+            // rede, o acompanhamento e o cancelamento na cadeia, como no iOS (segunda passada da auditoria de 03/11/2026).
+            let ordem = incerta.signedOrder
+            if case .limite(let r) = operacao { Self.lembrar([r.sell, r.buy]) }
+            Ordens.shared.lembrarAssinada(ordem, carteira: plano.walletID)
+            if let bytes = Hex.decode(ordem.id), let vence = CoWProtocol.validTo(ofUID: bytes), avisosDeOrdem {
+                VigiaDeOrdens.acompanhar(id: ordem.id, rede: ordem.chain, venceEm: Date(timeIntervalSince1970: TimeInterval(vence)), epoca: epocaDosAvisos)
+            }
+            trava.withLock {
+                guard rodada == numero, cancelou == cancelouAoComecar else { return }
+                ids = assinado.map(\.id)
+                assinadoIncerto = assinado
+                detalheIncerto = incerta.detail
+                notasDaRecusa = incerta.notes
+                ordemRecusada = ordem.id
+                etapa = .incerta
             }
         } catch {
             trava.withLock {
+                guard rodada == numero, cancelou == cancelouAoComecar else { return }
                 ids = assinado.map(\.id)
                 assinadoIncerto = assinado
                 detalheIncerto = (error as? LocalizedError)?.errorDescription
@@ -995,9 +1230,16 @@ final class Troca: @unchecked Sendable {
     func retransmitir() async {
         let preparo = trava.withLock { () -> ([SignedTransaction], SigningPlan, any TradeEngine, Int)? in
             guard etapa == .incerta, let assinadoIncerto, let plano, let motor = TradeEngines.engine(for: plano.chain) else { return nil }
+            // Marca o envio na mesma trava em que confere: dois toques no mesmo quadro nao enviam duas vezes, e a
+            // etapa 2 da edicao nao comeca com ele em voo (nona passada).
+            etapa = .enviando
             return (assinadoIncerto, plano, motor, rodada)
         }
-        guard let (assinado, plano, motor, numero) = preparo, Sessao.shared.fase == .unlocked else { return }
+        guard let (assinado, plano, motor, numero) = preparo else { return }
+        guard Sessao.shared.fase == .unlocked else {
+            trava.withLock { if rodada == numero, etapa == .enviando { etapa = .incerta } }
+            return
+        }
         await transmitir(assinado, plano: plano, motor: motor, numero: numero)
     }
 
@@ -1011,14 +1253,17 @@ final class Troca: @unchecked Sendable {
     /// Pergunta pelo que ja saiu: na ordem da CoW, o preenchimento; na transacao, a confirmacao.
     /// Na troca incerta, a rede (ou a CoW) conhecer o que foi assinado quer dizer que saiu.
     func acompanhar() async {
-        let (plano, ids, cow) = trava.withLock { (plano, ids, ordemDaCoW) }
-        guard let plano, let ultimo = ids.last,
+        // A rodada e os ids de quando a leitura comecou: uma leitura lenta da troca anterior, que volta depois de
+        // o dono fechar e mandar outra, nao grava nada nesta (sexta passada da auditoria de 03/11/2026).
+        let (plano, ids, cow, numero) = trava.withLock { (plano, ids, ordemDaCoW, rodada) }
+        guard let plano, !ids.isEmpty,
               let conta = Sessao.shared.metadata.wallets.first(where: { $0.id == plano.walletID })?.account(plano.chain) else { return }
         if cow {
             guard let motor = TradeEngines.engine(for: plano.chain), let uid = ids.first else { return }
             do {
                 let lido = try await motor.orderProgress(id: uid, account: conta)
                 trava.withLock {
+                    guard rodada == numero, self.ids == ids else { return }
                     andamento = lido
                     semAndamento = false
                     if etapa == .incerta {
@@ -1027,19 +1272,71 @@ final class Troca: @unchecked Sendable {
                     }
                 }
             } catch {
-                trava.withLock { semAndamento = true }
+                trava.withLock { if rodada == numero, self.ids == ids { semAndamento = true } }
             }
             return
         }
         guard plano.transactions.last is EIP712ValidatedMessage == false, let envio = SendEngines.engine(for: plano.chain) else { return }
-        let agora = await envio.status(ultimo, chain: plano.chain)
-        trava.withLock {
-            situacao = agora
-            if etapa == .incerta, case .confirmed = agora {
-                assinadoIncerto = nil
-                etapa = .enviada
-            }
+        // Todas as transacoes do plano, e nao so a ultima: uma perna do meio que reverte nao some atras de uma
+        // ultima confirmada (`TradeOutcome`, como no iOS).
+        var lidas = trava.withLock { situacoes }
+        for id in ids where lidas[id] == nil {
+            let agora = await envio.status(id, chain: plano.chain)
+            if case .pending = agora { continue }
+            lidas[id] = agora
         }
+        let resultado = TradeOutcome.of(plano, ids: ids, statuses: lidas)
+        let editar = trava.withLock { () -> Bool in
+            guard rodada == numero, self.ids == ids else { return false }
+            situacoes = lidas
+            switch resultado {
+            case .pending: situacao = .pending
+            case .done(let detalhe): situacao = .confirmed(detail: detalhe)
+            case .failed(let motivo, let saiuParte):
+                situacao = .failed(reason: motivo)
+                parcial = saiuParte
+            }
+            // Na edicao, o cancelamento confirmado nao encerra: segue a etapa 2 (a ordem nova), aqui ou pela espera do
+            // cancelamento, o que chegar antes (setima e oitava passadas da auditoria de 03/11/2026).
+            guard etapa == .incerta, case .done = resultado else { return false }
+            if cancelarAntes != nil, !cancelou { return true }
+            assinadoIncerto = nil
+            etapa = .enviada
+            return false
+        }
+        if editar { await continuarEdicao(numero, de: [.incerta]) }
+    }
+
+    /// O saldo da rede da troca lido de novo: a tela chama ao abrir e ao trocar de rede.
+    func lerSaldo() async {
+        guard let rede = trava.withLock({ chain }) else { return }
+        await Saldos.shared.atualizarRede(rede)
+    }
+
+    /// Edicao: o cancelamento da ordem antiga confirmou (ou foi o pedido a CoW, que nao tem transacao); a
+    /// etapa 2 monta a ordem nova na mesma revisao.
+    private func continuarEdicao(_ numero: Int, de esperadas: Set<Etapa>) async {
+        // Confere e marca na mesma trava: a espera do cancelamento, a leitura da tela incerta e o "Enviar de novo"
+        // podem chegar juntos, e a etapa 2 so comeca uma vez, nesta revisao, e so da etapa que cada um esperava (um
+        // reenvio em voo nao a deixa comecar; oitava e nona passadas da auditoria de 03/11/2026). O resultado do
+        // cancelamento nao passa para a ordem nova.
+        let segue = trava.withLock { () -> Bool in
+            guard rodada == numero, !cancelou, cancelarAntes != nil, esperadas.contains(etapa) else { return false }
+            cancelou = true
+            self.plano = nil
+            ids = []
+            assinadoIncerto = nil
+            situacao = .pending
+            situacoes = [:]
+            parcial = false
+            andamento = nil
+            semAndamento = false
+            etapa = .montando
+            return true
+        }
+        guard segue else { return }
+        avisar()
+        await montar(numero)
     }
 
     /// Fecha a revisao. Transmitindo, nao fecha. Devolve se algo saiu (a troca, a ordem ou o
@@ -1047,8 +1344,17 @@ final class Troca: @unchecked Sendable {
     @discardableResult
     func fechar() -> Bool {
         trava.withLock {
-            guard etapa != .enviando else { return false }
+            // Transmitindo, ou esperando o cancelamento da edicao confirmar (a ordem antiga ja saiu), nao fecha.
+            guard etapa != .enviando, etapa != .esperandoCancelamento else { return false }
             let saiu = etapa == .enviada || etapa == .incerta || cancelou
+            // Depois de uma troca enviada: o saldo agora e de novo quando a rede deve ter confirmado.
+            if etapa == .enviada || etapa == .incerta, let rede = operacao?.rede {
+                Task.detached {
+                    await Saldos.shared.atualizarRede(rede)
+                    try? await Task.sleep(nanoseconds: UInt64(rede.typicalConfirmationSeconds + 10) * 1_000_000_000)
+                    await Saldos.shared.atualizarRede(rede)
+                }
+            }
             let formulario = operacao.map { !$0.cancela } ?? false
             etapa = .formulario
             rodada += 1
@@ -1061,6 +1367,8 @@ final class Troca: @unchecked Sendable {
             if saiu, formulario {
                 textoDoValor = ""
                 textoDoPreco = ""
+                // O aceite do preco vale por ordem, como no iOS (sexta passada da auditoria de 03/11/2026).
+                precoAceito = nil
                 precoAuto = nil
                 chaveDoAlvo = nil
                 versaoDoValor += 1
@@ -1081,7 +1389,7 @@ final class Troca: @unchecked Sendable {
 
     /// Editar uma ordem abre a tela propria: so a ordem limite, com os valores dela (o que falta
     /// vender, o preco dela e o prazo mais perto do que restava).
-    static func editar(_ ordem: OpenOrder) throws -> Troca {
+    static func editar(_ ordem: OpenOrder, carteira dona: UUID) throws -> Troca {
         guard let via = Ordens.maisSeguro(ordem.cancellations),
               let sell = Ordens.resolver(ordem.sellAssetID, listado: ordem.sell, rede: ordem.chain),
               let buy = Ordens.resolver(ordem.buyAssetID, listado: ordem.buy, rede: ordem.chain),
@@ -1106,7 +1414,7 @@ final class Troca: @unchecked Sendable {
             } else if opcoes.contains(where: { $0.segundos == nil }) {
                 troca.validade = nil
             }
-            troca.edicao = Edicao(ordem: ordem, via: via, sell: sell, buy: buy)
+            troca.edicao = Edicao(ordem: ordem, via: via, sell: sell, buy: buy, carteira: dona)
             troca.refazer = Renovacoes.renova(ordem.id)
             troca.substitui = ordem.id
             troca.chaveDoAlvo = "\(troca.par)|\(troca.modo.rawValue)|\(troca.precoDeMercado != nil)"
@@ -1254,6 +1562,24 @@ final class Troca: @unchecked Sendable {
         let ativo: Estado.Ativo
         let quantidade: String?
         let fora: Bool
+        /// Uma moeda que a carteira tem em outra rede da troca: escolher leva a troca para la.
+        var outraRede = false
+    }
+
+    /// O que a carteira tem nas outras redes da troca (no modo limite, so as que tem ordem limite):
+    /// da lista e, na EVM e na Solana, fora dela, sem suspeita. Chamar com a trava.
+    private func tidosEmOutrasRedes() -> [Asset] {
+        guard let chain, let carteira else { return [] }
+        let redes = TradeEngines.chains.filter { rede in
+            rede.id != chain.id && (modo != .limite || TradeEngines.engine(for: rede)?.supportsLimitOrders == true)
+        }
+        return redes.flatMap { rede -> [Asset] in
+            let saldo = Saldos.shared.saldo(rede, carteira: carteira.id)
+            let listados = (saldo?.holdings ?? []).filter { !$0.amount.isZero }.map(\.asset)
+            let fora = (rede.family == .evm || rede.family == .solana)
+                ? (saldo?.unlisted ?? []).filter { !$0.isSuspicious && !$0.amount.isZero }.map(\.asset) : []
+            return listados + fora
+        }.filter(Self.permite)
     }
 
     /// Do maior saldo para o menor, nas duas secoes: pelo valor na moeda local quando ha preco,
@@ -1261,7 +1587,8 @@ final class Troca: @unchecked Sendable {
     func opcoes(vendendo: Bool) -> [Opcao] {
         trava.withLock {
             acompanharCarteira()
-            let excluir = vendendo ? buy?.id : sell?.id
+            // Na ordem limite (fora da edicao) a moeda do outro lado aparece: escolhe-la inverte os lados.
+            let excluir = modo == .limite && edicao == nil ? nil : (vendendo ? buy?.id : sell?.id)
             let (conferidas, fora) = candidatos()
             func ordenar(_ ativos: [Asset], fora: Bool) -> [Opcao] {
                 let pesados = ativos.enumerated().filter { $0.element.id != excluir }.map { indice, ativo -> (Asset, Int, Double, Double, BigUInt?) in
@@ -1278,7 +1605,12 @@ final class Troca: @unchecked Sendable {
                     return a.1 < b.1
                 }.map { Opcao(ativo: Self.dto($0.0), quantidade: $0.4.flatMap { $0.isZero ? nil : $0.decimalString }, fora: fora) }
             }
-            return ordenar(conferidas, fora: false) + ordenar(fora, fora: true)
+            let outras = ordenar(tidosEmOutrasRedes(), fora: false).map { opcao -> Opcao in
+                var marcada = opcao
+                marcada.outraRede = true
+                return marcada
+            }
+            return ordenar(conferidas, fora: false) + ordenar(fora, fora: true) + outras
         }
     }
 
@@ -1372,6 +1704,8 @@ final class Troca: @unchecked Sendable {
         }
         struct Resultado: Encodable {
             let id: String?, explorador: String, url: String?, situacao: String, detalhe: String?, ordem: Bool
+            /// Parte da troca saiu antes da falha: a tela nao diz que o valor continua na carteira.
+            var parcial = false
         }
         struct Andamento: Encodable { let estado: String; let fracao: Double; let recebido: String; let garantido: String }
 
@@ -1425,6 +1759,8 @@ final class Troca: @unchecked Sendable {
         let semAndamento: Bool
         let detalheIncerto: String?
         let motivoDaRecusa: String?
+        let notasDaRecusa: [String]
+        let ordemRecusada: String?
         let valorEmMoeda: Double?
     }
 
@@ -1473,14 +1809,15 @@ final class Troca: @unchecked Sendable {
             protecao: chain == .ethereum && metadata.settings.mevProtection,
             etapa: etapa, frases: atual.map(frases), revisaoVende: ativosDaRevisao.vende.map(Self.dto), revisaoCompra: ativosDaRevisao.compra.map(Self.dto),
             falhaDaMontagem: falhaDaMontagem, cancelou: cancelou, revisao: plano.map(revisaoDTO), resultado: resultadoDTO(), andamento: andamentoDTO(),
-            semAndamento: semAndamento, detalheIncerto: detalheIncerto, motivoDaRecusa: motivoDaRecusa, valorEmMoeda: valorEmMoeda
+            semAndamento: semAndamento, detalheIncerto: detalheIncerto, motivoDaRecusa: motivoDaRecusa,
+            notasDaRecusa: notasDaRecusa, ordemRecusada: ordemRecusada, valorEmMoeda: valorEmMoeda
         )
     }
 
     private func limiteDTO() -> Estado.Limite {
         let simboloDaCompra = buy?.symbol ?? ""
         let conferenciaDTO: Estado.ConferenciaDoPreco? = {
-            let confirmado = precoAceito == textoDoPreco
+            let confirmado = precoAceito == chaveDoAceite
             switch conferencia {
             case .ok: return nil
             case .abaixo(let percentual):
@@ -1629,7 +1966,9 @@ final class Troca: @unchecked Sendable {
         }
         return Estado.Cotacao(
             atual: atual, garantido: minimo.decimalString, estimativa: estimativa, preco: preco, precoInvertido: invertido, rota: rota,
-            provedores: Array(cotacao.legs.prefix(3).map(\.provider)), taxaDaRede: cotacao.networkFeeFiat,
+            provedores: Array(cotacao.legs.prefix(3).map(\.provider)),
+            // Em partes, a conta da taxa e outra: fica a da revisao, como no iOS (auditoria de 03/11/2026).
+            taxaDaRede: partes ? nil : cotacao.networkFeeFiat(price: { Saldos.shared.preco($0) }),
             garantidoTexto: Fmt.cripto(minimo, casas: compra.decimals, simbolo: compra.symbol, cheio: true),
             doProvedor: Fmt.cripto(partes ? cotacao.parts?.expectedOut ?? cotacao.expectedOut : cotacao.expectedOut, casas: compra.decimals,
                                    simbolo: compra.symbol, cheio: true),
@@ -1702,7 +2041,7 @@ final class Troca: @unchecked Sendable {
         let mostraExplorador = atual.map(frases)?.explorador == true && !ordemDaCoW
         return Estado.Resultado(id: ultimo, explorador: rede.explorerName,
                                 url: mostraExplorador ? ultimo.flatMap { rede.explorerURL(tx: $0)?.absoluteString } : nil,
-                                situacao: nome, detalhe: detalhe, ordem: ordemDaCoW)
+                                situacao: nome, detalhe: detalhe, ordem: ordemDaCoW, parcial: parcial)
     }
 
     private func andamentoDTO() -> Estado.Andamento? {
@@ -1740,8 +2079,10 @@ extension Troca {
         case "ordens.retrato":
             return try Nucleo.json(Ordens.shared.retrato())
         case "troca.editar":
-            guard let ordem = Ordens.shared.ordem(pedido["ordem"]?.stringValue ?? "") else { throw Nucleo.Falha(erro: "troca.semOrdem") }
-            return try retrato(try editar(ordem))
+            // So a ordem da lista da carteira em uso.
+            guard let (ordem, dona) = Ordens.shared.daLista(pedido["ordem"]?.stringValue ?? ""),
+                  dona == Sessao.shared.metadata.selectedWalletID else { throw Nucleo.Falha(erro: "troca.semOrdem") }
+            return try retrato(try editar(ordem, carteira: dona))
         case "troca.cancelar":
             guard let ordem = Ordens.shared.ordem(pedido["ordem"]?.stringValue ?? "") else { throw Nucleo.Falha(erro: "troca.semOrdem") }
             let troca = paraCancelar()
@@ -1760,7 +2101,8 @@ extension Troca {
             Renovacoes.esquecer(pedido["ordem"]?.stringValue ?? "")
             return try Nucleo.json(["pergunta": Renovacoes.pergunta()])
         case "troca.refazer":
-            guard let vencida = Renovacoes.vencida(pedido["ordem"]?.stringValue ?? "") else { throw Nucleo.Falha(erro: "troca.semOrdem") }
+            guard let vencida = Renovacoes.vencida(pedido["ordem"]?.stringValue ?? ""),
+                  vencida.registro.walletID == Sessao.shared.metadata.selectedWalletID else { throw Nucleo.Falha(erro: "troca.semOrdem") }
             return try retrato(refazer(vencida, continuar: pedido["continuar"]?.boolValue ?? true))
         default:
             break
@@ -1768,6 +2110,7 @@ extension Troca {
         let troca = try instancia(pedido["alvo"]?.stringValue)
         switch metodo {
         case "troca.estado": break
+        case "troca.lerSaldo": Nucleo.esperarSemErro { await troca.lerSaldo() }
         case "troca.definir": troca.definir(pedido)
         case "troca.cotar": Nucleo.esperarSemErro { await troca.cotar(pedido["chave"]?.stringValue ?? "") }
         case "troca.opcoes": return try Nucleo.json(troca.opcoes(vendendo: pedido["vende"]?.boolValue ?? false))

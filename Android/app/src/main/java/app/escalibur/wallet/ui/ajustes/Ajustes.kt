@@ -360,6 +360,10 @@ fun TelaSobre() {
                 Text(t("Todo o código que guarda chaves, assina e fala com as redes é publicado para quem quiser auditar, linha por linha. As bibliotecas de criptografia são compiladas a partir do código-fonte, e cada versão delas é conferida por uma impressão digital: se alguém trocar uma, a compilação para."),
                      style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
                 Text(t("Versão %@ (%@)", BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toString()), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+                // O commit de onde este app saiu, gravado pelo gerar-aab.sh, como no iOS.
+                if (BuildConfig.COMMIT_DE_ORIGEM.length == 40) {
+                    Text(t("Commit %@", BuildConfig.COMMIT_DE_ORIGEM.take(12)), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+                }
                 // A auditoria abre no navegador do celular, em outro app: o app nao abre conexao nenhuma.
                 BotaoSecundario(t("Auditar o código"), Modifier.padding(top = Espaco.xs), icone = Icones.codigo) {
                     runCatching { contexto.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://escalibur-wallet.github.io/auditoria/"))) }

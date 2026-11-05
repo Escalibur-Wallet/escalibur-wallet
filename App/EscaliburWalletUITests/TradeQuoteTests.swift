@@ -39,6 +39,9 @@ final class TradeQuoteTests: XCTestCase {
         // A proxima cotacao no relogio redondo, ao lado do preco.
         let next = app.descendants(matching: .any)["troca-proxima-cotacao"]
         XCTAssertTrue(next.waitForExistence(timeout: 40), "a cotacao nao chegou")
+        // A bomba de combustivel com a taxa da rede na moeda do app.
+        let fee = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Taxa da rede'")).firstMatch
+        XCTAssertTrue(fee.waitForExistence(timeout: 5), "a taxa da rede nao apareceu")
         shot("t1-cotacao-base", app)
         app.buttons["Pronto"].tap()
         shot("t2-cotacao-base-detalhe", app)
@@ -110,9 +113,41 @@ final class TradePickerTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         XCTAssertGreaterThan(sellRows, 0, "o SOL, com saldo, nao aparece para vender")
-        // Sem saldo, o USDC da Solana nao aparece para vender.
-        // A linha da lista tem o nome junto; o "USDC" do Voce recebe, atras da folha, nao.
-        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS 'USD Coin'")).firstMatch.exists, "token sem saldo na lista de vender")
+        // Sem saldo, o USDC da Solana nao aparece para vender. A linha da lista tem o nome junto; o
+        // "USDC" do Voce recebe, atras da folha, nao. Com USDC de outra rede na carteira, ele aparece
+        // em "Suas moedas em outras redes", e a conta nao vale.
+        if !app.staticTexts["Suas moedas em outras redes"].exists {
+            XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS 'USD Coin'")).firstMatch.exists, "token sem saldo na lista de vender")
+        }
+    }
+
+    /// As moedas da carteira nas outras redes aparecem, e escolher uma muda a rede la em cima
+    /// (pedido do dono, 02/11/2026).
+    func testPickerShowsOtherNetworksAndSwitches() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-reset", "-demo", "-tela", "trocar"]
+        app.launch()
+        let menu = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Rede:'")).firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 30))
+        let before = menu.label
+        // Os saldos de todas as redes carregados.
+        sleep(10)
+        let sell = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'escolher-token-'")).firstMatch
+        XCTAssertTrue(sell.waitForExistence(timeout: 10))
+        sell.tap()
+        XCTAssertTrue(app.staticTexts["Escolher token"].waitForExistence(timeout: 5))
+        let header = app.staticTexts["Suas moedas em outras redes"]
+        XCTAssertTrue(header.waitForExistence(timeout: 10), "as moedas das outras redes nao aparecem")
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "s2-outras-redes"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        // A primeira linha abaixo do titulo: uma moeda de outra rede.
+        let rows = app.buttons.allElementsBoundByIndex.filter { $0.frame.minY > header.frame.maxY && $0.isHittable }
+        XCTAssertFalse(rows.isEmpty)
+        rows[0].tap()
+        let switched = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", before), object: menu)
+        XCTAssertEqual(XCTWaiter.wait(for: [switched], timeout: 5), .completed, "a rede la em cima nao mudou")
     }
 }
 

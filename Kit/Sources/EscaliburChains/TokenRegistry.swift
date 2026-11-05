@@ -135,6 +135,16 @@ public enum TokenRegistry {
         erc20("linea", "0x176211869cA2b568f2A7D4EE941E073a821EE1ff", "USDC", "USD Coin", 6, "usd-coin", stable: true),
         // Unichain
         erc20("unichain", "0x078D782b760474a361dDA0AF3839290b0EF57AD6", "USDC", "USD Coin", 6, "usd-coin", stable: true),
+        // Os embrulhados da moeda da rede que a ordem limite da CoW cria ao vender a nativa (`CoWProtocol.wrapped`,
+        // os mesmos contratos): o app os criava e nao os listava, e o saldo ficava fora do envio e da troca (o
+        // WBNB, pedido do dono, 04/11/2026). Na Ethereum, Base, Arbitrum e Optimism o WETH ja estava acima.
+        // Conferidos na cadeia em 04/11/2026, em dois RPCs de cada rede: `symbol()`, `name()` e `decimals()` 18.
+        // O id do CoinGecko pela consulta de contrato; o WETH da Linea pelo preco do WETH, como nas outras.
+        erc20("bnb", "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", "WBNB", "Wrapped BNB", 18, "wbnb"),
+        erc20("polygon", "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", "WPOL", "Wrapped POL", 18, "wmatic"),
+        erc20("avalanche", "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7", "WAVAX", "Wrapped AVAX", 18, "wrapped-avax"),
+        erc20("plasma", "0x6100E367285b01F48D07953803A2d8dCA5D19873", "WXPL", "Wrapped XPL", 18, "wrapped-xpl"),
+        erc20("linea", "0xe5D7C2a44FfDDf6b295A15c148167daaAf5Cf34f", "WETH", "Wrapped Ether", 18, "weth"),
         erc20("unichain", "0x9151434b16b9763660705744891fA906F660EcC5", "USDT", "Tether", 6, "tether", stable: true),
         // Sonic
         erc20("sonic", "0x29219dd400f2Bf60E5a23d13Be72B486D4038894", "USDC", "USD Coin", 6, "usd-coin", stable: true),

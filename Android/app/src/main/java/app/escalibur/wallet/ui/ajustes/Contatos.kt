@@ -359,7 +359,7 @@ private fun NovoContato() {
                         if (endereco.isEmpty()) {
                             Box(Modifier.size(Altura.toque).clickable {
                                 val gerente = contexto.getSystemService(ClipboardManager::class.java)
-                                endereco = runCatching { gerente.primaryClip?.getItemAt(0)?.coerceToText(contexto)?.toString() }.getOrNull().orEmpty().trim().take(512)
+                                endereco = runCatching { gerente.primaryClip?.getItemAt(0)?.text?.toString() }.getOrNull().orEmpty().trim().take(512)
                             }, contentAlignment = Alignment.Center) { Icone(Icones.colar, Paleta.tintaSuave, tamanho = 16.dp, descricao = t("Colar")) }
                             Box(Modifier.size(Altura.toque).clickable {
                                 Navegacao.folha {

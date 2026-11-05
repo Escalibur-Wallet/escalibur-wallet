@@ -25,6 +25,21 @@ final class PriceAlertsTests: XCTestCase {
         }
     }
 
+    /// Aviso de recebimento: ligar nao liga junto o valor e a moeda (pedido do dono, 02/11/2026).
+    func testReceiptDetailsStartOff() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-reset", "-demo", "-tela", "aviso"]
+        app.launch()
+        let toggle = app.switches["recebimento-ligar"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 30))
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
+        allowNotificationsIfAsked()
+        let details = app.switches.matching(NSPredicate(format: "label BEGINSWITH 'Valor e moeda no aviso'")).firstMatch
+        XCTAssertTrue(details.waitForExistence(timeout: 10), "a opcao do valor nao apareceu")
+        XCTAssertEqual(details.value as? String, "0", "o valor e a moeda vieram ligados")
+        shot("r1-recebimento-ligado", app)
+    }
+
     func testEnableAndPickCoin() {
         let app = XCUIApplication()
         app.launchArguments = ["-reset", "-demo", "-tela", "ajustes"]

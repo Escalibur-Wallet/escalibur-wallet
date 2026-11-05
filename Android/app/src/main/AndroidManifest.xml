@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Rede, a biometria do sistema e a camera do leitor de QR (pedida so ao tocar em Ler QR).
          Nenhuma outra permissao: sem contatos, sem localizacao, sem armazenamento. -->
@@ -13,6 +14,16 @@
          checagem de fundo de volta a agenda depois de reiniciar o aparelho. Nenhum push. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- A checagem de root pergunta ao sistema se um gerenciador de root esta instalado. Do Android 11 em
+         diante so os pacotes declarados aqui sao visiveis; sem isto a resposta e sempre "nao existe"
+         (auditoria Android de 31/10/2026, AA-03). Nenhum outro pacote e consultado. -->
+    <queries>
+        <package android:name="com.topjohnwu.magisk" />
+        <package android:name="eu.chainfire.supersu" />
+        <package android:name="me.weishu.kernelsu" />
+        <package android:name="me.bmax.apatch" />
+    </queries>
 
     <!-- Sem backup (nem do Google nem de aparelho para aparelho): as chaves ficam so neste
          aparelho, como no iOS. Sem trafego em texto puro. -->
@@ -77,5 +88,10 @@
             android:name=".vigias.ConferenciaDoFundo"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+        <!-- O receiver exportado que o profileinstaller do Compose traz (so o adb o aciona): fora. A unica
+             porta aberta do app e a MainActivity (auditoria Android de 31/10/2026, AA-05). -->
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            tools:node="remove" />
     </application>
 </manifest>

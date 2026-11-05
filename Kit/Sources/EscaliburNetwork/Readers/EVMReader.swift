@@ -361,6 +361,41 @@ public actor EVMReader {
         return known.isNull ? .notFound : .pending
     }
 
+    /// O que a rede diz de uma transacao deste aparelho, pela fila de nonces (quinta passada da auditoria de
+    /// 03/11/2026): `seen` so com dois operadores diferentes devolvendo a transacao com esta conta e este nonce;
+    /// `unknown` so com a resposta de todos os operadores, nenhum com ela; `partial` no resto (um so a
+    /// conhece, ou faltou resposta). Um provedor sozinho nao destrava a conta nem faz a transacao sumir, e dois nos
+    /// atrasados nao a dao por perdida enquanto um terceiro a tem (sexta passada). A transacao com o mesmo hash e
+    /// outra conta ou outro nonce e resposta mentirosa, e nao conta.
+    public enum Sighting: Sendable, Equatable { case seen, unknown, partial }
+
+    public func sighting(_ hash: String, chain: Chain, from: String, nonce: UInt64) async throws -> Sighting {
+        guard let bytes = Hex.decode(hash), bytes.count == 32, hash.hasPrefix("0x") else { throw ReaderError.invalidInput("hash") }
+        let (pool, providers) = try await eligible(chain)
+        let transport = self.transport
+        let id = hash.lowercased(), conta = from.lowercased()
+        let (answers, _) = await Quorum.gather(providers, pool: pool, count: providers.count, firstWave: 2, until: { values in
+            values.filter { $0 }.count >= 2
+        }) { (provider: Provider) async throws -> Bool in
+            try await self.verify(provider, chain: chain)
+            let answer = try await Self.call(transport, provider.baseURL, "eth_getTransactionByHash", [.string(hash)])
+            guard !answer.isNull else { return false }
+            guard (try? answer.field("hash", "tx").string("tx.hash"))?.lowercased() == id,
+                  (try? answer.field("from", "tx").string("tx.from"))?.lowercased() == conta,
+                  (try? answer.field("nonce", "tx").quantity("tx.nonce"))?.uint64 == nonce
+            else { throw ReaderError.responseMismatch(field: "eth_getTransactionByHash") }
+            return true
+        }
+        let vistas = answers.filter { $0.value }.count
+        if vistas >= 2 { return .seen }
+        // Desconhecida so com a resposta de todos os operadores da rede: um que falhou, deu 429 ou esta no banco do
+        // circuit breaker pode ser justamente o que tem a transacao (setima passada da auditoria de 03/11/2026).
+        let todos = Set((rpcProviders[chain.id] ?? []).filter { !wrongNetwork.contains(chain.id + "|" + $0.name) }.map(\.operatorName))
+        let responderam = Set(answers.map(\.provider.operatorName))
+        if vistas == 0, answers.count >= 2, responderam == todos { return .unknown }
+        return .partial
+    }
+
     /// O resultado de conferir na rede um recebimento que o indexador mostrou.
     public enum IncomingCheck: Sendable, Equatable {
         /// Dois RPCs tem o mesmo recibo de sucesso, com o valor chegando a esta conta.

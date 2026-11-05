@@ -1314,6 +1314,17 @@ struct SendStages: View {
         )
     }
 
+    /// Uma transacao anterior desta conta que a rede ainda nao viu, ou com o mesmo ativo e ainda sem
+    /// confirmar: o plano pularia o nonce dela, ou leria o saldo de antes dela, e o segundo envio
+    /// reverteria cobrando a taxa (auditoria de 03/11/2026). Ler depois do `prune`. Mostra o motivo e
+    /// devolve true.
+    private func sellsInFlight(chain: Chain, address: String) -> Bool {
+        guard let reason = NonceQueue.blockedReason(session, wallet: model.wallet.id, chain: chain, address: address, asset: model.holding?.asset)
+        else { return false }
+        model.error = reason
+        return true
+    }
+
     private func loadSpendable() async {
         guard let engine, let holding = model.holding, let probe = request(amount: holding.amount, sendAll: true) else { return }
         model.spendable = try? await engine.spendable(probe)
@@ -1326,6 +1337,7 @@ struct SendStages: View {
         defer { model.working = false }
         // A fila de nonces sem o que a rede ja confirmou, antes de entrar no pedido.
         await NonceQueue.prune(session, wallet: model.wallet.id, chain: chain, address: account.address)
+        guard !sellsInFlight(chain: chain, address: account.address) else { return }
         guard let request = request(amount: amount, sendAll: model.sendAll) else { return }
         do {
             let plan = try await engine.plan(request)
@@ -1586,11 +1598,19 @@ struct SendStages: View {
             renewed = fresh
         }
         let plan = renewed
+        // Ate a assinatura: uma troca ou outro envio deste ativo pode ter saido depois da revisao.
+        if let address = model.account?.address, sellsInFlight(chain: chain, address: address) { return }
         // Sem cotacao, o valor em reais e desconhecido e a voz e pedida (falha fechada).
         let price = portfolio.price(of: holding.asset)
         let moved = plan.review.outgoing?.amount ?? model.amount ?? 0
         let fiat = price.map { Fmt.double(moved, decimals: holding.asset.decimals) * $0 }
         guard await VoiceGate.shared.confirm(.send(fiat: fiat), session: session) else { return }
+        // O autoteste da assinatura antes da passphrase e do PIN, fora da thread principal: com um defeito do aparelho,
+        // nada e pedido a toa (o Signer confere de novo antes de abrir o cofre; revisao da decima terceira passada).
+        guard (try? await Offload.run({ SigningSelfTest.passed(for: plan) })) == true else {
+            model.error = SigningSelfTest.Failure().errorDescription
+            return
+        }
         // Carteira com passphrase: a passphrase antes do Face ID ou do PIN, conferida dentro
         // do assinador (pedido do dono, 16/10/2026).
         var typedPassphrase: SecureBytes?
@@ -1657,7 +1677,8 @@ struct SendStages: View {
         // transmissao: se ela sair sem resposta, o proximo envio nao repete nenhum dos
         // dois. Anotar de novo numa retransmissao nao muda nada.
         if let address = model.account?.address {
-            NonceQueue.record(session, wallet: model.wallet.id, chain: chain, address: address, plan: plan, signed: signed)
+            NonceQueue.record(session, wallet: model.wallet.id, chain: chain, address: address, plan: plan, signed: signed,
+                              sells: model.holding?.asset.id)
         }
         if let usage = engine.usage(after: plan, current: model.wallet.utxoUsage[chain.id]),
            var wallet = session.metadata.wallets.first(where: { $0.id == model.wallet.id }) {
@@ -1956,7 +1977,6 @@ struct LockedOrdersSheet: View {
             TradeReviewFlow(item: item) { completed in
                 if completed, case .cancel(let order, _) = item.kind {
                     OpenOrdersBook.shared.markCancelling(order.id)
-                    Task { await LimitOrderWatch.shared.forget(order.id) }
                 }
                 cancelling = nil
                 if completed { Task { await reload() } }

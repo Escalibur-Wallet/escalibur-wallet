@@ -104,6 +104,28 @@ struct EVMLimitOrderTests {
         #expect(plan.review.lines.contains { $0.label == "Outras ordens" && $0.value.hasPrefix("Já há ordens abertas vendendo") })
     }
 
+    @Test("Editando: a ordem substituida, ja cancelada na cadeia e ainda listada pela CoW, sai da soma das abertas (auditoria de 03/11/2026)")
+    func replacedOrderLeavesTheOpenTotal() async throws {
+        let account = try EVMTestAccounts.testAccount(on: .base)
+        let owner = try EVMAddress(account.address)
+        let old = [UInt8](repeating: 0xCD, count: 32) + owner.bytes + [0x70, 0x00, 0x00, 0x00]
+        let cow = FakeCoW(openTotal: F.amount)
+        await cow.setStatus(Self.status(uid: old, owner: owner))
+        let engine = H.engine(cow: cow, sources: [], transport: try H.baseTransport())
+        // Sem dizer qual substitui: a antiga conta, e a revisao fala das outras ordens.
+        let stacked = try await engine.planLimitOrder(Self.request())
+        #expect(stacked.review.lines.contains { $0.label == "Outras ordens" && $0.value.hasPrefix("Já há ordens abertas vendendo") })
+        // Dizendo: ela sai da soma, e a autorizacao fica so no valor da nova.
+        let base = try Self.request()
+        let request = LimitOrderRequest(walletID: base.walletID, chain: base.chain, account: base.account, sell: base.sell, buy: base.buy,
+                                        amountIn: base.amountIn, minimumOut: base.minimumOut, validFor: base.validFor,
+                                        replacing: Hex.encode(old, prefix: true))
+        let plan = try await engine.planLimitOrder(request)
+        #expect(plan.review.lines.contains { $0.label == "Outras ordens" && $0.value.hasPrefix("A lista de ordens abertas vem só da CoW") })
+        let approve = try #require(plan.transactions.first as? EVMTransaction)
+        #expect(approve.data == ERC20.approve(spender: CoWProtocol.vaultRelayer, amount: F.amount))
+    }
+
     @Test("Validade fora da faixa e rede sem CoW: recusa")
     func refusals() async throws {
         let fresh = H.engine(sources: [], transport: try H.baseTransport())
@@ -221,6 +243,98 @@ struct EVMLimitOrderTests {
         #expect(sorted.map(\.id) == ["x2", "x3", "x1", "40", "12"])
     }
 
+    @Test("A CoW diz que recusou depois da autorizacao: a recusa conta o que entrou na rede e devolve a ordem assinada, so para cancelar na cadeia (auditoria de 03/11/2026)")
+    func refusalAfterApproval() async throws {
+        let cow = FakeCoW()
+        await cow.rejectSubmit("TooManyLimitOrders")
+        let engine = H.engine(cow: cow, sources: [], transport: try H.baseTransport())
+        let plan = try await engine.planLimitOrder(Self.request())
+        let message = try #require(plan.transactions.last as? EIP712ValidatedMessage)
+        do {
+            _ = try await engine.submit(try EVMTestAccounts.sign(plan), plan: plan)
+            Issue.record("a recusa da CoW devia sair como TradeRefusedForSure")
+        } catch let refusal as TradeRefusedForSure {
+            #expect(refusal.reason.contains("máximo de ordens limite"))
+            #expect(refusal.notes.contains { $0.contains("autorização do token entrou na rede") })
+            #expect(refusal.notes.contains { $0.contains("cancele na cadeia") })
+            let order = try #require(refusal.signedOrder)
+            #expect(order.cancellations == [.onchain])
+            let uid = try #require(Hex.decode(order.id))
+            #expect(Array(uid.prefix(32)) == message.digest)
+            #expect(order.remainingSell == F.amount && order.minimumBuy == Self.minimumOut)
+            #expect(order.chain.id == Chain.base.id)
+        }
+    }
+
+    /// O UID que a CoW calcula para a ordem do plano: digesto, dono e validTo.
+    static func uid(of plan: SigningPlan) throws -> [UInt8] {
+        let message = try #require(plan.transactions.last as? EIP712ValidatedMessage)
+        guard case .number(let text)? = message.typedData.message["validTo"], let validTo = UInt32(text) else { throw CoWClientError.badResponse("validTo") }
+        return message.digest + message.account.address.bytes + withUnsafeBytes(of: validTo.bigEndian) { Array($0) }
+    }
+
+    @Test("DuplicatedOrder: conta como criada so com a consulta pelo UID devolvendo a ordem; sem ela, incerto com a ordem assinada (auditoria de 03/11/2026)")
+    func duplicatedOrderIsCreated() async throws {
+        let cow = FakeCoW()
+        await cow.rejectSubmit("DuplicatedOrder")
+        let engine = H.engine(cow: cow, sources: [], transport: try H.baseTransport())
+        let unconfirmed = try await engine.planLimitOrder(Self.request())
+        do {
+            _ = try await engine.submit(try EVMTestAccounts.sign(unconfirmed), plan: unconfirmed)
+            Issue.record("sem a consulta, a ordem nao pode contar como criada")
+        } catch let uncertain as TradeSubmissionUncertain {
+            #expect(uncertain.signedOrder.cancellations == [.onchain])
+        }
+        let plan = try await engine.planLimitOrder(Self.request())
+        let uid = try Self.uid(of: plan)
+        await cow.setStatus(Self.status(uid: uid, owner: try EVMAddress(try EVMTestAccounts.testAccount(on: .base).address)))
+        let result = try await engine.submit(try EVMTestAccounts.sign(plan), plan: plan)
+        #expect(result == [Hex.encode(uid, prefix: true)])
+    }
+
+    @Test("Sem resposta certa depois de a ordem sair: incerto com a ordem assinada; o reenvio manda a mesma ordem sem repetir a autorizacao (auditoria de 03/11/2026)")
+    func uncertainThenResend() async throws {
+        let cow = FakeCoW()
+        await cow.failSubmit(HTTPClient.Failure.status(502))
+        let transport = try H.baseTransport()
+        let engine = H.engine(cow: cow, sources: [], transport: transport)
+        let plan = try await engine.planLimitOrder(Self.request())
+        let signed = try EVMTestAccounts.sign(plan)
+        do {
+            _ = try await engine.submit(signed, plan: plan)
+            Issue.record("o 502 depois do envio devia sair incerto")
+        } catch let uncertain as TradeSubmissionUncertain {
+            #expect(uncertain.signedOrder.cancellations == [.onchain])
+            #expect(uncertain.notes.contains { $0.contains("autorização do token entrou na rede") })
+            #expect(uncertain.notes.contains { $0.contains("cancele na cadeia") })
+        }
+        let sent = transport.calls.filter { $0.method == "eth_sendRawTransaction" }.count
+        // A autorizacao sai uma vez, por todos os provedores de transmissao.
+        #expect(sent > 0)
+        await cow.failSubmit(nil)
+        let result = try await engine.submit(signed, plan: plan)
+        #expect(result == [Hex.encode(try Self.uid(of: plan), prefix: true)])
+        #expect(transport.calls.filter { $0.method == "eth_sendRawTransaction" }.count == sent, "o reenvio mandou a autorizacao de novo")
+        // O appData ja registrado nao vai de novo: a recusa dele no reenvio nao poderia soltar a ordem assinada.
+        #expect(await cow.registered.count == 1, "o reenvio registrou o appData de novo")
+    }
+
+    @Test("A CoW responde outro UID: incerto com a ordem assinada, e nao recusa, porque ninguem recusou (terceira passada de 03/11/2026)")
+    func otherUIDIsUncertain() async throws {
+        let cow = FakeCoW()
+        await cow.answerUID([UInt8](repeating: 9, count: CoWProtocol.uidLength))
+        let engine = H.engine(cow: cow, sources: [], transport: try H.baseTransport())
+        let plan = try await engine.planLimitOrder(Self.request())
+        do {
+            _ = try await engine.submit(try EVMTestAccounts.sign(plan), plan: plan)
+            Issue.record("outro UID nao pode contar como criada")
+        } catch let uncertain as TradeSubmissionUncertain {
+            #expect(uncertain.detail?.contains("outro código") == true)
+            #expect(uncertain.signedOrder.cancellations == [.onchain])
+            #expect(uncertain.notes.contains { $0.contains("pode estar com a CoW") })
+        }
+    }
+
     @Test("Recusa da CoW: o motivo exato vira a mensagem, e nada do texto livre do servidor passa")
     func cowRefusalReasons() {
         let body = Data(#"{"errorType":"TooManyLimitOrders","description":"Too many limit orders"}"#.utf8)
@@ -231,7 +345,9 @@ struct EVMLimitOrderTests {
         #expect(EVMEngineMessages.cowRejection("TooManyLimitOrders").contains("máximo de ordens limite"))
         #expect(EVMEngineMessages.cowRejection("InsufficientBalance").contains("saldo do token"))
         #expect(EVMEngineMessages.cowRejection("DuplicatedOrder").contains("Ordens abertas"))
-        #expect(EVMEngineMessages.cowRejection("AlgoNovo").contains("AlgoNovo"))
+        // Motivo que o app nao conhece: texto generico, sem nada do servidor (auditoria de 03/11/2026).
+        #expect(!EVMEngineMessages.cowRejection("AlgoNovo").contains("AlgoNovo"))
+        #expect(EVMEngineMessages.cowRejection("AlgoNovo") == "A CoW recusou a ordem sem um motivo que o app conheça.")
         #expect(EVMEngineMessages.cowClient(.rejected("ZeroAmount"), chain: .base) == EVMEngineMessages.cowRejection("ZeroAmount"))
     }
 }

@@ -327,6 +327,7 @@ public actor TradeStateReader {
 
     /// `allowance(dono, token, spender)` do Permit2: (uint160 valor, uint48 prazo, uint48 nonce).
     static let permit2AllowanceFunction = try! ABIFunction("allowance(address,address,address)")  // 927da105
+    static let cowFilledAmountFunction = try! ABIFunction("filledAmount(bytes)")  // 2479fb6e
 
     /// O que o Permit2 ja permite ao router (Uniswap): o menor valor e o menor prazo de duas
     /// fontes. Ler a mais so faria o plano pular a permissao e a troca falhar na cadeia.
@@ -342,6 +343,38 @@ public actor TradeStateReader {
             return (BigUInt(bigEndian: Array(bytes[0..<32])), BigUInt(bigEndian: Array(bytes[32..<64])).uint64 ?? 0)
         }
         return TradePermit2Allowance(amount: answers.map(\.1.0).min() ?? 0, expiration: answers.map(\.1.1).min() ?? 0)
+    }
+
+    /// O `filledAmount(uid)` do GPv2Settlement: quanto da ordem a cadeia ja liquidou, ou o maximo
+    /// depois do `invalidateOrder`. Duas fontes, e vale o menor: a ordem so deixa de valer quando as
+    /// duas concordam (a ordem assinada que a CoW disse ter recusado, auditoria de 03/11/2026).
+    public func cowFilledAmount(chain: Chain, uid: [UInt8]) async throws -> BigUInt {
+        let data = try Self.cowFilledAmountFunction.encodeCall([.bytes(uid)])
+        let answers = try await collect(readProviders(chain), count: 2, what: "filledAmount") { provider in
+            let text = try await self.rpc(provider, chain: chain, "eth_call",
+                                          [.object(["to": Self.address(CoWProtocol.settlement), "data": Self.data(data)]), .string("latest")],
+                                          as: String.self)
+            guard let bytes = Hex.decode(text.hasPrefix("0x") ? String(text.dropFirst(2)) : text), bytes.count == 32 else {
+                throw TradeStateError.badResponse("filledAmount")
+            }
+            return BigUInt(bigEndian: bytes)
+        }
+        return answers.map(\.1).min() ?? 0
+    }
+
+    /// O tempo do ultimo bloco, em segundos, o menor de duas fontes: o contrato compara o `validTo` com ele,
+    /// e nao com o relogio do aparelho, que pode estar adiantado (terceira passada da auditoria de 03/11/2026).
+    public func latestBlockTimestamp(chain: Chain) async throws -> UInt64 {
+        struct Block: Decodable, Sendable { let timestamp: String }
+        let answers = try await collect(readProviders(chain), count: 2, what: "timestamp") { provider in
+            let block = try await self.rpc(provider, chain: chain, "eth_getBlockByNumber", [.string("latest"), .bool(false)], as: Block.self)
+            guard block.timestamp.hasPrefix("0x"), let seconds = UInt64(block.timestamp.dropFirst(2), radix: 16) else {
+                throw TradeStateError.badResponse("timestamp")
+            }
+            return seconds
+        }
+        guard let lowest = answers.map(\.1).min() else { throw TradeStateError.badResponse("timestamp") }
+        return lowest
     }
 
     /// Uma leitura `eth_call` do primeiro RPC da rede que responder. So para cotar (a

@@ -47,6 +47,18 @@ public struct TradeQuote: Sendable, Equatable {
         }
     }
 
+    /// A taxa de rede estimada da troca, num ativo: o nativo da rede, ou o vendido na
+    /// CoW (o leilao tira a taxa dele).
+    public struct NetworkFee: Sendable, Equatable {
+        public let asset: Asset
+        public let amount: BigUInt
+
+        public init(asset: Asset, amount: BigUInt) {
+            self.asset = asset
+            self.amount = amount
+        }
+    }
+
     public struct Alternative: Sendable, Equatable {
         public let provider: String
         public let out: BigUInt
@@ -63,7 +75,8 @@ public struct TradeQuote: Sendable, Equatable {
     public let expectedOut: BigUInt
     public let minimumOut: BigUInt
     public let priceImpactPercent: Double?
-    public let networkFeeFiat: Double?
+    /// Vazia quando o motor nao sabe estimar: a tela manda ver na revisao.
+    public let networkFees: [NetworkFee]
     public let providerFeeNote: String?
     public let legs: [Leg]
     public let alternatives: [Alternative]
@@ -76,7 +89,7 @@ public struct TradeQuote: Sendable, Equatable {
 
     public init(
         sell: Asset, buy: Asset, amountIn: BigUInt, expectedOut: BigUInt, minimumOut: BigUInt,
-        priceImpactPercent: Double?, networkFeeFiat: Double?, providerFeeNote: String?, legs: [Leg],
+        priceImpactPercent: Double?, networkFees: [NetworkFee], providerFeeNote: String?, legs: [Leg],
         alternatives: [Alternative], providersCompared: Int, needsApproval: Bool, expiresAt: Date,
         execution: Execution = .transactions, parts: Parts? = nil
     ) {
@@ -86,7 +99,7 @@ public struct TradeQuote: Sendable, Equatable {
         self.expectedOut = expectedOut
         self.minimumOut = minimumOut
         self.priceImpactPercent = priceImpactPercent
-        self.networkFeeFiat = networkFeeFiat
+        self.networkFees = networkFees
         self.providerFeeNote = providerFeeNote
         self.legs = legs
         self.alternatives = alternatives
@@ -95,6 +108,45 @@ public struct TradeQuote: Sendable, Equatable {
         self.expiresAt = expiresAt
         self.execution = execution
         self.parts = parts
+    }
+
+    /// A taxa de rede na moeda do dono, pelos precos que o app tem. nil sem estimativa ou
+    /// sem o preco de algum ativo dela.
+    public func networkFeeFiat(price: (Asset) -> Double?) -> Double? {
+        guard !networkFees.isEmpty else { return nil }
+        var total = 0.0
+        for fee in networkFees {
+            guard let unit = price(fee.asset), let amount = Double(fee.amount.decimalString) else { return nil }
+            total += amount / pow(10, Double(fee.asset.decimals)) * unit
+        }
+        return total
+    }
+
+    /// O que o "Max" deixa de fora quando vende a moeda nativa (auditoria de 03/11/2026): a taxa
+    /// estimada desta cotacao vezes tres, porque o plano reserva a taxa maxima (o gas com folga e o
+    /// preco maximo do gas), e o que a rede ainda pode pedir numa troca: a conta do token na Solana
+    /// (o minimo sem aluguel de uma conta de token) e a reserva da linha de confianca no XRP Ledger e
+    /// na Stellar. nil fora da nativa ou sem a taxa da rede.
+    public func nativeReserveForMax() -> BigUInt? {
+        guard sell.kind == .native, let chain = sell.chain else { return nil }
+        let native = networkFees.filter { $0.asset.id == sell.id }.reduce(BigUInt()) { $0 + $1.amount }
+        guard !native.isZero else { return nil }
+        let extra: BigUInt
+        switch chain.family {
+        case .solana: extra = 2 * 2_039_280        // lamports: a conta do token comprado e a do wSOL temporario
+        case .xrpl: extra = 200_000                // drops: 0,2 XRP por objeto novo
+        case .stellar: extra = 5_000_000           // stroops: 0,5 XLM por linha nova
+        default: extra = 0
+        }
+        return max(native * 3 + extra, Self.nativeReserveBeforeQuote(chain))
+    }
+
+    /// O que o "Max" na nativa ja deixa de fora antes da primeira cotacao. Na Solana a propria cotacao
+    /// confere o saldo (o rascunho da transacao), e com o saldo inteiro ela recusa antes de dizer a taxa:
+    /// 0,005 SOL cobre as duas contas de token e as taxas (segunda passada da auditoria de 03/11/2026).
+    /// Nas outras, a cotacao nao confere o saldo e o ajuste vem dela (`nativeReserveForMax`).
+    public static func nativeReserveBeforeQuote(_ chain: Chain) -> BigUInt {
+        chain.family == .solana ? 5_000_000 : 0
     }
 
     /// O minimo garantido da execucao escolhida.
@@ -117,7 +169,7 @@ public struct TradeQuote: Sendable, Equatable {
         }
         return TradeQuote(
             sell: sell, buy: buy, amountIn: amountIn, expectedOut: alternative.out, minimumOut: alternative.out,
-            priceImpactPercent: priceImpactPercent, networkFeeFiat: nil, providerFeeNote: nil,
+            priceImpactPercent: priceImpactPercent, networkFees: [], providerFeeNote: nil,
             legs: [Leg(provider: alternative.provider, fraction: 1, amountIn: amountIn, expectedOut: alternative.out)],
             alternatives: others.sorted { $0.out > $1.out }, providersCompared: providersCompared,
             // Outro provedor, outro contrato que gasta: a autorizacao pode faltar. A revisao diz.
@@ -170,11 +222,16 @@ public struct LimitOrderRequest: Sendable {
     public let validFor: TimeInterval?
     /// EVM: a fila local de transacoes desta conta ainda em transito (`PendingNonceQueue`).
     public let nonceQueue: PendingNonceQueue?
+    /// Editando: o UID da ordem substituida, ja cancelada na cadeia (a edicao espera o cancelamento
+    /// confirmar, `CancellationWait`). A CoW ainda pode lista-la ate indexar o cancelamento, e ela sai
+    /// da soma das ordens abertas (segunda passada da auditoria de 03/11/2026).
+    public let replacing: String?
 
     public init(
         walletID: UUID, chain: Chain, account: DerivedAccount, sell: Asset, buy: Asset, amountIn: BigUInt, minimumOut: BigUInt,
-        validFor: TimeInterval?, nonceQueue: PendingNonceQueue? = nil
+        validFor: TimeInterval?, nonceQueue: PendingNonceQueue? = nil, replacing: String? = nil
     ) {
+        self.replacing = replacing
         self.walletID = walletID
         self.chain = chain
         self.account = account
@@ -187,13 +244,38 @@ public struct LimitOrderRequest: Sendable {
     }
 }
 
-/// A outra ponta recusou com certeza e disse por que (a CoW recusou a ordem): nada foi criado, e
-/// enviar de novo os mesmos dados nao muda nada. A tela mostra o motivo, sem o "pode ja estar a
-/// caminho" de uma resposta incerta (01/11/2026).
+/// A outra ponta recusou e disse por que (a CoW recusou a ordem): enviar de novo os mesmos dados nao
+/// muda nada. A tela mostra o motivo, sem o "pode ja estar a caminho" de uma resposta incerta
+/// (01/11/2026). Mas e a palavra da CoW (auditoria de 03/11/2026): `notes` diz o que ja entrou na
+/// rede antes (a autorizacao, o embrulho do nativo), e `signedOrder` e a ordem que chegou assinada a
+/// ela. Com a ordem, o app continua acompanhando ate o prazo e oferece o cancelamento na cadeia, o
+/// unico que nao depende da CoW.
 public struct TradeRefusedForSure: LocalizedError, Equatable, Sendable {
     public let reason: String
-    public init(reason: String) { self.reason = reason }
+    public let notes: [String]
+    public let signedOrder: OpenOrder?
+    public init(reason: String, notes: [String] = [], signedOrder: OpenOrder? = nil) {
+        self.reason = reason
+        self.notes = notes
+        self.signedOrder = signedOrder
+    }
     public var errorDescription: String? { reason }
+}
+
+/// A ordem assinada saiu para a CoW e a resposta nao veio com certeza (sem resposta no prazo, erro do
+/// servidor, recusa sem motivo, resposta sem o UID, "ja existe" que a consulta nao confirma): ela pode
+/// estar valendo (segunda passada da auditoria de 03/11/2026). A tela de incerto mostra o que ja entrou
+/// na rede, acompanha a ordem e oferece o cancelamento na cadeia; o "Enviar de novo" manda a mesma ordem.
+public struct TradeSubmissionUncertain: LocalizedError, Equatable, Sendable {
+    public let detail: String?
+    public let notes: [String]
+    public let signedOrder: OpenOrder
+    public init(detail: String?, notes: [String], signedOrder: OpenOrder) {
+        self.detail = detail
+        self.notes = notes
+        self.signedOrder = signedOrder
+    }
+    public var errorDescription: String? { detail }
 }
 
 /// Uma ordem limite aberta da conta, lida da rede.
@@ -358,6 +440,10 @@ public protocol TradeEngine: Sendable {
     /// O andamento de uma ordem desta conta (o id que `submit` devolveu). Onde a rede nao
     /// tem ordem com andamento, `SendEngineError.unavailable`.
     func orderProgress(id: String, account: DerivedAccount) async throws -> OrderProgress
+
+    /// Quanto da ordem a cadeia ja liquidou, lido no contrato e nao na API, e o tempo do ultimo bloco (a
+    /// ordem assinada que a CoW disse ter recusado, `SignedOrders`).
+    func onChainState(_ order: OpenOrder) async throws -> SignedOrderChainState
 }
 
 extension TradeEngine {
@@ -369,6 +455,10 @@ extension TradeEngine {
         _ order: OpenOrder, walletID: UUID, account: DerivedAccount, via: OpenOrder.Cancellation, nonceQueue: PendingNonceQueue?
     ) async throws -> SigningPlan {
         throw SendEngineError.unavailable(kitText("Ordens limite ainda não estão disponíveis nesta rede."))
+    }
+
+    public func onChainState(_ order: OpenOrder) async throws -> SignedOrderChainState {
+        throw SendEngineError.unavailable(kitText("O andamento da ordem não está disponível nesta rede."))
     }
 
     public func orderProgress(id: String, account: DerivedAccount) async throws -> OrderProgress {

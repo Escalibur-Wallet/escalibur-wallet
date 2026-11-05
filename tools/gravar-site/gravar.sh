@@ -81,7 +81,7 @@ xcodegen generate --spec tools/gravar-site/project.yml --project "$TRABALHO" --q
 xcodebuild build-for-testing -project "$TRABALHO/GravarSite.xcodeproj" -scheme Cenas -destination "id=$U" \
     -derivedDataPath "$TRABALHO/dd" -quiet
 
-agora() { python3 -c 'import time; print(f"{time.time():.3f}")'; }
+agora() { python3 -I -c 'import time; print(f"{time.time():.3f}")'; }
 
 # grava <teste> <arquivo bruto>: grava a tela enquanto o teste roda e devolve
 # "inicio duracao capa" (capa: segundos desde o inicio, 0 sem a marca)
@@ -101,7 +101,7 @@ grava() {
     sleep 2
     kill -INT "$gravador"
     wait "$gravador" || true
-    python3 - "$marcas" "$t0" <<'PY'
+    python3 -I - "$marcas" "$t0" <<'PY'
 import sys
 marcas = dict(l.split() for l in open(sys.argv[1]) if l.strip())
 t0 = float(sys.argv[2])
@@ -118,7 +118,7 @@ X264=(-c:v libx264 -preset veryslow -crf 27 -tune animation -profile:v high -mov
 laco() {
     local entrada="$1" dur="$2" saida="$3" fusao=0.5
     local corte
-    corte=$(python3 -c "print(f'{$dur - $fusao:.3f}')")
+    corte=$(python3 -I -c "print(f'{$dur - $fusao:.3f}')")
     ffmpeg -nostdin -loglevel error -y -i "$entrada" -filter_complex \
         "[0:v]split[a][b];[b]trim=0:$fusao,setpts=PTS-STARTPTS[c];[a][c]xfade=transition=fade:duration=$fusao:offset=$corte,format=yuv420p" \
         "${X264[@]}" "$saida"
@@ -169,23 +169,23 @@ for cena in "${CENAS[@]}"; do
             read -r i2 d2 _ < <(grava testEnviado "$TRABALHO/bruto/enviado.mp4")
             corta "$TRABALHO/bruto/enviando.mp4" "$i1" "$d1" "$TRABALHO/envio-a.mp4"
             corta "$TRABALHO/bruto/enviado.mp4" "$i2" "$d2" "$TRABALHO/envio-b.mp4"
-            off=$(python3 -c "print(f'{$d1 - 0.4:.3f}')")
+            off=$(python3 -I -c "print(f'{$d1 - 0.4:.3f}')")
             ffmpeg -nostdin -loglevel error -y -i "$TRABALHO/envio-a.mp4" -i "$TRABALHO/envio-b.mp4" -filter_complex \
                 "[0:v][1:v]xfade=transition=fade:duration=0.4:offset=$off,format=yuv420p" -c:v libx264 -crf 12 -preset fast -an \
                 "$TRABALHO/envio-ab.mp4"
-            total=$(python3 -c "print(f'{$d1 + $d2 - 0.4:.3f}')")
+            total=$(python3 -I -c "print(f'{$d1 + $d2 - 0.4:.3f}')")
             laco "$TRABALHO/envio-ab.mp4" "$total" "$SAIDA/envio.mp4"
             ;;
         *)
-            teste="test$(python3 -c "print('$cena'.capitalize())")"
+            teste="test$(python3 -I -c "print('$cena'.capitalize())")"
             read -r inicio dur capa_em < <(grava "$teste" "$TRABALHO/bruto/$cena.mp4")
             vel=$(velocidade "$cena")
             corta "$TRABALHO/bruto/$cena.mp4" "$inicio" "$dur" "$TRABALHO/$cena-cortado.mp4" "$vel"
             if [ -n "$vel" ]; then
-                dur=$(python3 -c "print(f'{$dur / $vel:.3f}')")
-                capa_em=$(python3 -c "print(f'{$capa_em / $vel:.3f}')")
+                dur=$(python3 -I -c "print(f'{$dur / $vel:.3f}')")
+                capa_em=$(python3 -I -c "print(f'{$capa_em / $vel:.3f}')")
             fi
-            if python3 -c "import sys; sys.exit(0 if 0.1 < $capa_em < $dur - 0.6 else 1)"; then
+            if python3 -I -c "import sys; sys.exit(0 if 0.1 < $capa_em < $dur - 0.6 else 1)"; then
                 laco "$TRABALHO/$cena-cortado.mp4" "$dur" "$TRABALHO/$cena-laco.mp4"
                 gira "$TRABALHO/$cena-laco.mp4" "$capa_em" "$SAIDA/$cena.mp4"
             else

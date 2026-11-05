@@ -68,7 +68,9 @@ struct StellarTradeEngine: TradeEngine {
             }
             return TradeQuote(
                 sell: request.sell, buy: request.buy, amountIn: request.amountIn,
-                expectedOut: route.receiveAmount, minimumOut: minimum, priceImpactPercent: impact, networkFeeFiat: nil,
+                expectedOut: route.receiveAmount, minimumOut: minimum, priceImpactPercent: impact,
+                // Uma operacao pelo piso da rede: a taxa da Stellar fica em fracoes de centavo.
+                networkFees: [.init(asset: .native(request.chain), amount: StellarLimits.minFeePerOperation)],
                 providerFeeNote: kitText("Sem taxa de provedor: a troca acontece direto na DEX da Stellar."),
                 legs: [.init(provider: Self.provider, fraction: 1, amountIn: request.amountIn, expectedOut: route.receiveAmount)],
                 alternatives: [], providersCompared: 1, needsApproval: false,

@@ -100,6 +100,20 @@ final class Saldos: @unchecked Sendable {
     static let leiturasParalelas = 6
     static let prefixoDeContrato = "contrato:"
 
+    /// Os mapas por ativo (a cotacao por contrato e o reconhecimento de token) so com o que as carteiras que ficam tem no
+    /// cache de saldo: os tokens que so a removida tinha saem com ela (revisao da decima terceira passada).
+    /// `mantendo`: o que a leitura em curso tem na memoria e o cache de saldo ainda nao tem.
+    static func podarPorAtivo(_ metadata: inout Metadata, mantendo extra: Set<String> = []) {
+        let restam = Set(metadata.balanceCache.values.flatMap(\.values).flatMap { saldo in
+            saldo.holdings.map(\.asset.id) + (saldo.unlisted ?? []).map(\.asset.id)
+        }).union(extra)
+        metadata.recognizedTokens = metadata.recognizedTokens?.filter { restam.contains($0.key) }
+        metadata.unrecognizedChecks = metadata.unrecognizedChecks?.filter { restam.contains($0.key) }
+        metadata.quoteCache = metadata.quoteCache.filter { chave, _ in
+            !chave.hasPrefix(prefixoDeContrato) || restam.contains(String(chave.dropFirst(prefixoDeContrato.count)))
+        }
+    }
+
     /// Travou ou apagou: nada da carteira fica na memoria.
     func esquecer() {
         trava.withLock {
@@ -161,6 +175,21 @@ final class Saldos: @unchecked Sendable {
             carregando = false
         }
         emitir()
+    }
+
+    /// Le uma rede so, agora (o `refreshChain` do iOS): a troca le de novo o saldo da rede ao abrir
+    /// e depois de cada troca, para o "Max" nunca usar um saldo velho (visto pelo dono, 03/11/2026).
+    func atualizarRede(_ rede: Chain) async {
+        let metadata = Sessao.shared.metadata
+        guard let wallet = metadata.selectedWallet, let conta = wallet.account(rede), !metadata.settings.disabledChainIDs.contains(rede.id) else { return }
+        let enderecos = Self.enderecos(conta, rede: rede, uso: wallet.utxoUsage[rede.id])
+        guard let saldo = try? await BalanceService.shared.balance(chain: rede, addresses: enderecos, custom: metadata.customTokens) else { return }
+        let mesma = trava.withLock { () -> Bool in
+            guard carteiraID == wallet.id else { return false }
+            saldos[rede.id] = saldo
+            return true
+        }
+        if mesma { emitir() }
     }
 
     static func redeVaziaConhecida(_ saldo: ChainBalance?) -> Bool {
@@ -228,15 +257,20 @@ final class Saldos: @unchecked Sendable {
         let novasCotacoes = await cotadas
         var precos = await referencias
         if let btc = novasCotacoes?["bitcoin"]?.price { precos[moeda] = btc }
-        let mesmaMoeda = Sessao.shared.metadata.settings.currency == moeda
         let continua = trava.withLock { () -> Bool in
+            // A moeda conferida dentro da trava, a mesma do `moedaMudou`: conferida fora, uma troca de moeda no meio deixava a
+            // lista numa moeda e o rotulo em outra (decima terceira passada). Dentro dela, a leitura grava antes da conversao
+            // ou nao grava.
+            let mesmaMoeda = Sessao.shared.metadata.settings.currency == moeda
             precosDoBitcoin.merge(precos) { $1 }
             semRede = novos.isEmpty && novasCotacoes == nil && !alvos.isEmpty
             if !novos.isEmpty { lidas.insert(wallet.id) }
             guard carteiraID == wallet.id else { return false }
             for (id, saldo) in novos { saldos[id] = saldo }
             if let novasCotacoes, !novasCotacoes.isEmpty, mesmaMoeda {
-                cotacoes = novasCotacoes
+                // Por cima das da mesma moeda, e nao no lugar: a fonte de reserva nao tem os tokens menores, e o preco
+                // convertido sumia (o BNBFROG carregando, relatado no iPhone).
+                cotacoes = moedaDasCotacoes == moeda ? cotacoes.merging(novasCotacoes) { $1 } : novasCotacoes
                 moedaDasCotacoes = moeda
             }
             falhas = falharam.filter { !Self.redeVaziaConhecida(saldos[$0.id]) }.sorted { $0.name < $1.name }
@@ -245,40 +279,103 @@ final class Saldos: @unchecked Sendable {
         }
         guard continua else { return }
         emitir()
-
-        // Preco por contrato: moedas custom e outros tokens sem suspeita. Nunca pelo simbolo.
-        let comPrecoPorContrato = Self.precificadosPorContrato(trava.withLock { saldos })
-        if !comPrecoPorContrato.isEmpty {
-            // Os ja reconhecidos pelo contrato exato vao num pedido so, pelo id do CoinGecko, e nao
-            // um pedido por contrato (auditoria de privacidade, 22/10/2026).
-            // So o reconhecimento que ainda vale para o contrato: o que venceu volta ao preco por contrato.
-            let identidades = Sessao.shared.metadata.recognizedTokens ?? [:]
-            let reconhecidos = Dictionary(comPrecoPorContrato.compactMap { ativo in
-                identidades[ativo.id].flatMap { TokenRecognitionRules.isValid($0, for: ativo, now: .now) ? (ativo.id, $0.coingeckoID) : nil }
-            }, uniquingKeysWith: { mantido, _ in mantido })
-            let achados = await MarketService.shared.tokenQuotes(comPrecoPorContrato, currency: moeda, knownIDs: reconhecidos)
-            let aindaNaMoeda = Sessao.shared.metadata.settings.currency == moeda
-            trava.withLock {
-                if carteiraID == wallet.id, aindaNaMoeda { cotacoesPorContrato.merge(achados) { $1 } }
-            }
-            emitir()
-        }
+        await precificarPorContrato(wallet, moeda: moeda)
         await reconhecer(wallet)
         guarda(wallet, moeda: moeda)
     }
 
+    /// Preco por contrato: moedas custom e outros tokens sem suspeita. Nunca pelo simbolo.
+    private func precificarPorContrato(_ wallet: WalletMeta, moeda: String) async {
+        let comPrecoPorContrato = Self.precificadosPorContrato(trava.withLock { saldos })
+        guard !comPrecoPorContrato.isEmpty else { return }
+        // Os ja reconhecidos pelo contrato exato vao num pedido so, pelo id do CoinGecko, e nao
+        // um pedido por contrato (auditoria de privacidade, 22/10/2026).
+        // So o reconhecimento que ainda vale para o contrato: o que venceu volta ao preco por contrato.
+        let identidades = Sessao.shared.metadata.recognizedTokens ?? [:]
+        let reconhecidos = Dictionary(comPrecoPorContrato.compactMap { ativo in
+            identidades[ativo.id].flatMap { TokenRecognitionRules.isValid($0, for: ativo, now: .now) ? (ativo.id, $0.coingeckoID) : nil }
+        }, uniquingKeysWith: { mantido, _ in mantido })
+        let achados = await MarketService.shared.tokenQuotes(comPrecoPorContrato, currency: moeda, knownIDs: reconhecidos)
+        trava.withLock {
+            let aindaNaMoeda = Sessao.shared.metadata.settings.currency == moeda && (moedaDasCotacoes ?? moeda) == moeda
+            if carteiraID == wallet.id, aindaNaMoeda { cotacoesPorContrato.merge(achados) { $1 } }
+        }
+        emitir()
+    }
+
+    /// A moeda do app mudou. Os precos na tela viram a moeda nova na hora, pela cotacao do bitcoin nas duas (a mesma conta
+    /// do total em outra unidade), os da lista e os por contrato, e so os precos sao buscados de novo, por baixo
+    /// (`atualizarCotacoes`): os saldos das redes ficam. Antes a carteira inteira era lida de novo, a BNBFROG voltava a
+    /// carregar o preco, e o preco por contrato ficava na moeda antiga ate a proxima leitura (pedido do dono, 04/11/2026;
+    /// o mesmo do iPhone, 18/10/2026). Sem a cotacao do bitcoin nas duas, os precos saem ate os novos chegarem.
+    func moedaMudou(de antiga: String) {
+        trava.withLock {
+            let nova = Sessao.shared.metadata.settings.currency
+            let de = moedaDasCotacoes ?? antiga
+            if let daAntiga = precosDoBitcoin[de], let daNova = precosDoBitcoin[nova], daAntiga > 0, daNova > 0 {
+                let fator = daNova / daAntiga
+                cotacoes = cotacoes.mapValues { $0.converted(by: fator) }
+                cotacoesPorContrato = cotacoesPorContrato.mapValues { $0.converted(by: fator) }
+            } else {
+                cotacoes = [:]
+                cotacoesPorContrato = [:]
+            }
+            moedaDasCotacoes = cotacoes.isEmpty && cotacoesPorContrato.isEmpty ? nil : nova
+        }
+        emitir()
+    }
+
+    /// So os precos, na moeda de agora, para os saldos que ja estao na tela (o `refreshQuotes` do iPhone).
+    func atualizarCotacoes() async {
+        let metadata = Sessao.shared.metadata
+        guard let wallet = metadata.selectedWallet else { return }
+        let moeda = metadata.settings.currency
+        let ids = Set(Chain.all.map(\.coingeckoID) + TokenRegistry.tokens.compactMap(\.coingeckoID))
+        async let cotadas = try? MarketService.shared.quotes(ids: Array(ids), currency: moeda)
+        async let referencias = Self.precosDoBitcoin(exceto: moeda)
+        let novas = await cotadas
+        var precos = await referencias
+        if let btc = novas?["bitcoin"]?.price { precos[moeda] = btc }
+        let segue = trava.withLock { () -> Bool in
+            precosDoBitcoin.merge(precos) { $1 }
+            guard carteiraID == wallet.id, Sessao.shared.metadata.settings.currency == moeda else { return false }
+            if let novas, !novas.isEmpty {
+                cotacoes = moedaDasCotacoes == moeda ? cotacoes.merging(novas) { $1 } : novas
+                moedaDasCotacoes = moeda
+            }
+            return true
+        }
+        guard segue else { return }
+        emitir()
+        await precificarPorContrato(wallet, moeda: moeda)
+        guarda(wallet, moeda: moeda)
+    }
+
     /// Guarda o que foi lido nos metadados, para a proxima abertura mostrar na hora.
+    /// So a carteira que ainda e a da tela e ainda existe: trocar de carteira no meio gravava os saldos da outra no cache
+    /// desta, e remover a carteira com a leitura em voo trazia o rastro dela de volta. Os precos, so na moeda em que estao
+    /// (decima terceira passada da auditoria de 03/11/2026).
     private func guarda(_ wallet: WalletMeta, moeda: String) {
-        let (copia, cotacoesAgora, porContrato, quando) = trava.withLock { (saldos, cotacoes, cotacoesPorContrato, atualizado) }
+        let lido = trava.withLock { () -> ([String: ChainBalance], [String: Quote], [String: Quote], Date?, String?)? in
+            guard carteiraID == wallet.id else { return nil }
+            return (saldos, cotacoes, cotacoesPorContrato, atualizado, moedaDasCotacoes)
+        }
+        guard let (copia, cotacoesAgora, porContrato, quando, moedaDelas) = lido else { return }
         try? Sessao.shared.alterar { metadata in
+            guard metadata.wallets.contains(where: { $0.id == wallet.id }) else { return }
             metadata.balanceCache[wallet.id] = copia
-            if metadata.settings.currency == moeda {
+            if metadata.settings.currency == moeda, (moedaDelas ?? moeda) == moeda {
                 var cache = cotacoesAgora
                 for (id, cotacao) in porContrato { cache[Self.prefixoDeContrato + id] = cotacao }
                 metadata.quoteCache = cache
             }
             metadata.cachedAt = quando
+            // Os mapas por ativo so com o que alguma carteira tem: a removida fora da tela nao volta por esta gravacao
+            // (revisao da decima terceira passada).
+            Self.podarPorAtivo(&metadata, mantendo: Set(copia.values.flatMap { $0.holdings.map(\.asset.id) + ($0.unlisted ?? []).map(\.asset.id) }))
         }
+        let cache = Sessao.shared.metadata.quoteCache
+        trava.withLock { cotacoesPorContrato = cotacoesPorContrato.filter { cache[Self.prefixoDeContrato + $0.key] != nil } }
     }
 
     /// Pergunta ao CoinGecko pelos tokens fora da lista, sem suspeita, ainda sem resposta de menos
@@ -298,6 +395,7 @@ final class Saldos: @unchecked Sendable {
         }
         guard !pendentes.isEmpty else { return }
         var mudou = false
+        var conferidos: Set<String> = []
         for (indice, ativo) in pendentes.prefix(8).enumerated() {
             if indice > 0 { try? await Task.sleep(nanoseconds: 1_500_000_000) }
             do {
@@ -308,15 +406,26 @@ final class Saldos: @unchecked Sendable {
                     conhecidos[ativo.id] = nil
                     sem[ativo.id] = agora
                 }
+                conferidos.insert(ativo.id)
                 mudou = true
             } catch {
                 continue
             }
         }
-        guard mudou else { return }
-        try? Sessao.shared.alterar {
-            $0.recognizedTokens = conhecidos
-            $0.unrecognizedChecks = sem
+        // A mesma guarda do cache de saldo: so a carteira que ainda e a da tela e ainda existe. Depois de remover ou de
+        // apagar tudo, a lista de tokens dela nao volta (revisao da decima terceira passada).
+        guard mudou, trava.withLock({ carteiraID == wallet.id }) else { return }
+        try? Sessao.shared.alterar { metadata in
+            guard metadata.wallets.contains(where: { $0.id == wallet.id }) else { return }
+            // So o que esta rodada conferiu, por cima do que esta no disco: a foto do comeco desfazia a poda feita no meio.
+            var guardados = metadata.recognizedTokens ?? [:]
+            var semResposta = metadata.unrecognizedChecks ?? [:]
+            for id in conferidos {
+                guardados[id] = conhecidos[id]
+                semResposta[id] = sem[id]
+            }
+            metadata.recognizedTokens = guardados
+            metadata.unrecognizedChecks = semResposta
         }
         emitir()
     }

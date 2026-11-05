@@ -75,7 +75,8 @@ struct XRPLTradeEngine: TradeEngine {
                 priceImpactPercent: TradeMath.impactPercent(
                     amountIn: request.amountIn, out: fill.out, referenceIn: fill.bestPays, referenceOut: fill.bestGets
                 ),
-                networkFeeFiat: nil,
+                // O piso do protocolo: a taxa do XRP Ledger fica em fracoes de centavo.
+                networkFees: [.init(asset: .native(request.chain), amount: XRPLPlanner.minimumFeeDrops)],
                 providerFeeNote: kitText("Sem taxa de provedor: a troca acontece no livro de ofertas do XRP Ledger. O emissor do token pode cobrar taxa de transferência."),
                 legs: [.init(provider: Self.provider, fraction: 1, amountIn: request.amountIn, expectedOut: fill.out)],
                 alternatives: [], providersCompared: 1, needsApproval: false,

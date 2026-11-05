@@ -64,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -91,7 +92,6 @@ import app.escalibur.wallet.nucleo.Eventos
 import app.escalibur.wallet.ui.App
 import app.escalibur.wallet.ui.Formato
 import app.escalibur.wallet.ui.carteira.SeloDeToken
-import app.escalibur.wallet.ui.comp.Aceite
 import app.escalibur.wallet.ui.comp.BotaoDeDestaque
 import app.escalibur.wallet.ui.comp.BotaoPrimario
 import app.escalibur.wallet.ui.comp.CabecalhoDeFolha
@@ -135,6 +135,7 @@ private fun OuvirEventos(controle: ControleDaTroca) {
 @Composable
 fun TelaDeTrocar() {
     val controle = ControleDaTroca.aba
+    val foco = LocalFocusManager.current
     val dono = LocalLifecycleOwner.current
     val carteira = App.estado.carteira?.id
     var escolhendoToken by remember { mutableStateOf<Boolean?>(null) }
@@ -142,6 +143,9 @@ fun TelaDeTrocar() {
     LaunchedEffect(carteira) { controle.chamar("troca.estado") }
     OuvirEventos(controle)
     val r = controle.retrato
+    // O saldo da rede lido de novo ao abrir e ao trocar de rede: o "Max" usa ele (03/11/2026).
+    val redeDaTroca = r?.rede?.id
+    LaunchedEffect(carteira, redeDaTroca) { if (redeDaTroca != null) controle.chamar("troca.lerSaldo") }
     // A cotacao viva: a cada pedido novo (par, valor, tolerancia), depois de 400 ms, e de 15 em 15
     // s enquanto ele nao muda. So com a aba na tela e o app na frente; na revisao, para.
     val cotavel = r != null && r.podeCotar && r.etapa == "formulario" && !controle.naPonte
@@ -189,7 +193,8 @@ fun TelaDeTrocar() {
             }
             return
         }
-        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.lg)) {
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).toqueForaFechaTeclado(foco)
+                   .padding(horizontal = Espaco.margem).padding(bottom = Espaco.lg)) {
             Segmentado(listOf("agora" to t("Imediata"), "limite" to t("Limite"), "ponte" to t("Ponte")), if (controle.naPonte) "ponte" else r.modo,
                        Modifier.fillMaxWidth().padding(top = Espaco.sm)) {
                 controle.naPonte = it == "ponte"
@@ -257,13 +262,15 @@ private fun TelaDaOrdemPronta(alvo: String, titulo: String, nota: String, aoDesi
     LaunchedEffect(Unit) { if (!iniciar(controle)) Navegacao.fechar() }
     OuvirEventos(controle)
     val r = controle.retrato
+    val foco = LocalFocusManager.current
     Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().acimaDoTeclado()) {
         CabecalhoDeFolha(titulo, { Navegacao.fechar() })
         if (r == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Girando(Paleta.tintaSuave, 20.dp) }
             return
         }
-        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.lg)) {
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).toqueForaFechaTeclado(foco)
+                   .padding(horizontal = Espaco.margem).padding(bottom = Espaco.lg)) {
             Column(verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
                 r.limite?.editando?.let { Text(it, style = estilo(Tipo.linha), color = Paleta.tinta) }
                 Text(nota, style = estilo(Tipo.nota), color = Paleta.tintaSuave)
@@ -389,6 +396,9 @@ private fun emMoeda(r: RetratoDaTroca, quantidade: String?, ativo: AtivoDaTroca?
     return t("≈ %@", Formato.valor(Formato.numero(quantidade ?: "0", ativo.casas) * preco, r.moeda))
 }
 
+/** Um toque que nenhum campo nem botao pegou tira o foco e fecha o teclado (pedido do dono, 03/11/2026). */
+private fun Modifier.toqueForaFechaTeclado(foco: FocusManager): Modifier = pointerInput(foco) { detectTapGestures { foco.clearFocus() } }
+
 // MARK: Limite
 
 /** L1: vender por um preco. O minimo da ordem sai do preco digitado; o recebido pode puxar o preco ou o valor. */
@@ -421,7 +431,8 @@ private fun ColumnScope.FormularioLimite(r: RetratoDaTroca, mudar: (JSONObject) 
                 mudar(JSONObject().put("valor", it))
             },
             aoEscolher = { aoEscolherToken(true) },
-            aoFracao = if (r.temSaldo) ({ mudar(JSONObject().put("fracao", it)) }) else null,
+            // Na ordem limite, 25%, 50% e Max sempre aparecem, como no iOS.
+            aoFracao = { mudar(JSONObject().put("fracao", it)) },
         )
         CaixaDoPreco(limite, preco, compra?.simbolo ?: "", aoAlvo = { mudar(JSONObject().put("percentual", it)) }) {
             preco = it
@@ -430,7 +441,13 @@ private fun ColumnScope.FormularioLimite(r: RetratoDaTroca, mudar: (JSONObject) 
         limite.conferencia?.let { c ->
             Column(Modifier.padding(vertical = Espaco.xs), verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                 Text(c.texto, style = estilo(Tipo.nota), color = if (c.forte) Paleta.baixa else Paleta.tintaSuave)
-                c.confirmacao?.let { rotulo -> Aceite(c.confirmado, rotulo, solto = true) { mudar(JSONObject().put("aceitarPreco", it)) } }
+                // Um interruptor, como no iOS: vermelho abaixo do mercado, lima sem preco para comparar.
+                c.confirmacao?.let { rotulo ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(rotulo, style = estilo(Tipo.nota), color = Paleta.tinta, modifier = Modifier.weight(1f))
+                        Interruptor(c.confirmado, { mudar(JSONObject().put("aceitarPreco", it)) }, cor = if (c.forte) Paleta.baixa else Paleta.acento)
+                    }
+                }
             }
         }
         r.erroDoPlano?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(vertical = Espaco.xs)) }
@@ -462,21 +479,22 @@ private fun ColumnScope.FormularioLimite(r: RetratoDaTroca, mudar: (JSONObject) 
                 }
             }
         }
-    }
-    if (limite.podeRefazer) {
-        // Sem servidor e com a chave so no celular, nada assina sozinho: o app avisa e pergunta.
-        val pedir = rememberPermissaoDeNotificar()
-        val escopo = rememberCoroutineScope()
-        Column(Modifier.padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(t("Refazer quando vencer"), style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.weight(1f))
-                Interruptor(limite.refazer, { novo ->
-                    mudar(JSONObject().put("refazer", novo))
-                    if (novo) escopo.launch { pedir() }
-                }, cor = Paleta.acento)
+        // Logo abaixo dos prazos, como no iOS.
+        if (limite.podeRefazer) {
+            // Sem servidor e com a chave so no celular, nada assina sozinho: o app avisa e pergunta.
+            val pedir = rememberPermissaoDeNotificar()
+            val escopo = rememberCoroutineScope()
+            Column(Modifier.padding(top = Espaco.xs), verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(t("Refazer quando vencer"), style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.weight(1f))
+                    Interruptor(limite.refazer, { novo ->
+                        mudar(JSONObject().put("refazer", novo))
+                        if (novo) escopo.launch { pedir() }
+                    }, cor = Paleta.acento)
+                }
+                Text(t("Quando o prazo acabar, o celular avisa e o app pergunta se refaz com o mesmo preço. Refazer pede a sua biometria ou o PIN: sem você, ninguém assina uma ordem nova com a sua chave."),
+                     style = estilo(Tipo.nota), color = Paleta.tintaApagada)
             }
-            Text(t("Quando o prazo acabar, o celular avisa e o app pergunta se refaz com o mesmo preço. Refazer pede a sua biometria ou o PIN: sem você, ninguém assina uma ordem nova com a sua chave."),
-                 style = estilo(Tipo.nota), color = Paleta.tintaApagada)
         }
     }
     limite.custodia?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.sm)) }
@@ -491,13 +509,14 @@ private fun CaixaDoPreco(limite: RetratoDaTroca.Limite, preco: String, simbolo: 
         verticalArrangement = Arrangement.spacedBy(Espaco.xs),
     ) {
         Text(limite.rotuloDoPreco, style = estilo(Tipo.nota), color = Paleta.tintaSuave)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+        // O simbolo na linha de base do numero, como no iOS.
+        Row(horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
             val estiloDoPreco = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum", color = Paleta.tinta)
-            Box(Modifier.weight(1f)) {
+            Box(Modifier.weight(1f).alignByBaseline()) {
                 if (preco.isEmpty()) Text("0", style = estiloDoPreco.copy(color = Paleta.tintaMorta))
                 CampoDeNumero(preco, estiloDoPreco, Modifier.fillMaxWidth(), aoDigitar)
             }
-            Text(simbolo, style = estilo(Tipo.acao), color = Paleta.tintaSuave)
+            Text(simbolo, style = estilo(Tipo.acao), color = Paleta.tintaSuave, modifier = Modifier.alignByBaseline())
         }
         limite.precoCompacto?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.tintaSuave) }
         Row(horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {

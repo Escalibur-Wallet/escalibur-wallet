@@ -157,7 +157,8 @@ struct EVMTradeLeg: Sendable {
 enum EVMTradeQuoteMapping {
     /// O `TradeQuote` da tela a partir das pernas escolhidas e do ranking.
     static func quote(
-        sell: Asset, buy: Asset, amountIn: BigUInt, legs: [EVMTradeLeg], ranked: [TradeCandidate], allowances: [EVMAddress: BigUInt]
+        sell: Asset, buy: Asset, amountIn: BigUInt, legs: [EVMTradeLeg], ranked: [TradeCandidate], allowances: [EVMAddress: BigUInt],
+        costs: TradeCostModel, chain: Chain
     ) -> TradeQuote {
         let chosen = Set(legs.map(\.quote.provider))
         let isSplit = legs.count > 1
@@ -169,7 +170,11 @@ enum EVMTradeQuoteMapping {
             expectedOut: legs.reduce(BigUInt()) { $0 + $1.quote.expectedOut },
             minimumOut: legs.reduce(BigUInt()) { $0 + $1.quote.guaranteedOut },
             priceImpactPercent: impact.map { Double($0) / 100 },
-            networkFeeFiat: nil,
+            // Uma transacao por perna, cada uma com a autorizacao que faltar. Sem preco do gas
+            // (custo zerado), a tela manda ver na revisao.
+            networkFees: costs.gasPriceWei.isZero ? [] : [TradeQuote.NetworkFee(
+                asset: .native(chain), amount: legs.reduce(BigUInt()) { $0 + TradeRanking.gas(of: $1.quote, costs: costs).wei }
+            )],
             providerFeeNote: notes.isEmpty ? nil : notes.joined(separator: " "),
             legs: legs.map { leg in
                 TradeQuote.Leg(

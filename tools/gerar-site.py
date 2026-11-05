@@ -44,7 +44,7 @@ from pathlib import Path
 
 # Sem __pycache__ dentro de tools/: o gerador roda no verificar.sh de todo mundo.
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.append(str(Path(__file__).resolve().parent))
 
 from gerador_site import acentos, codigo, dados, paginas, png  # noqa: E402
 

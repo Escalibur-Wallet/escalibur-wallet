@@ -86,6 +86,16 @@ public final class SecureBytes: @unchecked Sendable {
             fatalError("SecureBytes: mprotect recusou as paginas de guarda")
         }
 
+        #if !canImport(Darwin)
+        // Android: o segredo nao vai para o swap nem para um core dump. Em aparelho com RAM Plus,
+        // Extensao de memoria e afins, o swap e um arquivo no flash, e a pagina fica la depois de
+        // zerada na RAM. Melhor esforco: sem cota (RLIMIT_MEMLOCK) ou sem permissao, o buffer segue
+        // como antes; o munmap solta a trava (auditoria Android de 31/10/2026, AA-01). O bloco do
+        // Argon2 (256 MiB, malloc) nao cabe na cota e continua exposto durante a derivacao do PIN.
+        _ = mlock(region.advanced(by: pageSize), payloadPages * pageSize)
+        _ = madvise(region, regionSize, MADV_DONTDUMP)
+        #endif
+
         self.region = region
         self.regionSize = regionSize
         self.base = region.advanced(by: pageSize)

@@ -6,8 +6,8 @@ import EscaliburNetwork
 import SwiftUI
 
 /// As contas que o aviso de recebimento confere: as das carteiras que podem receber, nas
-/// redes ligadas, so os enderecos publicos. As de so observar vem marcadas, e so entram se o
-/// dono quiser (`ReceiptWatchFile.includeWatchOnly`).
+/// redes ligadas, so os enderecos publicos. As de so observar ficam de fora (pedido do dono,
+/// 02/11/2026): em geral e a carteira fria, e conferi-la junto ligaria as duas no provedor.
 ///
 /// A carteira com passphrase fica de fora (auditoria 4, C7-03): o arquivo do aviso abre
 /// com o iPhone bloqueado depois do primeiro desbloqueio, e com ela nele quem extrai os
@@ -19,10 +19,7 @@ enum ReceiptAccounts {
         let disabled = session.metadata.settings.disabledChainIDs
         var out: [ReceiptWatchFile.Account] = []
         var seen: [String: Int] = [:]
-        // As de so observar por ultimo: com o mesmo endereco numa carteira normal, vale a normal
-        // (senao ela ficava sem aviso enquanto a de so observar estivesse de fora).
-        let wallets = session.metadata.wallets.filter { !$0.isWatchOnly } + session.metadata.wallets.filter(\.isWatchOnly)
-        for wallet in wallets where !wallet.hasPassphrase && (wallet.hasBackup || wallet.isWatchOnly) {
+        for wallet in session.metadata.wallets where !wallet.isWatchOnly && !wallet.hasPassphrase && wallet.hasBackup {
             for account in wallet.accounts {
                 guard let chain = Chain.all.first(where: { $0.id == account.chainID }), !disabled.contains(chain.id) else { continue }
                 // A conta da Tron com outra chave no controle nao recebe por caminho nenhum.
@@ -30,7 +27,7 @@ enum ReceiptAccounts {
                 let addresses = Self.addresses(for: account, chain: chain, usage: wallet.utxoUsage[chain.id])
                 guard seen["\(chain.id)|\(account.address)"] == nil else { continue }
                 seen["\(chain.id)|\(account.address)"] = out.count
-                out.append(.init(chainID: chain.id, addresses: addresses, owner: owner(chain, account.address), watchOnly: wallet.isWatchOnly))
+                out.append(.init(chainID: chain.id, addresses: addresses, owner: owner(chain, account.address)))
             }
         }
         return out
@@ -97,25 +94,10 @@ struct ReceiptWatchView: View {
                             file.showDetails = on
                             Task { await ReceiptWatchCenter.shared.setShowDetails(on) }
                         })) {
-                            label("eye", String(localized: "Valor e moeda no aviso"), file.showDetails ? String(localized: "Ex.: Recebeu 100 USDT, na Tron") : String(localized: "A tela bloqueada só diz que entrou moeda"))
+                            label("text.bubble", String(localized: "Valor e moeda no aviso"), file.showDetails ? String(localized: "Ex.: Recebeu 100 USDT, na Tron") : String(localized: "A tela bloqueada só diz que entrou moeda"))
                         }
                         .tint(Palette.success)
                         .padding(.horizontal, Space.md).frame(minHeight: Height.rowCompact)
-                        if session.metadata.wallets.contains(where: \.isWatchOnly) {
-                            Toggle(isOn: Binding(get: { file.includeWatchOnly == true }, set: { on in
-                                file.includeWatchOnly = on
-                                let accounts = ReceiptAccounts.all(session)
-                                Task {
-                                    await ReceiptWatchCenter.shared.setIncludeWatchOnly(on, accounts: accounts)
-                                    file = await ReceiptWatchCenter.shared.file()
-                                }
-                            })) {
-                                label("binoculars", String(localized: "Carteiras de só observar"),
-                                      String(localized: "Conferir junto liga elas às suas no provedor"))
-                            }
-                            .tint(Palette.success)
-                            .padding(.horizontal, Space.md).frame(minHeight: Height.rowCompact)
-                        }
                     }
                 }
                 .padding(.top, Space.lg)
@@ -133,7 +115,7 @@ struct ReceiptWatchView: View {
                     note(String(localized: "Por segurança, a Escalibur não tem servidor: não existe ninguém para avisar o iPhone na hora em que a moeda chega. Quem confere é o próprio iPhone, quando o iOS deixa: algumas vezes por hora em uso, menos parado ou com pouca bateria. Por isso o aviso pode chegar alguns minutos depois. Com o app aberto, a conferência é a cada 2 minutos."))
                     note(ReceiptWatchOffer.price)
                     note(String(localized: "Cada conferência consulta os provedores de cada rede com os endereços das suas carteiras, do IP em que o iPhone estiver. Nas redes como o Bitcoin, só o próximo endereço de recebimento e os dois últimos usados."))
-                    note(String(localized: "Carteiras com passphrase e carteiras com as palavras ainda não confirmadas ficam de fora. As de só observar também, a não ser que você ligue acima. Desligar apaga o arquivo."))
+                    note(String(localized: "Carteiras de só observar, carteiras com passphrase e carteiras com as palavras ainda não confirmadas ficam de fora. Desligar apaga o arquivo."))
                     note(String(localized: "Contam a moeda de cada rede e os tokens da lista conferida. Token fora da lista não avisa: é por ele que chega o spam."))
                 }
                 .padding(.horizontal, Space.gutter).padding(.top, Space.lg)
@@ -166,10 +148,9 @@ struct ReceiptWatchView: View {
                 return
             }
             denied = false
+            // O valor e a moeda comecam desligados: a tela bloqueada so diz que entrou moeda, e o
+            // dono liga se quiser (pedido do dono, 02/11/2026).
             await ReceiptWatchCenter.shared.enable(accounts: accounts)
-            // Ligar o aviso liga junto o valor e a moeda (pedido do dono, 16/10/2026); da para
-            // desligar em seguida, e a tela bloqueada volta a dizer so que entrou moeda.
-            await ReceiptWatchCenter.shared.setShowDetails(true)
             file = await ReceiptWatchCenter.shared.file()
         }
     }

@@ -39,6 +39,10 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>EscaliburCommit</key>
+	<string>$(ESCALIBUR_COMMIT)</string>
+	<key>EscaliburTree</key>
+	<string>$(ESCALIBUR_TREE)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>

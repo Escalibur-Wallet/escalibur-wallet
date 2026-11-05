@@ -63,6 +63,10 @@ fun ImagemDoQR(texto: String, tamanho: Dp, modifier: Modifier = Modifier) {
  * o dono foi colar em outro app que o prazo vence. Por isso a copia leva um rotulo sorteado, e o
  * rotulo e o prazo ficam num arquivo (sem o texto): no prazo, ou quando o app volta a ter o foco,
  * mesmo depois de o processo morrer, a copia vencida que ainda for a do app e apagada.
+ *
+ * Colar, em qualquer tela, le so o texto do item (`text`), nunca `coerceToText`: sem texto, ele
+ * abriria a `content://` URI do app que copiou e leria o fluxo inteiro na thread da interface
+ * (auditoria Android de 31/10/2026, AA-04). O verificar.sh recusa `coerceToText` no Kotlin.
  */
 object Transferencia {
     private val escopo = CoroutineScope(Dispatchers.Main)

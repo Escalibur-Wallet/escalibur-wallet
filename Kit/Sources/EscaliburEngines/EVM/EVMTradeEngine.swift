@@ -78,15 +78,12 @@ public struct EVMTradeEngine: TradeEngine {
             }
         }
 
-        // A CoW leva quando garante mais, liquido, que a melhor dos agregadores.
+        // A troca imediata sai sempre numa transacao dos agregadores: o leilao da CoW leva de
+        // segundos a minutos e preenche aos poucos (pedido do dono, 03/11/2026). A CoW fica na
+        // ordem limite e na troca em partes, que o dono escolhe; esta continua como opcao quando
+        // garante mais que a escolhida.
         let anchoredCoW = cow.flatMap { Self.cowAnchored($0, aggregatorExpected: set.ranked.map(\.quote.expectedOut)) ? $0 : nil }
-        if let cow = anchoredCoW, single.map({ cow.net > $0.net }) ?? true {
-            let ranked = single?.ranked ?? TradeRanking.rank(set.ranked.map(\.quote), costs: market.costs)
-            return Self.cowQuote(request, candidate: cow, ranked: ranked)
-        }
         guard let single else { throw failure }
-        // A CoW perdeu a troca de uma vez, mas a troca em partes dela continua como opcao
-        // quando garante mais que a escolhida.
         return single.quote.adding(cow: anchoredCoW)
     }
 
@@ -113,7 +110,8 @@ public struct EVMTradeEngine: TradeEngine {
             legs = resolved
         }
         let quote = EVMTradeQuoteMapping.quote(
-            sell: request.sell, buy: request.buy, amountIn: request.amountIn, legs: legs, ranked: ranked, allowances: allowances
+            sell: request.sell, buy: request.buy, amountIn: request.amountIn, legs: legs, ranked: ranked, allowances: allowances,
+            costs: costs, chain: chain
         )
         var guaranteed = BigUInt()
         var cost = BigUInt()
@@ -202,7 +200,7 @@ public struct EVMTradeEngine: TradeEngine {
 
     func makePlan(_ request: TradeRequest, quote: TradeQuote) async throws -> SigningPlan {
         try await checkUnlistedDecimals([request.sell, request.buy])
-        if request.inParts || quote.execution == .order { return try await makeCoWSwapPlan(request, quote: quote) }
+        if request.inParts { return try await makeCoWSwapPlan(request, quote: quote) }
         let context = try EVMTradeContext(request, chain: chain)
         let intent = context.intent
         guard quote.sell == request.sell, quote.buy == request.buy, quote.amountIn == request.amountIn else {
@@ -260,7 +258,7 @@ public struct EVMTradeEngine: TradeEngine {
     /// A recusa e da simulacao (a troca montada nao faria o que diz), nao da falta dela.
     static func failedInSimulation(_ refusal: TradeRefusal) -> Bool {
         switch refusal {
-        case .simulationFailed, .simulationShape, .simulationSpentTooMuch, .simulationReceivedTooLittle,
+        case .simulationFailed, .simulationBelowMinimum, .simulationShape, .simulationSpentTooMuch, .simulationReceivedTooLittle,
              .simulationUnexpectedTransfer, .simulationUnexpectedApproval:
             return true
         default:
@@ -454,7 +452,15 @@ public struct EVMTradeEngine: TradeEngine {
         // saldo, e a revisao diz que ha outras ordens e o total autorizado. Assinar essa
         // revisao e o "sim" do dono (docs/seguranca.md 4.5). A lista vem so da API da CoW
         // (o livro nao esta na cadeia); o teto na cadeia e a autorizacao (auditoria 2, B4).
-        let open = try await services.cow.openSellTotal(owner: account.address, sellToken: sellToken.contract, chain: chain)
+        var open = try await services.cow.openSellTotal(owner: account.address, sellToken: sellToken.contract, chain: chain)
+        // Editando: a ordem substituida ja foi cancelada na cadeia, mas a CoW ainda a conta como aberta
+        // ate indexar o cancelamento. Sem tira-la, o plano pedia saldo e autorizacao para as duas
+        // (segunda passada da auditoria de 03/11/2026).
+        if let replacing = request.replacing, let uid = Hex.decode(replacing), uid.count == CoWProtocol.uidLength,
+           let old = try? await services.cow.order(uid: uid, chain: chain, expected: nil),
+           old.owner == account.address, old.sellToken == sellToken.contract, old.status == .open, !old.invalidated {
+            open = open.subtractingReportingUnderflow(old.remainingSellAmount) ?? BigUInt()
+        }
 
         let read = try await services.chainState.readCoW(intent: intent, openOrdersSellTotal: open, localNextNonce: request.nonceQueue?.nextNonce)
         let state = CoWChainState(
@@ -485,6 +491,11 @@ public struct EVMTradeEngine: TradeEngine {
             case .cancelOrder: return try await submitCancellation(signed, plan: plan)
             default: throw EVMEngineFailure.batchMismatch
             }
+        } catch let refusal as TradeRefusedForSure {
+            // Ja vem com o que entrou na rede e a ordem assinada (`submitLimitOrder`).
+            throw refusal
+        } catch let uncertain as TradeSubmissionUncertain {
+            throw uncertain
         } catch CoWClientError.rejected(let type) {
             throw TradeRefusedForSure(reason: EVMEngineMessages.cowRejection(type))
         } catch {
@@ -517,21 +528,104 @@ public struct EVMTradeEngine: TradeEngine {
     /// Transmite a autorizacao (e o embrulho do nativo), espera confirmar, registra o
     /// appData e envia a ordem assinada. A CoW recusa ordem sem saldo e allowance.
     func submitLimitOrder(_ signed: [SignedTransaction], plan: SigningPlan) async throws -> String {
-        guard let order = await services.pendingOrders.take(plan.id) else { throw EVMEngineFailure.pendingOrderMissing }
+        guard let entry = await services.pendingOrders.entry(plan.id) else { throw EVMEngineFailure.pendingOrderMissing }
+        let order = entry.plan
         guard order.signingPlan.transactions.count == plan.transactions.count, signed.count == plan.transactions.count,
               plan.transactions.last is EIP712ValidatedMessage, let signature = signed.last
         else { throw EVMEngineFailure.batchMismatch }
         let prerequisites = plan.transactions.dropLast().compactMap { $0 as? EVMTransaction }
         guard prerequisites.count == order.prerequisiteCount else { throw EVMEngineFailure.batchMismatch }
-        if !prerequisites.isEmpty {
-            let ordered = try EVMEngineSupport.pairs(Array(signed.dropLast()), prerequisites)
-            let ids = try await EVMEngineSupport.broadcast(ordered, chain: chain, route: .publicMempool, reader: services.reader)
+        if !prerequisites.isEmpty, !entry.prerequisitesDone {
+            // No reenvio, o que ja entrou num bloco nao vai de novo (a rede responderia nonce baixo): o
+            // recibo em duas fontes basta (terceira passada da auditoria de 03/11/2026).
+            var pending: [(EVMTransaction, SignedTransaction)] = []
+            for pair in try EVMEngineSupport.pairs(Array(signed.dropLast()), prerequisites) {
+                if entry.prerequisitesSent, case .confirmed? = try? await services.reader.status(of: pair.1.id, chain: chain) { continue }
+                pending.append(pair)
+            }
+            await services.pendingOrders.markPrerequisitesSent(plan.id)
+            let ids = pending.isEmpty ? [] : try await EVMEngineSupport.broadcast(pending, chain: chain, route: .publicMempool, reader: services.reader)
             for id in ids { try await waitForConfirmation(id) }
+            await services.pendingOrders.markPrerequisitesDone(plan.id)
         }
-        try await services.cow.registerAppData(order.appData, chain: chain)
-        let uid = try await services.cow.submit(order, signature: signature)
-        guard uid == order.uid else { throw CoWClientError.uidMismatch }
+        // Daqui em diante a autorizacao e o embrulho ja estao na rede: a recusa da CoW diz isso.
+        let confirmed = confirmedNotes(prerequisites, plan: order)
+        // Toda saida depois que a ordem assinada foi (ou pode ter ido) a CoW leva a ordem, para o app
+        // acompanhar e o dono cancelar na cadeia (segunda passada da auditoria de 03/11/2026). A recusa diz
+        // que a palavra e da CoW; o incerto, que ninguem disse nada (terceira passada).
+        let signedOrder = Self.signedOrder(order, chain: chain)
+        let refusedSigned = confirmed + [kitText("A ordem já foi assinada, e quem diz que ela foi recusada é a CoW. Para ter certeza de que ela não executa, cancele na cadeia: custa a taxa da rede e não depende da CoW.")]
+        let uncertainSigned = confirmed + [kitText("A ordem já foi assinada e pode estar com a CoW. Para ter certeza de que ela não executa, cancele na cadeia: custa a taxa da rede e não depende da CoW.")]
+        if !entry.appDataDone {
+            do {
+                try await services.cow.registerAppData(order.appData, chain: chain)
+            } catch CoWClientError.rejected(let type) {
+                // No primeiro envio a ordem nem saiu do aparelho, e nao ha o que cancelar. No reenvio ela ja
+                // foi a CoW, e a recusa do appData nao diz nada sobre ela.
+                guard entry.orderSent else {
+                    await services.pendingOrders.finish(plan.id)
+                    throw TradeRefusedForSure(reason: EVMEngineMessages.cowRejection(type), notes: confirmed)
+                }
+                throw TradeSubmissionUncertain(detail: EVMEngineMessages.cowRejection(type), notes: uncertainSigned, signedOrder: signedOrder)
+            }
+            await services.pendingOrders.markAppDataDone(plan.id)
+        }
+        await services.pendingOrders.markOrderSent(plan.id)
+        let uid: [UInt8]
+        do {
+            uid = try await services.cow.submit(order, signature: signature)
+        } catch CoWClientError.rejected("DuplicatedOrder") {
+            // A CoW diz que ja tem uma ordem com este UID. Conta como criada so se a consulta pelo UID
+            // devolver esta mesma ordem (dono, tokens, valores, prazo).
+            guard (try? await services.cow.order(uid: order.uid, chain: chain, expected: order.order)) != nil else {
+                throw TradeSubmissionUncertain(detail: nil, notes: uncertainSigned, signedOrder: signedOrder)
+            }
+            await services.pendingOrders.finish(plan.id)
+            return Hex.encode(order.uid, prefix: true)
+        } catch CoWClientError.rejected(let type) {
+            await services.pendingOrders.finish(plan.id)
+            throw TradeRefusedForSure(reason: EVMEngineMessages.cowRejection(type), notes: refusedSigned, signedOrder: signedOrder)
+        } catch CoWClientError.uidMismatch {
+            // A CoW respondeu outro UID: ela nao esta falando desta ordem, nao recusou, e a desta pode estar com ela.
+            throw TradeSubmissionUncertain(detail: kitText("A CoW respondeu com outro código para esta ordem, e o app não a dá como criada."),
+                                           notes: uncertainSigned, signedOrder: signedOrder)
+        } catch {
+            throw TradeSubmissionUncertain(detail: (EVMEngineMessages.userFacing(error, .submit, chain: chain) as? LocalizedError)?.errorDescription,
+                                           notes: uncertainSigned, signedOrder: signedOrder)
+        }
+        guard uid == order.uid else {
+            throw TradeSubmissionUncertain(detail: kitText("A CoW respondeu com outro código para esta ordem, e o app não a dá como criada."),
+                                           notes: uncertainSigned, signedOrder: signedOrder)
+        }
+        await services.pendingOrders.finish(plan.id)
         return Hex.encode(uid, prefix: true)
+    }
+
+    /// O que confirmou antes de a ordem ir a CoW: a autorizacao (sem valor) e o embrulho do nativo
+    /// (o deposito no contrato embrulhado, com valor).
+    func confirmedNotes(_ prerequisites: [EVMTransaction], plan: CoWLimitOrderPlan) -> [String] {
+        var notes: [String] = []
+        if prerequisites.contains(where: { $0.value.isZero }) {
+            notes.append(kitText("A autorização do token entrou na rede antes da recusa e continua valendo."))
+        }
+        if let wrapped = CoWProtocol.wrappedNative(on: chain),
+           prerequisites.contains(where: { $0.to == wrapped.contract && !$0.value.isZero }) {
+            notes.append(kitText("Antes da recusa, o \(Asset.native(chain).symbol) virou \(wrapped.symbol): ele está na carteira."))
+        }
+        return notes
+    }
+
+    /// A ordem assinada que a CoW diz ter recusado, como uma ordem aberta: so o cancelamento na
+    /// cadeia, que nao passa por ela.
+    static func signedOrder(_ plan: CoWLimitOrderPlan, chain: Chain) -> OpenOrder {
+        let order = plan.order
+        return OpenOrder(
+            id: Hex.encode(plan.uid, prefix: true), chain: chain,
+            sellAssetID: assetID(order.sellToken, chain: chain), buyAssetID: assetID(order.buyToken, chain: chain),
+            remainingSell: order.sellAmount, minimumBuy: order.buyAmount,
+            expiresAt: Date(timeIntervalSince1970: TimeInterval(order.validTo)), sources: 1,
+            cancellations: [.onchain], totalSell: order.sellAmount
+        )
     }
 
     func waitForConfirmation(_ id: String) async throws {
@@ -556,7 +650,7 @@ public struct EVMTradeEngine: TradeEngine {
         do {
             guard supportsLimitOrders else { throw EVMEngineFailure.limitOrdersUnavailable }
             let owner = try EVMEngineSupport.account(account, chain: chain)
-            let orders = try await services.cow.openOrders(owner: owner.address, chain: chain, now: Date())
+            let orders = try await services.cow.openOrders(owner: owner.address, chain: chain)
             return orders.map(Self.openOrder(chain: chain))
         } catch {
             throw EVMEngineMessages.userFacing(error, .cancellation, chain: chain)
@@ -610,6 +704,14 @@ public struct EVMTradeEngine: TradeEngine {
                 throw EVMEngineMessages.userFacing(error, .cancellation, chain: chain)
             }
         }
+    }
+
+    public func onChainState(_ order: OpenOrder) async throws -> SignedOrderChainState {
+        guard supportsLimitOrders, order.chain.id == chain.id, order.id.hasPrefix("0x"), let uid = Hex.decode(order.id),
+              uid.count == CoWProtocol.uidLength else { throw EVMEngineFailure.invalidOrderReference }
+        async let filled = services.chainState.cowFilledAmount(chain: chain, uid: uid)
+        async let seconds = services.chainState.latestBlockTimestamp(chain: chain)
+        return SignedOrderChainState(filled: try await filled, chainTime: Date(timeIntervalSince1970: TimeInterval(try await seconds)))
     }
 
     /// O cancelamento assinado: o fora da cadeia vai a CoW e devolve os UIDs; o da cadeia

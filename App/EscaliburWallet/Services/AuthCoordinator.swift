@@ -184,6 +184,10 @@ final class AuthCoordinator {
     /// O texto de uma recusa que a tela mostra no lugar do erro generico. Nil quando nao e
     /// uma recusa conhecida.
     static func refusalMessage(_ error: Error) -> String? {
+        // O aparelho que calcula diferente dos vetores publicos: o dono fica sabendo que o problema e o aparelho, e nao o
+        // papel (revisao da decima terceira passada).
+        if let failure = error as? DerivationSelfTest.Failure { return failure.errorDescription }
+        if let failure = error as? SigningSelfTest.Failure { return failure.errorDescription }
         switch error as? RootKeyVault.Failure {
         case .biometryHold(let seconds):
             if KeyServices.root.securityMode == .hardened { return hardenedHoldMessage(seconds) }

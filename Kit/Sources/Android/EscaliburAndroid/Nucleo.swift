@@ -275,13 +275,21 @@ enum Nucleo {
             let forcar = pedido["forcar"]?.boolValue ?? false
             esperarSemErro { await Saldos.shared.atualizar(forcar: forcar) }
             return try json(Saldos.shared.retratoAtual())
+        case "saldos.precos":
+            esperarSemErro { await Saldos.shared.atualizarCotacoes() }
+            return try json(Saldos.shared.retratoAtual())
 
         case "ajustes.unidade":
             let unidade = pedido["unidade"]?.stringValue ?? "usd"
             guard ["brl", "usd", "eur", "btc"].contains(unidade) else { throw Falha(erro: "unidade desconhecida") }
+            let antiga = Sessao.shared.metadata.settings.currency
+            var mudou = false
             try Sessao.shared.alterar { metadata in
-                if metadata.settings.choose(unidade) { metadata.quoteCache = [:] }
+                mudou = metadata.settings.choose(unidade)
+                if mudou { metadata.quoteCache = [:] }
             }
+            // Os precos na tela viram a moeda nova na hora; o Kotlin pede so os precos depois ("saldos.precos").
+            if mudou { Saldos.shared.moedaMudou(de: antiga) }
             return try json(Estado.agora())
         case "ajustes.ocultarSaldos":
             let ocultar = pedido["ocultar"]?.boolValue ?? false
@@ -649,6 +657,13 @@ enum Nucleo {
             saida["erro"] = .string("frase.fraca." + String(describing: fraca))
         case let falha as HTTPClient.Failure:
             saida["erro"] = .string("rede." + String(describing: falha))
+        // O aparelho que calcula diferente dos vetores publicos, com o texto proprio (revisao da decima terceira passada).
+        case let falha as DerivationSelfTest.Failure:
+            saida["erro"] = .string("autoteste.derivacao")
+            if let mensagem = falha.errorDescription { saida["mensagem"] = .string(mensagem) }
+        case let falha as SigningSelfTest.Failure:
+            saida["erro"] = .string("autoteste.assinatura")
+            if let mensagem = falha.errorDescription { saida["mensagem"] = .string(mensagem) }
         default:
             saida["erro"] = .string("falha")
         }

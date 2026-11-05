@@ -1252,6 +1252,46 @@ struct HardenedModeTests {
         #expect(bytes(try vault.unlockHardened(pin: secure(pin), face: pass, use: .operation)) == rk)
     }
 
+    @Test("Descartar o rosto com o Face ID na tela volta na hora, e o rosto que confirma depois nao vale (auditoria de 03/11/2026)")
+    func discardWhileFaceOnScreen() throws {
+        let (vault, _, wrapper, rk) = try makeHardened(.continue)
+        let onScreen = DispatchSemaphore(value: 0)
+        let answer = DispatchSemaphore(value: 0)
+        wrapper.duringFace = {
+            onScreen.signal()
+            answer.wait()
+        }
+        final class Outcome: @unchecked Sendable { var error: Error? }
+        let outcome = Outcome()
+        let finished = DispatchSemaphore(value: 0)
+        // Numa thread propria, e nao na fila global: os outros testes do cofre prendem as threads dela com o Argon2id, e
+        // com a maquina carregada o rosto nao chegava a tela no prazo.
+        Thread {
+            do { _ = try vault.hardenedFace(reason: "x") } catch { outcome.error = error }
+            finished.signal()
+        }.start()
+        // Prazos largos: os outros testes do cofre rodam ao mesmo tempo e pesam. Com o descarte preso
+        // na trava do cofre, ele nao terminaria nunca enquanto o rosto estivesse na tela.
+        let shown = onScreen.wait(timeout: .now() + 60)
+        if shown != .success { _ = finished.wait(timeout: .now() + 60) }
+        #expect(shown == .success, "o rosto nao chegou a tela: \(String(describing: outcome.error))")
+        // O app foi para o fundo com o pedido na tela: o descarte nao espera o Face ID. No Android a
+        // resposta da biometria chega pela thread principal, que e a que descarta.
+        let discarded = DispatchSemaphore(value: 0)
+        Thread {
+            vault.discardHardenedFace()
+            discarded.signal()
+        }.start()
+        #expect(discarded.wait(timeout: .now() + 20) == .success, "o descarte esperou o Face ID que estava na tela")
+        answer.signal()
+        #expect(finished.wait(timeout: .now() + 60) == .success)
+        #expect(outcome.error as? RootKeyVault.Failure == .cancelled)
+        wrapper.duringFace = nil
+        #expect(vault.failureCount() == 0)
+        let pass = try vault.hardenedFace(reason: "x")
+        #expect(bytes(try vault.unlockHardened(pin: secure(pin), face: pass, use: .operation)) == rk)
+    }
+
     @Test("Rosto primeiro recusa antes do rosto o que o PIN recusaria sem contar")
     func faceRefusalsBeforeFace() throws {
         let (vault, _, wrapper, _) = try makeHardened(.continue)

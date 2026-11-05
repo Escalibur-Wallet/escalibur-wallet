@@ -175,6 +175,10 @@ object Autorizacao {
             "cofre.biometryLockedOut" -> t("O celular bloqueou a biometria depois de tentativas demais. Bloqueie e desbloqueie o celular com o PIN da tela, e tente de novo.")
             "cofre.wiped" -> t("Tentativas demais: as carteiras deste celular foram apagadas. Só as palavras de cada carteira trazem de volta.")
             "sessao.travada" -> t("O app travou antes de terminar. Destrave e tente de novo.")
+            "sessao.listaMudou" -> t("As carteiras mudaram enquanto o cofre abria. Nada foi guardado; tente de novo.")
+            // O aparelho que calcula diferente dos vetores publicos: o problema e o aparelho, e nao o papel.
+            "autoteste.derivacao" -> t("Este aparelho calculou um endereço de teste diferente do esperado. Por segurança, nenhuma carteira é criada ou importada aqui.")
+            "autoteste.assinatura" -> t("Este aparelho calculou uma assinatura de teste diferente da esperada. Por segurança, nada é assinado aqui.")
             else -> null
         }
     }

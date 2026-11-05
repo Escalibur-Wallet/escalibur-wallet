@@ -73,5 +73,8 @@ object Api {
         return json
     }
 
+    // O cofre se apagou (PIN errado demais) em qualquer tela, e nao so na do bloqueio: a gaveta de notificacoes sai
+    // junto, como no iPhone (setima passada da auditoria de 03/11/2026).
     private fun falha(json: JSONObject) = FalhaDoNucleo(json.optString("erro", "falha"), json)
+        .also { if (it.codigo == "cofre.wiped") app.escalibur.wallet.vigias.Vigia.limparGaveta() }
 }
