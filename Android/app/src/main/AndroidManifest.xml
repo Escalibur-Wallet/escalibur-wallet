@@ -88,6 +88,10 @@
             android:name=".vigias.ConferenciaDoFundo"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+        <!-- O app escolhido na folha de compartilhar do envelope (so o sistema, pelo PendingIntent do app). -->
+        <receiver
+            android:name=".ui.envelope.EnvelopeEntregue"
+            android:exported="false" />
         <!-- O alarme que apaga a frase copiada no prazo (so o AlarmManager do sistema, pelo PendingIntent do app). -->
         <receiver
             android:name=".ui.comp.ApagarTransferencia"

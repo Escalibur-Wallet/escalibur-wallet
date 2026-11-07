@@ -35,6 +35,7 @@ enum Java {
         ("Cofre", "abrirChave", "(Ljava/lang/String;[BLjava/lang/String;)[B"),
         ("Cofre", "abrirChaveVigiando", "(Ljava/lang/String;[BLjava/lang/String;Ljava/lang/String;[B)[B"),
         ("Cofre", "semente", "(Ljava/lang/String;[BZ)[B"),
+        ("Cofre", "temStrongBox", "()I"),
         ("Cofre", "estadoDaBiometria", "()I"),
         ("Cofre", "cadastroDaBiometria", "()[B"),
         ("Cofre", "boot", "()[B"),

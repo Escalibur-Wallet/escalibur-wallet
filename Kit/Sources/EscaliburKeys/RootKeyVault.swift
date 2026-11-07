@@ -1801,12 +1801,17 @@ extension RootKeyVault {
             changed = true
         }
         if !changed {
-            // So a prova do SEP (a vigia abriu o mesmo miolo) regrava o hash e termina uma
-            // espera vencida. O hash sozinho nunca encerra espera.
-            if opened.watch == .same {
-                refreshHardenedState()
-                if let hold, hold.remaining <= 0 { try? store.delete(Account.hardenedHold) }
-            }
+            // So a prova do SEP (a vigia abriu o mesmo miolo) regrava o hash. Uma espera vencida
+            // termina aqui tambem quando a vigia nao respondeu e o hash e o gravado: antes so a
+            // prova a terminava, e a espera que comecou por uma falha passageira da leitura do
+            // hash ficava gravada e recomecava cheia a cada reinicio; no Android, cuja vigia por
+            // operacao nunca abre sem um segundo pedido, para sempre (revisao dos pendentes de
+            // 07/11/2026). Nao abre nada a mais: a troca de cadastro de verdade apaga a chave da
+            // vigia (`.gone`) ou muda o hash do cadastro, e nos dois casos nao chega aqui; e quem
+            // forja o hash gravado escreve no chaveiro e apaga a espera do mesmo jeito. Uma espera
+            // correndo nunca termina aqui.
+            if opened.watch == .same { refreshHardenedState() }
+            if let hold, hold.remaining <= 0 { try? store.delete(Account.hardenedHold) }
             return true
         }
         if let hold {

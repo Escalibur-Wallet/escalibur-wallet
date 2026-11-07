@@ -6,6 +6,7 @@ import androidx.core.content.IntentCompat
 import androidx.core.content.FileProvider
 import android.content.Intent
 import android.content.Context
+import android.app.PendingIntent
 import android.content.ClipData
 import app.escalibur.wallet.ui.comp.EmblemaCifrado
 import app.escalibur.wallet.ui.comp.Girando
@@ -114,6 +115,7 @@ import app.escalibur.wallet.ui.tema.estilo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import app.escalibur.wallet.nucleo.PalavrasNaTela
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -182,7 +184,16 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
     var erro by remember { mutableStateOf<String?>(null) }
     var trabalhando by remember { mutableStateOf(false) }
     var segundos by remember { mutableStateOf(3.0) }
-    var sugestao by remember { mutableStateOf<List<String>>(emptyList()) }
+    // As seis palavras sorteadas vem do nucleo em bytes e ficam em CharArray, nunca em String (PalavrasNaTela).
+    val leitorDaSugestao = remember { PalavrasNaTela() }
+    var sugestao by remember { mutableStateOf<List<CharArray>>(emptyList()) }
+    DisposableEffect(Unit) { onDispose { leitorDaSugestao.zerar() } }
+    /** Troca as palavras na tela; as que saem sao zeradas depois do Crossfade. */
+    fun mostrarSugestao(novas: List<CharArray>) {
+        val antigas = sugestao
+        sugestao = novas
+        if (antigas.isNotEmpty()) escopo.launch { delay(1_000); antigas.forEach { it.fill('\u0000') } }
+    }
     var propria by remember { mutableStateOf(false) }
     val senha = remember { Segredo() }
     val repeticao = remember { Segredo() }
@@ -206,7 +217,7 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
     // So na depuracao: uma etapa do lacre sem a carteira aberta, para ver a tela. Nada e cifrado.
     if (BuildConfig.DEBUG && demo != null) LaunchedEffect(Unit) {
         when (demo) {
-            "lacrar-criar" -> { sugestao = CifraDoEnvelope.exemplo.take(6); passo = "criar" }
+            "lacrar-criar" -> { sugestao = CifraDoEnvelope.exemplo.take(6).map { it.toCharArray() }; passo = "criar" }
             "lacrar-propria" -> { propria = true; passo = "criar" }
             "lacrar-repetir" -> passo = "repetir"
             "lacrando" -> {
@@ -247,6 +258,7 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
                 java.security.MessageDigest.isEqual(lido, dados)
             }.getOrDefault(false)
             dados.fill(0)
+            if (ok) runCatching { Api.objeto("envelope.entregue") }
             withContext(Dispatchers.Main) { Avisos.mostrar(if (ok) t("Arquivo salvo.") else t("Não foi possível salvar o arquivo. Tente de novo.")) }
         }
     }
@@ -257,8 +269,15 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
 
     fun sortear() {
         escopo.launch {
-            sugestao = runCatching { Api.objeto("envelope.sugerir").getJSONArray("palavras").let { lista -> (0 until lista.length()).map { lista.getString(it) } } }
-                .getOrDefault(emptyList())
+            val novas = try {
+                Api.objeto("envelope.sugerir")
+                leitorDaSugestao.lerSugestao()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            mostrarSugestao(novas ?: emptyList())
         }
     }
 
@@ -319,7 +338,7 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
         escopo.launch {
             if (!propria) {
                 if (runCatching { Api.objeto("envelope.usarSorteada") }.isSuccess) {
-                    sugestao = emptyList()
+                    mostrarSugestao(emptyList())
                     passo = "repetir"
                 }
                 return@launch
@@ -338,8 +357,8 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
         repeticao.clearText()
         erro = null
         escopo.launch {
-            val palavras = runCatching { Api.objeto("envelope.voltar").getJSONArray("palavras") }.getOrNull()
-            if (palavras != null && palavras.length() > 0) sugestao = (0 until palavras.length()).map { palavras.getString(it) }
+            val sorteada = runCatching { Api.objeto("envelope.voltar").optBoolean("sorteada") }.getOrDefault(false)
+            if (sorteada) leitorDaSugestao.lerSugestao()?.takeIf { it.isNotEmpty() }?.let { mostrarSugestao(it) }
             passo = "criar"
         }
     }
@@ -479,7 +498,7 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
 /** A senha do envelope: o caminho padrao e o forte, seis palavras sorteadas; a propria e livre. */
 @Composable
 private fun ColumnScope.CriarSenha(
-    propria: Boolean, sugestao: List<String>, senha: Segredo, revelar: Boolean, aoRevelar: (Boolean) -> Unit, erro: String?,
+    propria: Boolean, sugestao: List<CharArray>, senha: Segredo, revelar: Boolean, aoRevelar: (Boolean) -> Unit, erro: String?,
     aoSortear: () -> Unit, aoPropria: () -> Unit, aoSorteadas: () -> Unit, aoFechar: () -> Unit, aoSeguir: () -> Unit,
 ) {
     CabecalhoDeFolha("", aoFechar)
@@ -496,11 +515,22 @@ private fun ColumnScope.CriarSenha(
             BotaoDeOpcao(t("Usar 6 palavras sorteadas"), null, Modifier.padding(top = Espaco.md), acao = aoSorteadas)
         } else {
             // As seis palavras na placa laqueada, como a senha da carteira.
+            // Duas por linha, na ordem de leitura, desenhadas sem String (TextoSecreto).
             androidx.compose.animation.Crossfade(sugestao, label = "sorteadas") { palavras ->
-                Text(
-                    palavras.joinToString(" "), fontFamily = FontFamily.Monospace, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Paleta.placaTinta,
-                    modifier = Modifier.padding(top = Espaco.lg).fillMaxWidth().background(Paleta.viva, app.escalibur.wallet.ui.comp.PlacaLaqueada()).padding(Espaco.base),
-                )
+                Column(
+                    Modifier.padding(top = Espaco.lg).fillMaxWidth().background(Paleta.viva, app.escalibur.wallet.ui.comp.PlacaLaqueada()).padding(Espaco.base),
+                    verticalArrangement = Arrangement.spacedBy(Espaco.xs),
+                ) {
+                    palavras.chunked(2).forEach { linha ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Espaco.md)) {
+                            linha.forEach { palavra ->
+                                Box(Modifier.weight(1f)) {
+                                    app.escalibur.wallet.ui.comp.TextoSecreto(palavra, 22.sp, FontWeight.SemiBold, Paleta.placaTinta)
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Text(t("Seis palavras sorteadas neste celular. Anote em outro lugar, longe do papel da senha da carteira."), style = estilo(Tipo.nota),
                  color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
@@ -1052,11 +1082,31 @@ object EnvelopeCompartilhado {
         val envio = Intent(Intent.ACTION_SEND).setType("application/octet-stream").putExtra(Intent.EXTRA_STREAM, uri)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         envio.clipData = ClipData.newRawUri(arquivo.name, uri)
-        runCatching { contexto.startActivity(Intent.createChooser(envio, null)) }
+        // O sistema avisa qual app o dono escolheu: so ai o envelope conta como entregue (a data de "lacrado").
+        val escolhido = PendingIntent.getBroadcast(
+            contexto, 1, Intent(contexto, EnvelopeEntregue::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        runCatching { contexto.startActivity(Intent.createChooser(envio, null, escolhido.intentSender)) }
     }
 
     fun apagar(contexto: Context) {
         runCatching { pasta(contexto).deleteRecursively() }
+    }
+}
+
+/** O app escolhido na folha de compartilhar: o envelope saiu, e a data de "lacrado" vai para a carteira. */
+class EnvelopeEntregue : android.content.BroadcastReceiver() {
+    override fun onReceive(contexto: Context, intent: Intent) {
+        // O sistema pode encerrar o processo quando o onReceive volta: o goAsync o segura ate a data ser gravada.
+        val pendente = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                runCatching { Api.objeto("envelope.entregue") }
+            } finally {
+                pendente.finish()
+            }
+        }
     }
 }
 

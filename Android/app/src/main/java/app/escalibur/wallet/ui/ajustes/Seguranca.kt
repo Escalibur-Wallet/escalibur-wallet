@@ -266,7 +266,8 @@ private fun TrocarPin() {
         } else null,
         entrada = entrada, trabalhando = trabalhando, aoCompletar = { seguir() },
     ) {
-        if (passo == 1) {
+        // PIN de 4 digitos so com StrongBox (decisao do dono, 07/11/2026).
+        if (passo == 1 && (entrada.tamanho == 4 || app.escalibur.wallet.nucleo.Cofre.strongBoxConhecido() == 1)) {
             BotaoTerciario(if (entrada.tamanho == 4) t("Usar PIN de 6 dígitos") else t("Usar PIN de 4 dígitos")) {
                 entrada.escolher(if (entrada.tamanho == 4) 6 else 4)
             }

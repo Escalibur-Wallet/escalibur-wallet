@@ -426,8 +426,113 @@ public enum BIP39 {
     /// diagnostico exato, e ai a frase passa por uma `String` de vida curta.
     public static func validate(_ phrase: SecureBytes, store: WordlistStore = .shared) -> Mnemonic.Validation {
         if let language = closingLanguage(phrase, store: store) { return .valid(language: language) }
-        let text = phrase.withUnsafeBytes { String(decoding: $0, as: UTF8.self) }
-        return Mnemonic.validate(text, store: store)
+        return diagnose(phrase, store: store)
+    }
+
+    /// A forma canonica do `Mnemonic.canonicalize` (NFKD, sem os invisiveis, minuscula, um espaco entre as palavras), feita
+    /// pelos bytes, sem `String`, e onde cada palavra comeca e termina nela.
+    public static func canonicalWords(_ phrase: SecureBytes) -> (canonical: SecureBytes, words: [Range<Int>]) {
+        let normalized = nfkd(phrase)
+        defer { normalized.wipe() }
+        let canonical = SecureBytes(capacity: max(normalized.count, 1))
+        var words: [Range<Int>] = []
+        normalized.withUnsafeBytes { raw in
+            var index = 0, start = -1
+            // Depois de U+0020 ou U+1680: no `canonicalize`, a marca que vem logo depois forma um Character so com o espaco
+            // (UAX #29) e some com ele na separacao. Um acento solto (U+00B4, U+02DC, U+309B) vira no NFKD espaco e marca.
+            var afterSpace = false
+            func closeWord() {
+                if start >= 0 { words.append(start..<canonical.count) }
+                start = -1
+            }
+            func next(_ offset: Int) -> UInt8? { index + offset < raw.count ? raw[index + offset] : nil }
+            while index < raw.count {
+                let byte = raw[index]
+                // Os invisiveis que o canonicalize tira: U+200B a U+200D, U+FEFF e o hifen suave U+00AD.
+                if byte == 0xE2, next(1) == 0x80, let third = next(2), (0x8B...0x8D).contains(third) { index += 3; continue }
+                if byte == 0xEF, next(1) == 0xBB, next(2) == 0xBF { index += 3; continue }
+                if byte == 0xC2, next(1) == 0xAD { index += 2; continue }
+                // Os espacos: os ASCII e os que o NFKD nao leva ao U+0020 (U+0085, U+1680, U+2028, U+2029).
+                var space = 0
+                if [0x20, 0x09, 0x0A, 0x0B, 0x0C, 0x0D].contains(byte) {
+                    space = 1
+                } else if byte == 0xC2, next(1) == 0x85 {
+                    space = 2
+                } else if byte == 0xE2, next(1) == 0x80, next(2) == 0xA8 || next(2) == 0xA9 {
+                    space = 3
+                } else if byte == 0xE1, next(1) == 0x9A, next(2) == 0x80 {
+                    space = 3
+                }
+                if space > 0 {
+                    closeWord()
+                    afterSpace = byte == 0x20 || byte == 0xE1
+                    index += space
+                    continue
+                }
+                if afterSpace, byte >= 0x80 {
+                    let width = byte >> 5 == 0x6 ? 2 : byte >> 4 == 0xE ? 3 : byte >> 3 == 0x1E ? 4 : 1
+                    var value = UInt32(width == 2 ? byte & 0x1F : width == 3 ? byte & 0x0F : byte & 0x07)
+                    for offset in 1..<max(width, 1) { value = value << 6 | UInt32((next(offset) ?? 0) & 0x3F) }
+                    if width > 1, let scalar = Unicode.Scalar(value),
+                       scalar.properties.isGraphemeExtend || scalar.properties.generalCategory == .spacingMark {
+                        index += width
+                        continue
+                    }
+                }
+                afterSpace = false
+                if start < 0 { start = canonical.count }
+                canonical.append((0x41...0x5A).contains(byte) ? byte + 0x20 : byte)
+                index += 1
+            }
+            closeWord()
+        }
+        return (canonical, words)
+    }
+
+    /// O diagnostico da frase que nao fechou pelos bytes, tambem sobre os bytes: a mesma forma do
+    /// `Mnemonic.canonicalize` (NFKD, sem os invisiveis, minusculas, espacos juntados) e o mesmo resultado do
+    /// `Mnemonic.validate`, sem a frase virar `String`. Uma frase com uma palavra errada e quase a frase inteira, e no
+    /// Android a `String` ficava no heap sem zerar (auditoria das chaves de 06/11/2026).
+    static func diagnose(_ phrase: SecureBytes, store: WordlistStore) -> Mnemonic.Validation {
+        let (canonical, words) = canonicalWords(phrase)
+        defer { canonical.wipe() }
+        guard Mnemonic.validWordCounts.contains(words.count) else { return .wrongLength(count: words.count) }
+
+        // O mesmo criterio do `Mnemonic.validate`: so conta o idioma em que todas as palavras estao na lista.
+        var candidates: [(language: BIP39Language, indices: [UInt16])] = []
+        var closestMisses: [(language: BIP39Language, positions: [Int])] = []
+        defer { for index in candidates.indices { candidates[index].indices.resetIndices() } }
+        canonical.withUnsafeBytes { raw in
+            for language in BIP39Language.allCases {
+                guard let list = try? store.wordlist(for: language) else { continue }
+                var indices: [UInt16] = []
+                indices.reserveCapacity(words.count)
+                var missing: [Int] = []
+                for (position, range) in words.enumerated() {
+                    var key = Array(raw[range])
+                    if let found = list.position(nfkd: key) { indices.append(found) } else { missing.append(position) }
+                    key.resetBytes()
+                }
+                if missing.isEmpty {
+                    candidates.append((language, indices))
+                } else {
+                    indices.resetIndices()
+                    closestMisses.append((language, missing))
+                }
+            }
+        }
+        guard !candidates.isEmpty else {
+            guard let best = closestMisses.min(by: { $0.positions.count < $1.positions.count }) else { return .mixedLanguages }
+            return Double(best.positions.count) / Double(words.count) > 0.5
+                ? .mixedLanguages
+                : .unknownWords(positions: best.positions, language: best.language)
+        }
+        let closing = candidates.filter { checksumCloses($0.indices) }.map(\.language)
+        switch closing.count {
+        case 0: return .checksumFailed(language: candidates[0].language)
+        case 1: return .valid(language: closing[0])
+        default: return .ambiguousLanguage(closing)
+        }
     }
 
     /// O idioma em que a frase canonica fecha, pelos bytes. Nil se nao fechar em

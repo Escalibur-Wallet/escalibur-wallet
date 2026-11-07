@@ -85,6 +85,8 @@ object Autorizacao {
                            rostoPrimeiro: Boolean = false, desde: Int = epoca): Credencial? {
         // `desde`: a epoca de quando a operacao comecou, e nao a de agora (o `tentando` passa a dele).
         val inicio = desde
+        // Antes de abrir a chave raiz: um depurador ou codigo injetado desde a ultima volta ao app acende o aviso.
+        runCatching { Integridade.conferir(app.escalibur.wallet.nucleo.Cofre.contexto) }
         val estado = App.estado
         if (estado.reforcado) {
             // Nas operacoes (enviar, trocar, ver as palavras), a biometria antes do PIN (pedido do dono,
@@ -210,6 +212,7 @@ object Autorizacao {
             "sessao.travada" -> t("O app travou antes de terminar. Destrave e tente de novo.")
             "passphrase.vazia" -> t("A passphrase chegou vazia. Nada foi feito: digite de novo.")
             "importacao.mudou" -> t("A carteira mudou desde a conferência dos endereços. Nada foi guardado: comece de novo.")
+            "sessao.pinCurto" -> t("Neste celular o PIN precisa ter 6 dígitos: ele não tem o chip de segurança separado (StrongBox).")
             "sessao.bloqueioLigado" -> t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova.")
             // A passphrase que esta versao nao confere (`passphraseUnverified`): o texto vem do nucleo.
             "passphrase.semConferencia" -> falha.dados.optString("mensagem", "").ifEmpty { null }

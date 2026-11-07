@@ -3,7 +3,8 @@ Listas do medidor de forca da senha do envelope (PasswordStrength).
 Cada arquivo e uma lista de palavras, uma por linha, da mais comum para a menos comum:
 a posicao na lista e o numero de chutes que um atacante gasta ate chegar nela. Vieram
 dos pacotes npm do projeto zxcvbn-ts, descomprimidas com o descompressor oficial
-(@zxcvbn-ts/dictionary-compression 3.0.1), sem nenhuma outra mudanca:
+(@zxcvbn-ts/dictionary-compression 3.0.1), sem nenhuma outra mudanca. As das outras linguas
+entraram em 07/11/2026, pelo mesmo processo, que reproduz byte a byte as de PT:
 
 - senhas-comuns.txt    @zxcvbn-ts/language-common 4.1.3, passwords
 - pt-palavras.txt      @zxcvbn-ts/language-pt-br 4.1.1, commonWords
@@ -13,6 +14,44 @@ dos pacotes npm do projeto zxcvbn-ts, descomprimidas com o descompressor oficial
 - en-palavras.txt      @zxcvbn-ts/language-en 4.1.1, commonWords
 - en-nomes.txt         @zxcvbn-ts/language-en 4.1.1, firstnames
 - en-wikipedia.txt     @zxcvbn-ts/language-en 4.1.1, wikipedia
+- de-palavras.txt      @zxcvbn-ts/language-de 4.1.1, commonWords
+- de-nomes.txt         @zxcvbn-ts/language-de 4.1.1, firstnames
+- de-sobrenomes.txt    @zxcvbn-ts/language-de 4.1.1, lastnames
+- de-wikipedia.txt     @zxcvbn-ts/language-de 4.1.1, wikipedia
+- es-palavras.txt      @zxcvbn-ts/language-es-es 4.1.2, commonWords
+- es-nomes.txt         @zxcvbn-ts/language-es-es 4.1.2, firstnames
+- es-sobrenomes.txt    @zxcvbn-ts/language-es-es 4.1.2, lastnames
+- es-wikipedia.txt     @zxcvbn-ts/language-es-es 4.1.2, wikipedia
+- fr-palavras.txt      @zxcvbn-ts/language-fr 4.1.2, commonWords
+- fr-nomes.txt         @zxcvbn-ts/language-fr 4.1.2, firstnames
+- fr-sobrenomes.txt    @zxcvbn-ts/language-fr 4.1.2, lastnames
+- fr-wikipedia.txt     @zxcvbn-ts/language-fr 4.1.2, wikipedia
+- id-palavras.txt      @zxcvbn-ts/language-id 4.1.1, commonWords
+- id-nomes.txt         @zxcvbn-ts/language-id 4.1.1, names
+- id-wikipedia.txt     @zxcvbn-ts/language-id 4.1.1, wikipedia
+- ja-palavras.txt      @zxcvbn-ts/language-ja 4.1.1, commonWords
+- ja-nomes.txt         @zxcvbn-ts/language-ja 4.1.1, firstnames
+- ja-sobrenomes.txt    @zxcvbn-ts/language-ja 4.1.1, lastnames
+- ja-wikipedia.txt     @zxcvbn-ts/language-ja 4.1.1, wikipedia
+- ar-palavras.txt      @zxcvbn-ts/language-ar 4.2.0, commonWords
+- ar-nomes.txt         @zxcvbn-ts/language-ar 4.2.0, firstnames
+- ar-sobrenomes.txt    @zxcvbn-ts/language-ar 4.2.0, lastnames
+- tr-palavras.txt      @zxcvbn-ts/language-tr 4.1.1, commonWords
+- tr-nomes.txt         @zxcvbn-ts/language-tr 4.1.1, firstnames
+- tr-sobrenomes.txt    @zxcvbn-ts/language-tr 4.1.1, lastnames
+- tr-wikipedia.txt     @zxcvbn-ts/language-tr 4.1.1, wikipedia
+- ko-palavras.txt      @zxcvbn-ts/language-ko 4.3.0, commonWords
+- ko-nomes.txt         @zxcvbn-ts/language-ko 4.3.0, firstnames
+- ko-sobrenomes.txt    @zxcvbn-ts/language-ko 4.3.0, lastnames
+- zh-palavras.txt      @zxcvbn-ts/language-zh 4.1.1, commonWords
+- zh-nomes.txt         @zxcvbn-ts/language-zh 4.1.1, firstnames
+- zh-sobrenomes.txt    @zxcvbn-ts/language-zh 4.1.1, lastnames
+- zh-wikipedia.txt     @zxcvbn-ts/language-zh 4.1.1, wikipedia
+
+frases.txt nao vem do zxcvbn-ts: e uma lista curta, feita aqui em 07/11/2026, das frases que
+todo mundo conhece (pangramas, proverbios, versiculos, citacoes classicas e lemas, nas linguas
+do app, sem letra de musica), uma por linha, da mais conhecida para a menos. O medidor compara
+so as letras e os digitos, em minuscula, com e sem acento.
 
 O digesto SHA-256 de cada arquivo esta em forca.lock, na raiz do repositorio, e o
 tools/verificar.sh confere. Para conferir por conta propria: baixe o pacote do npm,

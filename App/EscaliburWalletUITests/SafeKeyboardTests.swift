@@ -40,7 +40,8 @@ final class SafeKeyboardTests: XCTestCase {
 
         // A busca de token: letras, no teclado do app.
         app.buttons["escolher-token-Você recebe"].tap()
-        let search = app.textFields.matching(NSPredicate(format: "placeholderValue == 'Buscar por nome'")).firstMatch
+        // "Buscar qualquer moeda" desde que a busca do Swap alcanca o catalogo inteiro (06/11/2026).
+        let search = app.textFields.matching(NSPredicate(format: "placeholderValue == 'Buscar por nome' OR placeholderValue == 'Buscar qualquer moeda'")).firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
         XCTAssertTrue(app.buttons["safe-q"].waitForExistence(timeout: 5), "a busca nao abriu o Safe Keyboard")

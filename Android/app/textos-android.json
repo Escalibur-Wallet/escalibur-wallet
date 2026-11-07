@@ -4657,5 +4657,19 @@
   "zh-Hans": "单词已复制。将在大约 1 分钟后消失。",
   "vi": "Đã sao chép các từ. Chúng sẽ biến mất sau khoảng 1 phút.",
   "ar": "تم نسخ الكلمات. ستختفي بعد دقيقة واحدة تقريبًا."
+ },
+ "Neste celular o PIN precisa ter 6 dígitos: ele não tem o chip de segurança separado (StrongBox).": {
+  "en": "On this phone the PIN must have 6 digits: it doesn't have the separate security chip (StrongBox).",
+  "es": "En este celular el PIN debe tener 6 dígitos: no tiene el chip de seguridad separado (StrongBox).",
+  "fr": "Sur ce téléphone, le PIN doit avoir 6 chiffres : il n’a pas la puce de sécurité séparée (StrongBox).",
+  "de": "Auf diesem Handy muss die PIN 6 Ziffern haben: Es hat keinen separaten Sicherheitschip (StrongBox).",
+  "hi": "इस फ़ोन पर PIN में 6 अंक होने चाहिए: इसमें अलग सुरक्षा चिप (StrongBox) नहीं है.",
+  "id": "Di ponsel ini PIN harus 6 digit: ponsel ini tidak punya chip keamanan terpisah (StrongBox).",
+  "ja": "このスマートフォンでは PIN は 6 桁が必要です。独立したセキュリティチップ（StrongBox）がありません。",
+  "ko": "이 휴대폰에서는 PIN이 6자리여야 합니다. 별도의 보안 칩(StrongBox)이 없습니다.",
+  "tr": "Bu telefonda PIN 6 haneli olmalı: ayrı güvenlik çipi (StrongBox) yok.",
+  "zh-Hans": "在这部手机上，PIN 必须是 6 位：它没有独立的安全芯片（StrongBox）。",
+  "vi": "Trên điện thoại này, mã PIN phải có 6 chữ số: máy không có chip bảo mật riêng (StrongBox).",
+  "ar": "على هذا الهاتف يجب أن يتكون رمز PIN من 6 أرقام: فهو لا يحتوي على شريحة الأمان المنفصلة (StrongBox)."
  }
 }

@@ -18,17 +18,17 @@
     "Android/gradle/wrapper/gradle-wrapper.properties": "62779c1edca4389b50577428c5cab724a2ddd3ea4cac0685ce48bab709cce6c6",
     "Android/gradle/wrapper/gradle-wrapper.jar": "3b8a25775a69158b5ad2b1d17a80a88dc7b40a352a73eb27d06c612a7ce68e98",
     "Android/gradle/verification-metadata.xml": "2aa646c0cfda4e6d9441bbdb6d6545853af5b439bf00bd8982c50104b3f1f146",
-    "Android/app/proguard-rules.pro": "18169c6dfa5f0fc926f5264aec20363960eca2be65c610f4a1d659917cef6a03",
+    "Android/app/proguard-rules.pro": "e211351507d13e3859148da6e99cd13d68641b49b68f9ce725b8922c990f250e",
     "project.yml": "fae0d8606c2ddc961a5126af2301c20e897fc82a749d8af4b3e99932920ffbdc",
     "EscaliburWallet.xcodeproj/project.pbxproj": "402e8861c9530a4764a159e5c5992a5e298a6734dcea7500ccb80a0b8d6f5ee8",
     "EscaliburWallet.xcodeproj/project.xcworkspace/contents.xcworkspacedata": "7f3b00b5c3fdb45242d7b87e1e5c4e25d1fa8129a16c94295ecc4e8ea2235c5f",
     "EscaliburWallet.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings": "1217e88c0f6d47ddc1282863891735f7ecb21fef803b2834ac186fa9b6d597e0",
     "EscaliburWallet.xcodeproj/xcshareddata/xcschemes/EscaliburWallet.xcscheme": "93c098486d5212db927725bc95a4a5f0d1ea7571d19829e266d88eaa59998656",
     "tools/versoes/versoes.swift": "27461eace6a15115b8fd3473f17cd7d2aa96fbcfd0fbae22ca1d16aa723262cf",
-    "tools/verificar.sh": "ebef116f6f812a7a942d15f89bcf298e97ed8a9666c0f1fa5ea2db47fbdea9c0",
+    "tools/verificar.sh": "bde7f772f3a52e930479d5cbe3e703f7d69fd1414991f6c8a30b2a69e20055dd",
     "tools/codigo.py": "8b9177f894858956c6b888669f6a76b52f24736b8759e5ea1d4085b99252e0dd",
     ".xcode-version": "8fdab257cb1a860a6416eadf25c0ae8ddf3af194de2b8e8003c9e974a8f33644",
     ".github/workflows/verificar.yml": "e3e79a8ef2b84f82fca907945f4ea2834254663f37b82ff8d6d484595a23aed9",
-    "tools/android/testar-nucleo.sh": "8e9c21664cb074604c1d338e711f7e077be60682fa95cb657c69ff0a667f372e"
+    "tools/android/testar-nucleo.sh": "6d379b217768343f1894b21ef400803f45939c256573e2038adbde29831d2e57"
   }
 }

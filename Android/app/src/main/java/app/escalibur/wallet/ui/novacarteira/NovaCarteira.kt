@@ -92,6 +92,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import app.escalibur.wallet.nucleo.Api
 import app.escalibur.wallet.nucleo.FalhaDoNucleo
+import app.escalibur.wallet.nucleo.PalavrasNaTela
 import app.escalibur.wallet.ui.importar.EntradaDaFrase
 import app.escalibur.wallet.ui.importar.TelaDaFrase
 import app.escalibur.wallet.ui.comp.Segredo
@@ -118,6 +119,7 @@ import app.escalibur.wallet.ui.comp.SugestoesDePalavra
 import app.escalibur.wallet.ui.comp.PalavraPeloCelular
 import app.escalibur.wallet.ui.comp.TecladoDePalavras
 import app.escalibur.wallet.ui.comp.TecladoDoCelular
+import app.escalibur.wallet.ui.comp.TextoSecreto
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
 import app.escalibur.wallet.ui.comp.rememberPalavra
 import app.escalibur.wallet.ui.legal.DocumentoLegal
@@ -129,6 +131,7 @@ import app.escalibur.wallet.ui.tema.Paleta
 import app.escalibur.wallet.ui.tema.Raio
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
+import app.escalibur.wallet.ui.tema.Letra
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -306,11 +309,12 @@ private fun EscolherPalavras(palavras: Int, aoCancelar: () -> Unit, aoEscolher: 
  */
 @Composable
 private fun PalavraSorteada(palavras: Int, aoAnotar: () -> Unit) {
-    var palavra by remember { mutableStateOf<String?>(null) }
+    val leitor = remember { PalavrasNaTela() }
+    var palavra by remember { mutableStateOf<CharArray?>(null) }
     LaunchedEffect(palavras) {
-        palavra = runCatching { Api.lista("carteira.palavras", JSONObject().put("de", palavras - 1).put("ate", palavras)).getString(0) }.getOrNull()
+        palavra = runCatching { leitor.ler(palavras - 1, palavras)?.firstOrNull() }.getOrNull()
     }
-    DisposableEffect(Unit) { onDispose { palavra = null } }
+    DisposableEffect(Unit) { onDispose { palavra = null; leitor.zerar() } }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).padding(horizontal = Espaco.margem).padding(top = Espaco.md)) {
             Text(t("A %lldª palavra", palavras), style = estilo(Tipo.titulo), color = Paleta.tinta)
@@ -322,12 +326,12 @@ private fun PalavraSorteada(palavras: Int, aoAnotar: () -> Unit) {
                 verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
             ) {
                 Text("$palavras", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Paleta.placaApagada)
-                Text(palavra ?: "", fontSize = 40.sp, fontWeight = FontWeight.Bold, color = Paleta.placaTinta)
+                palavra?.let { TextoSecreto(it, 40.sp, FontWeight.Bold, Paleta.placaTinta, familia = Letra.familia(FontWeight.Bold, 40f)) }
             }
             Text(t("Em seguida vêm as %lld palavras, para conferir o que você anotou, e a conferência de sempre.", palavras),
                  style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.md))
         }
-        Rodape { BotaoPrimario(t("Anotei"), ligado = palavra != null) { palavra = null; aoAnotar() } }
+        Rodape { BotaoPrimario(t("Anotei"), ligado = palavra != null) { palavra = null; leitor.zerar(); aoAnotar() } }
     }
 }
 
@@ -473,17 +477,17 @@ fun Responsabilidade(tituloDoSeguir: String, carregando: Boolean = false, aoSegu
  * grupo na tela e os vizinhos viram texto; o resto fica no nucleo.
  */
 @Composable
-fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolean = false, aoTerminar: () -> Unit) {
+fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, aoTerminar: () -> Unit) {
     val porGrupo = 3
-    // A passphrase, quando a carteira tem, e o ultimo cartao.
-    val grupoDaPassphrase = if (comPassphrase) palavras / porGrupo else -1
-    val grupos = palavras / porGrupo + (if (comPassphrase) 1 else 0)
+    val grupos = palavras / porGrupo
     var grupo by remember { mutableIntStateOf(0) }
     var escondidas by remember { mutableStateOf(false) }
     var todas by remember { mutableStateOf(false) }
     var copiando by remember { mutableStateOf(false) }
     val contexto = androidx.compose.ui.platform.LocalContext.current
-    val mostradas = remember { mutableStateMapOf<Int, List<String>>() }
+    // As palavras vem do nucleo por um ByteBuffer direto e ficam em CharArray, nunca em String (PalavrasNaTela).
+    val leitor = remember { PalavrasNaTela() }
+    val mostradas = remember { mutableStateMapOf<Int, List<CharArray>>() }
     val arrasto = remember { Animatable(0f) }
     val escopo = rememberCoroutineScope()
     val ultimo = todas || grupo == grupos - 1
@@ -493,26 +497,29 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
     DisposableEffect(dono) {
         val observador = LifecycleEventObserver { _, evento -> if (evento == Lifecycle.Event.ON_STOP) escondidas = true }
         dono.lifecycle.addObserver(observador)
-        onDispose { dono.lifecycle.removeObserver(observador); mostradas.clear() }
+        onDispose { dono.lifecycle.removeObserver(observador); mostradas.clear(); leitor.zerar() }
     }
     // As mesmas palavras na tela por 60 s seguidos escondem sozinhas.
     LaunchedEffect(grupo, todas, escondidas) {
         if (!escondidas) { delay(60_000); escondidas = true }
     }
     LaunchedEffect(grupo, todas, escondidas) {
-        if (escondidas) { mostradas.clear(); return@LaunchedEffect }
+        if (escondidas) { mostradas.clear(); leitor.zerar(); return@LaunchedEffect }
         val faixa = if (todas) 0 until grupos else maxOf(0, grupo - 1)..minOf(grupos - 1, grupo + 1)
-        for (chave in mostradas.keys.toList()) if (chave !in faixa) mostradas.remove(chave)
+        for (chave in mostradas.keys.toList()) if (chave !in faixa) mostradas.remove(chave)?.forEach { it.fill('\u0000') }
         for (indice in faixa) {
-            if (mostradas[indice] == null && indice == grupoDaPassphrase) {
-                mostradas[indice] = listOfNotNull(runCatching { Api.objeto("carteira.passphraseDoRascunho").optString("passphrase", "").ifEmpty { null } }.getOrNull())
-            } else if (mostradas[indice] == null) {
+            if (mostradas[indice] == null) {
                 val inicio = indice * porGrupo
-                mostradas[indice] = runCatching {
-                    Api.lista("carteira.palavras", JSONObject().put("de", inicio).put("ate", minOf(inicio + porGrupo, palavras))).let { lista ->
-                        (0 until lista.length()).map { lista.getString(it) }
-                    }
-                }.getOrDefault(emptyList())
+                // So o que leu entra: uma leitura que falhou (ou que foi cancelada por trocar de grupo) tenta de novo depois,
+                // em vez de deixar o grupo vazio ate esconder (revisao dos pendentes de 07/11/2026).
+                val lidas = try {
+                    leitor.ler(inicio, minOf(inicio + porGrupo, palavras))
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+                if (lidas != null && lidas.size == minOf(porGrupo, palavras - inicio)) mostradas[indice] = lidas
             }
         }
     }
@@ -549,15 +556,16 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
         Text(
             when {
                 todas -> t("%@As %lld palavras, em ordem", prefixo, palavras)
-                grupo == grupoDaPassphrase -> prefixo + t("Passphrase")
                 else -> t("%@Palavras %lld a %lld de %lld", prefixo, grupo * porGrupo + 1, minOf(grupo * porGrupo + porGrupo, palavras), palavras)
             },
             style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xxs),
         )
         if (todas) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = Espaco.md), horizontalAlignment = Alignment.CenterHorizontally) {
-                ChapaDeTodas(palavras, mostradas, escondidas, mostradas[grupoDaPassphrase]?.firstOrNull()) { escondidas = false }
-                if (!escondidas) {
+                ChapaDeTodas(palavras, mostradas, escondidas) { escondidas = false }
+                // So do Android 13 em diante: antes dele a area de transferencia nao marca a copia como sensivel, e o teclado
+                // (Gboard, Samsung) guarda a frase no historico por ate 1 hora (decisao do dono, 07/11/2026).
+                if (!escondidas && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                     BotaoSecundario(t("Copiar"), Modifier.padding(top = Espaco.md).widthIn(max = 200.dp).fillMaxWidth(), icone = Icones.copiar) { copiando = true }
                 }
             }
@@ -610,9 +618,7 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
                                 .shadow(if (profundidade == 0) 10.dp else 0.dp, PlacaLaqueada())
                                 .clip(PlacaLaqueada()).background(tom),
                         ) {
-                            if (profundidade == 0 && indice == grupoDaPassphrase) {
-                                CartaoDaPassphrase(mostradas[indice]?.firstOrNull() ?: "", escondidas) { escondidas = false }
-                            } else if (profundidade == 0) {
+                            if (profundidade == 0) {
                                 CartaoDePalavras(indice * porGrupo, mostradas[indice] ?: emptyList(), escondidas) { escondidas = false }
                             }
                         }
@@ -627,10 +633,6 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
             }
         }
         BotaoTerciario(if (todas) t("Ver três por vez") else t("Ver todas de uma vez"), Modifier.fillMaxWidth()) { todas = !todas }
-        if (!todas && grupo == grupoDaPassphrase) {
-            Text(t("Sem ela, as palavras acima abrem uma carteira diferente e vazia."), style = estilo(Tipo.nota), color = Paleta.tintaSuave,
-                 modifier = Modifier.padding(top = Espaco.sm))
-        }
         if (!todas) Spacer(Modifier.weight(1f))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
             if (grupo > 0 && !todas) BotaoSecundario(t("Anteriores"), Modifier.weight(1f), altura = Altura.primaria) { mover(-1) }
@@ -644,11 +646,22 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
         FolhaDaCopia(aoCopiar = {
             // Direto do nucleo: as da tela podem ter sido soltas se o app saiu da frente.
             escopo.launch {
-                val frase = runCatching {
-                    Api.lista("carteira.palavras", JSONObject().put("de", 0).put("ate", palavras)).let { lista -> (0 until lista.length()).map { lista.getString(it) } }
-                }.getOrDefault(emptyList())
-                if (frase.size != palavras) return@launch
-                Transferencia.copiar(contexto, frase.joinToString(" "), segundos = 60, segredo = true)
+                val copia = PalavrasNaTela()
+                var junta: CharArray? = null
+                try {
+                    val frase = runCatching { copia.ler(0, palavras) }.getOrNull()
+                    if (frase == null || frase.size != palavras) return@launch
+                    // Juntas num CharArray so (o CharBuffer e uma janela sobre ele), zerado aqui mesmo se a copia falhar. A
+                    // area de transferencia transforma em String ao passar para o sistema (TextUtils.writeToParcel), dentro
+                    // do app e no sistema: e o preco da copia, que o dono escolhe (so do Android 13 em diante).
+                    val juntas = CharArray(frase.sumOf { it.size } + frase.size - 1) { ' ' }.also { junta = it }
+                    var posicao = 0
+                    frase.forEach { palavra -> palavra.copyInto(juntas, posicao); posicao += palavra.size + 1 }
+                    Transferencia.copiar(contexto, java.nio.CharBuffer.wrap(juntas), segundos = 60, segredo = true)
+                } finally {
+                    junta?.fill('\u0000')
+                    copia.zerar()
+                }
                 // O alarme do sistema e inexato: "cerca de" (auditoria do envelope de 06/11/2026).
                 Avisos.mostrar(t("Palavras copiadas. Elas somem em cerca de 1 minuto."))
             }
@@ -657,7 +670,7 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
 }
 
 @Composable
-private fun CartaoDePalavras(inicio: Int, palavras: List<String>, escondidas: Boolean, aoMostrar: () -> Unit) {
+private fun CartaoDePalavras(inicio: Int, palavras: List<CharArray>, escondidas: Boolean, aoMostrar: () -> Unit) {
     if (escondidas) {
         Column(Modifier.fillMaxSize().padding(Espaco.md), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Text(t("Escondidas para ninguém ler por cima do seu ombro."), style = estilo(Tipo.corpo), color = Paleta.placaTinta, textAlign = TextAlign.Center)
@@ -675,38 +688,11 @@ private fun CartaoDePalavras(inicio: Int, palavras: List<String>, escondidas: Bo
                 horizontalArrangement = Arrangement.spacedBy(Espaco.md)) {
                 Text("%02d".format(inicio + deslocamento + 1), color = Paleta.placaApagada, modifier = Modifier.width(34.dp),
                      style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum"))
-                Text(palavra, fontFamily = FontFamily.Monospace, fontSize = 30.sp, fontWeight = FontWeight.SemiBold, color = Paleta.placaTinta, maxLines = 1)
+                TextoSecreto(palavra, 30.sp, FontWeight.SemiBold, Paleta.placaTinta)
             }
             if (deslocamento < palavras.size - 1) Box(Modifier.fillMaxWidth().padding(start = Espaco.base).height(1.dp).background(Paleta.placaLinha))
         }
     }
-}
-
-/**
- * A passphrase inteira, sem cortar: o espaco aparece como ␣ e a contagem vem embaixo, porque um
- * espaco a mais ou um caractere que sumiu ja abre outra carteira.
- */
-@Composable
-private fun CartaoDaPassphrase(passphrase: String, escondidas: Boolean, aoMostrar: () -> Unit) {
-    if (escondidas) {
-        CartaoDePalavras(0, emptyList(), true, aoMostrar)
-        return
-    }
-    Row(Modifier.fillMaxSize().padding(horizontal = Espaco.base, vertical = Espaco.md), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Espaco.md)) {
-        Text("Pass", color = Paleta.placaApagada, modifier = Modifier.width(44.dp), style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-        Column(verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-            Text(passphrase.replace(" ", "␣"), fontFamily = FontFamily.Monospace, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, color = Paleta.placaTinta)
-            Text(contagemDaPassphrase(passphrase), style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold), color = Paleta.placaApagada)
-        }
-    }
-}
-
-/** A contagem, e o aviso de que a quebra de linha da tela nao e caractere. */
-fun contagemDaPassphrase(passphrase: String): String {
-    val quantos = passphrase.codePointCount(0, passphrase.length)
-    val contagem = if (passphrase.contains(" ")) t("%lld caracteres. ␣ é um espaço.", quantos) else t("%lld caracteres.", quantos)
-    return if (quantos > 16) contagem + " " + t("A quebra de linha não é espaço.") else contagem
 }
 
 /**
@@ -717,8 +703,7 @@ fun contagemDaPassphrase(passphrase: String): String {
  * no verso, e mostrar de novo vira a chapa de volta.
  */
 @Composable
-private fun ChapaDeTodas(palavras: Int, mostradas: Map<Int, List<String>>, escondidas: Boolean, passphrase: String? = null, aoMostrar: () -> Unit) {
-    val todas = (0 until palavras / 3).flatMap { mostradas[it] ?: emptyList() }
+private fun ChapaDeTodas(palavras: Int, mostradas: Map<Int, List<CharArray>>, escondidas: Boolean, aoMostrar: () -> Unit) {
     val metade = (palavras + 1) / 2
     val parado = app.escalibur.wallet.ui.comp.movimentoReduzido()
     val inclinacao = rememberInclinacao(ligada = !parado)
@@ -732,7 +717,6 @@ private fun ChapaDeTodas(palavras: Int, mostradas: Map<Int, List<String>>, escon
     )
     val deFrente = cos(Math.toRadians(giro.toDouble())) > 0
     val numero = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Black, fontFeatureSettings = "tnum")
-    val palavra = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
 
     // A espessura da chapa: a borda de aco que aparece embaixo e do lado oposto ao giro.
     @Composable
@@ -770,19 +754,16 @@ private fun ChapaDeTodas(palavras: Int, mostradas: Map<Int, List<String>>, escon
                                 for (indice in coluna * metade until minOf(palavras, (coluna + 1) * metade)) {
                                     Row(Modifier.height(40.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                                         TextoGravado("%02d".format(indice + 1), numero, 0.8.dp, Modifier.width(24.dp))
-                                        TextoGravado(todas.getOrElse(indice) { "" }, palavra, 1.dp)
+                                        // Pela posicao: um grupo que ainda nao chegou nao empurra os seguintes para o numero errado.
+                                        mostradas[indice / 3]?.getOrNull(indice % 3)?.let { palavra ->
+                                            // O baixo-relevo do TextoGravado, desenhado do CharArray.
+                                            TextoSecreto(palavra, 20.sp, FontWeight.Bold, Aco.tinta.copy(alpha = 0.94f),
+                                                camadas = listOf(Color.White.copy(alpha = 0.9f) to 1.3.dp, Color.Black.copy(alpha = 0.28f) to (-0.8).dp))
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    if (passphrase != null) {
-                        Box(Modifier.padding(vertical = Espaco.xs).fillMaxWidth().height(1.5.dp).background(Aco.sulco))
-                        Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
-                            TextoGravado("Pass", numero, 0.8.dp)
-                            TextoGravado(passphrase.replace(" ", "␣"), palavra, 1.dp, linhas = 8)
-                        }
-                        TextoGravado(contagemDaPassphrase(passphrase), TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold), 0.6.dp, linhas = 3)
                     }
                 }
             }
@@ -825,7 +806,8 @@ fun ConferirPalavras(palavras: Int, aoVoltar: () -> Unit, aoDepois: (() -> Unit)
         val digitada = palavra.texto
         escopo.launch {
             val confere = runCatching {
-                Api.objeto("carteira.conferir", JSONObject().put("indice", posicao).put("palavra", digitada)).getBoolean("confere")
+                // Como segredo, e nao no JSON (auditoria das chaves de 06/11/2026).
+                Api.comSegredo("carteira.conferir", JSONObject().put("indice", posicao), digitada.toByteArray(Charsets.UTF_8)).getBoolean("confere")
             }.getOrDefault(false)
             if (confere) {
                 palavra.limpar()

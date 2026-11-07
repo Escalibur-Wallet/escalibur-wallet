@@ -26,6 +26,11 @@ object Nucleo {
 
     @JvmStatic
     external fun chamarComSegredo(metodo: String, corpo: String, segredo: ByteArray): String
+
+    /** Palavras secretas em UTF-8, direto no ByteBuffer direto (ver PalavrasNaTela): fonte 0 as do rascunho, de `de` ate
+     * `ate`; fonte 1 as seis sorteadas para a senha do envelope. Quantos bytes, ou -1. */
+    @JvmStatic
+    external fun palavras(fonte: Int, de: Int, ate: Int, destino: java.nio.ByteBuffer): Int
 }
 
 /** A recusa do nucleo: o codigo estavel ("cofre.pinErrado") e o resto do JSON (restantes, segundos). */

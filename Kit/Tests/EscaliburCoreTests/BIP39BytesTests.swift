@@ -30,6 +30,14 @@ struct BIP39BytesTests {
                 #expect(BIP39.validate(secure(short)) == Mnemonic.validate(short))
                 let messy = "  " + canonical.uppercased().replacingOccurrences(of: " ", with: "   ") + " "
                 #expect(BIP39.validate(secure(messy)) == Mnemonic.validate(messy), "\(language) baguncada")
+                // O diagnostico pelos bytes (06/11/2026): os espacos e invisiveis que o canonicalize trata, na frase boa e
+                // na quebrada.
+                for separator in ["\t", "\n", "\u{00A0}", "\u{3000}", "\u{2028}", " \u{200B}", "\u{00AD} ", " \u{FEFF}\u{2003}", " \u{00B4}", "\u{309B} ", "\u{02DC}"] {
+                    let good = canonical.replacingOccurrences(of: " ", with: separator)
+                    #expect(BIP39.validate(secure(good)) == Mnemonic.validate(good), "\(language) com \(separator.unicodeScalars.map { $0.value })")
+                    let bad = broken.replacingOccurrences(of: " ", with: separator)
+                    #expect(BIP39.validate(secure(bad)) == Mnemonic.validate(bad), "\(language) quebrada com \(separator.unicodeScalars.map { $0.value })")
+                }
             }
         }
     }
@@ -134,7 +142,12 @@ struct BIP39BytesTests {
         }
         // A tabela de classes do Swift e a do Foundation concordam neste build (senao vale o NFKD de antes), e cada marca
         // depois de U+0345 (classe 240), tambem por aqui; e o texto que comeca por marca.
+        // No iPhone as duas tabelas concordam. No Android (o Foundation do Swift 6.4.1 sobre o ICU do sistema) discordam em
+        // alguma marca, e vale o caminho de reserva, que da o mesmo NFKD de antes: o que este teste confere e o resultado
+        // igual, nao o caminho (07/11/2026, os vetores de derivacao no emulador).
+        #if canImport(Darwin)
         #expect(BIP39.letterByLetterAgrees)
+        #endif
         for value in UInt32(0x300)...UInt32(0x10FFFF) {
             guard let mark = Unicode.Scalar(value), mark.properties.canonicalCombiningClass.rawValue != 0 else { continue }
             for probe in ["a\u{0345}" + String(Character(mark)), "a" + String(Character(mark)) + "\u{0334}"] {

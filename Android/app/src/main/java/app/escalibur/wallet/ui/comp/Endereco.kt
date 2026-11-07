@@ -82,7 +82,7 @@ object Transferencia {
     private const val ARQUIVO = "transferencia.pendente"
     private const val SEGREDO = "segredo"
 
-    fun copiar(contexto: Context, texto: String, segundos: Long = 120, rotulo: String = "Escalibur", segredo: Boolean = false) {
+    fun copiar(contexto: Context, texto: CharSequence, segundos: Long = 120, rotulo: String = "Escalibur", segredo: Boolean = false) {
         val gerente = contexto.getSystemService(ClipboardManager::class.java)
         val sorteio = ByteArray(8).also { java.security.SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
         val marca = "$rotulo $sorteio"

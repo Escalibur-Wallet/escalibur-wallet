@@ -25,6 +25,7 @@
     public static byte[] abrirChave(java.lang.String, byte[], java.lang.String);
     public static byte[] abrirChaveVigiando(java.lang.String, byte[], java.lang.String, java.lang.String, byte[]);
     public static byte[] semente(java.lang.String, byte[], boolean);
+    public static int temStrongBox();
     public static int estadoDaBiometria();
     public static byte[] cadastroDaBiometria();
     public static byte[] boot();

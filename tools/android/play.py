@@ -5,7 +5,10 @@ play-publisher. A chave fica em ~/.escalibur/android/play-api.json, fora do repo
   python3 tools/android/play.py conferir      # testa o acesso (abre e descarta uma edicao)
   python3 tools/android/play.py ficha         # textos, contato e imagens de tools/android/ficha-play.json
   python3 tools/android/play.py subir <aab>   # o AAB no teste interno, como rascunho
-  python3 tools/android/play.py producao <aab> <versao>   # o AAB em producao, para revisao, com as notas da ficha
+  python3 tools/android/play.py producao <aab> <versao> [fracao]   # o AAB em producao, para revisao, com as notas da ficha;
+                                                                # com fracao (ex.: 0.05), lancamento gradual para essa parte
+  python3 tools/android/play.py ampliar <versionCode> <fracao|completo>   # sobe a fracao do lancamento gradual, ou completa
+  python3 tools/android/play.py pausar <versionCode>                       # pausa o lancamento gradual
 
 Cada mudanca na Play passa por uma "edicao": abrir, mudar, e so o commit publica. Sem commit,
 nada muda na loja. Enquanto o app nunca foi publicado, a Play so aceita versao em rascunho: quem
@@ -119,12 +122,52 @@ def producao():
     edicao = pedir("POST", "/edits", {}, t)["id"]
     versao = pedir("POST", f"/edits/{edicao}/bundles?uploadType=media", open(aab, "rb").read(), t,
                    base=ENVIO, tipo="application/octet-stream")["versionCode"]
-    pedir("PUT", f"/edits/{edicao}/tracks/production", {"track": "production", "releases": [{
-        "name": nome, "versionCodes": [str(versao)], "status": "completed",
-        "releaseNotes": [{"language": l, "text": texto} for l, texto in notas.items()]}]}, t)
+    fracao = float(sys.argv[4]) if len(sys.argv) > 4 else None
+    if fracao is not None and not 0 < fracao < 1:
+        sys.exit("a fracao do lancamento gradual vai de 0 a 1, sem os dois (ex.: 0.05)")
+    lancamento = {"name": nome, "versionCodes": [str(versao)],
+                  "releaseNotes": [{"language": l, "text": texto} for l, texto in notas.items()]}
+    # Gradual: so essa parte dos usuarios recebe, e da para pausar se aparecer problema (07/11/2026).
+    lancamento.update({"status": "inProgress", "userFraction": fracao} if fracao is not None else {"status": "completed"})
+    pedir("PUT", f"/edits/{edicao}/tracks/production", {"track": "production", "releases": [lancamento]}, t)
     pedir("POST", f"/edits/{edicao}:commit", {}, t)
-    print(f"AAB {versao} ({nome}) em producao, enviado para revisao")
+    parte = f", lancamento gradual para {fracao:.0%}" if fracao is not None else ""
+    print(f"AAB {versao} ({nome}) em producao{parte}, enviado para revisao")
+
+
+def mudar_lancamento(versao, mudanca):
+    t = token()
+    edicao = pedir("POST", "/edits", {}, t)["id"]
+    faixa = pedir("GET", f"/edits/{edicao}/tracks/production", None, t)
+    lancamentos = faixa.get("releases", [])
+    alvo = next((r for r in lancamentos if str(versao) in r.get("versionCodes", [])), None)
+    if alvo is None:
+        sys.exit(f"o {versao} nao esta na faixa de producao")
+    mudanca(alvo)
+    pedir("PUT", f"/edits/{edicao}/tracks/production", {"track": "production", "releases": lancamentos}, t)
+    pedir("POST", f"/edits/{edicao}:commit", {}, t)
+    print(f"{versao}: {alvo.get('status')}" + (f" para {alvo['userFraction']:.0%}" if alvo.get("userFraction") else ""))
+
+
+def ampliar():
+    versao = sys.argv[2] if len(sys.argv) > 2 else sys.exit("falta o versionCode")
+    valor = sys.argv[3] if len(sys.argv) > 3 else sys.exit("falta a fracao ou completo")
+    def mudanca(alvo):
+        if valor == "completo":
+            alvo["status"] = "completed"
+            alvo.pop("userFraction", None)
+        else:
+            fracao = float(valor)
+            if not 0 < fracao < 1:
+                sys.exit("a fracao vai de 0 a 1, sem os dois")
+            alvo["status"], alvo["userFraction"] = "inProgress", fracao
+    mudar_lancamento(versao, mudanca)
+
+
+def pausar():
+    versao = sys.argv[2] if len(sys.argv) > 2 else sys.exit("falta o versionCode")
+    mudar_lancamento(versao, lambda alvo: alvo.__setitem__("status", "halted"))
 
 
 if __name__ == "__main__":
-    {"conferir": conferir, "ficha": ficha, "subir": subir, "producao": producao}.get(sys.argv[1] if len(sys.argv) > 1 else "", lambda: sys.exit(__doc__))()
+    {"conferir": conferir, "ficha": ficha, "subir": subir, "producao": producao, "ampliar": ampliar, "pausar": pausar}.get(sys.argv[1] if len(sys.argv) > 1 else "", lambda: sys.exit(__doc__))()

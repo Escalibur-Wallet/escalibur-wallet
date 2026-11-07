@@ -13,6 +13,8 @@ enum Envelopes {
     // MARK: Lacrar
 
     nonisolated(unsafe) private static var carteira: UUID?
+    /// A carteira do ultimo envelope lacrado: a data de "lacrado" so e gravada quando o arquivo sai do app (`entregue`).
+    nonisolated(unsafe) private static var lacradoDe: UUID?
     nonisolated(unsafe) private static var frase: SecureBytes?
     nonisolated(unsafe) private static var passphrase: SecureBytes?
     /// As posicoes das palavras sorteadas: a senha e montada direto no buffer seguro.
@@ -114,12 +116,24 @@ enum Envelopes {
         return wallet.name
     }
 
-    /// Seis palavras sorteadas neste aparelho, que nao repetem as da carteira.
-    static func sugerir() throws -> [String] {
+    /// Seis palavras sorteadas neste aparelho, que nao repetem as da carteira. Elas nao voltam no JSON: o Kotlin as le
+    /// em bytes pelo `Nucleo.palavras` (fonte 1, `escreverSugestao`), como as da carteira (revisao de 07/11/2026: a senha
+    /// sorteada em String, somada ao arquivo do envelope, abre a seed).
+    static func sugerir() throws {
         let novos = try PasswordStrength.suggestionIndices(avoiding: trava.withLock { frase })
-        let lista = try WordlistStore.shared.wordlist(for: .english)
         trava.withLock { indices = novos }
-        return novos.map { lista.words[$0] }
+    }
+
+    /// As palavras sorteadas, separadas por um espaco, direto no destino (o ByteBuffer do Kotlin). Quantos bytes, ou -1.
+    static func escreverSugestao(em destino: UnsafeMutableRawBufferPointer) -> Int {
+        trava.withLock {
+            guard !indices.isEmpty, let saida = destino.baseAddress else { return -1 }
+            let buffer = SecureBytes(capacity: 256)
+            defer { buffer.wipe() }
+            guard (try? PasswordStrength.write(indices, into: buffer)) != nil, buffer.count <= destino.count else { return -1 }
+            buffer.withUnsafeBytes { saida.copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
+            return buffer.count
+        }
     }
 
     /// "Anotei, continuar": a senha sai direto das posicoes sorteadas.
@@ -265,18 +279,16 @@ enum Envelopes {
     static func aceitarRisco() { trava.withLock { aceitouRisco = true } }
 
     /// Da repeticao de volta para a senha: a senha sai da memoria. Com as palavras sorteadas,
-    /// voltam as mesmas (o dono ja anotou).
-    static func voltar() -> [String] {
-        let (eraSorteada, posicoes) = trava.withLock { () -> (Bool, [Int]) in
+    /// voltam as mesmas (o dono ja anotou), lidas pelo `escreverSugestao`. Devolve se eram as sorteadas.
+    static func voltar() -> Bool {
+        trava.withLock {
             senha?.wipe()
             senha = nil
             aceitouRisco = false
-            let era = sorteada
+            let era = sorteada && !indices.isEmpty
             sorteada = false
-            return (era, indices)
+            return era
         }
-        guard eraSorteada, let lista = try? WordlistStore.shared.wordlist(for: .english) else { return [] }
-        return posicoes.map { lista.words[$0] }
     }
 
     struct Lacrado: Encodable { let arquivo: String; let nome: String; let fraca: Bool }
@@ -309,9 +321,24 @@ enum Envelopes {
         // Travou ou a tela fechou durante o Argon2: nada sai.
         guard trava.withLock({ rodadaDoLacre == rodada }) else { throw Sessao.Falha.travada }
         encerrar()
-        try? Sessao.shared.atualizar(id) { $0.envelopeSealedAt = .now }
+        // A data de "lacrado" so quando o arquivo sai: gravado e relido, ou entregue a um app (auditoria do envelope de
+        // 06/11/2026). Antes, Ajustes dizia "lacrado" de um envelope que podia nunca ter saido do app.
+        trava.withLock { lacradoDe = id }
         let sorteio = try SecureBytes.random(count: 2).withUnsafeBytes { Array($0) }
         return Lacrado(arquivo: arquivo.base64EncodedString(), nome: "envelope-\(Hex.encode(sorteio).uppercased()).esclbr", fraca: fraca)
+    }
+
+    /// O arquivo do ultimo lacre saiu do app: a data de "lacrado" vai para a carteira.
+    static func entregue() {
+        guard let id = trava.withLock({ lacradoDe }) else { return }
+        try? Sessao.shared.atualizar(id) { $0.envelopeSealedAt = .now }
+    }
+
+    /// A tela do envelope fechou: a carteira do ultimo lacre sai (um "entregue" que chegasse depois marcaria uma carteira
+    /// que nao lacrou nada agora). Nao no `encerrar`, que tambem roda ao travar: com a folha de compartilhar aberta, o app
+    /// pode travar antes de o dono escolher para onde vai o arquivo.
+    static func esquecerLacrado() {
+        trava.withLock { lacradoDe = nil }
     }
 
     /// A tela fechou: tudo do lacre sai da memoria.

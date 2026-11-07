@@ -40,6 +40,8 @@ public enum Signer {
     /// recusa.
     public static func sign(_ plan: SigningPlan, rootKey rk: SecureBytes, vault: WalletVault,
                             passphrase typed: SecureBytes?, fingerprint: [UInt8]?) throws -> [SignedTransaction] {
+        // Por ultimo: a pilha que as contas da BoringSSL deixaram (StackWipe).
+        defer { StackWipe.below() }
         defer { rk.wipe() }
         guard !plan.isExpired() else { throw Failure.expired }
         // O nonce conferido antes de abrir o cofre. A derivacao aqui nao passa pelo `DerivationSelfTest`, de proposito: a
@@ -117,7 +119,7 @@ public enum Signer {
             guard recovered == publicKey else { throw Failure.verificationFailed }
             return ProducedSignature(bytes: compact, recoveryID: recovery)
         case .ed25519:
-            let signature = try Ed25519.sign(request.payload, seed: key.key)
+            let signature = try Ed25519.sign(request.payload, seed: key.key, hedged: true)
             guard Ed25519.verify(signature: signature, message: request.payload, publicKey: publicKey) else {
                 throw Failure.verificationFailed
             }
@@ -184,6 +186,7 @@ public enum PassphraseProof {
     /// A raiz tem o fingerprint da criacao? E, com a conta Cardano gravada, ela e a desta passphrase em NFKD? A
     /// passphrase certa com outra conta Cardano e a que uma versao anterior gravou fora de NFKD.
     static func verify(_ secret: WalletSecret, fingerprint: [UInt8]?, cardanoPublicKey: [UInt8]?) throws -> Result {
+        defer { StackWipe.below() }
         guard let fingerprint, secret.passphrase.count > 0 else { return .mismatch }
         let seed = try secret.seed()
         defer { seed.wipe() }
@@ -227,6 +230,7 @@ public enum AccountDeriver {
     /// Deriva o endereco padrao de cada rede, depois de o aparelho conferir os vetores publicos (`DerivationSelfTest`): com
     /// um resultado diferente, nenhuma carteira e derivada (decima terceira passada da auditoria de 03/11/2026).
     public static func derive(_ secret: WalletSecret, chains: [Chain] = Chain.all) throws -> (accounts: [DerivedAccount], fingerprint: [UInt8]) {
+        defer { StackWipe.below() }
         guard DerivationSelfTest.passed else { throw DerivationSelfTest.Failure() }
         // Duas vezes, iguais: um defeito intermitente do aparelho (memoria, otimizador) que tivesse passado no autoteste nao
         // grava um endereco que a frase nao reabre (revisao da decima terceira passada).

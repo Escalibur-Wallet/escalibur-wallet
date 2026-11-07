@@ -841,6 +841,29 @@ struct HardenedModeTests {
         #expect(throws: RootKeyVault.Failure.biometryHold(seconds: PINPolicy.biometryLossHold)) { try other.unlockHardened(pin: secure(pin), reason: "enviar") }
     }
 
+    @Test("Esperar 24 horas: vigia sem resposta, espera de uma falha passageira do hash termina vencida e nao volta no reinicio")
+    func waitWatchUnknownTransientHoldEnds() throws {
+        for comeco in [nil, ownerFace, newFace] as [Data?] {
+            let (vault, store, wrapper, rk) = try makeHardened(.wait)
+            wrapper.watchUnknown = true
+            // A leitura do hash falhou uma vez: a espera comeca.
+            vault.hardenedDomainState = { nil }
+            _ = try vault.unlockHardened(pin: secure(pin), reason: "abrir", use: .openApp)
+            #expect(store.probe("and.espera") == .present)
+            vault.hardenedDomainState = { ownerFace }
+            // Correndo, nada muda, e o que pede a biometria espera.
+            _ = try vault.unlockHardened(pin: secure(pin), reason: "abrir", use: .openApp)
+            #expect(store.probe("and.espera") == .present)
+            // Vencida, com o hash igual ao gravado: termina, e o reinicio nao a traz de volta.
+            try expireHold(store, state: comeco ?? Data())
+            #expect(bytes(try vault.unlockHardened(pin: secure(pin), reason: "enviar")) == rk)
+            #expect(store.probe("and.espera") == .absent)
+            vault.rebaseAttempts()
+            #expect(store.probe("and.espera") == .absent)
+            #expect(bytes(try vault.unlockHardened(pin: secure(pin), reason: "enviar")) == rk)
+        }
+    }
+
     @Test("Esperar 24 horas: a vigia que abre outro miolo e um registro adulterado")
     func waitMiddleMismatch() throws {
         let (vault, store, wrapper, _) = try makeHardened(.wait)
@@ -939,18 +962,20 @@ struct HardenedModeTests {
         #expect(store.raw("and.espera") == running)
     }
 
-    @Test("Esperar 24 horas: so a vigia aberta encerra uma espera vencida; o hash igual sozinho nao")
-    func waitOnlyProofEndsHold() throws {
+    @Test("Esperar 24 horas: espera vencida termina com a vigia aberta ou, sem resposta dela, com o hash igual ao gravado")
+    func waitExpiredHoldEndsWithoutChange() throws {
+        // Ate 07/11/2026 so a vigia aberta terminava: o hash forjado no chaveiro era o risco, mas quem escreve no chaveiro
+        // apaga a espera do mesmo jeito, e a troca de cadastro de verdade apaga a chave da vigia (`.gone`). Sem terminar,
+        // a espera recomecava cheia a cada reinicio, e no Android (vigia por operacao, sempre `.unknown`) para sempre.
         let (vault, store, wrapper, rk) = try makeHardened(.wait)
         changeEnrollment(vault, wrapper)
         _ = try vault.unlockHardened(pin: secure(pin), reason: "abrir", use: .openApp)
         try expireHold(store)
-        // A vigia nao responde e o hash bate com o gravado: o mesmo cadastro, mas sem prova.
         try store.delete("and.estado")
         try store.add(newFace, account: "and.estado", protection: .standard, context: nil)
         wrapper.watchUnknown = true
         #expect(bytes(try vault.unlockHardened(pin: secure(pin), reason: "enviar")) == rk)
-        #expect(store.probe("and.espera") == .present)
+        #expect(store.probe("and.espera") == .absent)
         #expect(vault.hardenedHoldRemaining == 0)
     }
 

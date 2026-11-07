@@ -69,7 +69,13 @@ final class PassphraseWalletTests: XCTestCase {
         app.buttons["Abrir carteira"].tap()
         type(pin: "111111", in: app)
 
-        // Vai direto para a Carteira, com a carteira nova em uso (17/10/2026).
+        // Carteira sem movimento: a conferencia "Esta carteira ainda nao foi usada" pergunta antes (desde 01/11/2026).
+        let useIt = app.buttons["Usar esta carteira"]
+        if useIt.waitForExistence(timeout: 30) {
+            shot("q1c-nao-usada", app)
+            useIt.tap()
+        }
+        // Depois, a Carteira, com a carteira nova em uso (17/10/2026).
         XCTAssertTrue(app.staticTexts["Carteira principal com passphrase"].waitForExistence(timeout: 30), "a carteira nova deveria abrir na Carteira")
         XCTAssertTrue(app.buttons["acao-receber"].exists, "deveria estar na tela Carteira")
         shot("q2-em-uso", app)

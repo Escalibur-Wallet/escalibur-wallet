@@ -41,6 +41,8 @@ public final class SecureBytes: @unchecked Sendable {
     private let region: UnsafeMutableRawPointer
     private let regionSize: Int
     private let base: UnsafeMutableRawPointer
+    /// No Android, as fatias da arena travada que este buffer usa (nil: regiao propria, com `mmap`).
+    private let arenaSlices: (first: Int, count: Int)?
 
     public let capacity: Int
     public private(set) var count: Int = 0
@@ -50,6 +52,19 @@ public final class SecureBytes: @unchecked Sendable {
     public init(capacity: Int) {
         precondition(capacity > 0)
         self.capacity = capacity
+
+        #if !canImport(Darwin)
+        // Android: o segredo pequeno vai para a arena travada na RAM (LockedArena), que nao gasta uma pagina da cota de
+        // memoria travada por buffer (auditoria das chaves de 06/11/2026).
+        if let slot = LockedArena.take(capacity) {
+            memset_s(slot.pointer, slot.count * LockedArena.sliceSize, 0, slot.count * LockedArena.sliceSize)
+            self.region = slot.pointer
+            self.regionSize = 0
+            self.base = slot.pointer
+            self.arenaSlices = (slot.first, slot.count)
+            return
+        }
+        #endif
 
         let pageSize = Int(getpagesize())
         let payloadPages = (capacity + pageSize - 1) / pageSize
@@ -92,17 +107,25 @@ public final class SecureBytes: @unchecked Sendable {
         // zerada na RAM. Melhor esforco: sem cota (RLIMIT_MEMLOCK) ou sem permissao, o buffer segue
         // como antes; o munmap solta a trava (auditoria Android de 31/10/2026, AA-01). O bloco do
         // Argon2 (256 MiB, malloc) nao cabe na cota e continua exposto durante a derivacao do PIN.
-        _ = mlock(region.advanced(by: pageSize), payloadPages * pageSize)
+        // A falha do mlock e contada, e nao engolida (`LockedArena.lockFailures`).
+        if mlock(region.advanced(by: pageSize), payloadPages * pageSize) != 0 { LockedArena.noteLockFailure() }
         _ = madvise(region, regionSize, MADV_DONTDUMP)
         #endif
 
         self.region = region
         self.regionSize = regionSize
         self.base = region.advanced(by: pageSize)
+        self.arenaSlices = nil
     }
 
     deinit {
         wipeRegion()
+        #if !canImport(Darwin)
+        if let slices = arenaSlices {
+            LockedArena.give(first: slices.first, count: slices.count)
+            return
+        }
+        #endif
         munmap(region, regionSize)
     }
 
@@ -243,3 +266,87 @@ public enum CryptoError: Error, Equatable {
     /// O arquivo nao e um cofre, ou e de uma versao que este app nao conhece.
     case malformedVault(String)
 }
+
+#if !canImport(Darwin)
+/// Uma regiao so, travada na RAM (`mlock`) e fora do core dump, com uma pagina de guarda em cada ponta, dividida em fatias de
+/// 256 bytes. A cota de memoria travada do Android e de 64 KiB (RLIMIT_MEMLOCK), e cada SecureBytes com regiao propria trava
+/// pelo menos uma pagina: do 17o buffer em diante (do 5o, em kernel de paginas de 16 KiB) o `mlock` falhava em silencio e a
+/// seed podia ir para o swap no flash (auditoria das chaves de 06/11/2026). Aqui cabem as chaves, a entropia, a seed, o PIN,
+/// a passphrase e a frase. O que nao cabe segue com a regiao propria. Entre as fatias nao ha pagina de guarda: a capacidade
+/// fixa do SecureBytes ja impede escrever fora, e as guardas da arena pegam o ponteiro cru que passa da ponta.
+enum LockedArena {
+    static let sliceSize = 256
+    /// Acima disto (texto de envelope, por exemplo) vai para a regiao propria, para nao ocupar a arena das chaves.
+    static let largestCapacity = 2048
+
+    private struct State {
+        let base: UnsafeMutableRawPointer
+        var used: [Bool]
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var state: State? = setup()
+    nonisolated(unsafe) private static var failures = 0
+
+    /// Quantos `mlock` de regiao propria falharam neste processo (o que nao coube na arena).
+    static var lockFailures: Int { lock.withLock { failures } }
+
+    /// A arena nasceu (mmap, guardas e mlock aceitos)?
+    static var isActive: Bool { lock.withLock { state != nil } }
+
+    static func noteLockFailure() { lock.withLock { failures += 1 } }
+
+    private static func setup() -> State? {
+        let pageSize = Int(getpagesize())
+        var limit = rlimit()
+        guard getrlimit(RLIMIT_MEMLOCK, &limit) == 0 else { return nil }
+        // Sem limite (RLIM_INFINITY) conta como a cota padrao do Android.
+        let quota = limit.rlim_cur > rlim_t(Int32.max) ? 64 * 1024 : Int(limit.rlim_cur)
+        // Metade da cota, ate 32 KiB: a outra metade fica para quem nao cabe aqui.
+        let payload = (min(32 * 1024, quota / 2) / pageSize) * pageSize
+        guard payload >= pageSize else { return nil }
+        let regionSize = payload + 2 * pageSize
+        let region: UnsafeMutableRawPointer = mmap(nil, regionSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0)
+        guard region != UnsafeMutableRawPointer(bitPattern: -1) else { return nil }
+        let base = region.advanced(by: pageSize)
+        guard mprotect(region, pageSize, PROT_NONE) == 0,
+              mprotect(base.advanced(by: payload), pageSize, PROT_NONE) == 0,
+              mlock(base, payload) == 0
+        else {
+            munmap(region, regionSize)
+            return nil
+        }
+        _ = madvise(region, regionSize, MADV_DONTDUMP)
+        return State(base: base, used: [Bool](repeating: false, count: payload / sliceSize))
+    }
+
+    /// As primeiras fatias seguidas e livres que cabem `capacity`, ou nil (arena cheia, ou sem arena).
+    static func take(_ capacity: Int) -> (pointer: UnsafeMutableRawPointer, first: Int, count: Int)? {
+        let needed = (capacity + sliceSize - 1) / sliceSize
+        return lock.withLock {
+            // O `state` primeiro: a arena nasce no primeiro SecureBytes do processo, de qualquer tamanho. Se os grandes
+            // viessem antes e gastassem a cota, o mlock dela falhava e ela nunca existia (revisao de 07/11/2026).
+            guard var current = state, capacity <= largestCapacity, needed <= current.used.count else { return nil }
+            var run = 0
+            for index in current.used.indices {
+                run = current.used[index] ? 0 : run + 1
+                guard run == needed else { continue }
+                let first = index - needed + 1
+                for slice in first...index { current.used[slice] = true }
+                state = current
+                return (current.base.advanced(by: first * sliceSize), first, needed)
+            }
+            return nil
+        }
+    }
+
+    /// Devolve as fatias (ja zeradas por quem as usou).
+    static func give(first: Int, count: Int) {
+        lock.withLock {
+            guard var current = state else { return }
+            for slice in first..<(first + count) { current.used[slice] = false }
+            state = current
+        }
+    }
+}
+#endif

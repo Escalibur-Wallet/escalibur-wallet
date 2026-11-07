@@ -161,3 +161,23 @@ public func Java_app_escalibur_wallet_nucleo_Nucleo_chamarComSegredo(
     bytes.wipe()
     return java.string(String(decoding: resposta, as: UTF8.self))
 }
+
+/// Palavras secretas para a tela, em UTF-8 e separadas por um espaco, escritas direto no ByteBuffer direto que o Kotlin
+/// passa (um byte[] que o ART nao move): nem `String`, nem JSON. Fonte 0: as do rascunho, de `de` ate `ate` (sem incluir).
+/// Fonte 1: as seis sorteadas para a senha do envelope (`de` e `ate` nao contam). O Kotlin desenha grafema a grafema e zera
+/// o buffer. Devolve quantos bytes escreveu, ou -1 (sem rascunho ou sorteio, faixa fora, buffer que nao e direto ou pequeno).
+@_cdecl("Java_app_escalibur_wallet_nucleo_Nucleo_palavras")
+public func Java_app_escalibur_wallet_nucleo_Nucleo_palavras(
+    _ env: UnsafeMutablePointer<JNIEnv?>, _ classe: jclass?, _ fonte: jint, _ de: jint, _ ate: jint, _ destino: jobject?
+) -> jint {
+    let java = JavaEnv(env: env)
+    guard let saida = java.directBuffer(destino) else { return -1 }
+    switch fonte {
+    case 0:
+        return jint((try? Sessao.shared.comRascunho { $0.escrever(Int(de)..<max(Int(de), Int(ate)), em: saida) }) ?? -1)
+    case 1:
+        return jint(Envelopes.escreverSugestao(em: saida))
+    default:
+        return -1
+    }
+}

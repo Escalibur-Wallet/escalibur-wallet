@@ -63,7 +63,8 @@ FILTRO=""
 if [ "${1:-}" = "--derivacao" ]; then
     shift
     set -- EscaliburCoreTests EscaliburKeysTests
-    FILTRO="Mnemonic|BIP39|Derivation|DeriveAllChains|AddressVector|Signer|SigningSelfTest"
+    # A arena travada e a NFKC por trechos da senha do envelope tambem no nucleo otimizado (revisao de 07/11/2026).
+    FILTRO="Mnemonic|BIP39|Derivation|DeriveAllChains|AddressVector|Signer|SigningSelfTest|ChunkedNFKC|SecureBytesTests"
     # Os vetores no nucleo otimizado como o da loja (-O), e nao no de depuracao: uma divergencia no NFKD, no BIP-32 ou no
     # endereco que so aparecesse com o otimizador sairia na loja (decima segunda passada da auditoria de 03/11/2026). O
     # modulo Testing pede a biblioteca do Swift dinamica, e o `@testable`, o -enable-testing.
@@ -113,7 +114,7 @@ for t in "${TESTES[@]}"; do
     # (decima terceira passada). Vetor novo pede atualizar o numero aqui.
     if [ -n "$FILTRO" ]; then
         esperado=0
-        if [ "$t" = EscaliburCoreTests ]; then esperado=11; fi
+        if [ "$t" = EscaliburCoreTests ]; then esperado=15; fi
         if [ "$t" = EscaliburKeysTests ]; then esperado=40; fi
         sed 's/\x1b\[[0-9;]*m//g' "$L" | grep -qE "Test run with $esperado tests? in [0-9]+ suites? passed" \
             || { echo "== $t: nao rodaram os $esperado vetores esperados" >&2; falhou=1; }

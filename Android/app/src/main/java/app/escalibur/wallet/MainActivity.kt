@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        app.escalibur.wallet.nucleo.Cofre.aquecerStrongBox()
         // Nenhuma tela do app aparece em captura, gravacao ou na lista de apps recentes. So o build
         // de depuracao, pedido de fora (adb, `--ez capturas true`), deixa capturar: para conferir as
         // telas no emulador.

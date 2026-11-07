@@ -141,7 +141,10 @@ public enum PasswordStrength {
     public static func bits(_ password: SecureBytes) -> Double { measure(password).bits }
 
     /// Carrega as listas antes de a primeira tecla precisar delas.
-    public static func preload() { _ = Dictionaries.ranks }
+    public static func preload() {
+        _ = Dictionaries.ranks
+        _ = Dictionaries.phrases
+    }
 
     // MARK: Estimativa
 
@@ -328,6 +331,17 @@ public enum PasswordStrength {
             defer { wipe(&reversed) }
             if reversed != token, let rank = Dictionaries.ranks[reversed] {
                 keep(log2(Double(max(rank, 1))) + uppercaseBits(original, start, end) + 1)
+            }
+        }
+        // Uma frase celebre inteira (Resources/Forca/frases.txt), com ou sem espaco, acento e pontuacao: quem ataca tem as
+        // listas de citacoes, versiculos, proverbios e pangramas, e uma frase dessas nao custa a soma das palavras dela
+        // ("the quick brown fox jumps over the lazy dog" passava com 62 bits). Comeca no inicio de uma palavra.
+        if length >= 8, original[start] & 0xC0 != 0x80,
+           start == 0 || (original[start - 1] < 0x80 && !isLetter(original[start - 1])) {
+            var squeezed = squeeze(folded[start..<end])
+            defer { wipe(&squeezed) }
+            if squeezed.count >= 8, squeezed.count <= Int(UInt8.max), let rank = Dictionaries.phrases[squeezed] {
+                keep(log2(Double(max(rank, 1))) + 4 + phraseCaseBits(original, start, end) + phraseSeparatorBits(original, start, end))
             }
         }
         // Uma palavra de outra lingua, um nome proprio ou um trecho em outro alfabeto, que as listas nao tem: quem ataca
@@ -519,40 +533,203 @@ public enum PasswordStrength {
     }()
 
     /// As listas: a menor posicao de cada palavra entre todas, e as palavras BIP-39 de
-    /// todos os idiomas com no maximo 2048.
+    /// todos os idiomas com no maximo 2048. As de PT e EN e, desde 07/11/2026, as das outras linguas do app que o
+    /// zxcvbn-ts tem (alemao, espanhol, frances, indonesio, japones, arabe, turco, coreano e chines): uma palavra comum
+    /// de outra lingua custava o teto de palavra desconhecida, 2^16,6, e quatro delas davam "forte" (auditoria do
+    /// envelope de 06/11/2026). Vietnamita e hindi nao tem lista publicada e seguem pelo teto.
     enum Dictionaries {
         static let maxLength = 32
-        static let files = ["senhas-comuns", "pt-palavras", "pt-nomes", "pt-sobrenomes", "pt-wikipedia", "en-palavras", "en-nomes", "en-wikipedia"]
+        static let files = [
+            "senhas-comuns",
+            "pt-palavras", "pt-nomes", "pt-sobrenomes", "pt-wikipedia",
+            "en-palavras", "en-nomes", "en-wikipedia",
+            "de-palavras", "de-nomes", "de-sobrenomes", "de-wikipedia",
+            "es-palavras", "es-nomes", "es-sobrenomes", "es-wikipedia",
+            "fr-palavras", "fr-nomes", "fr-sobrenomes", "fr-wikipedia",
+            "id-palavras", "id-nomes", "id-wikipedia",
+            "ja-palavras", "ja-nomes", "ja-sobrenomes", "ja-wikipedia",
+            "ar-palavras", "ar-nomes", "ar-sobrenomes",
+            "tr-palavras", "tr-nomes", "tr-sobrenomes", "tr-wikipedia",
+            "ko-palavras", "ko-nomes", "ko-sobrenomes",
+            "zh-palavras", "zh-nomes", "zh-sobrenomes", "zh-wikipedia",
+        ]
 
-        static let ranks: [[UInt8]: Int32] = {
-            var out: [[UInt8]: Int32] = [:]
-            out.reserveCapacity(260_000)
+        static let ranks: WordTable = {
+            var out = WordTable(capacity: 800_000)
+            // As BIP-39 primeiro: se uma lista futura enchesse a tabela, sao elas que nao podem faltar ("abandon" seis vezes
+            // voltaria a ser forte). Uma posicao menor das listas que vem depois substitui o 2048.
+            for language in BIP39Language.allCases {
+                guard let list = try? WordlistStore.shared.wordlist(for: language) else { continue }
+                for word in list.words { out.insert(foldBytes(Array(word.utf8)), rank: 2048) }
+            }
             let bundle = CoreResources.bundle
             for name in files {
                 guard let url = bundle.url(forResource: name, withExtension: "txt", subdirectory: "Forca")
                         ?? bundle.url(forResource: name, withExtension: "txt"),
                       let data = try? Data(contentsOf: url) else { continue }
+                // Nas listas das outras linguas, os trechos de 1 e 2 bytes ("mw", "zr" do arabe romanizado) ficam de fora:
+                // casavam com pares de letras sorteadas e baixavam a conta de uma senha aleatoria. A posicao segue contando.
+                let shortest = ["senhas-comuns", "pt-", "en-"].contains(where: name.hasPrefix) ? 1 : 3
                 var rank: Int32 = 0
                 var start = data.startIndex
                 for index in data.indices where data[index] == 0x0A {
                     defer { start = index + 1 }
                     guard index > start, index - start <= maxLength else { continue }
                     rank += 1
-                    let word = foldBytes(Array(data[start..<index]))
-                    if let known = out[word], known <= rank { continue }
-                    out[word] = rank
-                }
-            }
-            for language in BIP39Language.allCases {
-                guard let list = try? WordlistStore.shared.wordlist(for: language) else { continue }
-                for word in list.words {
-                    let key = foldBytes(Array(word.utf8))
-                    if let known = out[key], known <= 2048 { continue }
-                    out[key] = 2048
+                    guard index - start >= shortest else { continue }
+                    out.insert(foldBytes(Array(data[start..<index])), rank: rank)
                 }
             }
             return out
         }()
+
+        /// As frases celebres (frases.txt, curada aqui e travada em forca.lock): pangramas, proverbios, versiculos,
+        /// citacoes classicas e lemas nas linguas do app, sem letra de musica. Cada uma so com as letras e os digitos, em
+        /// minuscula, como esta e sem os acentos. A posicao e a linha. Texto publico: pode passar por String.
+        static let phrases: WordTable = {
+            var out = WordTable(capacity: 1024)
+            let bundle = CoreResources.bundle
+            guard let url = bundle.url(forResource: "frases", withExtension: "txt", subdirectory: "Forca")
+                    ?? bundle.url(forResource: "frases", withExtension: "txt"),
+                  let data = try? Data(contentsOf: url) else { return out }
+            var rank: Int32 = 0
+            for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
+                rank += 1
+                let composed = String(line).precomposedStringWithCanonicalMapping
+                let bare = String(String.UnicodeScalarView(composed.decomposedStringWithCanonicalMapping.unicodeScalars
+                    .filter { !(0x300...0x36F).contains($0.value) })).precomposedStringWithCanonicalMapping
+                for variant in [composed, bare] {
+                    let folded = foldBytes(Array(variant.utf8))
+                    let squeezed = squeeze(folded[...])
+                    if squeezed.count >= 8 { out.insert(squeezed, rank: rank) }
+                }
+            }
+            return out
+        }()
+    }
+
+    /// So as letras e os digitos de um trecho ja em minuscula: sai a pontuacao ASCII, o espaco, a pontuacao do Latin-1
+    /// (U+00A0 a U+00BF), a geral (U+2000 a U+206F, as aspas e o apostrofo curvos do teclado do iPhone), a do CJK
+    /// (U+3000 a U+303F) e a virgula e a interrogacao arabes.
+    static func squeeze(_ bytes: ArraySlice<UInt8>) -> [UInt8] {
+        var out = [UInt8]()
+        out.reserveCapacity(bytes.count)
+        var index = bytes.startIndex
+        while index < bytes.endIndex {
+            let lead = bytes[index]
+            let width = lead < 0x80 ? 1 : lead >> 5 == 0x6 ? 2 : lead >> 4 == 0xE ? 3 : lead >> 3 == 0x1E ? 4 : 1
+            let stop = min(index + width, bytes.endIndex)
+            var scalar = UInt32(width == 1 ? lead : width == 2 ? lead & 0x1F : width == 3 ? lead & 0x0F : lead & 0x07)
+            for position in (index + 1)..<max(index + 1, stop) { scalar = scalar << 6 | UInt32(bytes[position] & 0x3F) }
+            let keep: Bool
+            if width == 1 {
+                keep = (0x30...0x39).contains(lead) || (0x61...0x7A).contains(lead) || lead >= 0x80
+            } else {
+                keep = !(0xA0...0xBF).contains(scalar) && !(0x2000...0x206F).contains(scalar) && !(0x3000...0x303F).contains(scalar)
+                    && scalar != 0x060C && scalar != 0x061F
+            }
+            if keep { out.append(contentsOf: bytes[index..<stop]) }
+            index = stop
+        }
+        return out
+    }
+
+    /// Maiusculas numa frase: nenhuma custa 0; so a primeira, todas, ou a de cada palavra (Title Case) custam 1 ou 2
+    /// bits, as variacoes que quem ataca roda; o resto, como numa palavra.
+    static func phraseCaseBits(_ original: [UInt8], _ start: Int, _ end: Int) -> Double {
+        var upper = 0, letters = 0, atWordStart = 0
+        let joined = !(start..<end).contains { original[$0] < 0x80 && !isLetter(original[$0]) }
+        for index in start..<end where isLetter(original[index]) {
+            letters += 1
+            guard (0x41...0x5A).contains(original[index]) else { continue }
+            upper += 1
+            if index == start || !isLetter(original[index - 1]) { atWordStart += 1 }
+        }
+        if upper == 0 { return 0 }
+        if upper == letters || (upper == 1 && atWordStart == 1 && (0x41...0x5A).contains(original[start])) { return 1 }
+        // Title Case, e o CamelCase da frase sem espaco ("TheQuickBrownFox"), em que o comeco de cada palavra nao se ve.
+        if upper == atWordStart || (joined && upper * 3 <= letters) { return 2 }
+        return uppercaseBits(original, start, end)
+    }
+
+    /// O separador entre as palavras da frase: so espaco nao custa; sem espaco ou com outro, 1 bit.
+    static func phraseSeparatorBits(_ original: [UInt8], _ start: Int, _ end: Int) -> Double {
+        var spaces = 0, others = 0
+        for index in start..<end where original[index] < 0x80 && !isLetter(original[index]) && !(0x30...0x39).contains(original[index]) {
+            if original[index] == 0x20 { spaces += 1 } else { others += 1 }
+        }
+        return spaces > 0 && others == 0 ? 0 : 1
+    }
+
+    /// Palavra -> menor posicao, numa tabela de espalhamento aberta sobre um bloco so de bytes. Com as listas das outras
+    /// linguas sao ~705 mil linhas e ~450 mil palavras distintas: num `[[UInt8]: Int32]` cada palavra era um objeto no heap
+    /// (dezenas de MB no Android, ao lado do Argon2 de 256 MiB); aqui, ~15 MB. Cabe ate a metade dos lugares; o que
+    /// passasse disso ficaria de fora, e o teste confere a contagem.
+    struct WordTable: Sendable {
+        private var bytes: [UInt8] = []
+        private var starts: [Int32] = []
+        private var lengths: [UInt8] = []
+        private var positions: [Int32] = []
+        private var slots: [Int32]
+        private let mask: Int
+
+        init(capacity: Int) {
+            var size = 1
+            while size < capacity * 2 { size <<= 1 }
+            slots = [Int32](repeating: -1, count: size)
+            mask = size - 1
+            bytes.reserveCapacity(capacity * 9)
+            starts.reserveCapacity(capacity)
+            lengths.reserveCapacity(capacity)
+            positions.reserveCapacity(capacity)
+        }
+
+        var count: Int { starts.count }
+
+        /// FNV-1a de 64 bits.
+        private static func hash(_ word: UnsafeBufferPointer<UInt8>) -> Int {
+            var value: UInt64 = 0xcbf2_9ce4_8422_2325
+            for byte in word { value = (value ^ UInt64(byte)) &* 0x0000_0100_0000_01b3 }
+            return Int(truncatingIfNeeded: value)
+        }
+
+        /// O lugar da palavra na tabela: o dela, ou o vazio onde ela entraria.
+        private func slot(of word: UnsafeBufferPointer<UInt8>) -> Int {
+            var index = Self.hash(word) & mask
+            return bytes.withUnsafeBufferPointer { all in
+                while true {
+                    let entry = Int(slots[index])
+                    if entry < 0 { return index }
+                    let start = Int(starts[entry])
+                    if Int(lengths[entry]) == word.count,
+                       word.count == 0 || memcmp(all.baseAddress! + start, word.baseAddress!, word.count) == 0 {
+                        return index
+                    }
+                    index = (index + 1) & mask
+                }
+            }
+        }
+
+        mutating func insert(_ word: [UInt8], rank: Int32) {
+            guard !word.isEmpty, word.count <= Int(UInt8.max), count * 2 < slots.count else { return }
+            let index = word.withUnsafeBufferPointer { slot(of: $0) }
+            let entry = Int(slots[index])
+            if entry >= 0 {
+                if rank < positions[entry] { positions[entry] = rank }
+                return
+            }
+            slots[index] = Int32(count)
+            starts.append(Int32(bytes.count))
+            lengths.append(UInt8(word.count))
+            positions.append(rank)
+            bytes.append(contentsOf: word)
+        }
+
+        subscript(word: [UInt8]) -> Int32? {
+            guard !word.isEmpty else { return nil }
+            let entry = Int(slots[word.withUnsafeBufferPointer { slot(of: $0) }])
+            return entry < 0 ? nil : positions[entry]
+        }
     }
 
     // MARK: Sugestao e reuso da frase

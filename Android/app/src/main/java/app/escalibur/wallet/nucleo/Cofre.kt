@@ -13,12 +13,15 @@ import android.provider.Settings
 import android.system.Os
 import android.system.OsConstants
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyInfo
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
+import android.security.keystore.UserNotAuthenticatedException
 import java.io.File
 import java.lang.ref.WeakReference
 import java.nio.ByteBuffer
+import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.MessageDigest
@@ -84,6 +87,8 @@ object Cofre {
     private const val VERSAO_DO_PIN: Byte = 2
 
     private lateinit var app: Context
+    /** O contexto do app, para quem precisa dele fora de uma tela (a conferencia de integridade antes da credencial). */
+    internal val contexto: Context get() = app
     private lateinit var pasta: File
     @Volatile private var atividade: WeakReference<Activity>? = null
     private val aleatorio = SecureRandom()
@@ -93,6 +98,12 @@ object Cofre {
     fun iniciar(contexto: Context) {
         app = contexto.applicationContext
         pasta = File(app.noBackupFilesDir, "cofre").apply { mkdirs() }
+    }
+
+    /** A sonda do StrongBox gera uma chave: so no processo da interface (a MainActivity chama), fora da thread dela, antes
+     * de a tela do PIN perguntar. Os processos de fundo (o trabalho de hora em hora, os receivers) nao sondam. */
+    fun aquecerStrongBox() {
+        if (sondaDoStrongBox[0] == null) Thread { temStrongBox() }.apply { isDaemon = true }.start()
     }
 
     /** A atividade em primeiro plano, onde a biometria aparece. */
@@ -292,6 +303,47 @@ object Cofre {
      * tirar o codigo apaga as carteiras). O caminho volta quando o bloqueio volta. */
     fun aparelhoComBloqueio(): Boolean = app.getSystemService(KeyguardManager::class.java).isDeviceSecure
 
+    /**
+     * 1 se o aparelho tem StrongBox, o chip de seguranca separado, e ele aceita a chave do PIN. Sem ele, a chave que
+     * confere o PIN fica no TEE do processador, e com root no aparelho destravado um PIN de 4 digitos cai em segundos: o
+     * PIN passa a ter 6 (decisao do dono, 07/11/2026). Pela sonda, e nao so pela feature anunciada: a chave do PIN cai no
+     * TEE quando o StrongBox recusa (`gerarHmac`), e o aparelho que anuncia e recusa liberava os 4 digitos (revisao dos
+     * pendentes de 07/11/2026). A sonda gera uma HMAC descartavel so no StrongBox, confere o nivel (Android 12 em diante)
+     * e a apaga; o resultado fica para o processo.
+     */
+    @JvmStatic
+    fun temStrongBox(): Int = synchronized(sondaDoStrongBox) {
+        sondaDoStrongBox[0]?.let { return it }
+        val resultado = try {
+            if (!app.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_STRONGBOX_KEYSTORE)) 0
+            else {
+                val alias = PREFIXO + "sonda.strongbox"
+                keyStore.deleteEntry(alias)
+                val gerador = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_HMAC_SHA256, "AndroidKeyStore")
+                gerador.init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
+                    .setKeySize(256).setDigests(KeyProperties.DIGEST_SHA256).setIsStrongBoxBacked(true).build())
+                val chave = gerador.generateKey()
+                val noChip = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    val info = javax.crypto.SecretKeyFactory.getInstance(chave.algorithm, "AndroidKeyStore")
+                        .getKeySpec(chave, KeyInfo::class.java) as KeyInfo
+                    info.securityLevel == KeyProperties.SECURITY_LEVEL_STRONGBOX
+                } else true
+                keyStore.deleteEntry(alias)
+                if (noChip) 1 else 0
+            }
+        } catch (e: Exception) {
+            runCatching { keyStore.deleteEntry(PREFIXO + "sonda.strongbox") }
+            0
+        }
+        sondaDoStrongBox[0] = resultado
+        resultado
+    }
+    private val sondaDoStrongBox = arrayOfNulls<Int>(1)
+
+    /** Para a interface: o que a sonda ja respondeu, sem esperar por ela (a geracao no StrongBox demora em alguns aparelhos,
+     * e a tela nao pode parar). Null enquanto ela roda: a opcao de 4 digitos fica escondida. Quem decide e o nucleo. */
+    fun strongBoxConhecido(): Int? = sondaDoStrongBox[0]
+
     // ---- Chaves de cada slot (KeyWrapper) ----
 
     private fun usaBiometria(slot: String) = slot == "kbio" || slot == "kand.bio" || slot == "kand.qualquer"
@@ -486,40 +538,53 @@ object Cofre {
         if (motivo == null) throw Recusa(CANCELADO)
         val privada = keyStore.getKey(alias(slot), null) as? PrivateKey ?: throw Recusa(SEM_CHAVE)
         val rsa = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
-        // A chave que aceita a biometria recente (`kand.bio`, a unica de "Bloquear as carteiras"):
-        // a biometria vem antes, sem objeto de cifra, e a cifra abre dentro da janela dela. Com o
-        // app recem-aberto nao ha biometria recente, e iniciar a cifra primeiro recusava.
-        if (!porOperacao(slot)) {
-            biometria(null, motivo)
+        if (!comPrazo(privada)) {
             try {
                 rsa.init(Cipher.DECRYPT_MODE, privada, oaep)
             } catch (e: KeyPermanentlyInvalidatedException) {
                 // Sem apagar: o cofre decide (ver `sondarChave`).
                 throw Recusa(SEM_CHAVE)
-            } catch (e: Exception) {
-                throw Recusa(FALHA)
+            } catch (e: UserNotAuthenticatedException) {
+                // Uma chave com prazo que o KeyInfo nao mostrou: segue pelo caminho dela, abaixo.
+                return decifrarComPrazo(rsa, privada, chaveCifrada, motivo)
             }
-            return try { rsa.doFinal(chaveCifrada) } catch (e: Exception) { throw Recusa(FALHA) }
+            val autenticada = biometria(rsa, motivo) ?: throw Recusa(FALHA)
+            return try { autenticada.doFinal(chaveCifrada) } catch (e: Exception) { throw Recusa(FALHA) }
         }
+        return decifrarComPrazo(rsa, privada, chaveCifrada, motivo)
+    }
+
+    /**
+     * A `kand.bio` criada antes de 07/11/2026 aceita a biometria dos ultimos 5 s: a biometria vem antes, sem objeto de
+     * cifra, e a cifra abre dentro da janela dela (com o app recem-aberto nao ha biometria recente, e iniciar a cifra
+     * primeiro recusava). As de agora sao por operacao, como as outras (ver `gerarRsa`).
+     */
+    private fun decifrarComPrazo(rsa: Cipher, privada: PrivateKey, chaveCifrada: ByteArray, motivo: String): ByteArray {
+        biometria(null, motivo)
         try {
             rsa.init(Cipher.DECRYPT_MODE, privada, oaep)
         } catch (e: KeyPermanentlyInvalidatedException) {
             // Sem apagar: o cofre decide (ver `sondarChave`).
             throw Recusa(SEM_CHAVE)
+        } catch (e: Exception) {
+            throw Recusa(FALHA)
         }
-        val autenticada = biometria(rsa, motivo) ?: throw Recusa(FALHA)
-        return try { autenticada.doFinal(chaveCifrada) } catch (e: Exception) { throw Recusa(FALHA) }
+        return try { rsa.doFinal(chaveCifrada) } catch (e: Exception) { throw Recusa(FALHA) }
     }
 
-    /** A vigia, sem interface: a autenticacao que acabou de abrir a outra camada vale para ela
-     * por alguns segundos (a chave da vigia aceita a biometria recente, ver `gerarRsa`). */
+    /**
+     * A vigia, sem interface. A `kand.bio` de antes de 07/11/2026 aceita a biometria recente e abre com a que acabou de
+     * abrir a outra camada. A de agora pede a biometria para a operacao: aqui so o `init` diz se o cadastro mudou (a chave
+     * invalidada lanca nele, antes de qualquer biometria), e sem abrir ela responde "nao se sabe" (2), e quem decide e o
+     * hash do cadastro, que no Android vem de outra chave invalidada pelo cadastro (`cadastroDaBiometria`).
+     */
     private fun decifrarVigia(slot: String, chaveCifrada: ByteArray?): Pair<Int, ByteArray> {
         if (!keyStore.containsAlias(alias(slot))) return 1 to ByteArray(0)
         return try {
             val privada = keyStore.getKey(alias(slot), null) as? PrivateKey ?: return 1 to ByteArray(0)
-            if (chaveCifrada == null || chaveCifrada.isEmpty()) return 2 to ByteArray(0)
             val rsa = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
             rsa.init(Cipher.DECRYPT_MODE, privada, oaep)
+            if (chaveCifrada == null || chaveCifrada.isEmpty() || !comPrazo(privada)) return 2 to ByteArray(0)
             0 to rsa.doFinal(chaveCifrada)
         } catch (e: KeyPermanentlyInvalidatedException) {
             keyStore.deleteEntry(alias(slot))
@@ -541,6 +606,13 @@ object Cofre {
             gerador.init(spec(true))
             gerador.generateKey()
         } catch (e: StrongBoxUnavailableException) {
+            // A sonda disse StrongBox e ele recusou agora: a chave do PIN nao cai calada no TEE (o PIN de 4 digitos ja pode
+            // ter passado pela sonda). A criacao falha, a sonda passa a dizer "sem StrongBox", e na proxima tentativa o PIN
+            // pede 6 digitos e a chave nasce no TEE (revisao dos pendentes de 07/11/2026).
+            val sondado = synchronized(sondaDoStrongBox) {
+                (sondaDoStrongBox[0] == 1).also { if (it) sondaDoStrongBox[0] = 0 }
+            }
+            if (sondado) throw e
             gerador.init(spec(false))
             gerador.generateKey()
         }
@@ -577,21 +649,18 @@ object Cofre {
     }
 
     /**
-     * A chave de biometria. A do rosto que segue o cadastro no modo reforcado (`kand.bio`) tambem
-     * e a vigia: aceita a biometria dos ultimos segundos, para abrir na mesma autenticacao da outra
-     * camada sem pedir de novo. As outras pedem a biometria para cada operacao.
+     * A chave de biometria: pede a biometria para cada operacao (o objeto de cifra no pedido), inclusive a `kand.bio` do
+     * modo reforcado. Ate 07/11/2026 a `kand.bio` aceitava a biometria dos ultimos 5 s, que valiam tambem para a digital
+     * do desbloqueio do celular: com root, dava para abrir a camada de fora sem o dono ver pedido nenhum (Medio 11 da
+     * auditoria de 31/10/2026). A que ja existe segue assim ate o modo reforcado recriar a chave (ver `comPrazo`).
      */
-    /** Pede a biometria a cada operacao (o objeto de cifra no pedido); `kand.bio` aceita a recente. */
-    private fun porOperacao(slot: String) = slot != "kand.bio"
-
     private fun gerarRsa(alias: String, segueCadastro: Boolean) {
-        val porOperacao = porOperacao(alias.removePrefix(PREFIXO))
         fun spec(comStrongBox: Boolean) = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_DECRYPT or KeyProperties.PURPOSE_ENCRYPT)
             .setKeySize(2048)
             .setDigests(KeyProperties.DIGEST_SHA256)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_RSA_OAEP)
             .setUserAuthenticationRequired(true)
-            .setUserAuthenticationParameters(if (porOperacao) 0 else 5, KeyProperties.AUTH_BIOMETRIC_STRONG)
+            .setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
             .setInvalidatedByBiometricEnrollment(segueCadastro)
             .setUnlockedDeviceRequired(true)
             .setIsStrongBoxBacked(comStrongBox)
@@ -604,6 +673,15 @@ object Cofre {
             gerador.initialize(spec(false))
             gerador.generateKeyPair()
         }
+    }
+
+    /** A chave aceita a biometria recente (a `kand.bio` de antes de 07/11/2026), e nao so a do pedido da operacao? */
+    private fun comPrazo(privada: PrivateKey): Boolean = try {
+        val info = KeyFactory.getInstance(privada.algorithm, "AndroidKeyStore").getKeySpec(privada, KeyInfo::class.java)
+        @Suppress("DEPRECATION")
+        info.userAuthenticationValidityDurationSeconds > 0
+    } catch (e: Exception) {
+        false
     }
 
     private fun invalidada(alias: String): Boolean = try {

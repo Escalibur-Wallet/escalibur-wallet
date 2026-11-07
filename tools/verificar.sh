@@ -1218,8 +1218,14 @@ python3 -I tools/codigo.py --exige "$fda" 'guard CCryptoBoringSSL_RAND_bytes(sai
     && python3 -I tools/codigo.py --exige "$fda" 'let kernel = SecureBytes(capacity: count)' --plataforma android \
     && ok "no Android, o sorteio mistura o getrandom do kernel com o da BoringSSL" || aviso "o sorteio do Android sem a mistura com o getrandom do kernel"
 sb=$CORE/Crypto/SecureBytes.swift
-codigo_vivo_android "$sb" | grep -qE '_ = mlock\(region' && codigo_vivo_android "$sb" | grep -qE 'madvise\(region, regionSize, MADV_DONTDUMP\)' \
-    && ok "SecureBytes prende o segredo na RAM e fora do core dump (mlock, MADV_DONTDUMP)" || aviso "SecureBytes sem mlock ou MADV_DONTDUMP (AA-01)"
+# A cota de memoria travada do Android (64 KiB) acaba no 17o buffer com regiao propria: o segredo pequeno vai para uma
+# arena travada, e nenhum mlock tem o resultado engolido (auditoria das chaves de 06/11/2026).
+codigo_vivo_android "$sb" | grep -qF 'if mlock(region.advanced(by: pageSize), payloadPages * pageSize) != 0 { LockedArena.noteLockFailure() }' \
+    && codigo_vivo_android "$sb" | grep -qE 'madvise\(region, regionSize, MADV_DONTDUMP\)' \
+    && codigo_vivo_android "$sb" | grep -qF 'if let slot = LockedArena.take(capacity) {' \
+    && codigo_vivo_android "$sb" | grep -qF 'mlock(base, payload) == 0' \
+    && ! codigo_vivo_android "$sb" | grep -qE '_ = mlock' \
+    && ok "SecureBytes prende o segredo na RAM e fora do core dump (arena travada, mlock conferido, MADV_DONTDUMP)" || aviso "SecureBytes sem a arena travada, sem MADV_DONTDUMP ou com mlock sem conferir (AA-01)"
 md=$APP/Services/Metadata.swift
 codigo_vivo "$md" | grep -q 'fcntl(handle.fileDescriptor, F_FULLFSYNC)' && codigo_vivo "$md" | grep -q 'try writeDurably(sealed, to: file)' \
     && ! grep -qE 'sealed\.write\(to: [^)]*\.atomic' "$md" \

@@ -29,12 +29,17 @@ final class ForgotPINTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Não existe redefinir o PIN"].waitForExistence(timeout: 5))
         shot("p1-esqueci", app)
 
-        app.buttons["Apagar as carteiras deste iPhone"].tap()
-        let alert = app.alerts["Apagar as carteiras deste iPhone?"]
-        XCTAssertTrue(alert.waitForExistence(timeout: 5), "a confirmacao deveria ser o alerta do iPhone")
-        XCTAssertTrue(alert.buttons["Apagar permanentemente"].exists)
-        shot("p2-alerta", app)
-        alert.buttons["Cancelar"].tap()
-        XCTAssertTrue(app.staticTexts["Não existe redefinir o PIN"].waitForExistence(timeout: 5), "cancelar nao pode apagar nada")
+        // Desde 27/10/2026, apagar pela tela de bloqueio so 24 horas depois do pedido: o botao de apagar nao existe na hora,
+        // so o pedido, que conta o prazo e pode ser cancelado (quem pega o iPhone destravado nao apaga na hora).
+        XCTAssertFalse(app.buttons["Apagar as carteiras deste iPhone"].exists, "apagar sem PIN nao pode estar disponivel na hora")
+        let request = app.buttons["Pedir para apagar em 24 horas"]
+        XCTAssertTrue(request.waitForExistence(timeout: 5))
+        request.tap()
+        let cancelRequest = app.buttons["Cancelar o pedido"]
+        XCTAssertTrue(cancelRequest.waitForExistence(timeout: 5), "o pedido conta o prazo e pode ser cancelado")
+        XCTAssertFalse(app.buttons["Apagar as carteiras deste iPhone"].exists, "o prazo de 24 horas ainda corre")
+        shot("p2-pedido", app)
+        cancelRequest.tap()
+        XCTAssertTrue(request.waitForExistence(timeout: 5), "cancelar volta ao pedido, sem apagar nada")
     }
 }

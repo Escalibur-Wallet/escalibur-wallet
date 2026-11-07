@@ -118,6 +118,40 @@ struct PasswordStrengthTests {
         #expect(PasswordStrength.suggestionBits() == 66)
     }
 
+    @Test("Palavras comuns das outras linguas do app pela lista delas, e nao pelo teto de palavra desconhecida")
+    func otherLanguages() {
+        // Quatro palavras comuns custavam 4 x 2^16,6 e passavam como fortes (auditoria do envelope de 06/11/2026).
+        for senha in ["haus garten schule wasser", "perro casa playa verde", "maison jardin soleil route",
+                      "rumah makan pagi besar", "araba okul deniz kitap"] {
+            if case .strong = PasswordStrength.verdict(secure(senha)) { Issue.record("\(senha) passou como forte") }
+        }
+        // As listas entraram todas: a tabela tem as das outras linguas.
+        #expect(PasswordStrength.Dictionaries.ranks.count > 400_000)
+        // Longe da metade dos lugares (acima dela, a tabela descartaria palavras), e as BIP-39 la dentro.
+        #expect(PasswordStrength.Dictionaries.ranks.count < 800_000)
+        #expect(PasswordStrength.Dictionaries.ranks[Array("abandon".utf8)] != nil)
+        #expect(PasswordStrength.Dictionaries.ranks[Array("zoológico".utf8)] != nil)
+        #expect(PasswordStrength.Dictionaries.phrases.count >= 191 && PasswordStrength.Dictionaries.phrases.count < 512)
+        #expect(PasswordStrength.Dictionaries.ranks[Array("garten".utf8)] != nil)
+        #expect(PasswordStrength.Dictionaries.ranks[Array("노동".utf8)] != nil)
+        // Os pares de letras das listas novas ficam de fora; os de PT e EN, como antes.
+        #expect(PasswordStrength.Dictionaries.ranks[Array("zr".utf8)] == nil)
+        #expect(PasswordStrength.Dictionaries.ranks[Array("de".utf8)] != nil)
+    }
+
+    @Test("Frase celebre conta como uma entrada da lista de frases, com ou sem espaco, acento, maiuscula e pontuacao")
+    func famousPhrases() {
+        for senha in ["the quick brown fox jumps over the lazy dog", "TheQuickBrownFoxJumpsOverTheLazyDog",
+                      "The Quick Brown Fox Jumps Over The Lazy Dog!", "Here’s looking at you, kid",
+                      "minha terra tem palmeiras onde canta o sabiá", "minha terra tem palmeiras onde canta o sabia",
+                      "el veloz murcielago hindu comia feliz cardillo y kiwi",
+                      "Victor jagt zwölf Boxkämpfer quer über den großen Sylter Deich", "知己知彼百战不殆"] {
+            #expect(bits(senha) < 40, "\(senha)")
+        }
+        // A frase que ninguem citou segue pelas palavras.
+        #expect(PasswordStrength.verdict(secure("purple elephants dance quietly under neon bridges")) == .strong)
+    }
+
     @Test("Caracteres contados como escalares, nao bytes")
     func length() {
         #expect(PasswordStrength.scalarCount(secure("ação")) == 4)

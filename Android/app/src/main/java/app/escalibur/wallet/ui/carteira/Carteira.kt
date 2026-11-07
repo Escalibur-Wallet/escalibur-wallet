@@ -135,12 +135,10 @@ object Redes {
 fun TelaDaCarteira() {
     val estado = App.estado
     val contextoDoRoot = LocalContext.current
-    // Conferido de novo a cada volta ao app: um depurador ou codigo injetado depois da abertura tambem acende
-    // a faixa (auditoria das chaves de 06/11/2026). Acesa, fica acesa.
-    var comRoot by remember { mutableStateOf(app.escalibur.wallet.ui.novacarteira.Checagem.pareceTerRoot(contextoDoRoot)) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        if (!comRoot) comRoot = app.escalibur.wallet.ui.novacarteira.Checagem.pareceTerRoot(contextoDoRoot)
-    }
+    // O aviso de integridade do app inteiro, conferido de novo a cada volta e antes de cada credencial (Integridade).
+    LaunchedEffect(Unit) { app.escalibur.wallet.ui.Integridade.conferir(contextoDoRoot) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { app.escalibur.wallet.ui.Integridade.conferir(contextoDoRoot) }
+    val comRoot = app.escalibur.wallet.ui.Integridade.suspeita
     val carteira = estado.carteira ?: return
     val retrato = Saldos.retrato
     val ocultar = App.ocultarSaldos

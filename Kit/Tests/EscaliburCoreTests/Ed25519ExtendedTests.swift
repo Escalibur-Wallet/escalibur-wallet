@@ -83,6 +83,20 @@ struct Ed25519ExtendedTests {
         #expect(Ed25519.verify(signature: second, message: message, publicKey: publicKey))
     }
 
+    @Test("A assinatura reforcada do Ed25519 verifica, e no Android sai diferente a cada vez")
+    func hedgedSeed() throws {
+        let seed = SecureBytes(capacity: 32)
+        seed.replaceAll(with: Array(repeating: 0x42, count: 32))
+        defer { seed.wipe() }
+        let publicKey = try Ed25519.publicKey(of: seed)
+        let message = Array("escalibur".utf8)
+        let first = try Ed25519.sign(message, seed: seed, hedged: true)
+        let second = try Ed25519.sign(message, seed: seed, hedged: true)
+        #expect(Ed25519.verify(signature: first, message: message, publicKey: publicKey))
+        #expect(Ed25519.verify(signature: second, message: message, publicKey: publicKey))
+        #expect(first != second)
+    }
+
     @Test("A mesma chave publica que o CryptoKit tira da semente")
     func matchesCryptoKit() throws {
         let seed = SecureBytes(capacity: 32)

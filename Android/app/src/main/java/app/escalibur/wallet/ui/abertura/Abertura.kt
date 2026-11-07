@@ -188,9 +188,12 @@ fun FluxoDeAbertura(aparelhoComBloqueio: Boolean) {
                             }
                         },
                     ) {
-                        BotaoTerciario(if (quatro) t("Usar PIN de 6 dígitos") else t("Usar PIN de 4 dígitos"),
-                                       modifier = Modifier.alpha(if (passo == 2) 1f else 0f)) {
-                            if (passo == 2) entrada.escolher(if (quatro) 6 else 4)
+                        // PIN de 4 digitos so com StrongBox (decisao do dono, 07/11/2026): sem ele, o botao nem aparece.
+                        if (quatro || app.escalibur.wallet.nucleo.Cofre.strongBoxConhecido() == 1) {
+                            BotaoTerciario(if (quatro) t("Usar PIN de 6 dígitos") else t("Usar PIN de 4 dígitos"),
+                                           modifier = Modifier.alpha(if (passo == 2) 1f else 0f)) {
+                                if (passo == 2) entrada.escolher(if (quatro) 6 else 4)
+                            }
                         }
                         Text(
                             t("O PIN não recupera a carteira. Se você esquecer o PIN, a senha da carteira traz tudo de volta."),
@@ -227,12 +230,10 @@ private fun BoasVindas(aparelhoComBloqueio: Boolean, aoComecar: () -> Unit, aoAb
             )
         }
         val contextoDoRoot = androidx.compose.ui.platform.LocalContext.current
-        // Conferido de novo a cada volta ao app: um depurador ou codigo injetado depois da abertura tambem acende
-        // a faixa (auditoria das chaves de 06/11/2026). Acesa, fica acesa.
-        var comRoot by remember { mutableStateOf(app.escalibur.wallet.ui.novacarteira.Checagem.pareceTerRoot(contextoDoRoot)) }
-        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-            if (!comRoot) comRoot = app.escalibur.wallet.ui.novacarteira.Checagem.pareceTerRoot(contextoDoRoot)
-        }
+        // O aviso de integridade do app inteiro, conferido de novo a cada volta e antes de cada credencial (Integridade).
+        LaunchedEffect(Unit) { app.escalibur.wallet.ui.Integridade.conferir(contextoDoRoot) }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { app.escalibur.wallet.ui.Integridade.conferir(contextoDoRoot) }
+        val comRoot = app.escalibur.wallet.ui.Integridade.suspeita
         Column(Modifier.padding(horizontal = Espaco.margem), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(t("Só você pode"), style = estilo(Tipo.heroi), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.lg))
             Text(

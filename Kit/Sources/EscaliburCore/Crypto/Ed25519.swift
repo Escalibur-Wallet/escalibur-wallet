@@ -1,6 +1,7 @@
 #if canImport(CryptoKit)
 import CryptoKit
 #else
+import CCryptoBoringSSL
 import Crypto
 #endif
 import Foundation
@@ -25,6 +26,31 @@ public enum Ed25519 {
         guard seed.count == 32 else { throw Failure.invalidSeed }
         let key = try seed.withUnsafeBytes { try Curve25519.Signing.PrivateKey(rawRepresentation: $0) }
         return Array(try key.signature(for: message))
+    }
+
+    /// A assinatura de verdade. No iPhone, a do CryptoKit, que ja sorteia. No Android, a da BoringSSL e deterministica
+    /// (RFC 8032 puro); com `hedged`, ela passa pela conta da chave estendida, a mesma do Ed25519 (kL = SHA-512 da seed
+    /// com o clamp, kR o resto), com 32 bytes do gerador no nonce (auditoria das chaves de 06/11/2026). Sem os bytes do
+    /// gerador, essa conta da o RFC 8032 byte a byte; a rede confere a assinatura, nunca como r nasceu.
+    public static func sign(_ message: [UInt8], seed: SecureBytes, hedged: Bool) throws -> [UInt8] {
+        #if canImport(CryptoKit)
+        return try sign(message, seed: seed)
+        #else
+        guard hedged else { return try sign(message, seed: seed) }
+        guard seed.count == 32 else { throw Failure.invalidSeed }
+        var expanded = [UInt8](repeating: 0, count: 64)
+        defer { expanded.resetBytes() }
+        seed.withUnsafeBytes { raw in
+            _ = CCryptoBoringSSL_SHA512(raw.bindMemory(to: UInt8.self).baseAddress, raw.count, &expanded)
+        }
+        expanded[0] &= 248
+        expanded[31] &= 127
+        expanded[31] |= 64
+        let key = SecureBytes(capacity: 64)
+        defer { key.wipe() }
+        key.replaceAll(with: expanded)
+        return try signExtended(message, extendedKey: key, hedged: true)
+        #endif
     }
 
     public static func verify(signature: [UInt8], message: [UInt8], publicKey: [UInt8]) -> Bool {

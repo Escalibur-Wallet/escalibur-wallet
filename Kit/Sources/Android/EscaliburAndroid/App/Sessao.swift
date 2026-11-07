@@ -927,11 +927,6 @@ final class Sessao: @unchecked Sendable {
         return (palavras, wallet.hasPassphrase)
     }
 
-    /// A passphrase nunca sai do nucleo para a tela, nem a de um envelope: ver as palavras mostra so
-    /// as palavras (pedido do dono, 01/11/2026), e a de uma carteira guardada nem esta no cofre
-    /// (05/11/2026). No rascunho so fica a de um envelope aberto, para importar.
-    func passphraseDoRascunho() -> String? { nil }
-
     /// Fechou a tela das palavras: a carteira anota quando elas foram vistas e o rascunho sai.
     func terminarRevelacao(_ id: UUID) {
         let eraDela = trava.withLock { rascunho?.carteira == id }
@@ -1015,8 +1010,8 @@ final class Sessao: @unchecked Sendable {
     }
 }
 
-/// A frase de uma carteira recem-criada, enquanto o dono anota e confere. As palavras so viram
-/// `String` no grupo que esta na tela.
+/// A frase de uma carteira recem-criada, enquanto o dono anota e confere. As palavras nunca viram `String`: saem em bytes
+/// direto num ByteBuffer do Kotlin (`escrever`), e a conferida chega como segredo (auditoria das chaves de 06/11/2026).
 final class Rascunho: @unchecked Sendable {
     let frase: SecureBytes
     let palavras: Int
@@ -1031,23 +1026,44 @@ final class Rascunho: @unchecked Sendable {
         self.carteira = carteira
     }
 
-    func palavras(_ faixa: Range<Int>) -> [String] {
+    /// As palavras da faixa, em UTF-8 e separadas por um espaco, direto no destino (o ByteBuffer direto do Kotlin, fora do
+    /// heap do Java). Devolve quantos bytes escreveu, ou -1 se a faixa ou o destino nao servem.
+    func escrever(_ faixa: Range<Int>, em destino: UnsafeMutableRawBufferPointer) -> Int {
         frase.withUnsafeBytes { raw in
             let trechos = Self.trechos(raw)
-            return faixa.compactMap { trechos.indices.contains($0) ? String(decoding: raw[trechos[$0]], as: UTF8.self) : nil }
+            guard !faixa.isEmpty, faixa.lowerBound >= 0, faixa.upperBound <= trechos.count,
+                  let origem = raw.baseAddress, let saida = destino.baseAddress
+            else { return -1 }
+            let total = faixa.reduce(faixa.count - 1) { $0 + trechos[$1].count }
+            guard total <= destino.count else { return -1 }
+            var posicao = 0
+            for indice in faixa {
+                if posicao > 0 {
+                    saida.storeBytes(of: UInt8(0x20), toByteOffset: posicao, as: UInt8.self)
+                    posicao += 1
+                }
+                let trecho = trechos[indice]
+                saida.advanced(by: posicao).copyMemory(from: origem.advanced(by: trecho.lowerBound), byteCount: trecho.count)
+                posicao += trecho.count
+            }
+            return posicao
         }
     }
 
-    /// A palavra digitada confere com a da posicao? Em tempo constante sobre os bytes canonicos.
-    func confere(_ digitada: String, em indice: Int) -> Bool {
-        var candidata = Array(Mnemonic.canonicalize(digitada).utf8)
-        defer { candidata.resetBytes() }
-        return frase.withUnsafeBytes { raw in
-            let trechos = Self.trechos(raw)
-            guard trechos.indices.contains(indice) else { return false }
-            var palavra = Array(raw[trechos[indice]])
-            defer { palavra.resetBytes() }
-            return Hash.constantTimeEqual(palavra, candidata)
+    /// A palavra digitada confere com a da posicao? Na forma canonica, pelos bytes, em tempo constante.
+    func confere(_ digitada: SecureBytes, em indice: Int) -> Bool {
+        let (candidata, palavrasDigitadas) = BIP39.canonicalWords(digitada)
+        defer { candidata.wipe() }
+        guard palavrasDigitadas.count == 1 else { return false }
+        return candidata.withUnsafeBytes { digitadaRaw in
+            frase.withUnsafeBytes { raw in
+                let trechos = Self.trechos(raw)
+                guard trechos.indices.contains(indice) else { return false }
+                var palavra = Array(raw[trechos[indice]])
+                var tentativa = Array(digitadaRaw[palavrasDigitadas[0]])
+                defer { palavra.resetBytes(); tentativa.resetBytes() }
+                return Hash.constantTimeEqual(palavra, tentativa)
+            }
         }
     }
 

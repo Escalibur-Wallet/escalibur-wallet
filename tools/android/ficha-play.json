@@ -30,8 +30,8 @@
     }
   },
   "notasDaVersao": {
-    "en-US": "Seeing the words now shows only the words, never the passphrase. The wallet stays closed while an outside app is reading the screen, the most common Android scam. Limit orders are listed newest first, sending to another wallet of yours skips the address check, and there are new protections in send tracking and against Tron account scams.",
-    "pt-BR": "Ver as palavras agora mostra só as palavras, nunca a passphrase. A carteira fica fechada enquanto um app de fora estiver lendo a tela, o golpe mais comum no Android. Ordens limite da mais nova para a mais antiga, envio para outra carteira sua sem a conferência do endereço, e proteções novas no acompanhamento dos envios e contra golpes com contas da Tron."
+    "en-US": "The passphrase is no longer stored on the phone: it is asked for every send, swap, bridge and order cancel. The Android vault is better protected in memory, sending checks the destination more carefully, and the envelope password meter is stricter. Swap can search any coin, and watch-only wallets now show their history.",
+    "pt-BR": "A passphrase não fica mais guardada no celular: ela é pedida a cada envio, troca, ponte e cancelamento de ordem. O cofre do Android ficou mais protegido na memória, o envio confere o destino com mais cuidado e o medidor de senha do envelope ficou mais rigoroso. No Swap dá para buscar qualquer moeda, e a carteira de observação agora mostra o histórico."
   },
   "icone": "build/loja-android/grafico/icone-512-lima.png"
 }

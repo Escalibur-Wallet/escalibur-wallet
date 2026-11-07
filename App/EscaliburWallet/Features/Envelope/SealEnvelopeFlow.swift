@@ -30,6 +30,7 @@ struct SealEnvelopeFlow: View {
     @State private var cipher = LiveCipher()
     @State private var revealPassword = false
     @State private var label = ""
+    @State private var sharing = false
     @State private var suggestion: [String] = []
     /// As posicoes das palavras sorteadas: a senha e montada direto no buffer seguro.
     @State private var suggestionIndices: [Int] = []
@@ -461,11 +462,21 @@ struct SealEnvelopeFlow: View {
     private var sealedFooter: some View {
         VStack(spacing: 0) {
             if let sealed {
-                ShareLink(item: sealed.url) {
+                // A folha do iPhone com o fim: a data de "lacrado" so quando o arquivo saiu (salvo ou enviado), e nao no lacre
+                // (auditoria do envelope de 06/11/2026). O `ShareLink` nao diz se o arquivo saiu.
+                Button { sharing = true } label: {
                     Text("Salvar ou enviar o arquivo").typeStyle(.action)
                         .frame(maxWidth: .infinity).frame(height: Height.primary)
                 }
                 .buttonStyle(PrimaryStyle())
+                .sheet(isPresented: $sharing) {
+                    ActivitySheet(items: [sealed.url]) { completed in
+                        sharing = false
+                        if completed { markDelivered() }
+                    }
+                    .presentationDetents([.medium, .large])
+                    .ignoresSafeArea()
+                }
             } else {
                 Color.clear.frame(height: Height.primary)
             }
@@ -713,9 +724,6 @@ struct SealEnvelopeFlow: View {
             try? await Task.sleep(for: .milliseconds(450))
             sealPart = 2
             sealed = try write(data)
-            var updated = session.metadata.wallets.first { $0.id == wallet.id } ?? wallet
-            updated.envelopeSealedAt = .now
-            session.update(updated)
             try? await Task.sleep(for: .milliseconds(450))
             step = .done
         } catch Envelope.Failure.notEnoughMemory {
@@ -741,6 +749,13 @@ struct SealEnvelopeFlow: View {
         values.isExcludedFromBackup = true
         try url.setResourceValues(values)
         return SealedFile(url: url, name: name)
+    }
+
+    /// O arquivo saiu do app: a data de "lacrado" vai para a carteira, que Ajustes mostra.
+    private func markDelivered() {
+        var updated = session.metadata.wallets.first { $0.id == wallet.id } ?? wallet
+        updated.envelopeSealedAt = .now
+        session.update(updated)
     }
 
     private func close() {
@@ -858,4 +873,18 @@ struct EnvelopeScrollingStep<Content: View, Footer: View>: View {
                 .background(Palette.void)
         }
     }
+}
+
+/// A folha de compartilhar do iPhone, que diz no fim se o arquivo saiu.
+private struct ActivitySheet: UIViewControllerRepresentable {
+    let items: [Any]
+    let finished: (Bool) -> Void
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, completed, _, _ in finished(completed) }
+        return controller
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }

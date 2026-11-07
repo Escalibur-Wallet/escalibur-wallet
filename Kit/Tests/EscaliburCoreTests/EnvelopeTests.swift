@@ -219,3 +219,38 @@ struct EnvelopeTests {
         try data.write(to: out)
     }
 }
+
+@Suite("NFKC da senha por trechos")
+struct ChunkedNFKCTests {
+    /// SplitMix64: a mesma sequencia em toda rodada.
+    struct Sorteio {
+        var state: UInt64
+        mutating func next(_ limit: Int) -> Int {
+            state &+= 0x9E37_79B9_7F4A_7C15
+            var z = state
+            z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+            z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+            return Int((z ^ (z >> 31)) % UInt64(limit))
+        }
+    }
+
+    @Test("Por trechos da o mesmo NFKC da String inteira: marcas soltas depois de ASCII, Hangul, compatibilidade e UTF-8 quebrado")
+    func sameAsWholeString() {
+        let pecas: [[UInt8]] = [
+            "a", "e", "o", "Z", "1", " ", "-", "!", "é", "ñ", "Å", "ǟ", "\u{0301}", "\u{0308}", "\u{0304}", "\u{0345}", "\u{0334}",
+            "\u{0327}", "\u{3099}", "\u{309A}", "ｶ", "\u{FF9E}", "か", "ﬁ", "Ａ", "①", "㌀", "ﷺ", "\u{0344}", "ά", "\u{1100}",
+            "\u{1161}", "\u{11A8}", "가", "각", "ي", "\u{064B}", "😀", "ệ", "Ω", "\u{212B}", "ẛ", "\u{0323}", "ﬃ", "²", "ß",
+        ].map { Array($0.utf8) } + [[0x80], [0xC3], [0xE2, 0x82], [0xFF], [0xED, 0xA0, 0x80]]
+        var sorteio = Sorteio(state: 0x5EED)
+        for _ in 0..<20_000 {
+            var bytes: [UInt8] = []
+            for _ in 0..<(1 + sorteio.next(12)) { bytes += pecas[sorteio.next(pecas.count)] }
+            let senha = SecureBytes(capacity: bytes.count)
+            senha.replaceAll(with: bytes)
+            let porTrechos = KeyDerivation.normalized(senha).withUnsafeBytes { Array($0) }
+            let inteira = Array(String(decoding: bytes, as: UTF8.self).precomposedStringWithCompatibilityMapping.utf8)
+            #expect(porTrechos == inteira, "\(bytes)")
+            if porTrechos != inteira { return }
+        }
+    }
+}

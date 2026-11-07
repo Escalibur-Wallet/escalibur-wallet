@@ -86,15 +86,37 @@ public enum KeyDerivation {
         // String nenhuma.
         guard needsWork else { return password }
 
-        var text = password.withUnsafeBytes { String(decoding: $0, as: UTF8.self) }
-        var bytes = Array(text.precomposedStringWithCompatibilityMapping.utf8)
-        defer {
-            bytes.resetBytes()
-            text = ""
-        }
-        let out = SecureBytes(capacity: max(bytes.count, password.capacity))
-        out.replaceAll(with: bytes)
+        // Trecho por trecho, e nao a senha inteira numa String (auditoria do envelope de 06/11/2026): cada sequencia fora
+        // do ASCII, junto do caractere ASCII logo antes dela, vai pelo NFKC do Foundation, e o resto do ASCII passa como
+        // esta. O resultado e o da String inteira: o ASCII nao se decompoe, tem classe 0 (nenhuma marca passa por ele) e
+        // nao e o segundo de nenhuma composicao (nao e marca, nem vogal ou final do Hangul), entao so se compoe com o que
+        // vem logo depois dele ("e" + U+0301 vira "é"), e esse ASCII vai junto do trecho. No heap sobram so os trechos.
+        var total = 0
+        password.withUnsafeBytes { raw in nfkcPieces(raw) { total += $0.count } }
+        let out = SecureBytes(capacity: max(total, password.capacity))
+        password.withUnsafeBytes { raw in nfkcPieces(raw) { out.append(contentsOf: $0) } }
         return out
+    }
+
+    /// Os pedacos do NFKC, em ordem: cada ASCII que nao vem antes de um trecho fora do ASCII, como esta; cada trecho fora
+    /// do ASCII (com o ASCII logo antes dele), pelo Foundation. UTF-8 invalido vira U+FFFD, como no `String(decoding:)`.
+    static func nfkcPieces(_ raw: UnsafeRawBufferPointer, _ body: (UnsafeBufferPointer<UInt8>) -> Void) {
+        let bytes = raw.bindMemory(to: UInt8.self)
+        var index = 0
+        while index < bytes.count {
+            if bytes[index] < 0x80, index + 1 == bytes.count || bytes[index + 1] < 0x80 {
+                body(UnsafeBufferPointer(rebasing: bytes[index..<(index + 1)]))
+                index += 1
+                continue
+            }
+            let start = index
+            if bytes[index] < 0x80 { index += 1 }
+            while index < bytes.count, bytes[index] >= 0x80 { index += 1 }
+            var piece = Array(String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<index]), as: UTF8.self)
+                .precomposedStringWithCompatibilityMapping.utf8)
+            piece.withUnsafeBufferPointer(body)
+            piece.resetBytes()
+        }
     }
 
     /// Deriva a chave mestra a partir da senha.

@@ -12,6 +12,18 @@ enum Nucleo {
     /// primeiro minuto, desligar nao pede o PIN.
     static let conferenciaLigadaEm = Guarda<TimeInterval?>(nil)
 
+    /// Sem StrongBox, so PIN de 6 digitos: a chave que confere o PIN fica no TEE, e com root um PIN de 4 cai em segundos
+    /// (decisao do dono, 07/11/2026). Na duvida (o Java nao respondeu), tambem 6. O PIN recusado sai zerado.
+    static func pinComTamanho(_ pin: SecureBytes) throws -> SecureBytes {
+        guard pin.count == 4 else { return pin }
+        let comStrongBox = ((try? Cofre.chamarInt("Cofre.temStrongBox", [])) ?? 0) == 1
+        guard comStrongBox else {
+            pin.wipe()
+            throw Falha(erro: "sessao.pinCurto")
+        }
+        return pin
+    }
+
     struct Falha: Error, Encodable {
         let erro: String
     }
@@ -114,18 +126,9 @@ enum Nucleo {
             try Sessao.shared.aceitarResponsabilidade(versao: Int(pedido["versao"]?.doubleValue ?? 1))
             return try json(Estado.agora())
 
-        case "carteira.palavras":
-            let de = Int(pedido["de"]?.doubleValue ?? 0), ate = Int(pedido["ate"]?.doubleValue ?? 0)
-            return try json(Sessao.shared.comRascunho { $0.palavras(max(0, de)..<max(de, ate)) })
-        case "carteira.conferir":
-            let indice = Int(pedido["indice"]?.doubleValue ?? -1)
-            let palavra = pedido["palavra"]?.stringValue ?? ""
-            return try json(["confere": Sessao.shared.comRascunho { $0.confere(palavra, em: indice) }])
         case "carteira.confirmarCopia":
             try Sessao.shared.confirmarCopia(try uuid(pedido["id"]))
             return try json(Estado.agora())
-        case "carteira.passphraseDoRascunho":
-            return try json(["passphrase": Sessao.shared.passphraseDoRascunho()])
         case "carteira.terminarRevelacao":
             Sessao.shared.terminarRevelacao(try uuid(pedido["id"]))
             return try json(Estado.agora())
@@ -199,7 +202,8 @@ enum Nucleo {
         case "envelope.calibrar":
             return try json(Envelopes.calibrar())
         case "envelope.sugerir":
-            return try json(["palavras": try Envelopes.sugerir()])
+            try Envelopes.sugerir()
+            return try json(["ok": true])
         case "envelope.usarSorteada":
             try Envelopes.usarSorteada()
             return try json(["ok": true])
@@ -207,8 +211,12 @@ enum Nucleo {
             Envelopes.aceitarRisco()
             return try json(["ok": true])
         case "envelope.voltar":
-            return try json(["palavras": Envelopes.voltar()])
+            return try json(["sorteada": Envelopes.voltar()])
+        case "envelope.entregue":
+            Envelopes.entregue()
+            return try json(["ok": true])
         case "envelope.encerrar":
+            Envelopes.esquecerLacrado()
             Envelopes.encerrar()
             Envelopes.fecharAbertura()
             return try json(["ok": true])
@@ -418,7 +426,7 @@ enum Nucleo {
         case let reforco where reforco.hasPrefix("reforco."):
             return try Reforco.chamar(reforco, pedido, segredo: proxima, segundo: { partes.isEmpty ? nil : try passphraseCheia(nil) })
         case "sessao.cadastrarPIN":
-            try Sessao.shared.cadastrarPIN(try proxima())
+            try Sessao.shared.cadastrarPIN(try Self.pinComTamanho(try proxima()))
             return try json(Estado.agora())
         case "sessao.destrancar":
             try Sessao.shared.destrancar(pin: try proxima())
@@ -436,7 +444,7 @@ enum Nucleo {
             return try json(Estado.agora())
         case "sessao.trocarPIN":
             let atual = try credencial()
-            try Sessao.shared.trocarPIN(atual, novo: try proxima())
+            try Sessao.shared.trocarPIN(atual, novo: try Self.pinComTamanho(try proxima()))
             return try json(Estado.agora())
 
         case "carteira.criar":
@@ -450,6 +458,12 @@ enum Nucleo {
             let cred = try credencial()
             let wallet = try Sessao.shared.criarComPalavras(try proxima(), palavras: palavras, credencial: cred)
             return try json(CarteiraResumo(wallet, selecionada: true))
+        case "carteira.conferir":
+            // A palavra digitada na conferencia, contra a da posicao no rascunho: chega como segredo, e nao no JSON.
+            let digitada = try proxima()
+            defer { digitada.wipe() }
+            let indice = Int(pedido["indice"]?.doubleValue ?? -1)
+            return try json(["confere": Sessao.shared.comRascunho { $0.confere(digitada, em: indice) }])
         case "carteira.conferirEscolhidas":
             // As palavras escolhidas, antes do PIN: cada uma da lista em ingles e nenhuma das
             // combinacoes que robo testa primeiro. A frase completada sai da memoria aqui mesmo.
