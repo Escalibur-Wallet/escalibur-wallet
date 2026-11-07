@@ -1,15 +1,19 @@
+import EscaliburChains
 import EscaliburCore
 import EscaliburKeys
 import SwiftUI
 
-/// Carteira com passphrase e "Pedir a passphrase para enviar" (ligado de fabrica, pedido do
-/// dono, 16/10/2026): antes do Face ID ou do PIN de um envio, troca ou ponte, o dono digita a
-/// passphrase. Quem viu o PIN, ou tem o rosto do dono a mao, nao move o saldo da carteira
-/// com passphrase sem saber a passphrase.
+/// Carteira com passphrase: antes do Face ID ou do PIN de cada assinatura (envio, troca, ponte,
+/// cancelar uma ordem), o dono digita a passphrase. A passphrase nunca fica salva no app
+/// (pedido do dono, 05/11/2026): o cofre guarda so a entropia, e ela so existe durante a
+/// assinatura, num buffer seguro que sai zerado logo depois. Quem viu o PIN, ou tem o rosto do
+/// dono a mao, nao move o saldo da carteira com passphrase sem saber a passphrase. Na carteira
+/// criada desde entao, quem tira os dados do aparelho nao a acha em lugar nenhum; a de antes, ver
+/// "Versoes anteriores" em docs/seguranca.md §2.11.
 ///
-/// A conferencia nao acontece aqui: a passphrase digitada vai para `Signer.sign`, que a
-/// compara com a do cofre (NFKD, tempo constante) antes de nascer qualquer chave. Errada,
-/// nada e assinado. Esta folha so coleta o que foi digitado, num buffer que o chamador zera.
+/// A conferencia nao acontece aqui: a passphrase digitada vai para `Signer.sign`, que deriva a
+/// raiz com ela e confere o fingerprint gravado na criacao, antes de nascer qualquer chave.
+/// Errada, nada e assinado. Esta folha so coleta o que foi digitado.
 @MainActor
 final class PassphraseGate {
     static let shared = PassphraseGate()
@@ -24,39 +28,70 @@ final class PassphraseGate {
         /// deixar de pedir, nao.
         let offersGrace: Bool
         let continuation: CheckedContinuation<SecureBytes?, Never>
+        /// O que a folha digita, do pedido e nao da tela: fechar o pedido de fora (o app saiu, travou) o
+        /// zera na hora. O `onDisappear` do SwiftUI nao roda com a cena no segundo plano.
+        /// Do tamanho do campo da importacao: o limite que vale e o do NFKD (`PassphraseLimit.fits`), e
+        /// um caractere de largura cheia encolhe nele (revisao de blockchain de 05/11/2026).
+        let buffer = SecureBytes(capacity: PassphraseLimit.fieldCapacity)
+        /// A cifra viva da folha guarda uma tag da passphrase inteira: e do pedido, e `finish` a apaga.
+        let cipher: LiveCipher
     }
 
     private var current: Request?
 
-    /// A carteira pede a passphrase para mover saldo? E o ajuste, sem a folga.
+    /// A carteira pede a passphrase para assinar? Toda carteira com passphrase: sem ela nao ha como
+    /// assinar, porque o cofre nao a tem. O "Pedir a passphrase para enviar" de antes saiu.
     static func asks(_ wallet: WalletMeta?) -> Bool {
         guard let wallet, wallet.hasPassphrase, !wallet.isWatchOnly else { return false }
-        return wallet.passphraseToSend ?? true
+        // A que esta versao nao confere: pedir so contaria erro (`unverified`).
+        return wallet.passphraseUnverified != true
     }
 
-    /// Para mover saldo agora: pede, a menos que a folga escolhida depois de acertar ainda valha.
-    static func needed(_ wallet: WalletMeta?) -> Bool {
-        guard let wallet, asks(wallet) else { return false }
-        return !shared.inGrace(wallet.id)
+    /// A carteira com passphrase que esta versao nao confere (`passphraseUnverified`): assinar, ver as palavras, lacrar
+    /// e conferir a copia recusam com `unverifiedMessage`, sem pedir a passphrase nem contar erro.
+    static func unverified(_ wallet: WalletMeta?) -> Bool {
+        guard let wallet, wallet.hasPassphrase, !wallet.isWatchOnly else { return false }
+        return wallet.passphraseUnverified == true
     }
 
     /// A passphrase digitada, ou nil se o dono fechou a folha. O buffer e do chamador: ele
     /// zera depois de assinar.
     func ask(_ wallet: WalletMeta, reason: String? = nil) async -> SecureBytes? {
         let line = reason ?? String(localized: "\(wallet.name) pede a passphrase para mover saldo. Depois dela vem o \(KeyServices.biometryName) ou o PIN, como sempre.")
+        return await ask(walletID: wallet.id, name: wallet.name, line: line, offersGrace: reason == nil)
+    }
+
+    /// Para uma carteira que ainda nao esta na lista (a do envelope que vai ser importado). Sem folga.
+    func ask(named name: String, reason: String) async -> SecureBytes? {
+        await ask(walletID: UUID(), name: name, line: reason, offersGrace: false)
+    }
+
+    private func ask(walletID: UUID, name: String, line: String, offersGrace: Bool) async -> SecureBytes? {
         // Um pedido em cima de outro: o de antes recebe "fechou", e nao fica pendurado.
         if let pending = current { finish(pending, with: nil) }
         pendingGrace = nil
-        return await withCheckedContinuation { continuation in
-            let request = Request(walletID: wallet.id, walletName: wallet.name, reason: line, offersGrace: reason == nil, continuation: continuation)
+        let epoch = cancelEpoch
+        let answer: SecureBytes? = await withCheckedContinuation { continuation in
+            let request = Request(walletID: walletID, walletName: name, reason: line, offersGrace: offersGrace, continuation: continuation,
+                                  cipher: LiveCipher())
             current = request
             OverlayWindow.shared.show(PassphrasePromptSheet(request: request))
         }
+        // Travou ou saiu do app enquanto a folha respondia: a passphrase nao segue para o PIN, que abriria no fundo. Vale
+        // para todo chamador (assinar, ver as palavras, lacrar, importar o envelope).
+        guard epoch == cancelEpoch, UIApplication.shared.applicationState != .background else {
+            answer?.wipe()
+            pendingGrace = nil
+            return nil
+        }
+        return answer
     }
 
     /// `grace`: os minutos escolhidos na folha, que so passam a valer quando o assinador
     /// conferir a passphrase (`confirmGrace`).
     func finish(_ request: Request, with passphrase: SecureBytes?, grace minutes: Int? = nil) {
+        request.buffer.wipe()
+        request.cipher.clearAll()
         // Uma resposta por pedido: fechar e confirmar quase juntos nao retoma duas vezes.
         guard current?.id == request.id else { passphrase?.wipe(); return }
         current = nil
@@ -69,34 +104,179 @@ final class PassphraseGate {
 
     // MARK: Folga depois de acertar
 
-    /// "Nao pedir nos proximos minutos" (pedido do dono, 17/10/2026): 5, 10, 15 ou 20
-    /// minutos, 5 ao ligar. Vale so para mover saldo, so na carteira em que a passphrase
-    /// conferiu, e so na memoria, no relogio monotono: fechar o app ou travar zera, e o PIN
-    /// ou o rosto continuam sendo pedidos a cada envio.
+    /// "Nao pedir nos proximos minutos" (pedido do dono, 17/10/2026, mantido em 05/11/2026): 5, 10,
+    /// 15 ou 20 minutos, 5 ao ligar. Como o cofre nao tem a passphrase, a folga guarda uma copia da
+    /// digitada, so na memoria, num buffer seguro (fora do core dump e, no Android, presa na RAM),
+    /// so da carteira em que ela conferiu e so para assinar nela. A copia e zerada no fim do prazo
+    /// (no relogio continuo, que conta o iPhone dormindo), ao sair do app, ao travar, ao remover a
+    /// carteira e ao apagar tudo; desligar ou reiniciar o iPhone apaga a RAM inteira, e nada dela
+    /// vai para o disco. O PIN ou o rosto continuam sendo pedidos a cada assinatura.
     static let graceChoices = [5, 10, 15, 20]
     private var pendingGrace: (wallet: UUID, minutes: Int)?
     private var graceUntil: [UUID: TimeInterval] = [:]
+    private var held: [UUID: SecureBytes] = [:]
+    private var expiry: [UUID: Task<Void, Never>] = [:]
 
     func inGrace(_ walletID: UUID) -> Bool {
-        (graceUntil[walletID] ?? 0) > PINPolicy.uptime
+        guard held[walletID] != nil else { return false }
+        guard (graceUntil[walletID] ?? 0) > PINPolicy.uptime else {
+            expire(walletID)
+            return false
+        }
+        return true
     }
 
-    /// O assinador conferiu a passphrase desta carteira: a folga pedida na folha comeca agora.
-    func confirmGrace(_ walletID: UUID) {
+    /// Uma copia da passphrase da folga, de quem chama (que zera depois de assinar), ou nil sem folga.
+    private func heldCopy(_ walletID: UUID) -> SecureBytes? {
+        guard inGrace(walletID), let passphrase = held[walletID] else { return nil }
+        let copy = SecureBytes(capacity: max(passphrase.count, 1))
+        passphrase.withUnsafeBytes { copy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+        return copy
+    }
+
+    /// O assinador conferiu a passphrase desta carteira: a folga pedida na folha comeca agora, com
+    /// uma copia dela. Sem folga pedida, nada fica.
+    private func confirmGrace(_ walletID: UUID, passphrase: SecureBytes) {
         defer { pendingGrace = nil }
         guard let pending = pendingGrace, pending.wallet == walletID else { return }
-        graceUntil[walletID] = PINPolicy.uptime + TimeInterval(pending.minutes * 60)
+        expire(walletID)
+        let copy = SecureBytes(capacity: max(passphrase.count, 1))
+        passphrase.withUnsafeBytes { copy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+        let seconds = TimeInterval(pending.minutes * 60)
+        held[walletID] = copy
+        graceUntil[walletID] = PINPolicy.uptime + seconds
+        // Zerada no fim do prazo mesmo sem ninguem perguntar por ela.
+        expiry[walletID] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            self?.expire(walletID)
+        }
+    }
+
+    /// A folga desta carteira acaba, e a copia da passphrase sai zerada.
+    func expire(_ walletID: UUID) {
+        held.removeValue(forKey: walletID)?.wipe()
+        graceUntil[walletID] = nil
+        expiry.removeValue(forKey: walletID)?.cancel()
     }
 
     /// Travar o app encerra toda folga: quem destrava com o PIN depois nao pula a passphrase.
-    /// O app travou: a folha aberta responde "fechou".
+    /// Soma um a cada `cancel` e `clearGrace` (travou, saiu do app, apagou tudo): a passphrase
+    /// digitada antes disso nao segue para o PIN, nem com a folha ja fechada (a saida entre a folha da
+    /// passphrase e a do PIN, revisao de seguranca de 05/11/2026).
+    private var cancelEpoch = 0
+
+    /// O app travou ou saiu: a folha aberta responde "fechou", e o que estava digitado sai zerado.
     func cancel() {
+        cancelEpoch &+= 1
         if let current { finish(current, with: nil) }
     }
 
+    /// Travar, sair do app ou apagar tudo: toda copia da passphrase sai zerada.
     func clearGrace() {
-        graceUntil = [:]
+        cancelEpoch &+= 1
+        for id in Array(held.keys) + Array(graceUntil.keys) { expire(id) }
         pendingGrace = nil
+    }
+
+    // MARK: Assinar
+
+    enum Signing {
+        case signed([SignedTransaction])
+        /// O dono fechou a folha da passphrase, do rosto ou do PIN: nada foi assinado.
+        case cancelled
+        /// Por que nao assina agora, sem contar tentativa: a espera depois de muitas passphrases erradas, ou a
+        /// passphrase que esta versao nao consegue conferir.
+        case waiting(String)
+        case failed(any Error)
+    }
+
+    /// Assina o plano com a RK de agora. Na carteira com passphrase, a passphrase vem antes do Face
+    /// ID ou do PIN (a copia da folga, se ainda vale), e o assinador a confere pelo fingerprint da
+    /// raiz; a tentativa conta antes, a folga escolhida comeca depois de conferir, e as redes que uma
+    /// versao nova trouxe nascem nessa mesma abertura do cofre (sem a passphrase, nao ha outro jeito).
+    /// No fim a passphrase sai zerada: so a copia da folga, se o dono a pediu, continua na memoria.
+    func sign(_ plan: SigningPlan, session: AppSession, auth: AuthCoordinator, reason: String,
+              prompt: ((WalletMeta) -> String)? = nil) async -> Signing {
+        let wallet = session.metadata.wallets.first { $0.id == plan.walletID }
+        if Self.unverified(wallet) { return .waiting(Self.unverifiedMessage) }
+        let epoch = cancelEpoch
+        var typed: SecureBytes?
+        var fresh = false
+        if Self.asks(wallet), let wallet {
+            if let copy = heldCopy(wallet.id) {
+                typed = copy
+            } else {
+                guard let given = await ask(wallet, reason: prompt?(wallet)) else { return .cancelled }
+                typed = given
+                fresh = true
+            }
+        }
+        let check = typed
+        defer { check?.wipe() }
+        // Travou ou saiu do app enquanto a folha respondia: a passphrase nao segue para o PIN, que abriria no fundo.
+        guard epoch == cancelEpoch, UIApplication.shared.applicationState != .background else {
+            pendingGrace = nil
+            return .cancelled
+        }
+        // A tentativa conta antes de o assinador conferir; com muitas erradas, espera.
+        if fresh, let wait = begin(session, wallet: plan.walletID) {
+            pendingGrace = nil
+            return .waiting(wait)
+        }
+        let fingerprint = wallet?.fingerprint.flatMap(Hex.decode)
+        let have = Set(wallet?.accounts.map(\.chainID) ?? [])
+        let missing = check == nil ? [] : Chain.all.filter { !have.contains($0.id) }
+        do {
+            guard let (signed, added) = try await auth.perform(session, reason: reason, { rk -> ([SignedTransaction], [DerivedAccount]) in
+                // Assina antes (o plano vencido recusa antes de a passphrase ser usada), e so depois as redes que faltam,
+                // com uma copia da RK, que o assinador zera. Ao contrario, a passphrase era testada antes do vencimento, e o
+                // plano vencido devolvia a tentativa (revisao de seguranca de 05/11/2026).
+                // A copia so nasce quando ha rede para derivar: no caso comum, a RK morre no assinador, como antes.
+                var again: SecureBytes?
+                if check != nil, !missing.isEmpty {
+                    let copy = SecureBytes(capacity: max(rk.count, 1))
+                    rk.withUnsafeBytes { copy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+                    again = copy
+                }
+                defer { again?.wipe() }
+                let signed = try Signer.sign(plan, rootKey: rk, vault: KeyServices.wallets, passphrase: check, fingerprint: fingerprint)
+                // Uma rede que nao nasce (aparelho com defeito) nao segura a assinatura: so fica para a proxima.
+                let added = again.flatMap { key in
+                    check.flatMap { typed in
+                        try? PassphraseProof.missingAccounts(walletID: plan.walletID, rootKey: key, vault: KeyServices.wallets,
+                                                             typed: typed, fingerprint: fingerprint, chains: missing)
+                    }
+                } ?? []
+                return (signed, added)
+            }) else {
+                if fresh { refund(session, wallet: plan.walletID) }
+                pendingGrace = nil
+                return .cancelled
+            }
+            if let check {
+                if fresh {
+                    passed(session, wallet: plan.walletID)
+                    confirmGrace(plan.walletID, passphrase: check)
+                }
+                if !added.isEmpty { session.addAccounts(added, to: plan.walletID) }
+            }
+            return .signed(signed)
+        } catch {
+            let mismatch = (error as? Signer.Failure) == .passphraseMismatch
+            if fresh {
+                // Parou antes da passphrase (PIN errado, cofre): nada foi conferido, a tentativa volta.
+                if mismatch { failed(session, wallet: plan.walletID) } else { refund(session, wallet: plan.walletID) }
+            } else if mismatch {
+                expire(plan.walletID)
+            }
+            pendingGrace = nil
+            // A raiz conferiu, mas a Cardano de uma carteira antiga saiu dos bytes da criacao, que a digitada nao repetiu.
+            if (error as? Signer.Failure) == .unexpectedKey, wallet?.legacyCardanoPassphrase == true, plan.chain.family == .cardano {
+                return .waiting(Self.legacyCardanoMessage)
+            }
+            return .failed(error)
+        }
     }
 
     // MARK: Espera depois de erros
@@ -253,8 +433,9 @@ final class PassphraseGate {
         }
     }
 
-    /// A carteira saiu deste iPhone: a conta dela sai junto.
+    /// A carteira saiu deste iPhone: a conta dela sai junto, e a copia da folga, zerada.
     func forget(_ session: AppSession, wallet: UUID) {
+        expire(wallet)
         let slots = [Self.slot(wallet, false), Self.slot(wallet, true)]
         guard slots.contains(where: { session.metadata.settings.passphraseGuards?[$0] != nil }) else { return }
         for slot in slots { session.metadata.settings.passphraseGuards?[slot] = nil }
@@ -287,20 +468,21 @@ final class PassphraseGate {
         return left
     }
 
-    /// A passphrase digitada confere com a do cofre? As duas em NFKD, em tempo constante:
-    /// a mesma regra do assinador (`Signer.sign`) e da conferencia da copia.
-    nonisolated static func matches(_ stored: SecureBytes, _ typed: SecureBytes) -> Bool {
-        let a = BIP39.nfkd(stored), b = BIP39.nfkd(typed)
-        defer { a.wipe(); b.wipe() }
-        return a.count > 0 && Hash.constantTimeEqual(a, b)
-    }
+    /// A passphrase que uma versao anterior gravou e que esta nao conseguiu conferir pela raiz: ela saiu do
+    /// cofre, e a digitada passaria pelo mesmo caminho. A carteira continua inteira nas palavras com a passphrase.
+    static let unverifiedMessage = String(localized: "Esta versão do app não consegue conferir a passphrase desta carteira, e ela não assina aqui. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39.")
+
+    /// A Cardano da carteira cuja passphrase uma versao anterior gravou fora de NFKD: so a digitada byte a byte igual a
+    /// da criacao a assina (`legacyCardanoPassphrase`).
+    static let legacyCardanoMessage = String(localized: "A conta da Cardano desta carteira saiu da passphrase exatamente como foi digitada na criação. Digite igual: o mesmo teclado, a mesma forma dos acentos e da largura dos caracteres.")
 
     /// O texto da passphrase errada, depois do Face ID ou do PIN.
     static let mismatchMessage = String(localized: "A passphrase não confere. Nada foi assinado. Escreva igual ao que você anotou: maiúscula, acento e espaço contam.")
 }
 
-/// O tamanho maximo da passphrase: 256 bytes no cofre, contados depois do NFKD, onde uma letra
-/// com acento ocupa tres (revisao de seguranca de 24/10/2026). Os campos de criar e importar
+/// O tamanho maximo da passphrase: 256 bytes, contados depois do NFKD, onde uma letra com acento
+/// ocupa tres (revisao de seguranca de 24/10/2026). Era o limite do cofre, que nao a guarda mais, e
+/// continua o mesmo para quem ja tem uma. Os campos de criar e importar
 /// guardam ate o dobro, para quem passa do limite ver o aviso em vez de ter a passphrase cortada
 /// sem saber, e a conta exata vem antes de gravar.
 enum PassphraseLimit {
@@ -325,10 +507,10 @@ enum PassphraseLimit {
 /// A folha da passphrase antes de assinar.
 struct PassphrasePromptSheet: View {
     let request: PassphraseGate.Request
-    @State private var buffer = SecureBytes(capacity: 256)
+    private var buffer: SecureBytes { request.buffer }
     @State private var length = 0
     @State private var reveal = false
-    @State private var cipher = LiveCipher()
+    private var cipher: LiveCipher { request.cipher }
     @State private var answered = false
     /// A folga: desligada a cada folha; ligar comeca em 5 minutos.
     @State private var graceOn = false
@@ -345,7 +527,7 @@ struct PassphrasePromptSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, Space.gutter).padding(.top, Space.sm)
             PasswordBox(buffer: buffer, length: $length, placeholder: String(localized: "Passphrase"), focusOnAppear: true, reveal: $reveal,
-                        onSubmit: { confirm() }, glyphs: glyphs)
+                        onSubmit: { confirm() }, glyphs: glyphs, wipesOnLeave: true)
                 .padding(.horizontal, Space.gutter).padding(.top, Space.lg)
                 .accessibilityIdentifier("passphrase-envio")
             Text("Segure o dedo no campo para conferir o que digitou.")
@@ -389,7 +571,7 @@ struct PassphrasePromptSheet: View {
                 .tint(Palette.success)
                 .accessibilityIdentifier("passphrase-folga")
                 Text(graceOn
-                     ? String(localized: "Nos próximos \(graceMinutes) minutos, \(request.walletName) não pede a passphrase para mover saldo. O \(KeyServices.biometryName) ou o PIN continuam. Travar o app encerra.")
+                     ? String(localized: "Nos próximos \(graceMinutes) minutos, \(request.walletName) não pede a passphrase. Até lá ela fica só na memória do app, e sai apagada no fim do tempo, ao sair do app ou ao travar. O \(KeyServices.biometryName) ou o PIN continuam.")
                      : String(localized: "Depois de a passphrase conferir, os próximos envios, trocas e ordens pulam esta etapa por alguns minutos."))
                     .typeStyle(.note).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true)
                     .padding(.trailing, 64)

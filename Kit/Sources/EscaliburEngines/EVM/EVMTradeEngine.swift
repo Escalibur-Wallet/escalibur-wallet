@@ -92,9 +92,20 @@ public struct EVMTradeEngine: TradeEngine {
         _ set: TradeQuoteSet, context: EVMTradeContext, market: EVMTradeMarket, request: TradeRequest
     ) async throws -> (quote: TradeQuote, net: TradeSignedAmount, ranked: [TradeCandidate]) {
         // O minimo ancorado fora do provedor: preco de referencia, ou duas cotacoes e a maior
-        // estimativa entre elas. Todas aparecem como alternativa; so as ancoradas podem ser
-        // a escolhida.
-        let eligible = Set(try TradeValidator.anchored(set.ranked.map(\.quote), market: market.reference).map(\.provider))
+        // estimativa entre elas. Sem nenhum dos dois, a fonte unica segue marcada como sem
+        // comparacao e so revisa com o aceite do dono, que ve o minimo que vai receber; a carteira
+        // nao recusa por preco nesse caso (pedido do dono, 05/11/2026). Todas aparecem como
+        // alternativa; so as ancoradas podem ser a escolhida (sem comparacao, so elas aparecem).
+        let quotes = set.ranked.map(\.quote)
+        var unanchored = false
+        let anchored: [ValidatedTradeQuote]
+        do {
+            anchored = try TradeValidator.anchored(quotes, market: market.reference)
+        } catch TradeRefusal.noPriceAnchor {
+            anchored = try TradeValidator.unanchored(quotes, market: market.reference)
+            unanchored = true
+        }
+        let eligible = Set(anchored.map(\.provider))
 
         // A autorizacao que ja existe barateia a troca: le a allowance dos spenders que
         // disputam o topo e ranqueia de novo com ela.
@@ -111,7 +122,7 @@ public struct EVMTradeEngine: TradeEngine {
         }
         let quote = EVMTradeQuoteMapping.quote(
             sell: request.sell, buy: request.buy, amountIn: request.amountIn, legs: legs, ranked: ranked, allowances: allowances,
-            costs: costs, chain: chain
+            costs: costs, chain: chain, unanchored: unanchored, alternativesFrom: unanchored ? eligible : nil
         )
         var guaranteed = BigUInt()
         var cost = BigUInt()
@@ -192,13 +203,16 @@ public struct EVMTradeEngine: TradeEngine {
 
     public func plan(_ request: TradeRequest, quote: TradeQuote) async throws -> SigningPlan {
         do {
-            return try await makePlan(request, quote: quote)
+            let plan = try await makePlan(request, quote: quote)
+            return quote.unanchored ? plan.addingWarnings([.uncomparedPrice]) : plan
         } catch {
             throw EVMEngineMessages.userFacing(error, .tradePlan, chain: chain)
         }
     }
 
     func makePlan(_ request: TradeRequest, quote: TradeQuote) async throws -> SigningPlan {
+        // A cotacao sem comparacao so vira plano com o aceite do dono, na troca imediata e em partes.
+        guard !quote.unanchored || request.acceptsUnanchored else { throw EVMEngineFailure.unanchoredNotAccepted }
         try await checkUnlistedDecimals([request.sell, request.buy])
         if request.inParts { return try await makeCoWSwapPlan(request, quote: quote) }
         let context = try EVMTradeContext(request, chain: chain)
@@ -278,10 +292,12 @@ public struct EVMTradeEngine: TradeEngine {
         // O garantido novo nao pode ter caido abaixo do que a tela mostrou por mais que a
         // tolerancia do dono: isso seria outra troca, nao a que ele revisou. Sem preco de
         // referencia agora, a recotacao de um provedor so nao tem ancora de fora: o
-        // garantido tem de ser pelo menos o minimo que a tela mostrou, ancorado na rodada.
+        // garantido tem de ser pelo menos o minimo que a tela mostrou, ancorado na rodada. Na
+        // cotacao sem comparacao, o minimo mostrado e o que o dono aceitou, mesmo que a referencia
+        // tenha voltado.
         let guaranteed = requoted.reduce(BigUInt()) { $0 + $1.quote.guaranteedOut }
-        let floor = market.reference.oracleOut == nil ? quote.minimumOut : intent.minimumOut(forExpected: quote.minimumOut)
-        guard guaranteed >= floor else { throw EVMEngineFailure.priceMoved }
+        let floor = quote.unanchored || market.reference.oracleOut == nil ? quote.minimumOut : intent.minimumOut(forExpected: quote.minimumOut)
+        guard guaranteed >= floor else { throw quote.unanchored ? EVMEngineFailure.belowAcceptedMinimum : EVMEngineFailure.priceMoved }
 
         // Uma perna depois da outra: nonce, saldo nativo e saldo do token vendido seguem de
         // uma para a proxima, porque todas vao ser assinadas agora e executadas em sequencia.

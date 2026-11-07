@@ -114,27 +114,107 @@ struct EVMTradeEngineTests {
         }
     }
 
-    @Test("Regressao M5: sem preco de referencia, uma cotacao so nao troca; com a referencia, troca")
+    @Test("Regressao M5: sem preco de referencia, uma cotacao so vem marcada sem comparacao e so troca com o aceite; com a referencia, troca")
     func anchorRequired() async throws {
         let proposals = try F.proposals()
         let single = try H.sources(EVMCallCounter(), proposals: [try #require(proposals.first)])
         let blind = H.engine(sources: single, transport: try H.baseTransport())
-        await #expect(throws: SendEngineError.message(
-            "Sem preço de referência do mercado agora, a troca precisa de pelo menos duas cotações para comparar, e só uma respondeu. Tente de novo em instantes."
-        )) { _ = try await blind.quote(F.request()) }
+        let request = try F.request()
+        let unanchored = try await blind.quote(request)
+        #expect(unanchored.unanchored && unanchored.providersCompared == 1)
 
-        // Com o preco de referencia, a mesma cotacao unica passa pela sanidade e troca.
+        // Sem o aceite do dono o plano nao sai (pedido do dono, 05/11/2026). Pedido em partes tambem nao: sem
+        // referencia a CoW nao oferece partes, e o teste prende so a ordem da trava, antes do ramo em partes.
+        await #expect(throws: SendEngineError.message(
+            "Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Marque que entende o risco para trocar."
+        )) { _ = try await blind.plan(request, quote: unanchored) }
+        let inParts = TradeRequest(walletID: request.walletID, chain: request.chain, account: request.account, sell: request.sell,
+                                   buy: request.buy, amountIn: request.amountIn, slippageBasisPoints: request.slippageBasisPoints, inParts: true)
+        await #expect(throws: SendEngineError.message(
+            "Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Marque que entende o risco para trocar."
+        )) { _ = try await blind.plan(inParts, quote: unanchored) }
+
+        // Com o aceite, o plano sai preso ao minimo que a tela mostrou, com o aviso na revisao.
+        let accepted = TradeRequest(walletID: request.walletID, chain: request.chain, account: request.account, sell: request.sell,
+                                    buy: request.buy, amountIn: request.amountIn, slippageBasisPoints: request.slippageBasisPoints,
+                                    acceptsUnanchored: true)
+        let plan = try await blind.plan(accepted, quote: unanchored)
+        #expect(plan.review.warnings.contains(.uncomparedPrice))
+        #expect(try #require(plan.review.incomingMinimum).amount >= unanchored.minimumOut)
+
+        // Com o preco de referencia, a mesma cotacao unica passa pela sanidade e troca, sem a marca.
         let best = try TradeValidator.validate(try #require(proposals.first), intent: F.intent())
         let ethMicros = BigUInt(100) * BigUInt.power(of: 10, 24) / best.expectedOut
         let text = ethMicros.decimalString
         let price = String(text.dropLast(6)) + "." + String(text.suffix(6))
         let seeing = H.engine(prices: ["usd-coin": "1", "ethereum": price], sources: try H.sources(EVMCallCounter(), proposals: [proposals[0]]),
                               transport: try H.baseTransport())
-        let quote = try await seeing.quote(F.request())
-        #expect(quote.providersCompared == 1)
+        let quote = try await seeing.quote(request)
+        #expect(quote.providersCompared == 1 && !quote.unanchored)
+        #expect(!(try await seeing.plan(request, quote: quote)).review.warnings.contains(.uncomparedPrice))
+
+        // Duas fontes sem referencia: ancoradas uma na outra, sem a marca.
+        let compared = try await H.engine(sources: try H.sources(EVMCallCounter()), transport: try H.baseTransport()).quote(request)
+        #expect(!compared.unanchored && compared.providersCompared >= 2)
     }
 
-    @Test("Regressao R7-B2: preco de referencia com 2 minutos ou mais nao ancora; a cotacao unica nao troca")
+    @Test("Cotacao sem comparacao: a rota so oferece como alternativa as cotacoes que ficaram na rodada")
+    func unanchoredAlternatives() throws {
+        let velora = try F.validated(.velora)
+        let kyber = try F.validated(.kyberSwap)
+        let costs = TradeCostModel(gasPriceWei: 0, l1FeePerTransactionWei: 0, nativeToBuy: .identity)
+        let ranked = TradeRanking.rank([velora, kyber], costs: costs)
+        let legs = [EVMTradeLeg(quote: velora, shareBps: 10_000)]
+        let compared = EVMTradeQuoteMapping.quote(sell: F.usdc, buy: .native(.base), amountIn: F.amount, legs: legs, ranked: ranked,
+                                                  allowances: [:], costs: costs, chain: .base)
+        #expect(compared.alternatives.map(\.provider) == [TradeProvider.kyberSwap.displayName] && !compared.unanchored)
+        let unanchored = EVMTradeQuoteMapping.quote(sell: F.usdc, buy: .native(.base), amountIn: F.amount, legs: legs, ranked: ranked,
+                                                    allowances: [:], costs: costs, chain: .base, unanchored: true, alternativesFrom: [.velora])
+        #expect(unanchored.alternatives.isEmpty && unanchored.unanchored && unanchored.providersCompared == 1)
+    }
+
+    @Test("Cotacao sem comparacao aceita: a recotacao tem de garantir o minimo mostrado, mesmo com a referencia de volta; a alternativa escolhida continua marcada")
+    func unanchoredFloorAndChoice() async throws {
+        let proposals = try F.proposals()
+        let request = try F.request()
+        let accepted = TradeRequest(walletID: request.walletID, chain: request.chain, account: request.account, sell: request.sell,
+                                    buy: request.buy, amountIn: request.amountIn, slippageBasisPoints: request.slippageBasisPoints,
+                                    acceptsUnanchored: true)
+        let quote = try await H.engine(sources: try H.sources(EVMCallCounter(), proposals: [proposals[0]]), transport: try H.baseTransport())
+            .quote(request)
+        #expect(quote.unanchored)
+        // A referencia volta no plano. O minimo mostrado 0,3% acima do que a recotacao garante (dentro da tolerancia
+        // de 0,5%): com referencia o piso desceria pela tolerancia, mas a cotacao aceita prende o minimo mostrado.
+        let best = try TradeValidator.validate(try #require(proposals.first), intent: F.intent())
+        let micros = (BigUInt(100) * BigUInt.power(of: 10, 24) / best.expectedOut).decimalString
+        let seeing = H.engine(prices: ["usd-coin": "1", "ethereum": String(micros.dropLast(6)) + "." + String(micros.suffix(6))],
+                              sources: try H.sources(EVMCallCounter(), proposals: [proposals[0]]), transport: try H.baseTransport())
+        let raised = TradeQuote(
+            sell: quote.sell, buy: quote.buy, amountIn: quote.amountIn, expectedOut: quote.expectedOut,
+            minimumOut: quote.minimumOut + quote.minimumOut * BigUInt(30) / BigUInt(10_000), priceImpactPercent: quote.priceImpactPercent,
+            networkFees: quote.networkFees, providerFeeNote: quote.providerFeeNote, legs: quote.legs, alternatives: quote.alternatives,
+            providersCompared: quote.providersCompared, needsApproval: quote.needsApproval, expiresAt: quote.expiresAt, unanchored: true
+        )
+        await #expect(throws: SendEngineError.message("O mínimo garantido caiu desde o seu aceite. Atualize a cotação e marque de novo.")) {
+            _ = try await seeing.plan(accepted, quote: raised)
+        }
+
+        // A alternativa escolhida na rota continua sem comparacao: sem o aceite, o plano recusa.
+        let withAlternative = TradeQuote(
+            sell: quote.sell, buy: quote.buy, amountIn: quote.amountIn, expectedOut: quote.expectedOut, minimumOut: quote.minimumOut,
+            priceImpactPercent: nil, networkFees: [], providerFeeNote: nil, legs: quote.legs,
+            alternatives: [TradeQuote.Alternative(provider: "Velora", out: quote.minimumOut)], providersCompared: 2, needsApproval: true,
+            expiresAt: quote.expiresAt, unanchored: true
+        )
+        let chosen = try #require(withAlternative.choosing(withAlternative.alternatives[0]))
+        #expect(chosen.unanchored)
+        #expect(withAlternative.adding(cow: nil).unanchored)
+        await #expect(throws: SendEngineError.message(
+            "Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Marque que entende o risco para trocar."
+        )) { _ = try await seeing.plan(request, quote: chosen) }
+    }
+
+    @Test("Regressao R7-B2: preco de referencia com 2 minutos ou mais nao ancora; a cotacao unica volta sem comparacao")
     func staleReferenceDropped() async throws {
         let proposals = try F.proposals()
         let best = try TradeValidator.validate(try #require(proposals.first), intent: F.intent())
@@ -147,20 +227,20 @@ struct EVMTradeEngineTests {
             H.engine(oracle: EVMMarketPriceOracle(service: service), sources: try H.sources(EVMCallCounter(), proposals: [proposals[0]]),
                      transport: try H.baseTransport())
         }
-        // Preco de agora: a cotacao unica passa pela sanidade contra ele e troca.
-        #expect(try await engine().quote(F.request()).providersCompared == 1)
+        // Preco de agora: a cotacao unica passa pela sanidade contra ele e troca, comparada (sem a marca).
+        let fresh = try await engine().quote(F.request())
+        #expect(fresh.providersCompared == 1 && !fresh.unanchored)
 
         // As fontes caem. Um minuto depois, o ultimo preco bom ainda serve de referencia.
         network.answer(nil)
         network.advance(60)
-        #expect(try await engine().quote(F.request()).providersCompared == 1)
+        let minute = try await engine().quote(F.request())
+        #expect(minute.providersCompared == 1 && !minute.unanchored)
 
-        // Dois minutos ou mais: o mesmo preco fica de fora, e a troca volta a exigir duas
-        // cotacoes, como sem referencia.
+        // Dois minutos ou mais: o mesmo preco fica de fora, e a cotacao unica volta marcada sem
+        // comparacao, como sem referencia.
         network.advance(60)
-        await #expect(throws: SendEngineError.message(
-            "Sem preço de referência do mercado agora, a troca precisa de pelo menos duas cotações para comparar, e só uma respondeu. Tente de novo em instantes."
-        )) { _ = try await engine().quote(F.request()) }
+        #expect(try await engine().quote(F.request()).unanchored)
 
         // O servico continua com o preco e a hora dele (a tela mostra o ultimo preco bom), e
         // o aviso de taxa alta do envio, que nao decide minimo, aceita qualquer idade.
@@ -540,7 +620,8 @@ struct EVMTradeEngineTests {
             EVMEngineFailure.wrongChain, EVMEngineFailure.accountMismatch, EVMEngineFailure.assetNotListed, EVMEngineFailure.tagNotSupported,
             EVMEngineFailure.recipientMismatch, EVMEngineFailure.transferReturnedFalse, EVMEngineFailure.batchMismatch,
             EVMEngineFailure.partialBroadcast, EVMEngineFailure.quoteMismatch, EVMEngineFailure.quoteExpired, EVMEngineFailure.priceMoved,
-            EVMEngineFailure.riskIncreased, EVMEngineFailure.noQuote, EVMEngineFailure.allQuotesRefused,
+            EVMEngineFailure.riskIncreased, EVMEngineFailure.unanchoredNotAccepted, EVMEngineFailure.belowAcceptedMinimum,
+            EVMEngineFailure.noQuote, EVMEngineFailure.allQuotesRefused,
             EVMEngineFailure.limitOrdersUnavailable, EVMEngineFailure.limitPriceNotRepresentable, EVMEngineFailure.openOrderExists,
             EVMEngineFailure.pendingOrderMissing, EVMEngineFailure.prerequisiteFailed, EVMEngineFailure.prerequisiteTimedOut,
             EVMEngineFailure.invalidOrderReference,

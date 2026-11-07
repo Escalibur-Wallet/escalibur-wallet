@@ -469,7 +469,7 @@ Quote { provider, kind(.evmTx|.eip712|.solIx|.solTx|.deposit(memo)),
 
 **Honestidade da cotação:** simular o top-1 e o top-2 (§3.5). Quem simula mais de X bps abaixo do que cotou é rebaixado. **Na v1 (código):** simula a escolhida, em duas fontes, no plano; a comparação da rodada é pelo mínimo decodificado.
 
-**Âncora do mínimo (v1, código):** o `minOut` que o provedor escreve só é aceito ancorado fora dele. Com preço de referência (CoinGecko, ou a paridade entre dois stablecoins da lista), a cotação mais de 5% pior bloqueia e acima de 2% avisa. Sem referência, pelo menos duas cotações válidas, e só é escolhida a que garante o mínimo calculado da maior estimativa entre elas (`TradeValidator.anchored`).
+**Âncora do mínimo (v1, código):** em regra, o `minOut` que o provedor escreve só é aceito ancorado fora dele (a exceção, com o aceite do dono, vem no fim deste parágrafo). Com preço de referência (CoinGecko, ou a paridade entre dois stablecoins da lista), a cotação mais de 5% pior bloqueia e acima de 2% avisa. Sem referência, duas cotações válidas, e só é escolhida a que garante o mínimo calculado da maior estimativa entre elas (`TradeValidator.anchored`). Com uma fonte só e sem referência, a cotação segue marcada sem comparação (`TradeValidator.unanchored`, `TradeQuote.unanchored`) e só vira plano com o aceite do dono, que vê o mínimo que vai receber; o plano fica preso a esse mínimo (decisão do dono, 05/11/2026).
 
 ### 3.3 Divisão entre provedores
 

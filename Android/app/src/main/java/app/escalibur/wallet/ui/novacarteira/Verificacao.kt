@@ -173,8 +173,13 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
                 Resultado.Cautela(t("Este celular guarda a chave do cofre em software, sem o chip de segurança.")))
         }
 
-        /** O aviso fixo da entrada e da Carteira (o `DeviceIntegrity.suspicious` do iOS): os mesmos sinais da checagem. */
-        fun pareceTerRoot(contexto: Context): Boolean = root(contexto).resultado is Resultado.Falhou
+        /**
+         * O aviso fixo da entrada e da Carteira (o `DeviceIntegrity.suspicious` do iOS): os mesmos sinais da checagem,
+         * root, codigo injetado e depurador (auditoria das chaves de 06/11/2026; antes so o root acendia a faixa).
+         */
+        fun pareceTerRoot(contexto: Context): Boolean =
+            root(contexto).resultado is Resultado.Falhou || injecao(contexto).resultado is Resultado.Falhou ||
+                depurador(contexto).resultado is Resultado.Falhou
 
         fun root(contexto: Context): Checagem {
             val caminhos = listOf(

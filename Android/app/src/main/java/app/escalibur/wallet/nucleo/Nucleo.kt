@@ -1,6 +1,8 @@
 package app.escalibur.wallet.nucleo
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -58,11 +60,13 @@ object Api {
             parte.copyInto(junto, posicao)
             posicao += parte.size
         }
+        // As partes saem zeradas ja, antes da chamada: o que segue vai so no `junto`, que o nucleo copia para a
+        // memoria protegida na entrada (05/11/2026).
+        partes.forEach { it.fill(0) }
         try {
             conferir(Nucleo.chamarComSegredo(metodo, corpo.toString(), junto))
         } finally {
             junto.fill(0)
-            partes.forEach { it.fill(0) }
         }
     }
 
@@ -74,7 +78,13 @@ object Api {
     }
 
     // O cofre se apagou (PIN errado demais) em qualquer tela, e nao so na do bloqueio: a gaveta de notificacoes sai
-    // junto, como no iPhone (setima passada da auditoria de 03/11/2026).
+    // junto, como no iPhone (setima passada da auditoria de 03/11/2026), e o estado do app recarrega num escopo do app,
+    // mesmo que a tela que pediu o PIN ja tenha saido (06/11/2026).
     private fun falha(json: JSONObject) = FalhaDoNucleo(json.optString("erro", "falha"), json)
-        .also { if (it.codigo == "cofre.wiped") app.escalibur.wallet.vigias.Vigia.limparGaveta() }
+        .also {
+            if (it.codigo == "cofre.wiped") {
+                app.escalibur.wallet.vigias.Vigia.limparGaveta()
+                MainScope().launch { runCatching { app.escalibur.wallet.ui.App.recarregar() } }
+            }
+        }
 }

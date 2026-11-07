@@ -47,13 +47,22 @@ extension Ed25519 {
 
     /// Assinatura Ed25519 com a chave estendida (kL, kR), como a Cardano confere:
     /// r = SHA-512(kR || m) mod L, R = r * B, S = r + SHA-512(R || A || m) * kL mod L.
-    /// Deterministica: a mesma chave e a mesma mensagem dao sempre a mesma assinatura.
+    /// Deterministica: a mesma chave e a mesma mensagem dao sempre a mesma assinatura. Com `hedged`
+    /// (a assinatura de verdade, auditoria das chaves de 06/11/2026), r = SHA-512(Z || kR || m) com Z de
+    /// 32 bytes do gerador do sistema: o no confere so R e S, nunca como r nasceu.
     public static func signExtended(_ message: [UInt8], extendedKey: SecureBytes) throws -> [UInt8] {
+        try signExtended(message, extendedKey: extendedKey, hedged: false)
+    }
+
+    public static func signExtended(_ message: [UInt8], extendedKey: SecureBytes, hedged: Bool) throws -> [UInt8] {
         guard extendedKey.count == 64 else { throw Failure.invalidSeed }
+        let noise: SecureBytes? = try hedged ? SecureBytes.random(count: 32) : nil
+        defer { noise?.wipe() }
         return extendedKey.withUnsafeBytes { raw in
             let kL = UnsafeRawBufferPointer(rebasing: raw[0..<32])
             let kR = UnsafeRawBufferPointer(rebasing: raw[32..<64])
-            return Ed25519Extended.sign(message, kL: kL, kR: kR)
+            guard let noise else { return Ed25519Extended.sign(message, kL: kL, kR: kR, noise: nil) }
+            return noise.withUnsafeBytes { Ed25519Extended.sign(message, kL: kL, kR: kR, noise: $0) }
         }
     }
 }
@@ -365,15 +374,16 @@ enum Ed25519Extended {
 
     // MARK: Assinatura
 
-    static func sign(_ message: [UInt8], kL: UnsafeRawBufferPointer, kR: UnsafeRawBufferPointer) -> [UInt8] {
+    static func sign(_ message: [UInt8], kL: UnsafeRawBufferPointer, kR: UnsafeRawBufferPointer, noise: UnsafeRawBufferPointer?) -> [UInt8] {
         let publicKey = scalarbasePacked(kL)
 
-        // O nonce: r = SHA-512(kR || m) mod L. Segredo: vive so ate o fim da funcao.
+        // O nonce: r = SHA-512([Z ||] kR || m) mod L. Segredo: vive so ate o fim da funcao.
         //
         // Limite conhecido: o estado do `SHA512` do CryptoKit passou por kR, e nem ele nem
         // o digesto que `finalize` devolve sao zeraveis daqui (o tipo nao expoe a memoria
         // dele). O que e nosso, os 64 bytes copiados e o nonce reduzido, e zerado.
         var hasher = SHA512()
+        if let noise { hasher.update(bufferPointer: noise) }
         hasher.update(bufferPointer: kR)
         hasher.update(data: message)
         var nonceWide = Array(hasher.finalize())

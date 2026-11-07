@@ -66,6 +66,8 @@ struct OpenEnvelopeFlow: View {
     @State private var opened: Envelope.Contents?
     @State private var revealDraft: PhraseDraft?
     @State private var importing = false
+    /// Super Security em "Bloquear as carteiras": importar recusa antes do PIN; so ver as palavras continua.
+    @State private var wordsBlocked = false
     /// Carteira montada a partir do envelope, esperando o dono conferir os enderecos.
     @State private var pending: (secret: WalletSecret, preview: ImportPreview, name: String, words: Int)?
 
@@ -77,7 +79,6 @@ struct OpenEnvelopeFlow: View {
                                       onSave: { foreign in Task { await save(tronForeign: foreign) } }, onBack: discardPending)
                 } else if let revealDraft, let opened {
                     // So as palavras: a passphrase do envelope nunca aparece (pedido do dono, 01/11/2026).
-                    // Importar o envelope continua levando a passphrase junto, sem mostrar.
                     RecordWordsView(draft: revealDraft, walletName: opened.label.isEmpty ? String(localized: "Envelope") : opened.label) {
                         close()
                     }
@@ -105,6 +106,12 @@ struct OpenEnvelopeFlow: View {
         }
         .interactiveDismissDisabled()
         .guardedAgainstCapture()
+        // Sair do app ou travar: o conteudo aberto (palavras e a passphrase de um envelope de antes) sai zerado e a tela volta a
+        // senha, com o arquivo cifrado, que nao tem segredo nenhum (05/11/2026). Com o cofre abrindo ou a carteira sendo
+        // gravada noutra thread, espera: zerar ali, no meio, corromperia o que se grava.
+        .onReceive(NotificationCenter.default.publisher(for: SecureInputField.wipeAll)) { _ in
+            if opening || importing { forgetWhenDone = true } else { forgetOpened() }
+        }
         .whiteAlert("Este envelope pede uma conta pesada", isPresented: $confirmingHeavy) {
             Button("Abrir mesmo assim") {
                 heavyConfirmed = true
@@ -152,7 +159,10 @@ struct OpenEnvelopeFlow: View {
             // parecia baixo (pedido do dono, 22/10/2026; mais 20 em 24/10/2026, e os 16 da animacao).
             Color.clear.frame(height: 104)
             Spacer()
+            // Com "Bloquear as carteiras" ligado, o envelope abre so para ver as palavras: o aviso vem antes da senha.
+            if wordsBlocked { Banner(kind: .caution, title: WalletError.lockPolicyMessage).padding(.bottom, Space.sm) }
             PrimaryButton(title: String(localized: "Escolher arquivo")) { picking = true }
+                .task { wordsBlocked = session.addingWordsBlocked }
         }
         .frame(maxWidth: .infinity)
         .sheet(isPresented: $howItWorks) { EnvelopeHowItWorks() }
@@ -216,8 +226,10 @@ struct OpenEnvelopeFlow: View {
         Text(String(localized: "\(words) palavras, lista em \(Fmt.languageName(contents.language))") + (contents.passphrase.count > 0 ? String(localized: " · com passphrase") : ""))
             .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.xxs)
         if let error { Banner(kind: .failure, title: error).padding(.top, Space.md) }
+        if wordsBlocked { Banner(kind: .caution, title: WalletError.lockPolicyMessage).padding(.top, Space.md) }
         Spacer()
-        PrimaryButton(title: String(localized: "Importar esta carteira"), loading: importing) { Task { await importWallet(contents, words: words) } }
+        PrimaryButton(title: String(localized: "Importar esta carteira"), enabled: !wordsBlocked, loading: importing) { Task { await importWallet(contents, words: words) } }
+            .task { wordsBlocked = session.addingWordsBlocked }
         SecondaryButton(title: String(localized: "Só ver as palavras")) { reveal(contents, words: words) }.padding(.top, Space.sm)
     }
 
@@ -285,17 +297,55 @@ struct OpenEnvelopeFlow: View {
             self.error = String(localized: "Não foi possível abrir este envelope agora. Tente de novo.")
         }
         opening = false
+        if forgetWhenDone { forgetOpened() }
+    }
+
+    /// O envelope lacrado antes de 05/11/2026 leva a passphrase. Ela nao fica no app e nao aparece na
+    /// tela (01/11/2026): sem saber a passphrase, quem importa ficaria com uma carteira que nao envia.
+    /// Entao ela e digitada antes, de onde o dono a anotou, e comparada com a do envelope; confere, a
+    /// carteira entra com a copia da passphrase conferida.
+    @State private var passphraseChecked = false
+    /// O envelope de uma carteira cuja passphrase uma versao anterior gravou fora de NFKD: a carteira entra com
+    /// a conta da Cardano dos bytes como estao, a da original, e com a marca `legacyCardanoPassphrase`.
+    @State private var legacyEnvelope = false
+    /// Saiu do app durante o Argon2 ou a gravacao: o que eles deixam e esquecido assim que terminam.
+    @State private var forgetWhenDone = false
+
+    private func checkEnvelopePassphrase(_ contents: Envelope.Contents) async -> Bool {
+        let name = contents.label.isEmpty ? String(localized: "Envelope") : contents.label
+        guard let typed = await PassphraseGate.shared.ask(named: name, reason: String(localized: "O envelope de \(name) leva a passphrase da carteira, e este app não a guarda: ela vai ser pedida a cada envio. Digite a passphrase que você anotou para importar.")) else {
+            // Fechada por sair do app, e nao por nao saber a passphrase: nada a dizer (a tela ja voltou a senha).
+            if opened != nil { error = String(localized: "Sem a passphrase, esta carteira não envia neste app. Ela está dentro deste envelope: se você não a anotou, o decifrador público da Escalibur (github.com/Escalibur-Wallet/escalibur-wallet, arquivo tools/referencia/decifrar.py) mostra a passphrase num computador sem internet.") }
+            return false
+        }
+        let given = BIP39.nfkd(typed), expected = BIP39.nfkd(contents.passphrase)
+        typed.wipe()
+        defer { given.wipe(); expected.wipe() }
+        guard Hash.constantTimeEqual(given, expected) else {
+            error = String(localized: "Não confere com a passphrase do envelope. Escreva igual ao que você anotou: maiúscula, acento e espaço contam.")
+            return false
+        }
+        return true
     }
 
     private func importWallet(_ contents: Envelope.Contents, words: Int) async {
+        if contents.passphrase.count > 0 {
+            passphraseChecked = false
+            guard await checkEnvelopePassphrase(contents) else { return }
+            passphraseChecked = true
+        }
         importing = true
-        defer { importing = false }
+        defer {
+            importing = false
+            if forgetWhenDone { forgetOpened() }
+        }
         do {
             let phraseCopy = SecureBytes(capacity: contents.phrase.capacity)
             contents.phrase.withUnsafeBytes { phraseCopy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
             let passCopy = SecureBytes(capacity: max(contents.passphrase.count, 1))
             contents.passphrase.withUnsafeBytes { passCopy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
-            let secret = try WalletSecret.from(phrase: phraseCopy, language: contents.language, passphrase: passCopy)
+            let (secret, legacy) = try WalletSecret.fromEnvelope(phrase: phraseCopy, language: contents.language, passphrase: passCopy)
+            legacyEnvelope = legacy
             phraseCopy.wipe()
             do {
                 let preview = try await ImportPreview.make(secret)
@@ -322,15 +372,21 @@ struct OpenEnvelopeFlow: View {
     private func save(tronForeign: Bool) async {
         guard let pending else { return }
         importing = true
-        defer { importing = false }
+        defer {
+            importing = false
+            if forgetWhenDone { forgetOpened() }
+        }
         do {
             // O envelope pode ter vindo de outra pessoa, com o nome que ela escolheu: a
             // carteira dele nunca passa a ser a carteira em uso sozinha (auditoria 4, C7-05).
             let first = session.metadata.wallets.isEmpty
             guard try await auth.retrying(reason: String(localized: "Guardar a carteira do envelope neste iPhone"), { credential in
+                // A passphrase digitada conferiu com a do envelope: a copia dela entra conferida. E a Cardano que saiu dos bytes
+                // de uma versao anterior entra marcada, como a da carteira de origem.
                 try await session.addWallet(secret: pending.secret, name: pending.name, origin: .importedEnvelope,
                                             wordCount: pending.words, backupConfirmed: true, select: first, tronForeignControl: tronForeign,
-                                            credential: credential)
+                                            passphraseConfirmed: passphraseChecked, legacyCardano: legacyEnvelope,
+                                            expectedFingerprint: pending.preview.fingerprint, credential: credential)
             }) != nil else { return }
             self.pending = nil
             close()
@@ -353,6 +409,22 @@ struct OpenEnvelopeFlow: View {
         let cipher = self.cipher
         let count = passwordLength
         return { tick in cipher.glyphs(0, count: count, tick: tick) }
+    }
+
+    private func forgetOpened() {
+        forgetWhenDone = false
+        cipher.clearAll()
+        password.wipe()
+        passwordLength = 0
+        opened?.wipe()
+        opened = nil
+        revealDraft?.wipe()
+        revealDraft = nil
+        pending?.secret.wipe()
+        pending = nil
+        passphraseChecked = false
+        legacyEnvelope = false
+        error = nil
     }
 
     private func close() {

@@ -22,6 +22,12 @@ public protocol SecretStore: Sendable {
     /// Um contexto que carrega a senha de aplicativo para a proxima operacao, sem
     /// nenhuma interface (`interactionNotAllowed`).
     func applicationPasswordContext(_ password: SecureBytes) throws -> LAContext?
+    /// As contas guardadas com este prefixo, sem ler o conteudo. Quem nao sabe listar devolve nada.
+    func accounts(prefix: String) -> [String]
+}
+
+public extension SecretStore {
+    func accounts(prefix: String) -> [String] { [] }
 }
 
 public enum ItemState: Sendable, Equatable { case present, absent, unknown }
@@ -135,6 +141,21 @@ public final class KeychainStore: SecretStore, @unchecked Sendable {
     }
 
     public func exists(_ account: String) -> Bool { probe(account) == .present }
+
+    /// So os atributos, sem o conteudo e sem nenhuma interface.
+    public func accounts(prefix: String) -> [String] {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecAttrSynchronizable as String: kCFBooleanFalse!,
+            kSecUseDataProtectionKeychain as String: kCFBooleanTrue!,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: kCFBooleanTrue!,
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let items = result as? [[String: Any]] else { return [] }
+        return items.compactMap { $0[kSecAttrAccount as String] as? String }.filter { $0.hasPrefix(prefix) }
+    }
 
     public func probe(_ account: String) -> ItemState {
         var query = baseQuery(account)

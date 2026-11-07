@@ -250,28 +250,8 @@ struct WalletSettingsView: View {
                             }
                             .accessibilityIdentifier("copia-envelope")
                         }
-                        // Carteira com passphrase: pedir a passphrase para mover saldo, ligado de
-                        // fabrica (pedido do dono, 16/10/2026). Desligar pede a passphrase e o PIN.
-                        if wallet.hasPassphrase {
-                            SettingsSection(title: String(localized: "Segurança")) {
-                                Toggle(isOn: Binding(get: { PassphraseGate.asks(wallet) }, set: { on in
-                                    Task { await setPassphraseToSend(on, wallet: wallet) }
-                                })) {
-                                    HStack(alignment: .top, spacing: Space.sm) {
-                                        Image(systemName: "lock.shield").font(.system(size: 16, weight: .medium)).foregroundStyle(Palette.inkSoft).frame(width: 24)
-                                            .padding(.top, 2)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Pedir a passphrase para enviar").typeStyle(.body).foregroundStyle(Palette.ink)
-                                            Text("Envios, trocas e pontes desta carteira pedem a passphrase antes do \(KeyServices.biometryName) ou do PIN.")
-                                                .typeStyle(.note).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true)
-                                        }
-                                    }
-                                }
-                                .tint(Palette.success)
-                                .padding(.horizontal, Space.md).padding(.vertical, Space.sm)
-                                .accessibilityIdentifier("pedir-passphrase")
-                            }
-                        }
+                        // O "Pedir a passphrase para enviar" saiu (05/11/2026): sem a passphrase no cofre, toda
+                        // assinatura da carteira com passphrase a pede, e nao ha o que desligar.
                         if let last = wallet.lastRevealedAt {
                             Text("Última vez que a senha da carteira foi exibida: \(Fmt.relative(last, inSentence: true)).")
                                 .typeStyle(.note).foregroundStyle(Palette.inkMuted).padding(.horizontal, Space.gutter).padding(.top, Space.xs)
@@ -363,44 +343,6 @@ struct WalletSettingsView: View {
 
     static func day(_ date: Date) -> String {
         date.formatted(.dateTime.day(.twoDigits).month(.twoDigits).locale(Fmt.locale))
-    }
-
-    /// Ligar e na hora. Desligar pede a passphrase e o PIN (nunca so o rosto), e a passphrase
-    /// e conferida com a do cofre: quem viu o PIN nao tira a protecao.
-    private func setPassphraseToSend(_ on: Bool, wallet: WalletMeta) async {
-        if !on {
-            guard let typed = await PassphraseGate.shared.ask(wallet, reason: String(localized: "Para deixar de pedir a passphrase nos envios de \(wallet.name), digite a passphrase. Depois vem o PIN.")) else { return }
-            defer { typed.wipe() }
-            let id = wallet.id
-            if let wait = PassphraseGate.shared.begin(session, wallet: id) {
-                toasts.show(wait)
-                return
-            }
-            do {
-                guard let matches = try await auth.perform(session, reason: String(localized: "Deixar de pedir a passphrase em \(wallet.name)"), presence: .pin, { rk in
-                    let secret = try KeyServices.wallets.open(walletID: id, rk: rk)
-                    defer { secret.wipe() }
-                    return PassphraseGate.matches(secret.passphrase, typed)
-                }) else {
-                    PassphraseGate.shared.refund(session, wallet: id)
-                    return
-                }
-                guard matches else {
-                    PassphraseGate.shared.failed(session, wallet: id)
-                    toasts.show(PassphraseGate.mismatchMessage)
-                    return
-                }
-                PassphraseGate.shared.passed(session, wallet: id)
-            } catch {
-                // Nada foi conferido: a tentativa volta.
-                PassphraseGate.shared.refund(session, wallet: id)
-                toasts.show(AuthCoordinator.refusalMessage(error) ?? String(localized: "Não foi possível mudar agora."))
-                return
-            }
-        }
-        guard var updated = session.metadata.wallets.first(where: { $0.id == wallet.id }) else { return }
-        updated.passphraseToSend = on
-        session.update(updated)
     }
 
     private func rename(_ wallet: WalletMeta) {
@@ -739,6 +681,8 @@ struct EnableBiometrySheet: View {
         }) {
             TertiaryButton(title: String(localized: "Cancelar"), action: onDone)
         }
+        // Sair do app ou travar: os digitos ja digitados saem da memoria (05/11/2026).
+        .onReceive(NotificationCenter.default.publisher(for: SecureInputField.wipeAll)) { _ in if !working { entry.reset() } }
     }
 }
 
@@ -769,6 +713,9 @@ struct ChangePINFlow: View {
                 TertiaryButton(title: String(localized: "Cancelar")) { current?.wipe(); newPIN?.wipe(); onDone() }
             }
         }
+        // Sair do app ou travar: os digitos deste passo saem da memoria (05/11/2026). O passo e o tamanho ficam: voltar ao
+        // primeiro passo com a entrada no tamanho do PIN novo gastava uma tentativa com o PIN atual cortado.
+        .onReceive(NotificationCenter.default.publisher(for: SecureInputField.wipeAll)) { _ in if !working { entry.reset() } }
     }
 
     /// Antes do ponto sem volta, qualquer falha deixa o PIN atual valendo.

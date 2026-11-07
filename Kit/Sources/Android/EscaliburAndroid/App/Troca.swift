@@ -126,6 +126,10 @@ final class Troca: @unchecked Sendable {
     /// O impacto que o dono aceitou, em %. Vale enquanto a cotacao nao piorar; trocar par,
     /// valor ou rede zera (auditoria 2, B1).
     private var impactoAceito: Double?
+    /// A cotacao sem comparacao que o dono aceitou (`TradeQuote.unanchored`): o par, o valor, a
+    /// execucao (de uma vez ou em partes) e o minimo que a tela mostrou. Vale enquanto o pedido e o
+    /// mesmo e o minimo nao piora (pedido do dono, 05/11/2026).
+    private var semComparacaoAceita: (par: String, entrada: BigUInt, emPartes: Bool, minimo: BigUInt)?
     /// O provedor que o dono escolheu na rota, para este par: as recotacoes seguem nele enquanto
     /// ele estiver na rodada.
     private var escolhido: (provedor: String, par: String)?
@@ -211,6 +215,8 @@ final class Troca: @unchecked Sendable {
             chaveDaCotacao = nil
             erro = nil
             impactoAceito = nil
+            semComparacaoAceita = nil
+            semComparacaoCaiu = false
             erroDoPlano = nil
             if let edicao {
                 // A edicao e de uma ordem da carteira dela: noutra, a tela fica parada com o aviso, e nada e revisado nem
@@ -300,6 +306,30 @@ final class Troca: @unchecked Sendable {
         return agora <= aceito
     }
 
+    /// A execucao e o minimo que a caixa do aceite prende, na cotacao sem comparacao.
+    private func termosSemComparacao(_ cotada: TradeQuote?) -> (emPartes: Bool, minimo: BigUInt)? {
+        guard let cotada, cotada.unanchored else { return nil }
+        let partes = emPartes && cotada.parts != nil
+        return (partes, cotada.minimumOut(inParts: partes))
+    }
+
+    private var aceitouSemComparacao: Bool {
+        guard let aceita = semComparacaoAceita, let cotacao, let termos = termosSemComparacao(cotacao) else { return false }
+        // Paga o mesmo ou menos e recebe o mesmo ou mais: no "Voce recebe" o valor a pagar muda a cada recotacao.
+        return aceita.par == par && cotacao.amountIn <= aceita.entrada && aceita.emPartes == termos.emPartes && termos.minimo >= aceita.minimo
+    }
+
+    /// Havia aceite e a cotacao nova do mesmo pedido nao cabe nele: o aceite saiu de vez e a tela diz por que. Ele so
+    /// volta com outro toque, mesmo que o minimo volte depois (revisao de 05/11/2026).
+    private var semComparacaoCaiu = false
+
+    /// Chamar com a trava, quando entra uma cotacao nova do mesmo pedido.
+    private func acertarAceiteSemComparacao() {
+        guard semComparacaoAceita != nil, !aceitouSemComparacao else { return }
+        semComparacaoAceita = nil
+        semComparacaoCaiu = cotacao?.unanchored == true
+    }
+
     /// A cotacao nova, pelo provedor que o dono escolheu se ele ainda esta na rodada.
     private func comEscolha(_ nova: TradeQuote) -> TradeQuote {
         guard let escolhido, escolhido.par == par else {
@@ -387,6 +417,10 @@ final class Troca: @unchecked Sendable {
             }
             if let id = mudanca["rede"]?.stringValue, edicao == nil, let rede = TradeEngines.chains.first(where: { $0.id == id }), rede.id != chain?.id {
                 reiniciar(rede)
+                // Comprando da busca a moeda que a rede nova poe na venda (a nativa): a venda vira a estavel, como no iOS.
+                if let compra = mudanca["compra"]?.stringValue, sell?.id == compra {
+                    sell = TokenRegistry.tokens.first { $0.chainID == rede.id && $0.isStablecoin && $0.id != compra }
+                }
             }
             // Uma moeda que a carteira tem em outra rede leva a troca para la (pedido do dono, 02/11/2026):
             // a rede muda sozinha, e o outro lado volta ao padrao da rede nova sem repetir a escolhida.
@@ -473,12 +507,37 @@ final class Troca: @unchecked Sendable {
                 tolerancia = min(max(Int((bps / 10).rounded()) * 10, 10), 1_000)
             }
             if mudanca["automatica"]?.boolValue == true { automatica = true }
-            if let partes = mudanca["partes"]?.boolValue { emPartes = partes && cotacao?.parts != nil }
+            if let partes = mudanca["partes"]?.boolValue {
+                let novo = partes && cotacao?.parts != nil
+                // Outra execucao: o aceite da cotacao sem comparacao era da outra, como na rota escolhida.
+                if novo != emPartes {
+                    semComparacaoAceita = nil
+                    semComparacaoCaiu = false
+                }
+                emPartes = novo
+            }
             if let aceita = mudanca["aceitarImpacto"]?.boolValue { impactoAceito = aceita ? cotacao?.priceImpactPercent : nil }
+            // O aceite vale para a cotacao do pedido de agora e so com o minimo e o valor a pagar que a tela
+            // desenhou: uma recotacao que chegou depois do retrato, ou a cotacao de um pedido que ja mudou, nao leva
+            // o aceite (revisao de 05/11/2026).
+            // O aviso de que o aceite caiu so sai quando o aceite grava ou o dono desmarca: um toque descartado nao o apaga.
+            if let aceita = mudanca["aceitarSemComparacao"]?.boolValue {
+                if !aceita {
+                    semComparacaoAceita = nil
+                    semComparacaoCaiu = false
+                } else if let atual = cotacaoAtual, let termos = termosSemComparacao(atual),
+                          mudanca["garantidoVisto"]?.stringValue == termos.minimo.decimalString,
+                          mudanca["entradaVista"]?.stringValue == atual.amountIn.decimalString {
+                    semComparacaoAceita = (par, atual.amountIn, termos.emPartes, termos.minimo)
+                    semComparacaoCaiu = false
+                }
+            }
             if let provedor = mudanca["rota"]?.stringValue, let atual = cotacaoAtual,
                let alternativa = atual.alternatives.first(where: { $0.provider == provedor }), let trocada = atual.choosing(alternativa) {
                 escolhido = (provedor, par)
                 impactoAceito = nil
+                semComparacaoAceita = nil
+                semComparacaoCaiu = false
                 cotacao = trocada
             }
             if let texto = mudanca["preco"]?.stringValue {
@@ -495,6 +554,8 @@ final class Troca: @unchecked Sendable {
             preencherAlvo()
             guard chave != antes else { return }
             impactoAceito = nil
+            semComparacaoAceita = nil
+            semComparacaoCaiu = false
             erroDoPlano = nil
             erro = nil
             if !podeCotar {
@@ -549,6 +610,7 @@ final class Troca: @unchecked Sendable {
                     if solucao.quote.parts == nil { emPartes = false }
                     cotacao = solucao.quote
                     chaveDaCotacao = chave
+                    acertarAceiteSemComparacao()
                     abaixoDoAlvo = !solucao.reached
                 }
             } else if let quantidade = p.quantidade {
@@ -559,6 +621,7 @@ final class Troca: @unchecked Sendable {
                     if nova.parts == nil { emPartes = false }
                     cotacao = comEscolha(nova)
                     chaveDaCotacao = chave
+                    acertarAceiteSemComparacao()
                     // "Max" na moeda nativa: o valor desce para deixar a taxa maxima de fora (o plano
                     // recusaria tudo). O valor novo muda a chave, e a tela cota de novo.
                     if maxNativo, let reserva = nova.nativeReserveForMax() {
@@ -785,11 +848,13 @@ final class Troca: @unchecked Sendable {
                     motor.supportsLimitOrders && minimoDaOrdem != nil && precoConfirmado)
         }
         guard let atual = cotacaoAtual, !cotando || cotacao != nil else { return (Textos.t("Buscando o melhor preço"), false) }
-        if emPartes, atual.parts != nil { return (Textos.t("Revisar troca em partes"), true) }
+        // Sem comparacao, so com o aceite, tambem em partes (pedido do dono, 05/11/2026).
+        let semAceite = atual.unanchored && !aceitouSemComparacao
+        if emPartes, atual.parts != nil { return (Textos.t("Revisar troca em partes"), !semAceite) }
         let nivel = PriceImpact.level(atual.priceImpactPercent)
         if nivel == .blocked { return (Textos.t("Impacto no preço alto demais"), false) }
         let titulo = atual.needsApproval ? preencher(Textos.t("Autorizar %@ e trocar"), sell?.symbol ?? "") : Textos.t("Revisar troca")
-        return (titulo, nivel == .confirm ? aceitouImpacto : true)
+        return (titulo, (nivel == .confirm ? aceitouImpacto : true) && !semAceite)
     }
 
     // MARK: Revisar
@@ -807,7 +872,8 @@ final class Troca: @unchecked Sendable {
                 guard let cotada = cotacaoAtual, cotada.amountIn == quantidade, cotada.sell.id == sell.id, cotada.buy.id == buy.id else { return nil }
                 let partes = emPartes && cotada.parts != nil
                 operacao = .troca(TradeRequest(walletID: carteira.id, chain: chain, account: conta, sell: sell, buy: buy, amountIn: quantidade,
-                                               slippageBasisPoints: toleranciaAgora(), inParts: partes), cotada)
+                                               slippageBasisPoints: toleranciaAgora(), inParts: partes,
+                                               acceptsUnanchored: cotada.unanchored && aceitouSemComparacao), cotada)
                 cancelarAntes = nil
             case .limite:
                 guard let minimo = minimoDaOrdem else { return nil }
@@ -906,7 +972,7 @@ final class Troca: @unchecked Sendable {
             case .troca(let r, let cotada):
                 novo = try await motor.plan(TradeRequest(walletID: r.walletID, chain: r.chain, account: r.account, sell: r.sell, buy: r.buy,
                                                          amountIn: r.amountIn, slippageBasisPoints: r.slippageBasisPoints, nonceQueue: fila,
-                                                         inParts: r.inParts), quote: cotada)
+                                                         inParts: r.inParts, acceptsUnanchored: r.acceptsUnanchored), quote: cotada)
             case .limite(let r):
                 // Editando, depois do cancelamento confirmado: a ordem antiga sai da soma das abertas.
                 let substitui = trava.withLock { cancelou ? cancelarAntes?.ordem.id : nil }
@@ -951,6 +1017,9 @@ final class Troca: @unchecked Sendable {
             return
         }
         erroDoPlano = mensagem
+        // O plano nao saiu: o aceite da cotacao sem comparacao vale de novo so com outro toque, como no iOS.
+        semComparacaoAceita = nil
+        semComparacaoCaiu = false
         etapa = .formulario
         operacao = nil
         cancelarAntes = nil
@@ -1008,6 +1077,9 @@ final class Troca: @unchecked Sendable {
         }
         if vencido {
             credencial.zerar()
+            // A passphrase nao e usada aqui, e nao atravessa a cotacao de rede de `montar` (nem a entregue pela folha).
+            passphrase?.wipe()
+            PortaDaPassphrase.descartarEntregue()
             avisar()
             await montar(numero)
             trava.withLock { if rodada == numero, etapa == .revisao { erroDaRevisao = Textos.t("Os dados da rede venceram. Confira de novo.") } }
@@ -1022,32 +1094,13 @@ final class Troca: @unchecked Sendable {
             trava.withLock { erroDaRevisao = motivo }
             return
         }
-        if !cancela, PortaDaPassphrase.precisa(dona), passphrase == nil {
-            credencial.zerar()
-            throw Nucleo.Falha(erro: "envio.pedePassphrase")
-        }
         // O autoteste da assinatura antes da porta da passphrase e da RK: com um defeito do aparelho, nada conta nem abre
         // (o Signer confere de novo antes de abrir o cofre; revisao da decima terceira passada).
         guard SigningSelfTest.passed(for: plano) else { credencial.zerar(); throw SigningSelfTest.Failure() }
-        let conferir = !cancela && PortaDaPassphrase.pede(dona) ? passphrase : nil
-        if conferir != nil {
-            do { try PortaDaPassphrase.comecar(plano.walletID) } catch { credencial.zerar(); throw error }
-        }
-        let assinado: [SignedTransaction]
-        do {
-            assinado = try Sessao.shared.comChaveRaiz(credencial) { rk in
-                try Signer.sign(plano, rootKey: rk, vault: Chaves.wallets, passphrase: conferir)
-            }
-        } catch {
-            if conferir != nil {
-                if (error as? Signer.Failure) == .passphraseMismatch { PortaDaPassphrase.errou(plano.walletID) } else { PortaDaPassphrase.devolver(plano.walletID) }
-            }
-            throw error
-        }
-        if conferir != nil {
-            PortaDaPassphrase.passou(plano.walletID)
-            PortaDaPassphrase.comecarFolga(plano.walletID, minutos: folga)
-        }
+        // Carteira com passphrase: ela nunca fica salva, e sai zerada logo depois de assinar (pedido do dono,
+        // 05/11/2026; ver `PortaDaPassphrase.assinar`). Cancelar uma ordem tambem assina, e sem a passphrase o
+        // cofre nao tem como.
+        let assinado = try PortaDaPassphrase.assinar(plano, carteira: dona, digitada: passphrase, folga: cancela ? nil : folga, credencial: credencial)
         // Travou entre assinar e enviar: nada sai (ver o envio). Destravado, o dono envia de novo.
         guard Sessao.shared.fase == .unlocked else { throw Sessao.Falha.travada }
         await transmitir(assinado, plano: plano, motor: motor, numero: numero)
@@ -1378,6 +1431,8 @@ final class Troca: @unchecked Sendable {
                 cotacao = nil
                 chaveDaCotacao = nil
                 impactoAceito = nil
+                semComparacaoAceita = nil
+                semComparacaoCaiu = false
                 edicao = nil
                 preencherAlvo()
             }
@@ -1657,6 +1712,10 @@ final class Troca: @unchecked Sendable {
             let pernas: [Perna]
             let explicacao: String
             let alternativas: [Alternativa]
+            /// So uma fonte de cotacao e sem preco de referencia: a tela avisa e pede o aceite (05/11/2026).
+            let semComparacao: Bool
+            /// O valor a pagar desta cotacao, na menor unidade: o aceite volta com ele.
+            let entrada: String
         }
         struct Validade: Encodable { let segundos: Double?; let titulo: String }
         struct ConferenciaDoPreco: Encodable { let texto: String; let forte: Bool; let confirmacao: String?; let confirmado: Bool }
@@ -1743,6 +1802,8 @@ final class Troca: @unchecked Sendable {
         let erroDoPlano: String?
         let naoVerificado: String?
         let impactoAceito: Bool
+        let semComparacaoAceita: Bool
+        let semComparacaoCaiu: Bool
         let botao: String
         let botaoLigado: Bool
         let protecao: Bool
@@ -1805,7 +1866,8 @@ final class Troca: @unchecked Sendable {
             cotacao: modo == .agora ? cotacao.map { cotacaoDTO($0, atual: atualCotada != nil) } : nil,
             limite: modo == .limite ? limiteDTO() : nil, erro: erro, erroDoPlano: erroDoPlano,
             naoVerificado: semVerificar.map { preencher(Textos.t("%@ não está na lista verificada da Escalibur. Qualquer pessoa cria um token com qualquer nome, e alguns deixam comprar mas não deixam vender. Confira o contrato antes."), $0.symbol) },
-            impactoAceito: aceitouImpacto, botao: titulo, botaoLigado: ligado,
+            impactoAceito: aceitouImpacto, semComparacaoAceita: aceitouSemComparacao, semComparacaoCaiu: semComparacaoCaiu,
+            botao: titulo, botaoLigado: ligado,
             protecao: chain == .ethereum && metadata.settings.mevProtection,
             etapa: etapa, frases: atual.map(frases), revisaoVende: ativosDaRevisao.vende.map(Self.dto), revisaoCompra: ativosDaRevisao.compra.map(Self.dto),
             falhaDaMontagem: falhaDaMontagem, cancelou: cancelou, revisao: plano.map(revisaoDTO), resultado: resultadoDTO(), andamento: andamentoDTO(),
@@ -1905,6 +1967,8 @@ final class Troca: @unchecked Sendable {
         let rota: String = {
             if partes { return Textos.t("Em partes pela CoW, conforme chega liquidez") }
             if cotacao.execution == .order { return preencher(Textos.t("Leilão da CoW, o melhor entre %lld"), "\(cotacao.providersCompared)") }
+            // Sem comparacao, "o melhor entre" sugeriria a comparacao que o aviso nega (revisao de 05/11/2026).
+            if cotacao.unanchored, cotacao.legs.count == 1 { return preencher(Textos.t("%@, sem comparação"), cotacao.legs[0].provider) }
             if let escolhido, escolhido.par == par, cotacao.legs.first?.provider == escolhido.provedor {
                 return preencher(Textos.t("%@, escolhido por você"), escolhido.provedor)
             }
@@ -1976,7 +2040,7 @@ final class Troca: @unchecked Sendable {
             impacto: impacto, nivel: nivel, partes: dePartes,
             tituloDaRota: cotacao.legs.count > 1 ? Textos.t("Como a sua ordem foi dividida") : Textos.t("Rota da troca"),
             pernas: cotacao.legs.map { Estado.Perna(provedor: $0.provider, fracao: $0.fraction, recebe: quantia($0.expectedOut)) },
-            explicacao: explicacao, alternativas: alternativas
+            explicacao: explicacao, alternativas: alternativas, semComparacao: cotacao.unanchored, entrada: cotacao.amountIn.decimalString
         )
     }
 
@@ -2013,8 +2077,10 @@ final class Troca: @unchecked Sendable {
         let entra = zip(review.incomingMinimum, compra).map { Textos.t("no mínimo ") + Fmt.cripto($0.amount, casas: $1.decimals, simbolo: $1.symbol) }
         // A ordem da CoW com autorizacao antes: a CoW so aceita a ordem depois que a autorizacao
         // confirma na rede, e a espera e essa.
+        // Na Ethereum, um bloco a cada 12 s: a espera, dita, nao parece travamento (pedido do dono, 06/11/2026, como no iOS).
         let nota = plano.transactions.last is EIP712ValidatedMessage && plano.transactions.count > 1
-            ? preencher(Textos.t("A autorização vai primeiro. A ordem segue para a CoW assim que ela confirmar na %@. Não feche o app até terminar."), plano.chain.name)
+            ? (plano.chain.evmChainID == 1 ? Textos.t("Esta ordem precisa de uma confirmação na Ethereum antes. Leva uns 15 a 30 segundos. Não feche o app até terminar.")
+                : preencher(Textos.t("Esta ordem precisa de uma confirmação na %@ antes. Leva alguns segundos. Não feche o app até terminar."), plano.chain.name))
             : Textos.t("Não feche o app até terminar.")
         return Estado.Revisao(
             titulo: review.title, sai: atual?.cancela == true ? nil : sai, entra: atual?.cancela == true ? nil : entra,
@@ -2150,7 +2216,8 @@ extension Troca {
         let metadata = Sessao.shared.metadata
         let carteira = metadata.selectedWallet
         return try Nucleo.json(Retrato(numero: numero, troca: troca.estado(), moeda: metadata.settings.currency,
-                                       pedePassphrase: PortaDaPassphrase.precisa(carteira), nomeDaCarteira: carteira?.name ?? ""))
+                                       pedePassphrase: PortaDaPassphrase.precisa(carteira), nomeDaCarteira: carteira?.name ?? "",
+                                       semConferencia: PortaDaPassphrase.semConferencia(carteira)))
     }
 
     private static let contagem = NSLock()
@@ -2170,5 +2237,7 @@ extension Troca {
         let moeda: String
         let pedePassphrase: Bool
         let nomeDaCarteira: String
+        /// A carteira com passphrase que esta versao nao confere: a tela recusa antes de pedir a passphrase e o PIN.
+        let semConferencia: Bool
     }
 }

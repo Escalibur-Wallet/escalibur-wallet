@@ -30,7 +30,7 @@ public struct EVMActivitySource: ActivitySource {
     public func history(chain: Chain, account: DerivedAccount, usage: UTXOUsage?) async throws -> [ActivityEntry] {
         do {
             guard chain.id == self.chain.id else { throw EVMEngineFailure.wrongChain }
-            let owner = try EVMEngineSupport.account(account, chain: chain).address
+            let owner = try EVMEngineSupport.historyOwner(account, chain: chain)
             let page = try await reader.history(chain: chain, address: owner)
             return EVMActivityScreen.entries(page, owner: owner, chain: chain)
         } catch HTTPClient.Failure.status(403) {

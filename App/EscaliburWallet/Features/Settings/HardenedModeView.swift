@@ -1,3 +1,4 @@
+import EscaliburChains
 import EscaliburCore
 import EscaliburKeys
 import SwiftUI
@@ -433,6 +434,7 @@ struct HardenedEnableFlow: View {
                     Button { onClose(false) } label: {
                         Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.inkSoft)
                     }
+                    .disabled(working)
                     .accessibilityLabel("Fechar")
                 }
             }
@@ -487,6 +489,9 @@ struct HardenedEnableFlow: View {
             }
         }
         .onDisappear { forget() }
+        // Sair do app ou travar: as frases e passphrases digitadas saem zeradas (05/11/2026). Com o Super Security ligando
+        // noutra thread, a conferencia ja tirou as dela da tela e as zera quando termina.
+        .onReceive(NotificationCenter.default.publisher(for: SecureInputField.wipeAll)) { _ in forget() }
     }
 
     static func wordCount(_ wallet: WalletMeta) -> Int {
@@ -572,45 +577,76 @@ struct HardenedEnableFlow: View {
     private func forget() {
         phrases.forEach { $0.secret.wipe() }
         phrases = []
+        // Sem frases, ligar nao retoma sozinho: a entrada fechada pela saida do app nao reabre na volta.
+        resume = false
     }
 
     private func enable() async {
         message = nil
         defer { if message != nil { attempt += 1 } }
+        // O que os metadados ja dizem recusa antes das palavras e do PIN (o cofre recusa de novo la dentro).
+        if let refused = HardenedPhraseCheck.refusal(wallets) {
+            message = refused
+            return
+        }
+        // Sem carteira com palavras nao ha papel a conferir: a conferencia recusaria depois do PIN, sem dizer por que.
+        if faceChange == .lock, wallets.isEmpty {
+            message = String(localized: "Não há carteira com palavras neste iPhone para conferir. Adicione a carteira antes de escolher Bloquear as carteiras.")
+            return
+        }
         if faceChange == .lock, phrases.count < wallets.count {
             typingWords = true
             return
         }
         guard case .pin(let pin)? = await auth.credential(reason: String(localized: "Ligar o Super Security"), forcePIN: true) else {
+            // Sem o PIN, as frases nao ficam esperando: ligar de novo pede as palavras de novo (como no Android).
+            forget()
             attempt += 1
             return
         }
+        // De novo, depois do PIN: sair do app enquanto ele era digitado zera as frases (05/11/2026), e "Bloquear as carteiras"
+        // nunca liga sem a de cada carteira conferida.
+        if faceChange == .lock, Set(phrases.map(\.id)) != Set(wallets.map(\.id)) {
+            pin.wipe()
+            forget()
+            attempt += 1
+            return
+        }
+        // As frases saem da tela para a conferencia: fechar ou sair do app no meio nao toca no que o cofre le, e elas sao
+        // zeradas quando ele termina, deu certo ou nao (tentar de novo pede as palavras de novo).
+        let phrases = self.phrases
+        self.phrases = []
+        defer { phrases.forEach { $0.secret.wipe() } }
         working = true
         defer { working = false }
         // A tela principal so libera com a copia de todas conferida; aqui, de novo, no
         // estado de agora.
         guard wallets.allSatisfy(\.hasBackup) else {
+            pin.wipe()
             message = String(localized: "Confira a cópia de todas as carteiras antes de ligar.")
             return
         }
-        let withPassphrase = wallets.filter(\.hasPassphrase).map { HardenedPhraseCheck.Named(id: $0.id, name: $0.name) }
+        let withPassphrase = wallets.filter(\.hasPassphrase).map {
+            HardenedPhraseCheck.Named(id: $0.id, name: $0.name, legacy: $0.legacyCardanoPassphrase == true, unverified: $0.passphraseUnverified == true)
+        }
         let faceChange = self.faceChange
-        let phrases = self.phrases
+        let expected = wallets.map(\.id)
         do {
             try await session.enableHardened(pin: pin, faceChange: faceChange) { rk in
                 if faceChange == .lock {
-                    try HardenedPhraseCheck.run(phrases, rk: rk)
+                    try HardenedPhraseCheck.run(phrases, expected: expected, rk: rk)
+                    try HardenedPhraseCheck.legacyOnly(withPassphrase, rk: rk)
                 } else {
                     try HardenedPhraseCheck.legacyOnly(withPassphrase, rk: rk)
                 }
             }
-            forget()
             onClose(true)
         } catch HardenedCheckError.mismatch(let name) {
-            forget()
             message = String(localized: "O que você digitou de \(name) não confere com esta carteira. Confira no papel e comece de novo.")
         } catch HardenedCheckError.legacyPassphrase(let name) {
             message = Self.legacyPassphraseMessage(name)
+        } catch HardenedCheckError.unverified {
+            message = PassphraseGate.unverifiedMessage
         } catch RootKeyVault.Failure.wrongPIN(let remaining) {
             message = AuthCoordinator.wrongPINMessage(remaining)
         } catch RootKeyVault.Failure.throttled(let seconds) {
@@ -630,6 +666,12 @@ struct HardenedEnableFlow: View {
         }
     }
 
+    /// A passphrase que esta versao nao confere (`passphraseUnverified`), com o nome da carteira: a tela do Super Security
+    /// trata de todas.
+    static func unverifiedPassphraseMessage(_ name: String) -> String {
+        String(localized: "A passphrase de \(name) não pode ser conferida por esta versão do app, e no Super Security a cópia é o único caminho de volta: com ela aqui, o Super Security recusa. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39.")
+    }
+
     /// A carteira com passphrase acentuada criada por uma versao anterior: a copia nao a
     /// traz de volta inteira.
     static func legacyPassphraseMessage(_ name: String) -> String {
@@ -647,7 +689,7 @@ struct HardenedEnableFlow: View {
 
 }
 
-enum HardenedCheckError: Error { case mismatch(String), legacyPassphrase(String) }
+enum HardenedCheckError: Error { case mismatch(String), legacyPassphrase(String), unverified }
 
 /// As palavras de cada carteira, uma depois da outra, ao ligar o Super Security ja em
 /// "Bloquear as carteiras". Quem chama fica com as frases e as apaga; fechar no meio apaga as
@@ -690,6 +732,8 @@ struct HardenedPhraseEntry: View {
         }
         .interactiveDismissDisabled()
         .guardedAgainstCapture()
+        // Sair do app ou travar: o que ja foi digitado sai zerado, e a entrada fecha (05/11/2026).
+        .onReceive(NotificationCenter.default.publisher(for: SecureInputField.wipeAll)) { _ in cancel() }
     }
 
     private func cancel() {
@@ -706,32 +750,65 @@ struct HardenedPhraseCheck: Sendable {
     let name: String
     let secret: WalletSecret
     let passphrase: Bool
+    /// O fingerprint da raiz e a chave da conta Cardano gravados na criacao: a passphrase digitada
+    /// confere por eles, porque o cofre nao a tem (05/11/2026).
+    let fingerprint: [UInt8]?
+    let cardanoPublicKey: [UInt8]?
+    let legacy: Bool
+    let unverified: Bool
 
     static func collect(_ wallets: [WalletMeta], typed: [UUID: WalletSecret]) -> [HardenedPhraseCheck] {
-        wallets.compactMap { wallet in typed[wallet.id].map { HardenedPhraseCheck(id: wallet.id, name: wallet.name, secret: $0, passphrase: wallet.hasPassphrase) } }
+        wallets.compactMap { wallet in
+            typed[wallet.id].map {
+                HardenedPhraseCheck(id: wallet.id, name: wallet.name, secret: $0, passphrase: wallet.hasPassphrase,
+                                    fingerprint: wallet.fingerprint.flatMap(Hex.decode),
+                                    cardanoPublicKey: wallet.accounts.first { $0.chainID == Chain.cardano.id }?.publicKey,
+                                    legacy: wallet.legacyCardanoPassphrase == true, unverified: wallet.passphraseUnverified == true)
+            }
+        }
+    }
+
+    /// A recusa que os metadados ja dizem, antes das palavras e do PIN: a passphrase que esta versao nao confere, ou a gravada
+    /// fora de NFKD por uma versao anterior. O cofre recusa de novo dentro dele.
+    @MainActor static func refusal(_ wallets: [WalletMeta]) -> String? {
+        if let unverified = wallets.first(where: { $0.hasPassphrase && $0.passphraseUnverified == true }) {
+            return HardenedEnableFlow.unverifiedPassphraseMessage(unverified.name)
+        }
+        if let legacy = wallets.first(where: { $0.hasPassphrase && $0.legacyCardanoPassphrase == true }) {
+            return HardenedEnableFlow.legacyPassphraseMessage(legacy.name)
+        }
+        return nil
     }
 
     struct Named: Sendable {
         let id: UUID
         let name: String
+        let legacy: Bool
+        let unverified: Bool
     }
 
     /// Ligar o modo, sem frase digitada: so a passphrase gravada fora de NFKD por uma versao
     /// anterior recusa. Restaurada pelas palavras, a conta da Cardano dela muda, e no modo
-    /// reforcado o papel e o unico caminho de volta (segunda revisao, N1). Roda sob a trava
-    /// do cofre, com a RK aberta.
+    /// reforcado o papel e o unico caminho de volta (segunda revisao, N1). A passphrase sai do
+    /// cofre (05/11/2026): vale a marca deixada ao tira-la (ou pela conferencia da copia), e a que
+    /// ainda esta no cofre, com a marca que nao chegou a ser gravada. Roda sob a trava do cofre,
+    /// com a RK aberta.
     static func legacyOnly(_ wallets: [Named], rk: SecureBytes) throws {
         for wallet in wallets {
-            let stored = try KeyServices.wallets.open(walletID: wallet.id, rk: rk)
-            defer { stored.wipe() }
-            let saved = BIP39.nfkd(stored.passphrase)
-            defer { saved.wipe() }
-            guard Hash.constantTimeEqual(saved, stored.passphrase) else { throw HardenedCheckError.legacyPassphrase(wallet.name) }
+            // A que esta versao nao confere nao vale como copia (`passphraseUnverified`).
+            if wallet.unverified { throw HardenedCheckError.unverified }
+            if wallet.legacy { throw HardenedCheckError.legacyPassphrase(wallet.name) }
+            if case .present(legacy: true, _) = try KeyServices.wallets.storedPassphrase(walletID: wallet.id, rk: rk) {
+                throw HardenedCheckError.legacyPassphrase(wallet.name)
+            }
         }
     }
 
     /// Roda sob a trava do cofre, com a RK aberta: so o `WalletVault`, nunca o `RootKeyVault`.
-    static func run(_ checks: [HardenedPhraseCheck], rk: SecureBytes) throws {
+    /// `expected`: as carteiras que tem de estar todas conferidas. Uma lista que nao bate (frases zeradas no meio) recusa,
+    /// em vez de passar sem conferir nada (revisao de seguranca de 05/11/2026).
+    static func run(_ checks: [HardenedPhraseCheck], expected: [UUID], rk: SecureBytes) throws {
+        guard Set(checks.map(\.id)) == Set(expected), !expected.isEmpty else { throw HardenedCheckError.mismatch(String(localized: "uma carteira")) }
         for check in checks {
             let stored = try KeyServices.wallets.open(walletID: check.id, rk: rk)
             defer { stored.wipe() }
@@ -740,14 +817,16 @@ struct HardenedPhraseCheck: Sendable {
                 throw HardenedCheckError.mismatch(check.name)
             }
             if check.passphrase {
-                // As duas em NFKD: a importada ja foi gravada assim, a criada aqui pode ter os
-                // bytes do teclado (revisao do modo reforcado, M3).
-                let saved = BIP39.nfkd(stored.passphrase)
-                defer { saved.wipe() }
-                guard Hash.constantTimeEqual(saved, check.secret.passphrase) else { throw HardenedCheckError.mismatch(check.name) }
-                // Gravada fora de NFKD por uma versao anterior: restaurada pelas palavras, a
-                // conta da Cardano dela muda. Nao vale como copia (segunda revisao, N1).
-                guard Hash.constantTimeEqual(saved, stored.passphrase) else { throw HardenedCheckError.legacyPassphrase(check.name) }
+                if check.unverified { throw HardenedCheckError.unverified }
+                // A digitada da a raiz da criacao? E a conta da Cardano dela e a do NFKD? A certa com
+                // outra conta da Cardano foi gravada fora de NFKD por uma versao anterior: restaurada
+                // pelas palavras, ela muda. Nao vale como copia (segunda revisao, N1).
+                switch try PassphraseProof.check(stored, typed: check.secret.passphrase, fingerprint: check.fingerprint,
+                                                 cardanoPublicKey: check.cardanoPublicKey) {
+                case .mismatch: throw HardenedCheckError.mismatch(check.name)
+                case .legacy: throw HardenedCheckError.legacyPassphrase(check.name)
+                case .match: if check.legacy { throw HardenedCheckError.legacyPassphrase(check.name) }
+                }
             }
         }
     }

@@ -10,8 +10,11 @@ import SwiftUI
 struct PassphraseWalletView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(Router.self) private var router
+    @Environment(AppSession.self) private var session
     let base: WalletMeta
 
+    /// Super Security em "Bloquear as carteiras": recusa antes da passphrase.
+    @State private var wordsBlocked = false
     @State private var checking = false
     @State private var entering = false
     @State private var howItWorks = false
@@ -59,13 +62,18 @@ struct PassphraseWalletView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.body))
                 .padding(.top, Space.lg)
+                // Super Security em "Bloquear as carteiras": recusa antes da passphrase (pedido do dono, 06/11/2026).
+                if wordsBlocked {
+                    Banner(kind: .caution, title: WalletError.lockPolicyMessage).padding(.top, Space.md)
+                }
             }
             .padding(.horizontal, Space.gutter)
             .padding(.vertical, Space.md)
         }
+        .task { wordsBlocked = session.addingWordsBlocked }
         .safeAreaInset(edge: .bottom) {
             ActionFooter {
-                PrimaryButton(title: String(localized: "Continuar")) { checking = true }
+                PrimaryButton(title: String(localized: "Continuar"), enabled: !wordsBlocked) { checking = true }
             }
         }
         .background(Palette.void.ignoresSafeArea())

@@ -18,4 +18,8 @@ public struct DerivedAccount: Sendable, Codable, Hashable {
         self.publicKey = publicKey
         self.accountXPub = accountXPub
     }
+
+    /// A conta de uma carteira so de observacao: so o endereco, sem caminho, chave nem xpub (`addWatchWallet` no iPhone,
+    /// a observacao do Android). Serve para ler saldo e historico; nada que monta ou assina aceita esta forma.
+    public var isAddressOnly: Bool { path.components.isEmpty && publicKey.isEmpty && accountXPub == nil }
 }

@@ -21,7 +21,6 @@ struct SealEnvelopeFlow: View {
     @State private var sealPart = 0
     @State private var sealStarted = Date()
     @State private var phrase: SecureBytes?
-    @State private var passphrase: SecureBytes?
     @State private var password = SecureBytes(capacity: 256)
     @State private var passwordLength = 0
     @State private var repeatPassword = SecureBytes(capacity: 256)
@@ -43,7 +42,7 @@ struct SealEnvelopeFlow: View {
     @State private var weakSealed = false
     /// A forca medida fora da thread principal, depois que o dono para de digitar: o
     /// medidor percorre listas grandes, e a digitacao nao espera por ele.
-    @State private var measured: (length: Int, bits: Double)?
+    @State private var measured: (length: Int, bits: Double, digitsOnly: Bool)?
     @State private var error: String?
     @State private var working = false
     @State private var howItWorks = false
@@ -354,7 +353,8 @@ struct SealEnvelopeFlow: View {
     @ViewBuilder
     private var strengthLine: some View {
         let short = passwordLength > 0 && PasswordStrength.scalarCount(password) < PasswordStrength.minimumLength
-        let digits = passwordLength > 0 && password.withUnsafeBytes { $0.allSatisfy { (0x30...0x39).contains($0) } }
+        // So digitos de qualquer escrita ("١٢٣٤" tambem e PIN), pela medida feita fora da tela (rodadas 4 e 5).
+        let digits = passwordLength > 0 && measured.map { $0.length == passwordLength && $0.digitsOnly } == true
         VStack(alignment: .leading, spacing: 4) {
             if passwordLength == 0 {
                 Text("Qualquer senha com pelo menos 4 caracteres. Quanto mais longa e menos óbvia, mais tempo ela aguenta. Não use a senha da carteira.")
@@ -386,12 +386,13 @@ struct SealEnvelopeFlow: View {
         let copy = SecureBytes(capacity: max(password.count, 1))
         password.withUnsafeBytes { copy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
         let length = passwordLength
-        let bits = await Offload.compute {
+        let result = await Offload.compute {
             defer { copy.wipe() }
-            return PasswordStrength.bits(copy)
+            let measure = PasswordStrength.measure(copy)
+            return (measure.bits, measure.digitsOnly)
         }
         guard !Task.isCancelled else { return }
-        measured = (length, bits)
+        measured = (length, result.0, result.1)
     }
 
     private var repeatStep: some View {
@@ -416,6 +417,10 @@ struct SealEnvelopeFlow: View {
                 .padding(.top, Space.xs)
             Text("O nome fica cifrado. O arquivo não diz de quem é.")
                 .typeStyle(.note).foregroundStyle(Palette.inkMuted).padding(.top, Space.xs)
+            if wallet.hasPassphrase {
+                Text("Esta carteira tem passphrase. O envelope leva só as palavras, que abrem a carteira de base. Não use aqui o nome da carteira com passphrase.")
+                    .typeStyle(.note).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
+            }
         } footer: {
             PrimaryButton(title: String(localized: "Lacrar envelope"), enabled: repeatLength > 0) { Task { await seal() } }
         }
@@ -554,13 +559,20 @@ struct SealEnvelopeFlow: View {
         do {
             try AuthCoordinator.checkPINAndBiometry()
             guard await VoiceGate.shared.confirm(.envelope, session: session) else { return }
-            // O envelope leva a passphrase junto: na carteira que pede a passphrase, ela so sai
-            // depois de digitada e conferida no cofre. Sem isso, quem tem o PIN e o rosto
-            // exportava as duas (revisao de seguranca de 16/10/2026).
+            // O envelope leva so as palavras: a passphrase nunca fica salva, nem no app nem num
+            // arquivo que sai dele (pedido do dono, 05/11/2026). Na carteira com passphrase, as
+            // palavras so saem depois de a passphrase digitada conferir pelo fingerprint da raiz:
+            // sem a carteira de base neste iPhone, quem tem o PIN e o rosto exportava as palavras e
+            // testava passphrases fora do aparelho (revisao de seguranca de 16/10/2026).
             let current = session.metadata.wallets.first { $0.id == id } ?? wallet
+            if PassphraseGate.unverified(current) {
+                self.error = PassphraseGate.unverifiedMessage
+                return
+            }
+            let fingerprint = current.fingerprint.flatMap(Hex.decode)
             var typed: SecureBytes?
             if PassphraseGate.asks(current) {
-                guard let given = await PassphraseGate.shared.ask(current, reason: String(localized: "O envelope de \(current.name) leva a passphrase junto. Digite a passphrase para seguir; depois vem a confirmação de sempre.")) else { return }
+                guard let given = await PassphraseGate.shared.ask(current, reason: String(localized: "Para lacrar as palavras de \(current.name), digite a passphrase. Ela não vai no envelope: guarde-a à parte. Depois vem a confirmação de sempre.")) else { return }
                 typed = given
                 if let wait = PassphraseGate.shared.begin(session, wallet: id) {
                     self.error = wait
@@ -571,23 +583,23 @@ struct SealEnvelopeFlow: View {
             }
             defer { typed?.wipe() }
             let check = typed
-            let opened: (SecureBytes, SecureBytes)? = try await auth.perform(session, reason: String(localized: "Lacrar a senha de \(wallet.name) num envelope"), presence: .pinAndBiometry) { rk in
+            let opened: SecureBytes? = try await auth.perform(session, reason: String(localized: "Lacrar a senha de \(wallet.name) num envelope"), presence: .pinAndBiometry) { rk in
                 let secret = try KeyServices.wallets.open(walletID: id, rk: rk)
                 defer { secret.wipe() }
-                if let check, !PassphraseGate.matches(secret.passphrase, check) { throw Signer.Failure.passphraseMismatch }
-                let phrase = try secret.phrase()
-                let passphrase = SecureBytes(capacity: max(secret.passphrase.count, 1))
-                secret.passphrase.withUnsafeBytes { passphrase.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
-                return (phrase, passphrase)
+                if let check, try PassphraseProof.check(secret, typed: check, fingerprint: fingerprint, cardanoPublicKey: nil) == .mismatch {
+                    throw Signer.Failure.passphraseMismatch
+                }
+                return try secret.phrase()
             }
             guard let result = opened else {
                 if check != nil { PassphraseGate.shared.refund(session, wallet: id) }
                 return
             }
             if check != nil { PassphraseGate.shared.passed(session, wallet: id) }
-            phrase = result.0
-            passphrase = result.1
-            label = wallet.name
+            phrase = result
+            // O envelope leva so as palavras, que abrem a carteira de base: o nome da carteira com passphrase nao vai nele, nem
+            // como sugestao (auditoria do envelope de 06/11/2026: na restauracao, a de base entrava com o nome da escondida).
+            label = wallet.hasPassphrase ? "" : wallet.name
             step = .create
         } catch {
             if (error as? Signer.Failure) == .passphraseMismatch {
@@ -645,14 +657,16 @@ struct SealEnvelopeFlow: View {
             error = String(localized: "Esta senha usa palavras da própria carteira. Quem achar o papel abre o envelope. Escolha outra.")
             return
         }
-        switch PasswordStrength.verdict(password) {
+        // Uma medida so, com uma normalizacao (rodada 3 da auditoria do envelope).
+        let measured = PasswordStrength.measure(password)
+        switch measured.verdict {
         case .tooShort:
             error = String(localized: "Use pelo menos 4 caracteres.")
         case .strong:
             // O medidor depende do custo do Argon2 deste iPhone: abaixo de forte nele, pede
             // o "sim" como as outras. Antes, 60 bits saiam como "bom" no medidor e lacravam
             // sem o aviso (pentest de 14/10/2026).
-            let bits = PasswordStrength.bits(password)
+            let bits = measured.bits
             if PasswordCost.band(bits: bits, kdf: kdf) != .strong {
                 error = nil
                 riskBits = bits
@@ -679,22 +693,20 @@ struct SealEnvelopeFlow: View {
         sealPart = 0
         sealStarted = .now
         step = .sealing
-        let (password, label, passphrase, kdf) = (self.password, String(self.label.prefix(64)), self.passphrase, self.kdf)
+        let (password, label, kdf) = (self.password, String(self.label.prefix(64)), self.kdf)
         let generated: Double? = usingSuggestion ? PasswordStrength.suggestionBits() : nil
         let accepted = acceptedRisk
         // Para a tela final: senha muito fraca, o arquivo fica fora da nuvem.
         weakSealed = !usingSuggestion && PasswordCost.band(bits: PasswordStrength.bits(password), kdf: kdf) == .veryWeak
         do {
             let data = try await Offload.run {
-                try Envelope.seal(phrase: phrase, passphrase: passphrase, label: label, password: password, parameters: kdf,
+                try Envelope.seal(phrase: phrase, passphrase: nil, label: label, password: password, parameters: kdf,
                                   generatedBits: generated, acceptedRisk: accepted)
             }
             password.wipe()
             repeatPassword.wipe()
             phrase.wipe()
-            passphrase?.wipe()
             self.phrase = nil
-            self.passphrase = nil
             // A cifra e a gravacao levam milissegundos: a tela mostra cada uma por um
             // instante, para o dono ver o que aconteceu, e so entao o envelope fecha.
             sealPart = 1
@@ -733,7 +745,6 @@ struct SealEnvelopeFlow: View {
 
     private func close() {
         phrase?.wipe()
-        passphrase?.wipe()
         password.wipe()
         repeatPassword.wipe()
         if let sealed { try? FileManager.default.removeItem(at: sealed.url) }

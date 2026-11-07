@@ -158,7 +158,7 @@ enum EVMTradeQuoteMapping {
     /// O `TradeQuote` da tela a partir das pernas escolhidas e do ranking.
     static func quote(
         sell: Asset, buy: Asset, amountIn: BigUInt, legs: [EVMTradeLeg], ranked: [TradeCandidate], allowances: [EVMAddress: BigUInt],
-        costs: TradeCostModel, chain: Chain
+        costs: TradeCostModel, chain: Chain, unanchored: Bool = false, alternativesFrom: Set<TradeProvider>? = nil
     ) -> TradeQuote {
         let chosen = Set(legs.map(\.quote.provider))
         let isSplit = legs.count > 1
@@ -184,13 +184,18 @@ enum EVMTradeQuoteMapping {
             },
             // Cada alternativa e uma cotacao de um provedor so, pelo valor inteiro, com o
             // garantido dela. Numa divisao, os proprios provedores das pernas tambem sao
-            // alternativa ("tudo por um so").
-            alternatives: ranked.filter { isSplit || !chosen.contains($0.quote.provider) }.map {
+            // alternativa ("tudo por um so"). Na cotacao sem comparacao, so as que passaram pelas
+            // travas (`alternativesFrom`).
+            alternatives: ranked.filter {
+                (isSplit || !chosen.contains($0.quote.provider)) && (alternativesFrom?.contains($0.quote.provider) ?? true)
+            }.map {
                 TradeQuote.Alternative(provider: $0.quote.provider.displayName, out: $0.quote.guaranteedOut)
             },
-            providersCompared: ranked.count,
+            // Na cotacao sem comparacao, so as que ficaram na rodada, como as alternativas.
+            providersCompared: alternativesFrom.map { kept in ranked.filter { kept.contains($0.quote.provider) }.count } ?? ranked.count,
             needsApproval: sellsToken && legs.contains { (allowances[$0.quote.spender] ?? 0) < $0.quote.intent.amountIn || $0.quote.router.viaPermit2 },
-            expiresAt: (legs.map(\.quote.validatedAt).min() ?? .now).addingTimeInterval(ValidatedTradeQuote.lifetime)
+            expiresAt: (legs.map(\.quote.validatedAt).min() ?? .now).addingTimeInterval(ValidatedTradeQuote.lifetime),
+            unanchored: unanchored
         )
     }
 

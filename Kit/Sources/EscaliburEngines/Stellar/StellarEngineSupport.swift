@@ -17,6 +17,15 @@ enum StellarEngineSupport {
         return source
     }
 
+    /// A conta do historico: a que assina, como no envio; na carteira de observacao, a conta observada (so leitura:
+    /// montar e assinar continuam exigindo `source`).
+    static func historyAccount(_ account: DerivedAccount) throws -> StellarAccountID {
+        guard account.isAddressOnly else { return try source(account).account }
+        guard account.chainID == Chain.stellar.id, let id = StellarAccountID(address: account.address), id.address == account.address
+        else { throw SendEngineError.message(NetworkFailureText.wrongAccount) }
+        return id
+    }
+
     // MARK: Ativos
 
     /// Os ativos emitidos da lista curada (`TokenRegistry`), com codigo e emissor.

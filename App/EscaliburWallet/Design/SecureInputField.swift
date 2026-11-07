@@ -10,7 +10,14 @@ import UIKit
 /// pontos. Teclado do sistema forcado (teclados de terceiros ja estao bloqueados no
 /// app), sem correcao, sem sugestao, sem ferramentas de escrita.
 struct SecureInputField: UIViewRepresentable {
+    /// Sair do app ou travar zera os campos `wipesOnLeave` abertos (05/11/2026): o `onDisappear` do SwiftUI
+    /// nao roda com a cena no segundo plano, e o que estava digitado ficaria na memoria ate a volta. So os de
+    /// conferir e de usar e descartar: os de criar e importar ficam, porque a propria previa manda comparar os
+    /// enderecos noutro app.
+    static let wipeAll = Notification.Name("escalibur.secureInputField.wipeAll")
+
     let buffer: SecureBytes
+    var wipesOnLeave = false
     @Binding var length: Int
     var placeholder: String = ""
     /// Abre o teclado assim que o campo aparece (quem tocou para digitar uma senha).
@@ -31,6 +38,7 @@ struct SecureInputField: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextField {
         let field = UITextField()
         field.delegate = context.coordinator
+        context.coordinator.field = field
         field.isSecureTextEntry = true
         field.textContentType = nil
         field.autocorrectionType = .no
@@ -109,8 +117,27 @@ struct SecureInputField: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextFieldDelegate, UIGestureRecognizerDelegate {
         var parent: SecureInputField
+        weak var field: UITextField?
 
-        init(_ parent: SecureInputField) { self.parent = parent }
+        init(_ parent: SecureInputField) {
+            self.parent = parent
+            super.init()
+            // O observador por seletor sai sozinho quando o coordenador some. O aviso sai na thread principal.
+            if parent.wipesOnLeave {
+                NotificationCenter.default.addObserver(self, selector: #selector(wipeAllFields), name: SecureInputField.wipeAll, object: nil)
+            }
+        }
+
+        @objc private func wipeAllFields() {
+            MainActor.assumeIsolated { wipe() }
+        }
+
+        @MainActor private func wipe() {
+            parent.buffer.wipe()
+            parent.reveal?.wrappedValue = false
+            if parent.length != 0 { parent.length = 0 }
+            field?.text = ""
+        }
 
         func textField(_ field: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
             // Revelado, o campo so mostra: editar no meio do texto a mostra nao existe.
@@ -179,11 +206,13 @@ struct PasswordBox: View {
     /// A cifra viva do que foi digitado (`LiveCipher`), no lugar dos pontos: os glifos
     /// trocam num relogio de 12 Hz, como os das palavras.
     var glyphs: ((UInt64) -> String)? = nil
+    /// Zera ao sair do app ou travar (`SecureInputField.wipesOnLeave`).
+    var wipesOnLeave = false
     @State private var editing = false
 
     var body: some View {
         let ciphered = glyphs != nil && length > 0 && reveal?.wrappedValue != true
-        SecureInputField(buffer: buffer, length: $length, placeholder: placeholder, focusOnAppear: focusOnAppear, reveal: reveal,
+        SecureInputField(buffer: buffer, wipesOnLeave: wipesOnLeave, length: $length, placeholder: placeholder, focusOnAppear: focusOnAppear, reveal: reveal,
                          concealed: ciphered, editing: $editing, onSubmit: onSubmit)
             // O campo na altura inteira da caixa: segurar o dedo em qualquer ponto dela mostra o
             // texto, e nao so perto da linha do cursor (pedido do dono, 23/10/2026).

@@ -1,5 +1,6 @@
 import EscaliburChains
 import EscaliburCore
+import EscaliburEngines
 import EscaliburNetwork
 import Foundation
 
@@ -237,15 +238,16 @@ enum Receber {
 
     /// A lista embarcada primeiro, sem esperar; a leitura na rede (o aviso e as redes do
     /// CoinPaprika) entra se responder em ate 2 s, como no iOS. Sem a moeda na lista, so a rede.
-    static func redes(id: String, simbolo: String?, nome: String?) async throws -> Redes {
-        let local = lista()?.coin(id: id)
-        let moeda: CatalogCoin
-        if let local {
+    static func moedaDoCatalogo(id: String, simbolo: String?, nome: String?) async throws -> CatalogCoin {
+        if let local = lista()?.coin(id: id) {
             let naRede = await comPrazo(segundos: 2) { try? await CoinCatalog.coinAllNetworks(id: id, symbol: simbolo, name: nome) }
-            moeda = naRede.map { local.merged(with: $0, addingNetworks: true) } ?? local
-        } else {
-            moeda = try await CoinCatalog.coinAllNetworks(id: id, symbol: simbolo, name: nome)
+            return naRede.map { local.merged(with: $0, addingNetworks: true) } ?? local
         }
+        return try await CoinCatalog.coinAllNetworks(id: id, symbol: simbolo, name: nome)
+    }
+
+    static func redes(id: String, simbolo: String?, nome: String?) async throws -> Redes {
+        let moeda = try await moedaDoCatalogo(id: id, simbolo: simbolo, nome: nome)
         let metadata = Sessao.shared.metadata
         let contas = Set(metadata.selectedWallet?.accounts.map(\.chainID) ?? [])
         let conhecidos = Set(recebiveis(metadata).map(\.id))
@@ -274,6 +276,40 @@ enum Receber {
             guard token.chainID == chain.id, let salvo = CustomToken.reference(token.kind) else { return false }
             return chain.family == .evm ? salvo.lowercased() == referencia.lowercased() : salvo == referencia
         }
+    }
+
+    /// As redes de uma moeda da busca em que a troca a compra.
+    struct RedesDaTroca: Encodable {
+        let simbolo: String
+        /// O CoinGecko publicou um aviso sobre a moeda (ataque, migracao, golpe).
+        let aviso: Bool
+        /// A leitura de agora respondeu. Sem ela, so as formas verificadas.
+        let conferida: Bool
+        let opcoes: [OpcaoDaTroca]
+    }
+
+    struct OpcaoDaTroca: Encodable {
+        let ativo: Ativo
+        /// Da lista verificada ou ja adicionada: vai direto para a troca. Senao, passa antes pelo Adicionar moeda.
+        let pronta: Bool
+        let verificada: Bool
+    }
+
+    /// Comprando na troca (pedido do dono, 06/11/2026: a busca de Receber tambem na escolha do token): a regra de
+    /// `TradeCatalog`, a mesma do `TradeCatalogLookup` do iOS, com a lista embarcada e a leitura de agora inteira (sem o
+    /// prazo de 2 s de Receber: o aviso do CoinGecko e o contrato atual decidem a compra). `excluir`: o ativo do outro lado.
+    static func redesDaTroca(id: String, simbolo: String?, nome: String?, excluir: String?) async -> RedesDaTroca {
+        // Moeda da lista verificada: so as formas verificadas, sem perguntar nada na rede.
+        let listada = TradeCatalog.isListed(id)
+        let local = listada ? nil : lista()?.coin(id: id)
+        let viva = listada ? nil : try? await CoinCatalog.coinAllNetworks(id: id, symbol: simbolo, name: nome)
+        let metadata = Sessao.shared.metadata
+        let contas = Set(metadata.selectedWallet?.accounts.map(\.chainID) ?? [])
+        let opcoes = TradeCatalog.options(coinID: id, local: local, live: viva, chains: TradeEngines.chains.filter { contas.contains($0.id) },
+                                          custom: metadata.customTokens, exclude: excluir)
+        return RedesDaTroca(simbolo: viva?.symbol ?? local?.symbol ?? simbolo ?? "", aviso: viva?.hasNotice ?? false,
+                            conferida: listada || TradeCatalog.confirmed(coinID: id, live: viva),
+                            opcoes: opcoes.map { OpcaoDaTroca(ativo: Ativo($0.asset), pronta: $0.ready, verificada: $0.verified) })
     }
 
     /// O resultado de `operacao`, ou nil se passar de `segundos`.

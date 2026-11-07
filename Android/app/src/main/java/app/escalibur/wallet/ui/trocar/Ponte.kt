@@ -95,6 +95,8 @@ class RetratoDaPonte(json: JSONObject) {
     val numero = json.getInt("numero")
     val moeda: String = json.getString("moeda")
     val pedePassphrase = json.getBoolean("pedePassphrase")
+    /** A carteira com passphrase que esta versao nao confere: recusa antes da passphrase e do PIN. */
+    val semConferencia = json.optBoolean("semConferencia")
     val nomeDaCarteira: String = json.getString("nomeDaCarteira")
     private val e = json.getJSONObject("ponte")
 
@@ -545,16 +547,20 @@ private fun DirecaoDaPonte(r: RetratoDaPonte, sai: String?, entra: String?) {
 /** Assina e transmite a ponte. A carteira com passphrase pede ela antes da biometria ou do PIN. */
 private suspend fun assinarPonte(r: RetratoDaPonte, motivo: String): String? {
     val controle = ControleDaPonte
+    if (r.semConferencia) return t("Esta versão do app não consegue conferir a passphrase desta carteira, e ela não assina aqui. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39.")
     var passphrase: PedidoDePassphrase.Resposta? = null
     if (r.pedePassphrase) passphrase = PedidoDePassphrase.pedir(r.nomeDaCarteira) ?: return null
     controle.trabalhando = true
     try {
-        val segredo = passphrase?.bytes
+        // A passphrase vai para o nucleo antes do PIN, num buffer seguro dele, e a daqui sai zerada ja: assinar e transmitir
+        // estao na mesma chamada, e a copia daqui vivia ate o fim da transmissao (05/11/2026). Entregue com o app ja no
+        // fundo, ela sai e nada segue: o PIN abriria no fundo.
+        passphrase?.let { Api.comSegredo("passphrase.entregar", JSONObject(), it.bytes) }
+        if (passphrase != null && !app.escalibur.wallet.ui.Ciclo.primeiroPlano) return null
         Autorizacao.tentando(motivo) { credencial ->
             val corpo = JSONObject().put("credencial", credencial.json())
             passphrase?.folga?.let { corpo.put("folga", it) }
-            val partes = if (segredo != null) credencial.partes(segredo.copyOf()) else credencial.partes()
-            controle.aplicar(Api.comSegredo("ponte.assinar", corpo, *partes))
+            controle.aplicar(Api.comSegredo("ponte.assinar", corpo, *credencial.partes()))
         }
         return null
     } catch (falha: FalhaDoNucleo) {
@@ -568,6 +574,7 @@ private suspend fun assinarPonte(r: RetratoDaPonte, motivo: String): String? {
         }
     } finally {
         passphrase?.bytes?.fill(0)
+        if (passphrase != null) runCatching { app.escalibur.wallet.nucleo.Nucleo.chamar("passphrase.descartar", "{}") }
         controle.trabalhando = false
     }
 }

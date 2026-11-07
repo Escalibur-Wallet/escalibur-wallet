@@ -75,7 +75,7 @@ Atualizada a cada correção.
 | M2 teto UTXO | Corrigido: teto compilado, duas fontes no máximo 3x distantes, o menor de duas, aviso acima de 1% | `UTXORules`, `UTXOFeeConsensus` |
 | M3 moedas deixadas | Corrigido: `skipped` na revisão, "enviar tudo" só com poeira de fora | `UTXOPlanner` |
 | M4 vencimento | Corrigido: Solana com duas fontes e altura finalizada com folga; Tron pelo bloco solidificado em dois provedores e relógio conferido no plano | `SolanaTransfers`, `TronReader.status`, `TronPlanner` |
-| M5 âncora EVM | Corrigido: referência obrigatória ou duas cotações e a maior estimativa | `TradeValidator.anchored` |
+| M5 âncora EVM | Corrigido: referência obrigatória ou duas cotações e a maior estimativa. Em 05/11/2026, por decisão do dono, a fonte única sem referência deixou de ser recusada: segue marcada sem comparação e só troca com o aceite na tela, preso ao mínimo mostrado | `TradeValidator.anchored`, `TradeValidator.unanchored` |
 | M6 `sequence` | Corrigido: interno; compositores nomeados | `Signing.swift`, `TradePlanner.combineSplit`, `XRPLPlanner.combineTrustlineAndOffer` |
 | B1 | Corrigido: mediana de duas fontes, gas pela menor, BNB 1 gwei, aviso de taxa no envio de token | `EVMReader`, `TradeStateReader`, `EVMFeeProfile`, `EVMSendEngine` |
 | B2 | Corrigido: LastLedgerSequence do ledger pinado | `XRPLPlanner.common` |

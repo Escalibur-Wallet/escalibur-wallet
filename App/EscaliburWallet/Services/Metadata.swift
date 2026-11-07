@@ -96,9 +96,18 @@ struct WalletMeta: Codable, Equatable, Identifiable, Hashable {
     /// A passphrase digitada de novo pelo dono, de onde a anotou (auditoria 4, C7-02). So
     /// vale para a carteira com passphrase. Opcional para os metadados antigos abrirem.
     var passphraseConfirmedAt: Date?
-    /// Carteira com passphrase: pedir a passphrase antes de mover saldo (envio, troca,
-    /// ponte). Nil vale ligado, o padrao (pedido do dono, 16/10/2026). Ver `PassphraseGate`.
+    /// O "Pedir a passphrase para enviar" de antes (16/10/2026). Nao vale mais: desde 05/11/2026 a
+    /// passphrase nao fica no cofre, e toda assinatura da carteira com passphrase a pede. Fica so
+    /// para os metadados antigos abrirem.
     var passphraseToSend: Bool?
+    /// A passphrase que uma versao anterior gravou estava fora de NFKD (com acento composto), e a
+    /// conta da Cardano dela saiu dos bytes digitados: restaurada pelas palavras, ela muda. E o unico
+    /// fato sobre a passphrase que sobra, marcado ao tira-la do cofre (05/11/2026), para o Super
+    /// Security continuar recusando essa carteira.
+    var legacyCardanoPassphrase: Bool?
+    /// A passphrase que uma versao anterior gravou nao dava a raiz da criacao, e saiu do cofre assim mesmo
+    /// (05/11/2026): a digitada tambem nao assina nesta versao, e a tela diz isso em vez de contar erro.
+    var passphraseUnverified: Bool?
     /// Na importacao, a rede mostrou outra chave no controle da conta da Tron (o golpe da
     /// "frase com saldo"): o Receber da Tron nesta carteira fica fechado. O envio ja recusa
     /// pela leitura das permissoes (`TronSendEngine`). Opcional para os metadados antigos.

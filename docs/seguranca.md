@@ -65,7 +65,7 @@ No Escalibur de hoje nenhum destes achados é grave, porque lá o PIN não prote
 
 **T2. Ladrão com o aparelho desbloqueado, ou que viu o código do iPhone. É o caso real mais comum.**
 - Defesa:
-  - O app pede PIN ou biometria ao abrir. Trava ao ir para segundo plano (tolerância escolhida pelo dono: na hora, 30 s, 1 min ou 5 min; alongar pede o PIN) e trava na hora em `UIApplication.protectedDataWillBecomeUnavailableNotification`.
+  - O app pede PIN ou biometria ao abrir. Trava ao ir para segundo plano (tolerância escolhida pelo dono: na hora, 30 s, 1 min ou 5 min; alongar pede o PIN) e trava na hora em `UIApplication.protectedDataWillBecomeUnavailableNotification` quando o app está na frente. Suspenso, o app não recebe esse aviso: quem destravar o iPhone dentro da tolerância vê a carteira aberta, e assinar continua pedindo PIN ou rosto (auditoria das chaves de 06/11/2026).
   - A biometria usa `.biometryCurrentSet`, **nunca** `.userPresence` nem `.devicePasscode`. O código do iPhone não abre nada aqui.
   - Cadastrar um rosto novo destrói o slot biométrico em vez de abri-lo.
   - A escada de atraso do PIN dobra do nono erro em diante, de 3 horas até 7 dias por tentativa: pela interface são 18 chutes em 30 dias e 66 em um ano (§2.7).
@@ -79,9 +79,9 @@ No Escalibur de hoje nenhum destes achados é grave, porque lá o PIN não prote
   - Nenhum byte gravado abre fora deste Secure Enclave.
   - O PIN não tem verificador extraível, mas o sal e os parâmetros do Argon2id podem ser lidos e os 10^6 Argon2id pré-calculados numa GPU; no aparelho sobra a passagem pelo SE, cerca de 22 ms por chute. Total: 3 a 6 horas em média, 6 a 11 horas no pior caso (auditoria de 15/10/2026). Com PIN de 4 dígitos, 2 a 3 minutos em média e 4 a 6 no pior caso.
   - A biometria continua exigindo o rosto, porque a decisão acontece no SEP.
-  - As opções de valor alto (seção 2.6) sobem o custo para milhares de anos.
-  - A seed só existe em memória durante a assinatura.
-- O que sobra: o PIN de 6 dígitos cai em horas, e o de 4 em minutos. Malware dentro do processo durante uma assinatura vê a seed. A interface pode ser adulterada para mostrar A e assinar B. Isso está aceito, com os números, no fim do relatório.
+  - As opções de valor alto da seção 2.6 que subiriam esse custo para milhares de anos (senha alfanumérica, carteira-cofre) ainda não existem. O modo reforçado só ajuda sem o rosto do dono.
+  - A seed só existe em memória durante a assinatura, no primeiro destravar depois de uma versão com rede nova (as redes novas são derivadas ali), em toda conferência da passphrase (ver as palavras, lacrar o envelope, conferir a cópia, a purga) e na prévia de importar.
+- O que sobra: o PIN de 6 dígitos cai em horas, e o de 4 em minutos. Malware dentro do processo vê a chave raiz em qualquer abertura do app (ela tira dali a chave dos metadados) e, com ela, a entropia de todas as carteiras. A interface pode ser adulterada para mostrar A e assinar B. Isso está aceito, com os números, no fim do relatório.
 
 **T4. MITM (Wi-Fi hostil, perfil com CA instalada pelo usuário, CA comprometida)**
 - Defesa: ATS padrão sem exceções, pinning só do relay, e principalmente nenhuma decisão de assinatura baseada em dado de rede (seções 4 e 5).
@@ -95,7 +95,7 @@ No Escalibur de hoje nenhum destes achados é grave, porque lá o PIN não prote
   - Tetos de taxa.
   - Na BTC, o valor de cada UTXO é conferido pela transação anterior.
   - Na XRPL, o recebimento mostrado é o `delivered_amount`.
-- O que sobra: uma rota ruim dentro da tolerância de slippage. Negação de serviço.
+- O que sobra: uma rota ruim dentro da tolerância de slippage. Negação de serviço. Na troca EVM sem comparação (uma fonte só e sem preço de referência, com o aceite do dono; 05/11/2026), quem controla a única fonte que responde pode servir qualquer preço: a carteira não recusa por preço nesse caso (decisão do dono), e a defesa é a tela, que mostra o mínimo que vai entrar e diz que o preço não foi comparado.
 
 **T6. Nosso relay comprometido**
 - Pode tudo o que T5 pode, e ainda vê IP mais endereços consultados e pode reter broadcasts.
@@ -125,8 +125,8 @@ No Escalibur de hoje nenhum destes achados é grave, porque lá o PIN não prote
 - O que sobra: o dono que ignora um aviso bloqueante.
 
 **T9. Coerção física**
-- Defesa honesta: pouca. Modo discreto (saldos ocultos), modo viagem (carteiras removidas do aparelho) e perfil isca opcional. Na carteira quente, só o que se entregaria.
-- O que sobra: o código é aberto, então o agressor sabe que a isca existe.
+- Defesa honesta: pouca. Só o modo discreto (saldos ocultos), que qualquer um com o app aberto desfaz. Modo viagem e perfil isca ainda não existem: o caminho hoje é remover a carteira antes (PIN e rosto) e restaurá-la pelas palavras depois. Na carteira quente, só o que se entregaria.
+- O que sobra: quem obriga a abrir o app vê o que a lista mostra, inclusive a carteira com passphrase, com o cadeado e o saldo.
 
 ---
 
@@ -140,8 +140,8 @@ No Escalibur de hoje nenhum destes achados é grave, porque lá o PIN não prote
 - **Uma chave raiz (RK) por instalação e uma DEK por carteira.**
   - PIN e biometria destravam a RK. A RK desembrulha só a DEK da carteira que vai assinar.
   - Um PIN por carteira seria inviável de usar.
-  - Com a DEK por carteira: trocar o PIN reembrulha 113 bytes, a opção "carteira-cofre" adiciona um fator só àquela carteira, e apagar uma carteira destrói a DEK dela.
-- **O que se guarda é a entropia (16–32 bytes), o idioma e a passphrase, não as palavras.** A frase e a seed de 64 bytes são reconstruídas quando preciso.
+  - Com a DEK por carteira: trocar o PIN reembrulha 113 bytes, a opção "carteira-cofre" (ainda não feita) adicionaria um fator só àquela carteira, e apagar uma carteira destrói a DEK dela.
+- **O que se guarda é a entropia (16–32 bytes) e o idioma, não as palavras.** A frase e a seed de 64 bytes são reconstruídas quando preciso. A passphrase nunca é guardada (pedido do dono, 05/11/2026): ver §2.11.
 - **Carteira nova tem 128 bits (12 palavras) por padrão; 256 bits é opcional.** 2^128 já é o nível de segurança das curvas secp256k1 e ed25519. Com 24 palavras a segurança efetiva não aumenta, e o trabalho de anotar e a chance de erro dobram.
 - **Chaves públicas e endereços são derivados na criação e guardados nos metadados.** Mostrar saldo nunca toca a seed.
 
@@ -195,6 +195,9 @@ Arquivos:
 - Exceções com a proteção até o primeiro desbloqueio (classe C), porque a checagem em segundo plano roda com o iPhone bloqueado, e o `verificar.sh` confere que só elas existem e que nenhuma toca cofre, chaveiro ou metadados:
   - `Alertas/alertas.json`: as moedas escolhidas para alerta de preço e o último preço visto. Nada de saldo nem endereço.
   - `Recebimentos/recebimentos.json` (aviso de recebimento, oferecido a todos desde 14/10/2026 a pedido do dono): os endereços públicos das contas e o último saldo visto de cada ativo. Nenhuma chave, frase ou nome de carteira. O aviso troca a confidencialidade dos endereços com o iPhone bloqueado depois do primeiro desbloqueio pelo aviso sem servidor. Desde a auditoria 4 (C7-03), uma folha diz esse preço na primeira abertura da carteira, antes do pedido de permissão, e o dono escolhe; a permissão de notificação sozinha não vale como aceite. Carteiras com passphrase e carteiras sem cópia conferida ficam fora do arquivo: com elas nele, quem extrai os dados do aparelho acharia a carteira que o dono quis esconder. Desligar apaga o arquivo e vale para sempre. Os endereços chegam do app destravado (`ReceiptAccounts`); o arquivo do aviso nunca abre os metadados.
+  - O marcador de instalação (`KeyServices`): só diz que o app já rodou neste aparelho, sem conteúdo.
+  - O arquivo do widget (`WidgetFeed`, na pasta do App Group): a última moeda que o dono abriu ou recebeu, com o preço e a linha do dia. Diz que moeda interessa ao dono, sem saldo nem endereço.
+  - `Avisos/chave` (`LimitOrderWatch`): a chave que cifra a ligação entre cada aviso de ordem e o UID dela.
   - `Ordens/ordens.json` (avisos da ordem limite): o UID de cada ordem aberta da CoW, a rede e o prazo. O UID traz o endereço do dono, então o arquivo diz quais endereços são do aparelho, como o do recebimento. Serve para perguntar à CoW, com o iPhone bloqueado, se a ordem executou. A ordem sai quando termina, o arquivo some vazio, e o aviso de 24 horas antes do prazo é um alarme local, sem rede. O UID chega do app destravado (`LimitOrderWatch.track`); o arquivo nunca abre metadados nem conta.
 
 Pré-condições para criar ou importar carteira:
@@ -329,7 +332,7 @@ Consequência que vai por escrito no onboarding:
     4. O `stateHash` (iOS 18) e o `evaluatedPolicyDomainState` (17) em cada caso: depois de reiniciar, na atualização do iOS, com a aparência alternativa e com a máscara. Um hash que muda sozinho custa uma espera de 24 horas a mais em "Esperar" e a espera do A1 ao desligar "Continuar".
     5. A ordem de um Face ID só por chamada nas três políticas, e o tempo da abertura de "Esperar" (a vigia não pode atrasar o rosto).
     6. A animação no iPhone pequeno e com o texto grande do sistema, e o VoiceOver lendo as quatro legendas em ordem.
-- **Carteira-cofre**: a DEK daquela carteira é embrulhada por `HKDF(RK ‖ Argon2id(senha da carteira, 512 MiB, t=4, p=4))`. Quebrar o PIN no aparelho não a abre.
+- **Carteira-cofre** (ainda não feita): a DEK daquela carteira é embrulhada por `HKDF(RK ‖ Argon2id(senha da carteira, 512 MiB, t=4, p=4))`. Quebrar o PIN no aparelho não a abre.
 
 ### 2.7 Atraso progressivo e "apagar após N erros"
 
@@ -354,9 +357,11 @@ Consequência que vai por escrito no onboarding:
 | O mesmo, com PIN de 4 dígitos | 66 chutes por ano: contra PIN sorteado, 1 chance em 150 por ano; com apagar-após-10, 1 em 10^3 |
 | Tem execução de código no aparelho desbloqueado | Argon2id pré-calculado em GPU + 10^6 × 22 ms no SE ≈ **6 a 11 horas no pior caso, 3 a 6 em média** |
 | O mesmo, com PIN de 4 dígitos | Argon2id pré-calculado em GPU (1 a 2 min) + 10^4 × 22 ms no SE ≈ **4 a 6 minutos no pior caso, 2 a 3 em média**; sem GPU, só no iPhone, 10^4 × 0,82 s ≈ 2,3 horas |
-| O mesmo, com modo reforçado, sem o rosto do dono | não abre: a camada de fora é decidida no SEP. O PIN é testável pela `kand.pin` em 10^6 × 22 ms (3 a 6 horas; 4 dígitos, minutos), mas sozinho não abre nada |
+| O mesmo, com modo reforçado, sem o rosto do dono | em "Bloquear as carteiras" não abre: a camada de fora é decidida no SEP. Em "Esperar 24 horas", abre 24 horas depois; em "Continuar normal", quem tem o código do iPhone cadastra o próprio rosto e a `kand.qualquer` abre. O PIN é testável pela `kand.pin` em 10^6 × 22 ms (3 a 6 horas; 4 dígitos, minutos), mas sozinho não abre nada |
 | O mesmo, com modo reforçado e o rosto do dono uma vez | o PIN cai no tempo de sempre: 10^6 × 22 ms, 3 a 6 horas em média com o Argon2id em GPU (4 dígitos: minutos). Quem consegue o rosto uma vez guarda o miolo e testa PINs contra o SE fora do contador; o iOS não tem como impedir. No rosto antes do PIN, o miolo fica até 2 minutos na memória do app esperando o PIN |
 | Modo reforçado, pela interface | com o PIN visto, sem o rosto e sem o código do iPhone: enganar o Face ID fica em 66 tentativas por ano, ou N com o apagar-após-N ligado. Com o PIN e o código do iPhone, cadastrar o próprio rosto: em "Continuar normal" leva tudo na hora; em "Esperar 24 horas", depois de 24 horas com o iPhone na mão; em "Bloquear as carteiras" mata o cofre (o ladrão não leva nada) |
+
+No Android, o HMAC do PIN roda no StrongBox quando o aparelho tem; sem ele, no TEE, de 1 a 3 ms por chute (`Cofre.kt`). Com root no aparelho destravado: 10^6 chutes em 17 a 50 minutos no TEE, mais o Argon2id em GPU; com 4 dígitos, segundos. Desde 06/11/2026, o AES-GCM e o HKDF do embrulho dos slots do PIN e da biometria rodam no núcleo, sobre buffers zerados: o Kotlin só faz o HMAC e a RSA do Keystore, e a chave raiz não passa pelo Java (`Kit/Sources/Android/EscaliburAndroid/Cofre.swift`). O que o Keystore devolve passa: a chave AES do embrulho da biometria (com o `rk.bio`, abre a RK) e a semente do PIN (abre a camada de dentro, ainda presa ao Argon2id). O Binder e o Keystore guardam cópias delas que o app não alcança. O AEAD da swift-crypto zera a chave ao sair (remendo em `swift-crypto.lock`).
 
 A resposta honesta: **o SE converte ataque offline em ataque preso ao aparelho, mas não limita as tentativas de segredos do app.**
 - O único limite por hardware que existe é o do código do iPhone (80 ms mais atrasos crescentes no SEP).
@@ -372,8 +377,9 @@ A resposta honesta: **o SE converte ataque offline em ataque preso ao aparelho, 
 assinar(lote: LoteValidado, credencial) -> [Assinatura]:
   rk  = destrancarRaiz(credencial)         ; defer rk.wipe
   dek = desembrulharDEK(rk, lote.carteira) ; rk.wipe()   ; defer dek.wipe
-  reg = abrirRegistro(dek)                 ; dek.wipe()  ; defer reg.wipe   // entropia + passphrase
-  s64 = PBKDF2-HMAC-SHA512(frase(reg), "mnemonic"+pass, 2048) → SecureBytes ; reg.wipe() ; defer s64.wipe
+  reg = abrirRegistro(dek)                 ; dek.wipe()  ; defer reg.wipe   // so a entropia
+  s64 = PBKDF2-HMAC-SHA512(frase(reg), "mnemonic"+digitada, 2048) → SecureBytes ; reg.wipe() ; defer s64.wipe
+  exigir fingerprint(raiz(s64)) == metadados.fingerprint             // carteira com passphrase
   para cada item:
      k   = derivar(s64, item.caminho)       ; defer k.wipe        // BIP-32 / SLIP-10
      sig = assinar(k, item.digestoLocal)                           // RFC 6979 + ndata do CSPRNG
@@ -385,7 +391,7 @@ Regras:
 - **Nenhum `await` enquanto um segredo está vivo.** Função assíncrona em Swift guarda as variáveis locais num contexto alocado no heap, que é liberado sem zerar.
 - **HMAC e PBKDF2 pelo CommonCrypto** (`CCHmac` com `kCCHmacAlgSHA512`, `CCKeyDerivationPBKDF` com `kCCPRFHmacAlgSHA512`), escrevendo direto em `SecureBytes`. O `HashedAuthenticationCode` do CryptoKit não é zerável.
 - **libsecp256k1**:
-  - Contexto criado com `SECP256K1_CONTEXT_NONE` e `secp256k1_context_randomize` com 32 bytes do CSPRNG, re-randomizado depois de cada lote.
+  - Cada assinatura usa um contexto só dela, criado com `SECP256K1_CONTEXT_NONE`, aleatorizado com 32 bytes do CSPRNG e destruído no fim, e o nonce do RFC 6979 leva 32 bytes do CSPRNG como `ndata` (auditoria das chaves de 06/11/2026). Na Cardano, r = SHA-512(Z ‖ kR ‖ m), com Z de 32 bytes do CSPRNG. Duas assinaturas do mesmo digesto nunca usam o mesmo nonce, uma falha induzida numa delas não se combina com outra, e quem mede o consumo do aparelho nunca vê a mesma conta duas vezes; o HMAC estragado continua sendo do `SigningSelfTest`. No Android, o Ed25519 de Solana, Stellar, TON, Sui, NEAR, Aptos e Polkadot é o da BoringSSL, determinístico (no iPhone, o do CryptoKit, que sorteia). Os vetores fixos (`SigningSelfTest` e os testes) assinam sem eles.
   - EVM e Tron assinam com `secp256k1_ecdsa_sign_recoverable`; BTC e XRPL com `secp256k1_ecdsa_sign` mais DER. O S baixo é garantido pela biblioteca.
   - Toda assinatura passa por `secp256k1_ecdsa_verify` antes de sair. Uma assinatura defeituosa com nonce determinístico entrega a chave.
 - Ed25519 (Solana, Stellar) pelo `Curve25519.Signing` do CryptoKit, também verificado.
@@ -407,17 +413,25 @@ Regras:
 
 ---
 
-### 2.11 Carteira com passphrase: pedir a passphrase (16/10/2026)
+### 2.11 Carteira com passphrase: a passphrase nunca fica salva (16/10/2026, refeita em 05/11/2026)
 
-"Pedir a passphrase para enviar" vem ligado em toda carteira com passphrase (`WalletMeta.passphraseToSend`, nil vale ligado). Contra quem tem o PIN, ou o PIN e o rosto do dono, a passphrase é o fator que falta.
+A passphrase não fica em lugar nenhum do app (pedido do dono, 05/11/2026): nem no cofre, nem nos metadados, nem em arquivo, nem num envelope lacrado desde então (o lacrado antes a leva junto, num arquivo que o dono guardou fora do app). O cofre da carteira com passphrase guarda só a entropia e o idioma, como o de qualquer carteira (o lugar dela no registro vai zerado, e o registro continua do mesmo tamanho). Ela entra digitada só para a operação, num `SecureBytes`, e sai zerada logo depois. Contra quem tem o PIN, ou o PIN e o rosto do dono, a passphrase é o fator que falta; contra quem extrai os dados do aparelho, ela não está lá na carteira criada desde 05/11/2026 (a de antes, ver "Versões anteriores").
 
-- **Mover saldo.** Envio, troca e ponte pedem a passphrase antes do Face ID ou do PIN (`PassphraseGate`). Cancelar uma ordem não move saldo e não pede. A digitada vai para `Signer.sign(passphrase:)`, que a compara com a do cofre, as duas em NFKD e em tempo constante, antes de nascer qualquer chave: errada, nada é assinado. O parâmetro não tem valor padrão: cada chamador diz se pede.
-- **Folga depois de acertar** (pedido do dono, 17/10/2026). Na folha de mover saldo, "Não pedir de novo por um tempo": 5, 10, 15 ou 20 minutos, 5 ao ligar, desligado a cada folha. Começa só depois de o assinador conferir a passphrase daquela carteira (`PassphraseGate.confirmGrace`), vale só para mover saldo naquela carteira, fica só na memória, no relógio monótono, e acaba ao travar o app (`AppSession.lock`). O Face ID ou o PIN continuam a cada assinatura. Ver a senha, criptografar e desligar o pedido sempre pedem a passphrase.
-- **Ver a senha e criptografar.** Mostram a passphrase só depois de ela ser digitada e conferida dentro do mesmo fechamento do cofre. Sem isso, quem tem o PIN e o rosto lia ou exportava a passphrase.
-- **Desligar.** Pede a passphrase e o PIN (nunca só o rosto), conferidos no cofre. Ligar é livre.
-- **Chute.** Cada carteira tem a sua conta de passphrases erradas, para as portas que conferem uma (mover saldo, ver, criptografar, desligar, conferir a cópia). A tentativa é gravada antes da conferência; acertar zera só a conta daquela carteira; cancelar o PIN antes de o cofre abrir devolve a tentativa. Depois de 5 erros, espera de 1 minuto que dobra a cada erro, até 24 horas, no relógio monótono, como a da voz.
+- **Conferir sem guardar.** A digitada, em NFKD, dá a seed com a entropia do cofre, e a raiz secp256k1 tem de dar o fingerprint BIP-32 que a criação gravou nos metadados (4 bytes do hash da chave pública; `PassphraseProof`). Quem tem o PIN e as palavras já podia testar passphrases fora do aparelho pelos endereços públicos; o fingerprint não abre nada a mais. Errada, nada é assinado, e a chave de cada pedido ainda tem de bater com a `expectedPublicKey`.
+- **Assinar.** Toda assinatura da carteira com passphrase pede a passphrase antes do Face ID ou do PIN: envio, troca, ponte e também cancelar uma ordem, que assina e sem ela não tem como (`PassphraseGate.sign` no iPhone, `PortaDaPassphrase.assinar` no Android). O "Pedir a passphrase para enviar" de antes saiu: não há o que desligar. `Signer.sign(passphrase:fingerprint:)` não tem valor padrão nos parâmetros; com o fingerprint, a raiz confere antes de qualquer chave de pedido também sem passphrase. A digitada sai zerada logo depois de assinar, antes de transmitir. No Android, a folha entrega a passphrase ao núcleo antes do PIN (`passphrase.entregar`), num `SecureBytes` dele, e o Kotlin zera a dele na volta da chamada: assinar e transmitir estão na mesma chamada, e a cópia do Kotlin vivia até o fim da transmissão. A do núcleo sai ao assinar, ao errar, ao fechar o pedido, ao travar e ao sair do app.
+- **Sair do app com a folha aberta.** A folha da passphrase e a do PIN fecham ao ir para o segundo plano, com o que estava digitado zerado (o buffer, a cifra viva e os dígitos são do pedido, e não da tela), e a operação que esperava por elas para: suspenso, o app não recebe o aviso de o aparelho bloquear. Um contador de fechamentos (`cancelEpoch` no iPhone, `epoca` no Android, nas duas folhas e no laço do PIN) impede que o rosto cancelado pela saída caia para o PIN com o app no fundo, e que uma passphrase digitada antes da saída siga para o PIN. Os campos de conferir e de usar e descartar (as folhas, conferir a cópia, as palavras e passphrases digitadas do Super Security, a senha de abrir o envelope) também zeram ao sair do app e ao travar; com a conta em curso noutra thread, zeram quando ela termina. No Super Security, fechar a tela, cancelar ou errar o PIN e trocar a política também zeram as palavras e passphrases digitadas, e a conferência as tira da tela (no Android, da lista do núcleo) antes de o cofre começar, sem cópia, e as zera quando ele termina, deu certo ou não: tentar de novo pede as palavras de novo, nos dois apps. Os dígitos que estão sendo digitados em toda tela de PIN também zeram. Limite: o PIN que a troca de PIN e a escolha do PIN na abertura guardam entre um passo e outro fica até a tela fechar (voltar ao primeiro passo trocava o tamanho do PIN e gastava tentativa), e o PIN não move o saldo de uma carteira com passphrase. O envelope aberto esquece o conteúdo (palavras e a passphrase de um envelope de antes) e volta à senha, com o arquivo cifrado, que não tem segredo; o Argon2 que termina depois disso, ao abrir ou lacrar, não deixa nada. O lacre em curso não leva a passphrase e fica. Os de criar e importar ficam: a própria prévia manda comparar os endereços noutro app, e um campo zerado ali gravaria outra carteira. Por isso, no Android, o núcleo recusa uma passphrase que chega vazia em toda ação que recebe uma (`passphrase.vazia`), e a importação só grava a carteira da digital que o dono conferiu na prévia (`importacao.mudou`).
+- **Assinar antes de derivar.** Na abertura do cofre da assinatura, o assinador vem primeiro (o plano vencido recusa antes de a passphrase ser usada) e as redes que faltam só depois, com uma cópia da RK: ao contrário, a passphrase era testada antes do vencimento, e o plano vencido devolvia a tentativa.
+- **Envelope de antes de 05/11/2026.** Ele leva a passphrase, que não aparece na tela (01/11/2026): importá-lo pede a passphrase digitada de onde o dono a anotou, comparada com a do envelope (NFKD, tempo constante). Confere, a carteira entra com a cópia da passphrase conferida; não confere ou o dono não sabe, nada é importado, e a tela diz por quê. O envelope antigo continua sendo uma cópia da passphrase, cifrada pela senha dele e legível pelo formato documentado (`tools/referencia/decifrar.py`, num computador fora da rede). O de uma carteira cuja passphrase com acento uma versão anterior gravou fora de NFKD entra com a conta da Cardano dos bytes como estão, a da carteira de origem, e com a marca `legacyCardanoPassphrase` (`WalletSecret.fromEnvelope`).
+- **Cardano da carteira antiga.** Sem a cópia no cofre, a conta da Cardano de uma carteira com `legacyCardanoPassphrase` só assina com a passphrase digitada byte a byte como na criação (mesmo teclado, mesma forma dos acentos e da largura); com outra forma, a raiz confere e a tela diz isso, em vez de um erro genérico.
+- **Carteira que esta versão não confere** (`passphraseUnverified`). Assinar, ver as palavras, lacrar o envelope e conferir a cópia recusam com o texto próprio, sem pedir a passphrase nem contar erro.
+- **Folga depois de acertar** (pedido do dono, 17/10/2026, mantida em 05/11/2026). Na folha de assinar, "Não pedir de novo por um tempo": 5, 10, 15 ou 20 minutos, 5 ao ligar, desligado a cada folha. Começa só depois de o assinador conferir, e guarda uma cópia da passphrase só na memória, num `SecureBytes` (fora do core dump; no Android, presa na RAM), só daquela carteira e só para assinar nela. A cópia sai zerada no fim do prazo (um relógio a zera mesmo sem uso; quem decide é o monótono, a cada uso), ao sair do app, ao travar, ao remover a carteira e ao apagar tudo. Desligar ou reiniciar o aparelho apaga a RAM inteira, e nada dela vai para o disco. O Face ID ou o PIN continuam a cada assinatura.
+- **Ver as palavras e criptografar.** Mostram e lacram só as palavras, nunca a passphrase: o envelope de uma carteira com passphrase leva só as palavras, e a tela diz para guardar a passphrase à parte. As palavras só saem depois de a passphrase digitada conferir: sem a carteira de base no aparelho, quem tem o PIN e o rosto levaria as palavras daqui e testaria passphrases fora dele.
+- **Redes novas.** Uma rede que entra numa versão nova não nasce no destravar da carteira com passphrase (o cofre não a tem): nasce na próxima assinatura, na mesma abertura do cofre, com a passphrase que acabou de conferir.
+- **Versões anteriores.** A passphrase que uma versão anterior gravou sai do cofre no primeiro destravar depois de atualizar, sempre (nada no app a lê mais: `open` nem a copia). Antes de ela sair, os fatos que precisam ficar viram marcas nos metadados, gravadas primeiro: fora de NFKD (`legacyCardanoPassphrase`, ver abaixo) e, quando ela, em NFKD como a digitada vai entrar, não dá a raiz da criação, `passphraseUnverified`, com que a folha de assinar diz que esta versão não confere a passphrase e que as palavras com ela abrem a carteira em outra carteira BIP-39, sem contar erro. Sem as marcas gravadas, ela espera o próximo destravar. O registro novo, com salts e DEK novos, é aberto em memória antes de valer e lido de volta depois; se não bate, o de antes volta. No iPhone, os registros do cofre sem carteira na lista (um gravar que parou no meio, numa versão anterior) perdem a passphrase também, sem perder a entropia; o cofre do Android guarda os registros por um resumo do nome, e não dá para listá-los. O registro aberto já não a devolve a ninguém. A que estava fora de NFKD (com acento composto) deixa só a marca `legacyCardanoPassphrase`, gravada antes de ela sair, porque a conta da Cardano dela saiu dos bytes digitados e muda se a carteira for restaurada pelas palavras: o Super Security continua recusando essa carteira, e o assinador ainda move o saldo da Cardano dela com a mestra dos bytes digitados. Limite: a purga troca o registro, mas não a RK. Quem tem o PIN, o aparelho e uma extração forense do sistema de arquivos pode achar a versão antiga do registro (no iPhone, páginas livres e o WAL do SQLite do chaveiro; no Android, blocos do arquivo antigo, com um custo bem maior pela criptografia por arquivo) e abri-la com a mesma RK: a passphrase gravada antes de 05/11/2026 não está apagada de forma garantida. Fechar isso pede trocar a RK.
+- **NFKD sem a passphrase inteira numa `String`.** Fora do ASCII, cada letra é decomposta sozinha pelo Foundation, e a ordem canônica é refeita com a classe de cada marca do Swift. Uma vez por processo, só com texto de teste, o app confere que as duas tabelas concordam em cada marca (`BIP39.letterByLetterAgrees`): onde não concordam (um Foundation com Unicode mais antigo que o do Swift), ou com um escalar que a tabela do Swift ainda não conhece (o caso de um Foundation mais novo), vale o NFKD do Foundation trecho por trecho entre os bytes ASCII (classe 0, que nenhuma marca atravessa), que dá o mesmo do NFKD de antes, e a seed é a de antes. Sobram no heap letras soltas, sem a ordem, ou, no caminho de reserva, os trechos de letras com acento seguidas.
+- **Chute.** Cada carteira tem a sua conta de passphrases erradas, para as portas que conferem uma (assinar, ver, criptografar, conferir a cópia, inclusive logo depois das palavras). A tentativa é gravada antes da conferência; acertar zera só a conta daquela carteira; cancelar o PIN antes de o cofre abrir devolve a tentativa. Depois de 5 erros, espera de 1 minuto que dobra a cada erro, até 24 horas, no relógio monótono, como a da voz.
 - **Abrir ou criar com passphrase.** Cada criação conta, numa conta por frase: a base é sempre a carteira sem passphrase (o app não oferece a porta numa carteira com passphrase, e o núcleo recusa), então criar uma carteira nova e usá-la como base não zera mais a conta (revisão de segurança de 26/10/2026). São 10 tentativas livres antes da primeira espera (27/10/2026), e daí depende do aparelho. Sem carteira com passphrase neste aparelho, é por esta porta que o dono que esqueceu a passphrase tenta lembrar: a espera começa em 1 minuto, dobra até 15 minutos, e um dia inteiro sem tentar zera a conta, medido no relógio monótono do mesmo boot (adiantar a hora não zera; depois de reiniciar, o dia recomeça na próxima tentativa). Com uma carteira com passphrase neste aparelho, a porta diria "esta carteira já está aberta" para o chute certo, e seria o jeito fácil de descobrir a passphrase dela e depois enviar: a espera cresce até 24 horas e não zera sozinha, como a de enviar. Aberta uma carteira nova neste aparelho, o app procura movimento nela, rede por rede, com os mesmos leitores da Atividade e, na EVM, o nonce e o saldo de dois provedores. Sem movimento nenhum, a tela diz que a carteira ainda não foi usada nas redes que a Escalibur lê e pergunta se a passphrase está certa; tentar outra tira a carteira vazia sem pedir o PIN de novo, só para uma carteira aberta por este processo na última hora e nunca a última do aparelho.
-- **Limite.** Quem tem o PIN e o rosto ainda vê as palavras da carteira de sempre, e com elas pode tentar a passphrase fora do aparelho, em PBKDF2-SHA512 de 2048 rodadas: uma passphrase curta cai, uma de 5 palavras sorteadas não. A tela de criar diz para anotar longe das palavras; um medidor de força da passphrase é o próximo passo.
+- **Limite.** Quem tem o PIN e o rosto ainda vê as palavras da carteira de sempre, e com elas pode tentar a passphrase fora do aparelho, em PBKDF2-SHA512 de 2048 rodadas: uma passphrase curta cai, e mesmo uma de 5 palavras sorteadas da lista BIP-39 (55 bits) cai em meses para quem aluga mil GPUs; 6 palavras (66 bits) ou 5 da lista de 7.776 já não. A tela de criar diz para anotar longe das palavras; um medidor de força da passphrase é o próximo passo.
 
 ### 2.12 Carteira com as palavras escolhidas pelo dono (17/10/2026)
 
@@ -508,6 +522,7 @@ Intenção do usuário: I = {chain, sellToken, buyToken, amountIn, slippage, des
    - `minOut ≥ cotação × (1 − slippage)` e maior que zero. `deadline ≤ agora + 20 min`. Taxa de integrador e destinatário da taxa iguais aos compilados (zero, ou a nossa).
 6. **O ranking entre agregadores usa o `minOut` decodificado**, que é garantido na cadeia, e não o `expectedOut` cotado. Inflar o `expectedOut` é justamente como um provedor malicioso venceria a disputa.
 7. Checagem de sanidade contra oráculo: pior que o preço médio da CoinGecko em mais de 2%, avisa; em mais de 5%, bloqueia (desbloquear exige PIN). Oráculo e cotação chegam pelo mesmo relay, então isso é sanidade, não garantia.
+   - Sem preço de referência, o mínimo ancora em duas fontes de cotação (a maior estimativa entre elas). Com uma fonte só, a troca não é mais bloqueada (decisão do dono, 05/11/2026: a pessoa vê exatamente o mínimo que vai receber e decide): a cotação vem marcada sem comparação (`TradeQuote.unanchored`), a tela diz que um preço manipulado passaria sem aviso e só revisa com a caixa de aceite marcada, o motor recusa o plano sem esse aceite (também em partes), a recotação tem de garantir o mínimo que a tela mostrou (mesmo que a referência volte; senão, "O mínimo garantido caiu desde o seu aceite"), e a revisão repete o aviso. A carteira não recusa por preço nesse caso: nem pelo último preço conhecido, nem pela cotação da CoW, nem por token sem preço no CoinGecko. O aceite vale para a carteira, o par, a execução (de uma vez ou em partes) e o mínimo desenhados, pagando o mesmo ou menos; pedido novo, troca concluída ou mínimo menor pede de novo: o aceite que cai sai de vez (não volta sozinho se o mínimo subir de novo), e a tela diz que a cotação mudou. A rota só oferece como alternativa as cotações que ficaram na rodada. Na Solana (a Jupiter é a única fonte) a recusa sem referência continua.
 8. Gás:
    - `maxFeePerGas ≤ 2 × baseFee + prioridade`, com baseFee e prioridade pela mediana de 2 provedores e teto por chain.
    - `gasLimit ≤ estimativa × 1,3` (na v1, a menor de 2 estimativas × 1,2), também com teto.
@@ -819,7 +834,7 @@ Palavras, entropia, chaves privadas, xpub, PIN, senhas, AP, RK, DEK, endereços,
 
 - **Tipo de arquivo**:
   - O Escalibur declara `UTExportedTypeDeclarations` para `app.escalibur.envelope` (extensão `esclbr`, conforme `public.data`). Hoje não declara.
-  - A carteira declara `UTImportedTypeDeclarations`, `CFBundleDocumentTypes` com `LSHandlerRank = Alternate` e `UIFileSharingEnabled = NO`.
+  - A carteira declara `UTExportedTypeDeclarations`, `CFBundleDocumentTypes` com `LSHandlerRank = Owner` e `UIFileSharingEnabled = NO`.
 - **Entrada**:
   - `fileImporter` com escopo de segurança e `onOpenURL`.
   - AirDrop e "Abrir com" deixam uma **cópia em `Documents/Inbox`**, que entra no backup do iCloud. Apague a cópia logo depois de ler e varra `Documents/Inbox` e `tmp/` a cada lançamento. O original do dono no app Arquivos não é tocado, e a tela diz isso.
@@ -828,7 +843,7 @@ Palavras, entropia, chaves privadas, xpub, PIN, senhas, AP, RK, DEK, endereços,
   - A leitura é `FileHandle.read(upToCount: 16_505)`, nunca `Data(contentsOf:)`.
 - **Cabeçalho**: as checagens que já existem, mais:
   - `binding == 0`; um envelope vinculado ao SE é recusado com mensagem própria.
-  - `memoryKiB ≤ os_proc_available_memory() − 300 MiB` medido **na hora de abrir**.
+  - `memoryKiB ≤ memória disponível − 300 MiB`, medido **na hora de abrir**: no iPhone, `os_proc_available_memory()`; no Android, o `MemAvailable` do `/proc/meminfo`, nunca mais que metade da RAM (auditoria do envelope de 06/11/2026).
   - Tempo estimado (m × t pela taxa calibrada) de até 10 s; acima disso, confirmação explícita.
   - Argon2 fora do MainActor.
 - **Conteúdo** (depois de a tag fechar):
@@ -839,23 +854,25 @@ Palavras, entropia, chaves privadas, xpub, PIN, senhas, AP, RK, DEK, endereços,
   - Nome e notas são texto não confiável: sem controles bidi (U+202A–202E, U+2066–2069) e sem largura zero, com tamanho limitado, e exibidos só com `Text(verbatim:)`. `Text` com interpolação vira `LocalizedStringKey` e interpreta Markdown.
 - **Erro**: uma mensagem única para qualquer falha AEAD, "Não foi possível abrir com essa senha". As quatro tentativas de compartimento, sempre na mesma ordem, continuam como estão.
 - **Senha do envelope**:
-  - Vive só em `SecureBytes`, pelo `GhostTextField`/`CipherField` do Escalibur, com `textContentType = nil`.
+  - Vive em `SecureBytes`, pelo `GhostTextField`/`CipherField` do Escalibur, com `textContentType = nil`. Exceção conhecida: com uma letra fora do ASCII, a senha inteira passa por `String` para o NFKC (`KeyDerivation.normalized`), a cada medida (no iPhone, também a cada redesenho da linha de força da tela de lacrar).
   - Zerada assim que `open` retorna, com sucesso ou não. Não entra em cache para "tentar de novo".
 - **Seed revelada**:
   - O padrão é **não mostrar**. A importação vai direto para o armazenamento, e a tela mostra a identidade para conferência: fingerprint BIP-32 e o primeiro endereço BTC e EVM.
-  - "Ver palavras" exige PIN e, com o Face ID ligado, o rosto (A1), e segue a sessão de revelação do Escalibur: 3 palavras por vez, ou as 12 (ou 24) numa chapa só em "Ver todas de uma vez" (pedido do dono, 15/10/2026). As mesmas palavras por 60 s seguidos escondem sozinhas e voltam com um toque (N2); escondem também ao sair do primeiro plano. Proteção de captura e sem seleção. Antes, três "estou ciente"; o do Espelhamento do iPhone no Mac saiu a pedido do dono, e o aviso dele fica na checagem do aparelho (C7-06). Do toque em "Ver as palavras" até elas abrirem, a lista sai da tela. Copiar, só pelo aviso descrito em "Área de transferência".
-  - A passphrase aparece com o espaço visível (␣) e a contagem de caracteres: um espaço a mais já abre outra carteira.
+  - "Ver palavras" do envelope aberto não pede PIN de novo (quem tem o arquivo e a senha já tem as palavras fora do app), e segue a sessão de revelação do Escalibur: 3 palavras por vez, ou as 12 (ou 24) numa chapa só em "Ver todas de uma vez" (pedido do dono, 15/10/2026). As mesmas palavras por 60 s seguidos escondem sozinhas e voltam com um toque (N2); escondem também ao sair do primeiro plano. Proteção de captura e sem seleção. Antes, três "estou ciente"; o do Espelhamento do iPhone no Mac saiu a pedido do dono, e o aviso dele fica na checagem do aparelho (C7-06). Do toque em "Ver as palavras" até elas abrirem, a lista sai da tela. Copiar, só pelo aviso descrito em "Área de transferência".
+  - A passphrase nunca aparece (pedido do dono, 01/11/2026), nem a do envelope, e desde 05/11/2026 nem fica no app.
 - **Importar** (frase ou envelope): a conferência antes de guardar mostra endereços e impressão digital, e só guarda com o aceite de que quem deu as palavras (ou o envelope e a senha) controla a carteira. Na Tron, as permissões da conta são lidas na rede (`TronReader.ownerControl`): outra chave no controle vira aviso vermelho, o golpe da "frase com saldo". A carteira de um envelope não passa a ser a carteira em uso sozinha, e nome repetido ganha "(envelope)" (auditoria 4, C7-05).
 - **Exportar**:
   - Exige PIN e, com o Face ID ligado, o rosto (A1).
   - Senha padrão **gerada**: 6 palavras BIP-39 do CSPRNG, 66 bits. Com os parâmetros de referência, isso custa cerca de 97 mil anos a um Estado e 9,7 milhões a crime organizado. Com 5 palavras seriam 48 anos contra um Estado.
   - Senha escolhida pelo dono, livre, com no mínimo 4 caracteres (pedido do dono, 14/10/2026). Enquanto ele digita, a tela diz em quanto tempo a senha cai com os parâmetros reais do envelope: muito fraca (crime organizado em menos de 1 dia), fraca (até 10 anos), boa contra ladrão comum (um Estado em menos de 1.000 anos) e forte.
-  - O medidor é o modelo do zxcvbn (`PasswordStrength`): palavras e senhas comuns pela posição nas listas de frequência do zxcvbn-ts (MIT, travadas em `forca.lock`), palavras BIP-39 de todos os idiomas com no máximo 11 bits, repetição, sequência, ano, data e linha de teclado quase de graça, e força bruta só no resto. O medidor anterior dava "forte" a "abandon" seis vezes e a doze pontos de exclamação (auditoria do envelope, 14/10/2026).
+  - O medidor é o modelo do zxcvbn (`PasswordStrength`): palavras e senhas comuns pela posição nas listas de frequência do zxcvbn-ts (MIT, travadas em `forca.lock`), palavras BIP-39 de todos os idiomas com no máximo 11 bits, repetição, sequência, ano, data e linha de teclado quase de graça, e força bruta só no resto. O medidor anterior dava "forte" a "abandon" seis vezes e a doze pontos de exclamação (auditoria do envelope, 14/10/2026). Desde 06/11/2026 (auditoria do envelope) o medidor também: mede a forma digitada, a NFKC (a que vai ao Argon2) e a NFKC com os dígitos de outras escritas (árabe, persa, devanágari) em ASCII, e fica com a menor; cobra no máximo log2(10^5) mais as maiúsculas por um trecho só de letras de 4 a 64 bytes, a palavra de uma língua que as listas não têm (quem ataca escolhe a lista da língua do dono: três palavras pedem o "sim", quatro passam), com 1 bit por letra trocada por dígito ou símbolo (até uma troca a cada cinco letras) ou 1 bit por tipo de troca quando ela vale para a palavra inteira ("K4rt0ff3l"); procura a palavra de trás para frente, por caractere; reconhece as caminhadas do teclado do computador (com e sem Shift) e da página de símbolos do celular, nos dois sentidos; e não cobra a repetição do separador da máscara (um símbolo, um dígito entre letras, ou de 2 a 4 caracteres entre letras, espaço incluído: o primeiro custa, os seguintes não); a frase da carteira é comparada na forma NFKD dela, palavra inteira com acento ou de outro alfabeto. O erro é para o lado do "sim": senha aleatória alfanumérica também é subestimada, e o caminho seguro continua sendo a sugestão de 6 palavras. Forte, na tela dos dois apps, só com 60 bits ou mais.
   - Abaixo de forte, o lacre só sai com o "sim" explícito (`Envelope.seal(acceptedRisk:)`, que só a folha de confirmação entrega). Nas faixas muito fraca e fraca, "usar mesmo assim" exige segurar o botão por 2 s. Senha só de dígitos ganha o aviso de não usar o código do iPhone nem o PIN. A senha sorteada pelo app vale a entropia exata do sorteio (66 bits) e vai das posições direto para o buffer seguro.
   - Continua recusada a senha com duas ou mais palavras da própria frase: o papel da frase abriria o envelope, e isso anula o backup.
   - Subir o Argon2 não compensa senha fraca: dobrar m × t compra 1 bit. A calibração mede na prioridade do lacre, com sonda de 128 MiB rodada duas vezes, e o piso do lacre é t = 3 (a abertura aceita t = 2 dos envelopes antigos).
   - KDF por `KDFCalibration.calibrate()`, com piso de 256 MiB. `cloudEnabled = false`, `passwordOnly`.
-  - O arquivo vai para `tmp/` com `.completeFileProtection` e exclusão de backup, e é apagado quando o compartilhamento termina.
+  - O arquivo vai para `tmp/` com `.completeFileProtection` e exclusão de backup (no Android, o cache do app, por um FileProvider só de leitura), e é apagado ao fechar a tela e na varredura de cada abertura do app.
+  - Na carteira com passphrase, o envelope leva só as palavras, e o nome dela não vai como sugestão: a tela avisa que as palavras abrem a carteira de base (auditoria do envelope de 06/11/2026).
+  - O `m` do Argon2 vai em claro no cabeçalho, em degraus de 256, 384 e 512 MiB: um valor quebrado contava a RAM do aparelho.
   - **Condição posterior obrigatória**: reabrir o envelope gerado com a mesma senha antes de entregá-lo, como o `plantDecoy` já faz.
 - **Compatibilidade byte a byte**:
   - Fixtures nos dois sentidos: um `.esclbr` gerado pelo Escalibur e aberto pela carteira, e um exportado pela carteira e aberto pelo `decifrar.py` no CI.
@@ -1070,7 +1087,7 @@ Pedido do dono (18/10/2026): que ninguém consiga pôr código malicioso na cart
 - Aviso de jailbreak.
 - Camada segura contra captura nas telas de segredo (§7).
 - Build duplo no CI com atestação.
-- `ndata` do CSPRNG na assinatura.
+- `ndata` do CSPRNG na assinatura (feito em 06/11/2026, §2.9; no Android, o Ed25519 ainda não).
 - Registro de ordens com cancelamento real na cadeia.
 - Logos embutidos, só PNG.
 - Consulta por endereço, nunca por xpub.
@@ -1095,7 +1112,7 @@ Pedido do dono (18/10/2026): que ninguém consiga pôr código malicioso na cart
 1. **Exploit com execução de código no aparelho desbloqueado quebra o PIN de 6 dígitos em horas (6 a 11 no pior caso), e o de 4 dígitos em minutos (4 a 6 no pior caso).**
    - Aceito porque exige cadeia de exploit para o iOS atual e posse do aparelho desbloqueado.
    - Deixa de ser aceitável: com jailbreak público para a versão corrente do iOS, ou saldo acima do que o dono aceita perder. Nesses casos, modo reforçado ou senha longa passam a ser o padrão, e acima disso, carteira de hardware.
-2. **Malware dentro do processo durante uma assinatura vê a seed, ou adultera a tela.**
+2. **Malware dentro do processo vê a chave raiz em qualquer abertura do app (e, com ela, todas as carteiras), ou adultera a tela.**
    - Nenhuma carteira de software se defende disso.
    - Deixa de ser aceitável: quando o valor justifica carteira de hardware, e o suporte a ela é o conserto.
 3. **Relay e provedores veem endereços, e o relay vê o IP.**
@@ -1113,7 +1130,7 @@ Pedido do dono (18/10/2026): que ninguém consiga pôr código malicioso na cart
 8. **Carteiras somem se o dono tirar o código do iPhone, e não migram para um iPhone novo.**
    - É escolha deliberada: disponibilidade vem do backup do dono, não da nuvem.
    - Deixa de ser aceitável: se o onboarding não garantir o backup conferido.
-9. **Coerção**: o código é aberto, e o agressor sabe que a isca existe. A defesa real é o saldo quente pequeno.
+9. **Coerção**: não há isca nem modo viagem, e a carteira com passphrase aparece na lista. A defesa real é o saldo quente pequeno.
 
 Arquivos citados:
 - `escalibur/Escalibur/Vault/AppLock.swift` (A1–A3)

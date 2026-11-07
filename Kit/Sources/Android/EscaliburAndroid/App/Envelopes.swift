@@ -30,6 +30,14 @@ enum Envelopes {
 
     nonisolated(unsafe) private static var dados: Data?
     nonisolated(unsafe) private static var aberto: Envelope.Contents?
+    /// A passphrase do envelope aberto foi digitada e conferiu (`conferirPassphrase`).
+    nonisolated(unsafe) private static var passphraseConferida = false
+    /// A digital da previa que o dono conferiu: so ela e gravada (revisao de blockchain de 05/11/2026).
+    nonisolated(unsafe) private static var digitalDaPrevia: String?
+    /// Soma um a cada esquecer e fechar a abertura: o Argon2 de abrir (e a previa) que termina depois disso nao deixa nada.
+    nonisolated(unsafe) private static var rodadaDaAbertura = 0
+    /// Soma um a cada encerrar o lacre (travar, fechar a tela): o lacre em curso ao sair do app fica, como no iPhone.
+    nonisolated(unsafe) private static var rodadaDoLacre = 0
 
     /// O custo deste aparelho: o piso de lacre ate a medida chegar.
     private static var kdf: KDFParameters {
@@ -45,9 +53,11 @@ enum Envelopes {
         return Calibracao(segundos: KDFCalibration.estimatedSeconds(for: medido), podeLacrar: KDFCalibration.canSeal())
     }
 
-    /// Abre as palavras da carteira para o lacre. O envelope leva a passphrase junto: na carteira
-    /// que pede a passphrase, ela so sai depois de digitada e conferida no cofre. Sem isso, quem
-    /// tem o PIN e o rosto exportava as duas.
+    /// Abre as palavras da carteira para o lacre. O envelope leva so as palavras: a passphrase nunca
+    /// fica salva, nem no app nem num arquivo que sai dele (pedido do dono, 05/11/2026). Na carteira
+    /// com passphrase, as palavras so saem depois de a passphrase digitada conferir pelo fingerprint
+    /// da raiz: sem a carteira de base neste celular, quem tem o PIN e o rosto exportava as palavras
+    /// e testava passphrases fora do aparelho.
     static func abrirCarteira(_ id: UUID, credencial: Credencial, passphraseDigitada: SecureBytes?) throws -> String {
         defer { passphraseDigitada?.wipe() }
         encerrar()
@@ -55,7 +65,13 @@ enum Envelopes {
             credencial.zerar()
             throw Sessao.Falha.carteiraNaoEncontrada
         }
-        let conferir = PortaDaPassphrase.pede(wallet) ? passphraseDigitada : nil
+        if PortaDaPassphrase.semConferencia(wallet) {
+            credencial.zerar()
+            throw PortaDaPassphrase.SemConferencia()
+        }
+        // A digitada vem na chamada, ou entregue pela folha antes do PIN (o Kotlin zera a dele na hora).
+        let conferir = PortaDaPassphrase.pede(wallet) ? (passphraseDigitada ?? PortaDaPassphrase.copiaEntregue()) : nil
+        defer { conferir?.wipe() }
         if PortaDaPassphrase.pede(wallet), conferir == nil {
             credencial.zerar()
             throw Nucleo.Falha(erro: "envio.pedePassphrase")
@@ -63,28 +79,31 @@ enum Envelopes {
         if conferir != nil {
             do { try PortaDaPassphrase.comecar(wallet.id) } catch { credencial.zerar(); throw error }
         }
-        let aberta: (SecureBytes, SecureBytes)
+        let aberta: SecureBytes
         do {
             aberta = try Sessao.shared.comChaveRaiz(credencial) { rk in
                 let segredo = try Chaves.wallets.open(walletID: id, rk: rk)
                 defer { segredo.wipe() }
-                if let conferir, !PortaDaPassphrase.confere(segredo.passphrase, conferir) { throw Signer.Failure.passphraseMismatch }
-                let palavras = try segredo.phrase()
-                let copia = SecureBytes(capacity: max(segredo.passphrase.count, 1))
-                segredo.passphrase.withUnsafeBytes { copia.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
-                return (palavras, copia)
+                if let conferir, try PortaDaPassphrase.confere(segredo, conferir, wallet) == .mismatch { throw Signer.Failure.passphraseMismatch }
+                return try segredo.phrase()
             }
         } catch {
             if conferir != nil {
-                if (error as? Signer.Failure) == .passphraseMismatch { PortaDaPassphrase.errou(wallet.id) } else { PortaDaPassphrase.devolver(wallet.id) }
+                if (error as? Signer.Failure) == .passphraseMismatch {
+                    PortaDaPassphrase.descartarEntregue()
+                    PortaDaPassphrase.errou(wallet.id)
+                } else {
+                    PortaDaPassphrase.devolver(wallet.id)
+                }
             }
             throw error
         }
+        PortaDaPassphrase.descartarEntregue()
         if conferir != nil { PortaDaPassphrase.passou(wallet.id) }
         trava.withLock {
             carteira = id
-            frase = aberta.0
-            passphrase = aberta.1
+            frase = aberta
+            passphrase = nil
         }
         // Travou enquanto o cofre abria: o travar() ja zerou o lacre, e o que acabou de chegar sai
         // tambem.
@@ -128,7 +147,8 @@ enum Envelopes {
             if crime < 86_400 { return .muitoFraca }
             if crime < 10 * ano { return .fraca }
             if segundosDeGoverno(bits: bits, kdf: kdf) < 1_000 * ano { return .media }
-            return .forte
+            // Forte so com o piso do nucleo (60 bits), como no iPhone (rodada 3 da auditoria do envelope).
+            return bits >= PasswordStrength.minimumBits ? .forte : .media
         }
     }
 
@@ -186,11 +206,14 @@ enum Envelopes {
     /// Ao vivo, enquanto o dono digita: em quanto tempo a senha cai, com o custo deste aparelho.
     static func medir(_ digitada: SecureBytes) -> Medida {
         defer { digitada.wipe() }
-        let soDigitos = digitada.count > 0 && digitada.withUnsafeBytes { $0.allSatisfy { (0x30...0x39).contains($0) } }
-        guard PasswordStrength.scalarCount(digitada) >= PasswordStrength.minimumLength else {
+        // Uma medida so, com uma normalizacao (rodada 3 da auditoria do envelope); o aviso de PIN vem dela, para digitos de
+        // qualquer escrita (rodadas 4 e 5).
+        let medida = PasswordStrength.measure(digitada)
+        let soDigitos = medida.digitsOnly
+        guard medida.scalars >= PasswordStrength.minimumLength else {
             return Medida(curta: true, faixa: nil, texto: nil, soDigitos: soDigitos)
         }
-        let bits = PasswordStrength.bits(digitada)
+        let bits = medida.bits
         let custo = kdf
         return Medida(curta: false, faixa: Faixa.de(bits: bits, kdf: custo), texto: textoDaFaixa(bits: bits, kdf: custo), soDigitos: soDigitos)
     }
@@ -213,13 +236,11 @@ enum Envelopes {
             digitada.wipe()
             return Conferencia(resultado: "usaFrase", titulo: nil, segurar: false, media: false)
         }
-        let bits: Double
-        switch PasswordStrength.verdict(digitada) {
-        case .tooShort:
+        let medida = PasswordStrength.measure(digitada)
+        let bits = medida.bits
+        if case .tooShort = medida.verdict {
             digitada.wipe()
             return Conferencia(resultado: "curta", titulo: nil, segurar: false, media: false)
-        case .strong: bits = PasswordStrength.bits(digitada)
-        case .digitsOnly(let medidos), .weak(let medidos): bits = medidos
         }
         trava.withLock {
             senha?.wipe()
@@ -229,11 +250,16 @@ enum Envelopes {
         }
         let custo = kdf
         let faixa = Faixa.de(bits: bits, kdf: custo)
-        guard faixa != .forte else { return Conferencia(resultado: "ok", titulo: nil, segurar: false, media: false) }
-        let titulo = faixa == .media
+        // Forte so com o piso do nucleo: com 512 MiB e mais passes, a faixa do tempo comeca abaixo de 60 bits, e o lacre
+        // falhava sem caminho para o "sim" (auditoria do envelope de 06/11/2026). Como no iPhone, os bits antes da faixa.
+        guard faixa != .forte || bits < PasswordStrength.minimumBits else {
+            return Conferencia(resultado: "ok", titulo: nil, segurar: false, media: false)
+        }
+        let media = faixa == .media || faixa == .forte
+        let titulo = media
             ? preencher(Textos.t("Um governo abriria em %@"), tempo(segundosDeGoverno(bits: bits, kdf: custo)))
             : preencher(Textos.t("Esta senha cai em %@"), tempo(segundos(bits: bits, kdf: custo)))
-        return Conferencia(resultado: "risco", titulo: titulo, segurar: faixa == .muitoFraca || faixa == .fraca, media: faixa == .media)
+        return Conferencia(resultado: "risco", titulo: titulo, segurar: faixa == .muitoFraca || faixa == .fraca, media: media)
     }
 
     static func aceitarRisco() { trava.withLock { aceitouRisco = true } }
@@ -260,11 +286,19 @@ enum Envelopes {
     static func lacrar(repeticao: SecureBytes, rotulo: String) throws -> Lacrado {
         defer { repeticao.wipe() }
         guard Sessao.shared.fase == .unlocked else { throw Sessao.Falha.travada }
-        let preparo = trava.withLock { () -> (SecureBytes, SecureBytes?, SecureBytes, UUID, Bool, Bool)? in
-            guard let frase, let senha, let carteira else { return nil }
-            return (frase, passphrase, senha, carteira, sorteada, aceitouRisco)
+        // Copias, tiradas sob a trava: travar no meio zera os do lacre, e nao os que o Argon2 esta usando (revisao de seguranca
+        // de 05/11/2026).
+        func copia(_ b: SecureBytes) -> SecureBytes {
+            let c = SecureBytes(capacity: max(b.count, 1))
+            b.withUnsafeBytes { c.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+            return c
         }
-        guard let (frase, passphrase, senha, id, eraSorteada, aceito) = preparo else { throw Nucleo.Falha(erro: "envelope.semCarteira") }
+        let preparo = trava.withLock { () -> (SecureBytes, SecureBytes?, SecureBytes, UUID, Bool, Bool, Int)? in
+            guard let frase, let senha, let carteira else { return nil }
+            return (copia(frase), passphrase.map(copia), copia(senha), carteira, sorteada, aceitouRisco, rodadaDoLacre)
+        }
+        guard let (frase, passphrase, senha, id, eraSorteada, aceito, rodada) = preparo else { throw Nucleo.Falha(erro: "envelope.semCarteira") }
+        defer { frase.wipe(); passphrase?.wipe(); senha.wipe() }
         guard Hash.constantTimeEqual(senha, repeticao) else { throw Nucleo.Falha(erro: "envelope.naoConferem") }
         let custo = kdf
         let fraca = !eraSorteada && Faixa.de(bits: PasswordStrength.bits(senha), kdf: custo) == .muitoFraca
@@ -272,6 +306,8 @@ enum Envelopes {
             phrase: frase, passphrase: passphrase?.count == 0 ? nil : passphrase, label: String(rotulo.prefix(64)), password: senha,
             parameters: custo, generatedBits: eraSorteada ? PasswordStrength.suggestionBits() : nil, acceptedRisk: aceito
         )
+        // Travou ou a tela fechou durante o Argon2: nada sai.
+        guard trava.withLock({ rodadaDoLacre == rodada }) else { throw Sessao.Falha.travada }
         encerrar()
         try? Sessao.shared.atualizar(id) { $0.envelopeSealedAt = .now }
         let sorteio = try SecureBytes.random(count: 2).withUnsafeBytes { Array($0) }
@@ -281,6 +317,7 @@ enum Envelopes {
     /// A tela fechou: tudo do lacre sai da memoria.
     static func encerrar() {
         trava.withLock {
+            rodadaDoLacre &+= 1
             frase?.wipe()
             passphrase?.wipe()
             senha?.wipe()
@@ -311,11 +348,20 @@ enum Envelopes {
 
     static func abrir(senha digitada: SecureBytes) throws -> Aberto {
         defer { digitada.wipe() }
-        guard let bytes = trava.withLock({ dados }) else { throw Envelope.Failure.notAnEnvelope }
+        guard let (bytes, rodada) = trava.withLock({ dados.map { ($0, rodadaDaAbertura) } }) else { throw Envelope.Failure.notAnEnvelope }
         let conteudo = try Envelope.open(bytes, password: digitada)
-        trava.withLock {
+        // Saiu do app ou travou durante o Argon2: o conteudo aberto nao fica (revisao de seguranca de 05/11/2026).
+        let valeu = trava.withLock { () -> Bool in
+            guard rodadaDaAbertura == rodada else { return false }
             aberto?.wipe()
             aberto = conteudo
+            passphraseConferida = false
+            digitalDaPrevia = nil
+            return true
+        }
+        guard valeu else {
+            conteudo.wipe()
+            throw Sessao.Falha.travada
         }
         let palavras = conteudo.phrase.withUnsafeBytes { raw in raw.filter { $0 == 0x20 }.count + 1 }
         return Aberto(rotulo: conteudo.label, palavras: palavras, idioma: conteudo.language.rawValue, comPassphrase: conteudo.passphrase.count > 0)
@@ -340,21 +386,65 @@ enum Envelopes {
 
     /// A previa da importacao: a digital e os enderecos, como na importacao pelas palavras.
     static func previa() throws -> Importacao.Previa {
+        let rodada = trava.withLock { rodadaDaAbertura }
         let (frase, passphrase, _, _) = try copias()
         defer {
             frase.wipe()
             passphrase?.wipe()
         }
-        return try Importacao.previa(frase, passphrase: passphrase)
+        let previa = try Importacao.previa(frase, passphrase: passphrase, doEnvelope: true)
+        // Saiu do app durante a previa: o conteudo aberto ja foi esquecido, e esta digital nao vale mais.
+        guard trava.withLock({ () -> Bool in
+            guard rodadaDaAbertura == rodada else { return false }
+            digitalDaPrevia = previa.digital
+            return true
+        }) else { throw Sessao.Falha.travada }
+        return previa
+    }
+
+    /// O envelope lacrado antes de 05/11/2026 leva a passphrase. Ela nao fica no app e nao aparece na tela
+    /// (01/11/2026): sem saber a passphrase, quem importa ficaria com uma carteira que nao envia. Entao ela
+    /// e digitada antes, de onde o dono a anotou, e comparada com a do envelope (as duas em NFKD, em tempo
+    /// constante); confere, a carteira entra com a copia da passphrase conferida.
+    static func conferirPassphrase(_ digitada: SecureBytes) throws {
+        defer { digitada.wipe() }
+        let (frase, passphrase, _, _) = try copias()
+        frase.wipe()
+        guard let passphrase else { return }
+        let a = BIP39.nfkd(passphrase), b = BIP39.nfkd(digitada)
+        passphrase.wipe()
+        defer { a.wipe(); b.wipe() }
+        guard Hash.constantTimeEqual(a, b) else { throw Signer.Failure.passphraseMismatch }
+        trava.withLock { passphraseConferida = true }
     }
 
     /// Guarda a carteira do envelope, com a copia ja conferida (o envelope e a copia).
     static func importar(tronComOutraChave: Bool, credencial: Credencial) throws -> WalletMeta {
         let partes: (frase: SecureBytes, passphrase: SecureBytes?, palavras: Int, rotulo: String)
         do { partes = try copias() } catch { credencial.zerar(); throw error }
+        let conferida = trava.withLock { passphraseConferida }
+        // So a carteira da digital que o dono conferiu na previa (a conferencia e na derivacao que vai ao cofre).
+        guard let esperada = trava.withLock({ digitalDaPrevia }) else {
+            partes.frase.wipe()
+            partes.passphrase?.wipe()
+            credencial.zerar()
+            throw Nucleo.Falha(erro: "importacao.mudou")
+        }
+        if partes.passphrase != nil, !conferida {
+            partes.frase.wipe()
+            partes.passphrase?.wipe()
+            credencial.zerar()
+            throw Nucleo.Falha(erro: "envelope.pedePassphrase")
+        }
+        // A de uma versao anterior, fora de NFKD: a Cardano da carteira importada sai dos mesmos bytes da original.
+        let antiga = partes.passphrase.map { p in
+            let n = BIP39.nfkd(p)
+            defer { n.wipe() }
+            return p.count > 0 && !Hash.constantTimeEqual(n, p)
+        } ?? false
         let segredo: WalletSecret
         do {
-            segredo = try Importacao.segredo(partes.frase, passphrase: partes.passphrase)
+            segredo = try Importacao.segredo(partes.frase, passphrase: partes.passphrase, doEnvelope: true)
         } catch {
             partes.frase.wipe()
             partes.passphrase?.wipe()
@@ -367,7 +457,10 @@ enum Envelopes {
         let nome = partes.rotulo.isEmpty ? Textos.carteira(quantas + 1) : String(partes.rotulo.prefix(40))
         let wallet = try Sessao.shared.adicionarCarteira(
             segredo, nome: nome, origem: .importedEnvelope, palavras: partes.palavras, copiaConfirmada: true,
-            selecionar: quantas == 0, tronComOutraChave: tronComOutraChave, credencial: credencial
+            selecionar: quantas == 0, tronComOutraChave: tronComOutraChave,
+            // A passphrase digitada conferiu com a do envelope: a copia dela entra conferida. E a Cardano que saiu dos bytes de
+            // uma versao anterior entra marcada, como a da carteira de origem.
+            passphraseConfirmada: conferida, cardanoAntiga: antiga, digitalEsperada: esperada, credencial: credencial
         )
         fecharAbertura()
         return wallet
@@ -376,15 +469,31 @@ enum Envelopes {
     /// "So ver as palavras": a frase vira o rascunho que a tela de gravar mostra de tres em tres.
     static func verPalavras() throws -> Int {
         let (frase, passphrase, palavras, _) = try copias()
-        guard Sessao.shared.mostrar(Rascunho(frase: frase, palavras: palavras, passphrase: passphrase)) else { throw Sessao.Falha.travada }
+        // So as palavras: a passphrase do envelope nao aparece nem fica no rascunho (05/11/2026).
+        passphrase?.wipe()
+        guard Sessao.shared.mostrar(Rascunho(frase: frase, palavras: palavras)) else { throw Sessao.Falha.travada }
         return palavras
+    }
+
+    /// Saiu do app: o conteudo aberto sai, e o arquivo cifrado (sem segredo nenhum) fica, para abrir de novo com a senha.
+    static func esquecerAberto() {
+        trava.withLock {
+            rodadaDaAbertura &+= 1
+            aberto?.wipe()
+            aberto = nil
+            passphraseConferida = false
+            digitalDaPrevia = nil
+        }
     }
 
     static func fecharAbertura() {
         trava.withLock {
+            rodadaDaAbertura &+= 1
             aberto?.wipe()
             aberto = nil
             dados = nil
+            passphraseConferida = false
+            digitalDaPrevia = nil
         }
     }
 }

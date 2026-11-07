@@ -1,3 +1,4 @@
+import EscaliburChains
 import EscaliburCore
 import EscaliburKeys
 import SwiftUI
@@ -8,16 +9,18 @@ import SwiftUI
 /// ela so recebe depois de o dono digitar a passphrase de novo, longe da tela onde a
 /// escolheu, de onde a anotou.
 ///
-/// Com `expected` (a passphrase que acabou de aparecer na revelacao), confere aqui mesmo;
-/// sem ele, o cofre abre a carteira e compara, com a presenca de sempre.
+/// A passphrase nao fica no cofre (pedido do dono, 05/11/2026): a digitada confere pelo
+/// fingerprint da raiz que a criacao gravou. Com `words` (as palavras que acabaram de aparecer
+/// na revelacao), a seed sai delas; sem elas, o cofre abre a carteira, com o PIN. Nos dois
+/// casos a tentativa conta na mesma espera das outras portas.
 struct ConfirmPassphraseView: View {
     @Environment(AppSession.self) private var session
     @Environment(AuthCoordinator.self) private var auth
     let wallet: WalletMeta
-    var expected: SecureBytes? = nil
+    var words: PhraseDraft? = nil
     let onClose: () -> Void
 
-    @State private var typed = SecureBytes(capacity: 256)
+    @State private var typed = SecureBytes(capacity: PassphraseLimit.fieldCapacity)
     @State private var typedLength = 0
     @State private var reveal = false
     @State private var message: String?
@@ -37,7 +40,7 @@ struct ConfirmPassphraseView: View {
                     .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm)
                     .fixedSize(horizontal: false, vertical: true)
                 PasswordBox(buffer: typed, length: $typedLength, placeholder: String(localized: "Passphrase"), focusOnAppear: true, reveal: $reveal,
-                            onSubmit: { Task { await check() } }, glyphs: glyphs)
+                            onSubmit: { Task { await check() } }, glyphs: glyphs, wipesOnLeave: true)
                 .padding(.top, Space.lg)
                 .accessibilityIdentifier("conferir-passphrase")
                 Text("Segure o dedo no campo para ver o que digitou.")
@@ -81,58 +84,59 @@ struct ConfirmPassphraseView: View {
         message = nil
         working = true
         defer { working = false }
-        let matches: Bool
-        if let expected {
-            // As duas em NFKD: a importada foi gravada assim, e o teclado da os bytes em NFC
-            // (revisao do modo reforcado, M3).
-            let a = BIP39.nfkd(expected), b = BIP39.nfkd(typed)
-            defer { a.wipe(); b.wipe() }
-            // Gravada fora de NFKD por uma versao anterior: a copia nao traz a conta da
-            // Cardano de volta (revisao do modo reforcado, N1).
-            if Hash.constantTimeEqual(a, b), !Hash.constantTimeEqual(a, expected) {
-                message = HardenedEnableFlow.legacyPassphraseMessage(wallet.name)
-                return
-            }
-            matches = Hash.constantTimeEqual(a, b)
-        } else {
-            // O cofre fica com uma copia: o campo continua dono do buffer dele.
-            let copy = SecureBytes(capacity: typed.count)
-            typed.withUnsafeBytes { copy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
-            defer { copy.wipe() }
-            let id = wallet.id
-            // A conferencia pelo cofre e uma porta de chute: conta na mesma espera das outras
-            // (revisao de seguranca de 16/10/2026).
-            if let wait = PassphraseGate.shared.begin(session, wallet: id) {
-                message = wait
-                return
-            }
-            do {
+        // A conferencia fica com uma copia: o campo continua dono do buffer dele.
+        let copy = SecureBytes(capacity: max(typed.count, 1))
+        typed.withUnsafeBytes { copy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+        defer { copy.wipe() }
+        let id = wallet.id
+        if PassphraseGate.unverified(session.metadata.wallets.first { $0.id == id } ?? wallet) {
+            message = PassphraseGate.unverifiedMessage
+            return
+        }
+        let fingerprint = wallet.fingerprint.flatMap(Hex.decode)
+        let cardano = wallet.accounts.first { $0.chainID == Chain.cardano.id }?.publicKey
+        // Toda conferencia e uma porta de chute: conta na mesma espera das outras (revisao de
+        // seguranca de 16/10/2026).
+        if let wait = PassphraseGate.shared.begin(session, wallet: id) {
+            message = wait
+            return
+        }
+        let result: PassphraseProof.Result
+        do {
+            if let words, case .valid(let language) = BIP39.validate(words.phrase) {
+                let phrase = words.phrase
+                result = try await Offload.run {
+                    try PassphraseProof.check(phrase: phrase, language: language, typed: copy, fingerprint: fingerprint, cardanoPublicKey: cardano)
+                }
+            } else {
                 // O PIN, nunca so o rosto: com o rosto do dono apresentado a forca, a conferencia
                 // viraria um chute de passphrase por Face ID.
-                guard let result = try await auth.perform(session, reason: String(localized: "Conferir a passphrase de \(wallet.name)"), presence: .pin, { rk in
-                    let secret = try KeyServices.wallets.open(walletID: id, rk: rk)
-                    defer { secret.wipe() }
-                    let a = BIP39.nfkd(secret.passphrase), b = BIP39.nfkd(copy)
-                    defer { a.wipe(); b.wipe() }
-                    guard Hash.constantTimeEqual(a, b) else { return PassphraseCheck.mismatch }
-                    return Hash.constantTimeEqual(a, secret.passphrase) ? PassphraseCheck.match : PassphraseCheck.legacy
+                guard let checked = try await auth.perform(session, reason: String(localized: "Conferir a passphrase de \(wallet.name)"), presence: .pin, { rk in
+                    try PassphraseProof.check(walletID: id, rootKey: rk, vault: KeyServices.wallets, typed: copy,
+                                              fingerprint: fingerprint, cardanoPublicKey: cardano)
                 }) else {
                     PassphraseGate.shared.refund(session, wallet: id)
                     return
                 }
-                if result == .mismatch { PassphraseGate.shared.failed(session, wallet: id) } else { PassphraseGate.shared.passed(session, wallet: id) }
-                if result == .legacy {
-                    message = HardenedEnableFlow.legacyPassphraseMessage(wallet.name)
-                    return
-                }
-                matches = result == .match
-            } catch {
-                // Nada foi conferido: a tentativa volta.
-                PassphraseGate.shared.refund(session, wallet: id)
-                message = AuthCoordinator.refusalMessage(error) ?? String(localized: "Não foi possível abrir a carteira agora.")
-                return
+                result = checked
             }
+        } catch {
+            // Nada foi conferido: a tentativa volta.
+            PassphraseGate.shared.refund(session, wallet: id)
+            message = AuthCoordinator.refusalMessage(error) ?? String(localized: "Não foi possível abrir a carteira agora.")
+            return
         }
+        if result == .mismatch { PassphraseGate.shared.failed(session, wallet: id, warn: false) } else { PassphraseGate.shared.passed(session, wallet: id) }
+        // Gravada fora de NFKD por uma versao anterior: a copia nao traz a conta da Cardano de
+        // volta (revisao do modo reforcado, N1).
+        if result == .legacy {
+            var marked = session.metadata.wallets.first { $0.id == id } ?? wallet
+            marked.legacyCardanoPassphrase = true
+            session.update(marked)
+            message = HardenedEnableFlow.legacyPassphraseMessage(wallet.name)
+            return
+        }
+        let matches = result == .match
         guard matches else {
             message = String(localized: "Não confere com a passphrase desta carteira. Confira o que você anotou, letra por letra.")
             return
@@ -148,10 +152,6 @@ struct ConfirmPassphraseView: View {
         onClose()
     }
 }
-
-/// O resultado da conferencia dentro do cofre: confere, nao confere, ou confere mas foi
-/// gravada fora de NFKD por uma versao anterior.
-enum PassphraseCheck: Sendable { case match, mismatch, legacy }
 
 /// O "Gravar agora" de uma carteira que ainda nao recebe: so a passphrase, quando as
 /// palavras ja estao conferidas e ela nao; senao a revelacao com a conferencia das

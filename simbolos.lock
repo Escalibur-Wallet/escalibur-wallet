@@ -218,6 +218,7 @@ kSecClassGenericPassword
 kSecClassKey
 kSecKeyAlgorithmECIESEncryptionCofactorVariableIVX963SHA256AESGCM
 kSecMatchLimit
+kSecMatchLimitAll
 kSecMatchLimitOne
 kSecPrivateKeyAttrs
 kSecRandomDefault
@@ -306,6 +307,7 @@ SecKeyCreateDecryptedData
 SecKeyCreateEncryptedData
 SecKeyCreateRandomKey
 secp256k1_context_create
+secp256k1_context_destroy
 secp256k1_context_randomize
 secp256k1_ec_pubkey_create
 secp256k1_ec_pubkey_parse

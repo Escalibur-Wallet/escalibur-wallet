@@ -45,6 +45,8 @@ struct OnboardingFlow: View {
         }
         .animation(Motion.fade, value: step)
         .sheet(item: $legalDocument) { LegalDocumentView(document: $0) }
+        // Sair do app no meio da escolha do PIN: os digitos deste passo saem da memoria (05/11/2026).
+        .onReceive(NotificationCenter.default.publisher(for: SecureInputField.wipeAll)) { _ in if !working { entry.reset() } }
     }
 
     private var welcome: some View {
@@ -216,6 +218,8 @@ struct BiometryOfferView: View {
                 }
                 .accessibilityIdentifier("biometria-voltar")
             }
+            // Sair do app: os digitos ja digitados saem da memoria (05/11/2026).
+            .onReceive(NotificationCenter.default.publisher(for: SecureInputField.wipeAll)) { _ in if !working { entry.reset() } }
         } else {
             VStack(spacing: 0) {
                 Spacer()

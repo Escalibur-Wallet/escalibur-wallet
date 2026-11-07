@@ -21,7 +21,10 @@
     public static void apagarChave(java.lang.String);
     public static byte[] embrulhar(java.lang.String, byte[], byte[]);
     public static byte[] desembrulhar(java.lang.String, byte[], byte[], java.lang.String);
-    public static byte[] desembrulharVigiando(java.lang.String, byte[], java.lang.String, java.lang.String, byte[]);
+    public static byte[] publica(java.lang.String);
+    public static byte[] abrirChave(java.lang.String, byte[], java.lang.String);
+    public static byte[] abrirChaveVigiando(java.lang.String, byte[], java.lang.String, java.lang.String, byte[]);
+    public static byte[] semente(java.lang.String, byte[], boolean);
     public static int estadoDaBiometria();
     public static byte[] cadastroDaBiometria();
     public static byte[] boot();

@@ -24,6 +24,10 @@ public struct CatalogCoin: Codable, Sendable, Hashable, Identifiable {
         /// conferido. A validacao completa (checksum, chave da rede) e a da moeda custom,
         /// `CustomToken.kind`, na hora de mostrar o endereco.
         public let contract: String
+        /// Achada no CoinPaprika so pelo mesmo simbolo e nome (`coinAllNetworks`), e nao pelo id da moeda. Vale em Receber
+        /// (pedido do dono, 17/10/2026); a busca da troca nao a oferece para compra: um clone listado com o mesmo nome
+        /// viraria compra direta (revisao de seguranca de 06/11/2026).
+        public var byName: Bool? = nil
 
         public var chain: Chain? { Chain.find(chainID) }
     }
@@ -225,6 +229,11 @@ public enum CoinCatalog {
                                             id: paprikaPrefix + match, acceptAs: id)
         }
         let base = await geckoCoin
+        reserve = reserve.map { found in
+            CatalogCoin(id: found.id, symbol: found.symbol, name: found.name,
+                        networks: found.networks.map { network in var marked = network; marked.byName = true; return marked },
+                        hasNotice: found.hasNotice)
+        }
         guard let first = base ?? reserve else { throw HTTPClient.Failure.offline }
         let joined = reserve.map { first.merged(with: $0, addingNetworks: true) } ?? first
         return CatalogCoin(id: id, symbol: joined.symbol, name: joined.name, networks: joined.networks, hasNotice: base?.hasNotice ?? false)

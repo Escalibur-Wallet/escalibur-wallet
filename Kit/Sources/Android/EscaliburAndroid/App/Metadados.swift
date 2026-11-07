@@ -84,7 +84,17 @@ struct WalletMeta: Codable, Equatable, Hashable {
     var hasPassphrase: Bool
     var backupConfirmedAt: Date?
     var passphraseConfirmedAt: Date?
+    /// O "Pedir a passphrase para enviar" de antes. Nao vale mais: desde 05/11/2026 a passphrase nao
+    /// fica no cofre, e toda assinatura da carteira com passphrase a pede. Fica so para os metadados
+    /// antigos abrirem.
     var passphraseToSend: Bool?
+    /// A passphrase que uma versao anterior gravou estava fora de NFKD, e a conta da Cardano dela saiu
+    /// dos bytes digitados: restaurada pelas palavras, ela muda. O unico fato sobre a passphrase que
+    /// sobra, marcado ao tira-la do cofre (05/11/2026), para o Super Security continuar recusando.
+    var legacyCardanoPassphrase: Bool?
+    /// A passphrase que uma versao anterior gravou nao dava a raiz da criacao, e saiu do cofre assim mesmo
+    /// (05/11/2026): a digitada tambem nao assina nesta versao, e a tela diz isso em vez de contar erro.
+    var passphraseUnverified: Bool?
     var tronForeignControl: Bool?
     var envelopeSealedAt: Date?
     var lastRevealedAt: Date?

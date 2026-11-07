@@ -179,7 +179,8 @@ public enum TradeRefusal: Error, Equatable, Sendable {
     // Mercado
     case priceFarFromOracle(deviationBps: Int)
     /// Sem preco de referencia e com uma cotacao so: o minimo sairia do numero do proprio
-    /// provedor, sem nada para comparar (auditoria 2, M5).
+    /// provedor, sem nada para comparar (auditoria 2, M5). Na EVM o motor segue com a cotacao sem
+    /// comparacao e o aceite do dono (`TradeValidator.unanchored`, 05/11/2026).
     case noPriceAnchor
     case priceImpactTooHigh(bps: Int)
     // Plano

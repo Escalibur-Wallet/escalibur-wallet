@@ -187,7 +187,7 @@ public enum KDFCalibration {
     /// interface? Sem ela, o sistema mataria o app no meio do lacre; melhor recusar
     /// antes e pedir para fechar outros apps.
     public static func canSeal() -> Bool {
-        availableMemoryBytes() >= UInt64(sealFloorKiB) * 1024 + 150 * 1024 * 1024
+        availableMemoryBytes() >= UInt64(sealFloorKiB) * 1024 + 300 * 1024 * 1024
     }
 
     /// Memoria disponivel ao processo agora, em bytes. No iPhone e o teto do jetsam.
@@ -201,6 +201,16 @@ public enum KDFCalibration {
         if !ProcessInfo.processInfo.isiOSAppOnMac {
             // Tres medidas, vale a maior: uma so pode cair num vale transitorio.
             return UInt64((0..<3).map { _ in os_proc_available_memory() }.max() ?? 0)
+        }
+        #endif
+        #if !canImport(Darwin)
+        // Android: a memoria que o sistema diz livre agora, e nunca mais que a metade da fisica. So a metade da fisica
+        // deixava um arquivo forjado com 1 GiB passar num celular de 3 GB, e o sistema matava o app no meio (auditoria do
+        // envelope de 06/11/2026).
+        if let text = try? String(contentsOfFile: "/proc/meminfo", encoding: .utf8),
+           let line = text.split(separator: "\n").first(where: { $0.hasPrefix("MemAvailable:") }),
+           let kib = line.split(separator: " ").dropFirst().first.flatMap({ UInt64($0) }) {
+            return min(kib * 1024, ProcessInfo.processInfo.physicalMemory / 2)
         }
         #endif
         return ProcessInfo.processInfo.physicalMemory / 2
@@ -240,7 +250,10 @@ public enum KDFCalibration {
 
         let bytes = min(reference, min(byPhysical, byAvailable))
         let kib = UInt32(bytes / 1024)
-        return max(kib, KDFParameters.memoryRange.lowerBound)
+        // Em degraus: o m vai em claro no cabecalho, e um valor quebrado contava a RAM do aparelho e a memoria livre na
+        // hora do lacre (auditoria do envelope de 06/11/2026).
+        let step = [UInt32(512 * 1024), 384 * 1024, 256 * 1024].first { $0 <= kib } ?? KDFParameters.memoryRange.lowerBound
+        return max(step, KDFParameters.memoryRange.lowerBound)
     }
 
     /// O piso de passes de um envelope novo. A abertura continua aceitando 2, o piso dos

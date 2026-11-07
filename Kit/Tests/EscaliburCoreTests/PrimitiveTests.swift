@@ -198,6 +198,28 @@ struct Secp256k1Tests {
         let der = try Secp256k1.signDER(digest: digest, privateKey: key)
         #expect(Secp256k1.verifyDER(signature: der, digest: digest, publicKey: pub))
     }
+
+    @Test("Com hedged, o nonce leva bytes do gerador: assinaturas diferentes, validas e low-S")
+    func hedgedSigning() throws {
+        let key = SecureBytes(capacity: 32)
+        key.replaceAll(with: [UInt8](repeating: 0, count: 31) + [7])
+        let pub = try Secp256k1.publicKey(of: key)
+        let digest = Hash.sha256(Array("escalibur".utf8))
+        let halfOrder = BigUInt(hex: "7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0")!
+        let plain = try Secp256k1.signRecoverable(digest: digest, privateKey: key)
+        let first = try Secp256k1.signRecoverable(digest: digest, privateKey: key, hedged: true)
+        let second = try Secp256k1.signRecoverable(digest: digest, privateKey: key, hedged: true)
+        #expect(first.compact != second.compact && first.compact != plain.compact)
+        for signed in [first, second] {
+            #expect(BigUInt(bigEndian: signed.compact.suffix(32)) <= halfOrder)
+            #expect(try Secp256k1.recover(digest: digest, compact: signed.compact, recoveryID: signed.recoveryID, compressed: true) == pub)
+        }
+        let derA = try Secp256k1.signDER(digest: digest, privateKey: key, hedged: true)
+        let derB = try Secp256k1.signDER(digest: digest, privateKey: key, hedged: true)
+        #expect(derA != derB)
+        #expect(Secp256k1.verifyDER(signature: derA, digest: digest, publicKey: pub))
+        #expect(Secp256k1.verifyDER(signature: derB, digest: digest, publicKey: pub))
+    }
 }
 
 enum SHA3Vectors {

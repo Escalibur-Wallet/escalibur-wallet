@@ -308,6 +308,8 @@ struct HardenedLockFlow: View {
     @State private var accepted = false
     @State private var typing = false
     @State private var typed: [UUID: WalletSecret] = [:]
+    /// Saiu do app com a troca em curso: as frases saem quando ela termina.
+    @State private var forgetWhenDone = false
     @State private var index = 0
     @State private var working = false
     @State private var message: String?
@@ -348,12 +350,23 @@ struct HardenedLockFlow: View {
                     Button { close(false) } label: {
                         Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.inkSoft)
                     }
+                    .disabled(working)
                     .accessibilityLabel("Fechar")
                 }
             }
         }
         .interactiveDismissDisabled()
         .guardedAgainstCapture()
+        // Sair do app ou travar: as frases e passphrases digitadas saem zeradas, e a entrada recomeca (05/11/2026). Com a
+        // troca em curso noutra thread, espera.
+        .onReceive(NotificationCenter.default.publisher(for: SecureInputField.wipeAll)) { _ in
+            guard !working else {
+                forgetWhenDone = true
+                return
+            }
+            restart()
+            typing = false
+        }
     }
 
     private var intro: some View {
@@ -410,11 +423,19 @@ struct HardenedLockFlow: View {
             attempt += 1
             return
         }
-        // As frases ja digitadas (o PIN errado na tentativa anterior) valem: so o PIN de novo.
-        if HardenedPhraseCheck.collect(wallets, typed: typed).count == wallets.count {
-            Task { await apply() }
+        // O que os metadados ja dizem recusa antes das palavras e do PIN (o cofre recusa de novo la dentro).
+        if let refused = HardenedPhraseCheck.refusal(wallets) {
+            message = refused
+            attempt += 1
             return
         }
+        // Sem carteira com palavras nao ha papel a conferir: a conferencia recusaria depois do PIN, sem dizer por que.
+        guard !wallets.isEmpty else {
+            message = String(localized: "Não há carteira com palavras neste iPhone para conferir. Adicione a carteira antes de escolher Bloquear as carteiras.")
+            attempt += 1
+            return
+        }
+        // Sempre as palavras de novo: nenhuma frase fica esperando de uma tentativa anterior.
         restart()
         typing = true
     }
@@ -422,19 +443,42 @@ struct HardenedLockFlow: View {
     private func apply() async {
         defer { if message != nil { attempt += 1 } }
         guard case .hardened(let pin, _)? = await auth.credential(reason: String(localized: "Para ativar o bloqueio se o \(KeyServices.biometryName) mudar.")) else {
+            // Sem o PIN, as frases nao ficam esperando (como no Android).
+            restart()
             attempt += 1
             return
         }
+        // As frases saem da tela para a conferencia: sair do app no meio nao toca no que o cofre le, e elas sao zeradas
+        // quando ele termina, deu certo ou nao.
+        let taken = typed
+        typed = [:]
+        defer { taken.values.forEach { $0.wipe() } }
         working = true
-        defer { working = false }
-        let checks = HardenedPhraseCheck.collect(wallets, typed: typed)
+        defer {
+            working = false
+            if forgetWhenDone {
+                forgetWhenDone = false
+                restart()
+                typing = false
+            }
+        }
+        let checks = HardenedPhraseCheck.collect(wallets, typed: taken)
         guard checks.count == wallets.count else {
             pin.wipe()
             restart()
             return
         }
+        // A passphrase que ainda esta no cofre fora de NFKD, com a marca que nao chegou a ser gravada, recusa tambem (como
+        // no Android e ao ligar).
+        let withPassphrase = wallets.filter(\.hasPassphrase).map {
+            HardenedPhraseCheck.Named(id: $0.id, name: $0.name, legacy: $0.legacyCardanoPassphrase == true, unverified: $0.passphraseUnverified == true)
+        }
+        let expected = wallets.map(\.id)
         do {
-            try await session.setHardenedFaceChange(.lock, pin: pin) { rk in try HardenedPhraseCheck.run(checks, rk: rk) }
+            try await session.setHardenedFaceChange(.lock, pin: pin) { rk in
+                try HardenedPhraseCheck.run(checks, expected: expected, rk: rk)
+                try HardenedPhraseCheck.legacyOnly(withPassphrase, rk: rk)
+            }
             close(true)
         } catch HardenedCheckError.mismatch(let name) {
             message = String(localized: "O que você digitou de \(name) não confere com esta carteira. Confira no papel e comece de novo.")
@@ -442,10 +486,14 @@ struct HardenedLockFlow: View {
         } catch HardenedCheckError.legacyPassphrase(let name) {
             message = HardenedEnableFlow.legacyPassphraseMessage(name)
             restart()
+        } catch HardenedCheckError.unverified {
+            message = PassphraseGate.unverifiedMessage
+            restart()
         } catch RootKeyVault.Failure.wiped {
             close(false)
         } catch {
             message = HardenedFaceChangeView.failureMessage(error)
+            restart()
         }
     }
 

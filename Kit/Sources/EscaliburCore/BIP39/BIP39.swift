@@ -93,7 +93,10 @@ public enum BIP39 {
             guard ranges.count == 11 || ranges.count == 23 else {
                 throw CryptoError.malformedVault("tamanho de frase fora do padrão")
             }
+            // Capacidade exata: o array nunca realoca, e o buffer zerado no fim e o unico com os indices
+            // (auditoria das chaves de 06/11/2026; no Android o free nao zera).
             var out: [UInt16] = []
+            out.reserveCapacity(ranges.count)
             for range in ranges {
                 guard let index = lookup(raw, range, in: list) else {
                     out.resetIndices()
@@ -165,7 +168,10 @@ public enum BIP39 {
             guard Mnemonic.validWordCounts.contains(ranges.count) else {
                 throw CryptoError.malformedVault("tamanho de frase fora do padrão")
             }
+            // Capacidade exata: o array nunca realoca, e o buffer zerado no fim e o unico com os indices
+            // (auditoria das chaves de 06/11/2026; no Android o free nao zera).
             var out: [UInt16] = []
+            out.reserveCapacity(ranges.count)
             for range in ranges {
                 guard let index = lookup(raw, range, in: list) else {
                     out.resetIndices()
@@ -179,6 +185,7 @@ public enum BIP39 {
 
         let entropyBits = indices.count * 32 / 3
         var bits = [UInt8]()
+        bits.reserveCapacity(indices.count * 11)
         defer { bits.resetBytes() }
         for index in indices {
             for b in (0..<11).reversed() { bits.append(UInt8((Int(index) >> b) & 1)) }
@@ -231,20 +238,176 @@ public enum BIP39 {
 
     /// NFKD de um segredo em buffer. ASCII ja esta em NFKD: copia os bytes, sem passar por
     /// `String` (revisao de seguranca de 24/10/2026: cada conferencia deixava copias da
-    /// passphrase na memoria). Fora do ASCII, uma passagem por `String`, curta, zerada.
+    /// passphrase na memoria).
+    ///
+    /// Fora do ASCII o segredo inteiro tambem nunca vira `String`, que o heap solta sem zerar
+    /// (pedido do dono, 05/11/2026: nada de onde se junte os pedacos). Cada escalar fora do ASCII
+    /// e decomposto sozinho, numa `String` de um caractere, e a ordem canonica das marcas e
+    /// refeita aqui, sobre os escalares, num buffer seguro. Da o mesmo que o NFKD da `String`
+    /// inteira: a decomposicao de um escalar nao depende dos vizinhos (UAX #15), e so a ordem das
+    /// marcas atravessa a fronteira entre eles. No heap sobram so letras soltas, sem a ordem.
+    ///
+    /// A classe de cada marca vem do Swift, e a decomposicao, do Foundation: com as duas em versoes de
+    /// Unicode diferentes, uma marca nova seria reordenada aqui e nao no NFKD de antes, e a seed
+    /// mudaria. O Swift mais novo e conferido uma vez por processo, so com texto de teste
+    /// (`letterByLetterAgrees`); o Foundation mais novo, pelo escalar que o Swift ainda nao conhece. Nos
+    /// dois casos vale o NFKD de antes, pela `String`.
     public static func nfkd(_ secret: SecureBytes) -> SecureBytes {
         if secret.withUnsafeBytes({ raw in raw.allSatisfy { $0 < 0x80 } }) {
             let out = SecureBytes(capacity: max(secret.count, 1))
             secret.withUnsafeBytes { out.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
             return out
         }
-        var text = secret.withUnsafeBytes { String(decoding: $0, as: UTF8.self) }
-        var bytes = Array(text.decomposedStringWithCompatibilityMapping.utf8)
-        text = ""
-        defer { bytes.resetBytes() }
-        let out = SecureBytes(capacity: max(bytes.count, 1))
-        out.replaceAll(with: bytes)
+        guard letterByLetterAgrees else { return wholeStringNFKD(secret) }
+        var total = 0
+        var unknown = false
+        secret.withUnsafeBytes { raw in
+            decomposing(raw) { scalar in
+                total += 1
+                if scalar.properties.generalCategory == .unassigned { unknown = true }
+            }
+        }
+        // Um escalar que a tabela do Swift ainda nao conhece pode ser marca para um Foundation mais novo: so ele escapa da
+        // conferencia acima (um escalar que o Swift conhece tem a mesma classe em qualquer tabela que tambem o conheca).
+        guard !unknown else { return wholeStringNFKD(secret) }
+        let scalars = SecureBytes(capacity: total * 4)
+        defer { scalars.wipe() }
+        var length = 0
+        scalars.fill(count: total * 4) { base in
+            let out = base.bindMemory(to: UInt32.self, capacity: total)
+            var n = 0
+            secret.withUnsafeBytes { raw in
+                decomposing(raw) { scalar in
+                    guard n < total else { return }
+                    out[n] = scalar.value
+                    n += 1
+                }
+            }
+            canonicalOrder(out, count: n)
+            for i in 0..<n { length += utf8Length(out[i]) }
+        }
+        let out = SecureBytes(capacity: max(length, 1))
+        scalars.withUnsafeBytes { raw in
+            let values = raw.bindMemory(to: UInt32.self)
+            out.fill(count: length) { base in
+                var at = 0
+                for value in values {
+                    let bytes = base.advanced(by: at).assumingMemoryBound(to: UInt8.self)
+                    switch utf8Length(value) {
+                    case 1:
+                        bytes[0] = UInt8(value)
+                    case 2:
+                        bytes[0] = UInt8(0xC0 | (value >> 6))
+                        bytes[1] = UInt8(0x80 | (value & 0x3F))
+                    case 3:
+                        bytes[0] = UInt8(0xE0 | (value >> 12))
+                        bytes[1] = UInt8(0x80 | ((value >> 6) & 0x3F))
+                        bytes[2] = UInt8(0x80 | (value & 0x3F))
+                    default:
+                        bytes[0] = UInt8(0xF0 | (value >> 18))
+                        bytes[1] = UInt8(0x80 | ((value >> 12) & 0x3F))
+                        bytes[2] = UInt8(0x80 | ((value >> 6) & 0x3F))
+                        bytes[3] = UInt8(0x80 | (value & 0x3F))
+                    }
+                    at += utf8Length(value)
+                }
+            }
+        }
         return out
+    }
+
+    /// Ordem canonica (UAX #15): cada marca recua enquanto a de antes tem classe maior. Um escalar de
+    /// classe 0 nunca se move nem deixa uma marca passar por ele.
+    private static func canonicalOrder(_ out: UnsafeMutablePointer<UInt32>, count n: Int) {
+        for i in 1..<max(n, 1) {
+            let mark = combiningClass(out[i])
+            guard mark != 0 else { continue }
+            var j = i
+            while j > 0, combiningClass(out[j - 1]) > mark {
+                let moved = out[j - 1]
+                out[j - 1] = out[j]
+                out[j] = moved
+                j -= 1
+            }
+        }
+    }
+
+    /// A classe de cada marca do Swift e a mesma do NFKD do Foundation? Cada marca vai em duas sondas:
+    /// depois de "a" e de U+0345 (classe 240, a mais alta) e antes de U+0334 (classe 1, a mais baixa).
+    /// Uma marca que um dos dois ve com classe e o outro sem troca de lugar num e nao no outro em pelo
+    /// menos uma delas, qualquer que seja a classe. A politica de estabilidade do Unicode nunca muda uma
+    /// classe ja dada, entao so essa diferenca existe. So texto de teste, nunca o segredo.
+    public static let letterByLetterAgrees: Bool = {
+        for value in UInt32(0x300)...UInt32(0x10FFFF) where combiningClass(value) != 0 {
+            guard let mark = Unicode.Scalar(value) else { continue }
+            for text in ["a\u{0345}" + String(Character(mark)), "a" + String(Character(mark)) + "\u{0334}"] {
+                let expected = text.decomposedStringWithCompatibilityMapping.unicodeScalars.map(\.value)
+                var got: [UInt32] = []
+                Array(text.utf8).withUnsafeBytes { raw in decomposing(raw) { got.append($0.value) } }
+                got.withUnsafeMutableBufferPointer { buffer in buffer.baseAddress.map { canonicalOrder($0, count: buffer.count) } }
+                if got != expected { return false }
+            }
+        }
+        return true
+    }()
+
+    /// O NFKD do Foundation, onde a conferencia acima nao passa: o mesmo de antes, mas trecho por trecho entre
+    /// os bytes ASCII, e nao a `String` inteira. Um caractere ASCII tem classe 0 e nao se decompoe, entao
+    /// nenhuma marca passa por ele e o resultado e o mesmo, em qualquer versao do Unicode. No heap sobram so os
+    /// trechos fora do ASCII (letras com acento seguidas), sem o resto.
+    static func wholeStringNFKD(_ secret: SecureBytes) -> SecureBytes {
+        var total = 0
+        secret.withUnsafeBytes { raw in segmented(raw) { total += $0.count } }
+        let out = SecureBytes(capacity: max(total, 1))
+        secret.withUnsafeBytes { raw in segmented(raw) { piece in piece.withUnsafeBufferPointer { out.append(contentsOf: $0) } } }
+        return out
+    }
+
+    /// Cada byte ASCII como esta, e cada trecho fora do ASCII pelo NFKD do Foundation (UTF-8 invalido vira U+FFFD).
+    private static func segmented(_ raw: UnsafeRawBufferPointer, _ body: ([UInt8]) -> Void) {
+        let bytes = raw.bindMemory(to: UInt8.self)
+        var start = 0
+        while start < bytes.count {
+            if bytes[start] < 0x80 {
+                body([bytes[start]])
+                start += 1
+                continue
+            }
+            var end = start
+            while end < bytes.count, bytes[end] >= 0x80 { end += 1 }
+            var piece = Array(String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<end]), as: UTF8.self).decomposedStringWithCompatibilityMapping.utf8)
+            body(piece)
+            piece.resetBytes()
+            start = end
+        }
+    }
+
+    /// Os escalares do NFKD, um a um, na ordem da entrada (a ordem canonica vem depois). UTF-8
+    /// invalido vira U+FFFD, como no `String(decoding:)` de antes.
+    private static func decomposing(_ raw: UnsafeRawBufferPointer, _ body: (Unicode.Scalar) -> Void) {
+        var iterator = raw.makeIterator()
+        var decoder = Unicode.UTF8()
+        while true {
+            switch decoder.decode(&iterator) {
+            case .scalarValue(let scalar):
+                guard !scalar.isASCII else { body(scalar); continue }
+                // Uma letra so: a `String` de um caractere fica em linha, e a ponte do Foundation
+                // leva para o heap so esta letra.
+                for piece in String(Character(scalar)).decomposedStringWithCompatibilityMapping.unicodeScalars { body(piece) }
+            case .emptyInput:
+                return
+            case .error:
+                body("\u{FFFD}")
+            }
+        }
+    }
+
+    private static func combiningClass(_ value: UInt32) -> UInt8 {
+        Unicode.Scalar(value)?.properties.canonicalCombiningClass.rawValue ?? 0
+    }
+
+    private static func utf8Length(_ value: UInt32) -> Int {
+        value < 0x80 ? 1 : value < 0x800 ? 2 : value < 0x10000 ? 3 : 4
     }
 
     private static func seed(phrase: SecureBytes, normalizedPassphrase: SecureBytes) throws -> SecureBytes {
@@ -277,9 +440,13 @@ public enum BIP39 {
             for language in BIP39Language.allCases {
                 guard let list = try? store.wordlist(for: language) else { continue }
                 var indices: [UInt16] = []
+                indices.reserveCapacity(ranges.count)
                 defer { indices.resetIndices() }
                 for range in ranges {
-                    guard let index = list.position(nfkd: Array(raw[range])) else { break }
+                    var key = Array(raw[range])
+                    let index = list.position(nfkd: key)
+                    key.resetBytes()
+                    guard let index else { break }
                     indices.append(index)
                 }
                 if indices.count == ranges.count, checksumCloses(indices) { closing.append(language) }
@@ -316,6 +483,7 @@ public enum BIP39 {
     static func checksumCloses(_ indices: [UInt16]) -> Bool {
         guard let entropyBits = Mnemonic.entropyBits(forWordCount: indices.count) else { return false }
         var bits = [UInt8]()
+        bits.reserveCapacity(indices.count * 11)
         defer { bits.resetBytes() }
         for index in indices {
             for b in (0..<11).reversed() { bits.append(UInt8((Int(index) >> b) & 1)) }

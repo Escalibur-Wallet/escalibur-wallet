@@ -374,6 +374,9 @@ final class Ponte: @unchecked Sendable {
         }
         if vencido {
             credencial.zerar()
+            // A passphrase nao e usada aqui, e nao atravessa a cotacao de rede de `montar` (nem a entregue pela folha).
+            passphrase?.wipe()
+            PortaDaPassphrase.descartarEntregue()
             avisar()
             await montar(numero)
             trava.withLock { if rodada == numero, etapa == .revisao { erroDaRevisao = Textos.t("Os dados da rede venceram. Confira de novo.") } }
@@ -386,32 +389,12 @@ final class Ponte: @unchecked Sendable {
             trava.withLock { erroDaRevisao = motivo }
             return
         }
-        if PortaDaPassphrase.precisa(dona), passphrase == nil {
-            credencial.zerar()
-            throw Nucleo.Falha(erro: "envio.pedePassphrase")
-        }
         // O autoteste da assinatura antes da porta da passphrase e da RK: com um defeito do aparelho, nada conta nem abre
         // (o Signer confere de novo antes de abrir o cofre; revisao da decima terceira passada).
         guard SigningSelfTest.passed(for: plano) else { credencial.zerar(); throw SigningSelfTest.Failure() }
-        let conferir = PortaDaPassphrase.pede(dona) ? passphrase : nil
-        if conferir != nil {
-            do { try PortaDaPassphrase.comecar(plano.walletID) } catch { credencial.zerar(); throw error }
-        }
-        let assinado: [SignedTransaction]
-        do {
-            assinado = try Sessao.shared.comChaveRaiz(credencial) { rk in
-                try Signer.sign(plano, rootKey: rk, vault: Chaves.wallets, passphrase: conferir)
-            }
-        } catch {
-            if conferir != nil {
-                if (error as? Signer.Failure) == .passphraseMismatch { PortaDaPassphrase.errou(plano.walletID) } else { PortaDaPassphrase.devolver(plano.walletID) }
-            }
-            throw error
-        }
-        if conferir != nil {
-            PortaDaPassphrase.passou(plano.walletID)
-            PortaDaPassphrase.comecarFolga(plano.walletID, minutos: folga)
-        }
+        // Carteira com passphrase: ela nunca fica salva, e sai zerada logo depois de assinar (pedido do dono,
+        // 05/11/2026; ver `PortaDaPassphrase.assinar`).
+        let assinado = try PortaDaPassphrase.assinar(plano, carteira: dona, digitada: passphrase, folga: folga, credencial: credencial)
         // Travou entre assinar e enviar: nada sai (ver o envio). Destravado, o dono envia de novo.
         guard Sessao.shared.fase == .unlocked else { throw Sessao.Falha.travada }
         await transmitir(assinado, plano: plano, cotada: cotada, numero: numero)
@@ -831,7 +814,8 @@ extension Ponte {
         let metadata = Sessao.shared.metadata
         let carteira = metadata.selectedWallet
         return try Nucleo.json(Retrato(numero: numero, ponte: Ponte.shared.estado(), moeda: metadata.settings.currency,
-                                       pedePassphrase: PortaDaPassphrase.precisa(carteira), nomeDaCarteira: carteira?.name ?? ""))
+                                       pedePassphrase: PortaDaPassphrase.precisa(carteira), nomeDaCarteira: carteira?.name ?? "",
+                                       semConferencia: PortaDaPassphrase.semConferencia(carteira)))
     }
 
     private static let contagem = NSLock()
@@ -848,5 +832,7 @@ extension Ponte {
         let moeda: String
         let pedePassphrase: Bool
         let nomeDaCarteira: String
+        /// A carteira com passphrase que esta versao nao confere: a tela recusa antes de pedir a passphrase e o PIN.
+        let semConferencia: Bool
     }
 }

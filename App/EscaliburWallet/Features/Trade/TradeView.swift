@@ -37,6 +37,41 @@ final class TradeModel {
         guard let accepted = acceptedImpactPercent, let current = quote?.priceImpactPercent else { return false }
         return current <= accepted
     }
+    /// A cotacao sem comparacao que o dono aceitou (`TradeQuote.unanchored`): o par, o valor, a
+    /// execucao (de uma vez ou em partes) e o minimo que a tela mostrou. Vale enquanto o pedido e o
+    /// mesmo e o minimo nao piora (pedido do dono, 05/11/2026).
+    var acceptedUnanchored: (pair: String, amountIn: BigUInt, inParts: Bool, minimum: BigUInt)?
+
+    /// A execucao e o minimo que a caixa do aceite prende, na cotacao sem comparacao.
+    var unanchoredTerms: (inParts: Bool, minimum: BigUInt)? {
+        guard let quote, quote.unanchored else { return nil }
+        let parts = inParts && quote.parts != nil
+        return (parts, quote.minimumOut(inParts: parts))
+    }
+
+    var acceptsUnanchored: Bool {
+        guard let accepted = acceptedUnanchored, let quote, let terms = unanchoredTerms else { return false }
+        // Paga o mesmo ou menos e recebe o mesmo ou mais: no "Voce recebe" o valor a pagar muda a cada recotacao.
+        return accepted.pair == pairKey && quote.amountIn <= accepted.amountIn && accepted.inParts == terms.inParts
+            && terms.minimum >= accepted.minimum
+    }
+
+    /// Havia aceite e a cotacao nova do mesmo pedido nao cabe nele: o aceite saiu de vez e a tela diz por que. Ele so
+    /// volta com outro toque, mesmo que o minimo volte depois (revisao de 05/11/2026).
+    var unanchoredDropNotice = false
+
+    /// Chamar quando entra uma cotacao nova do mesmo pedido.
+    func settleUnanchoredAcceptance() {
+        guard acceptedUnanchored != nil, !acceptsUnanchored else { return }
+        acceptedUnanchored = nil
+        unanchoredDropNotice = quote?.unanchored == true
+    }
+
+    /// Pedido novo, rota escolhida, troca concluida, plano que falhou ou desmarcar: o aceite e o aviso saem juntos.
+    func clearUnanchoredAcceptance() {
+        acceptedUnanchored = nil
+        unanchoredDropNotice = false
+    }
     var invertedRate = false
     var showDetails = false
 
@@ -110,6 +145,7 @@ final class TradeModel {
         exactOut = false
         receiveText = ""
         shortOfTarget = false
+        solving = false
     }
 
     var amountIn: BigUInt? {
@@ -241,9 +277,18 @@ struct TradeView: View {
     /// sem botao de inverter (pedido do dono, 04/11/2026).
     private var pickerSwapsSides: Bool { mode == .limit && model.editing == nil && fixedEdit == nil }
 
+    /// Comprando na troca de agora: as redes em que a busca de qualquer moeda, a mesma de Receber, leva a troca (pedido do
+    /// dono, 06/11/2026). A ordem limite e a edicao de uma ordem ficam como estao.
+    private var catalogChains: [Chain] {
+        guard mode == .now, fixedEdit == nil, model.editing == nil else { return [] }
+        let accounts = Set(session.selectedWallet?.accounts.map(\.chainID) ?? [])
+        return tradeChains.filter { accounts.contains($0.id) }
+    }
+
     private func tokenPicker(_ side: Side) -> some View {
         let other = side == .sell ? model.buy : model.sell
-        return TokenPickerSheet(chain: model.chain, chains: pickerChains, exclude: pickerSwapsSides ? nil : other, selling: side == .sell) { asset in
+        return TokenPickerSheet(chain: model.chain, chains: pickerChains, exclude: pickerSwapsSides ? nil : other, selling: side == .sell,
+                                catalogChains: side == .buy ? catalogChains : []) { asset in
             if pickerSwapsSides, let other, asset.id == other.id {
                 // O valor e o preco eram do sentido anterior: saem, e o preco de agora volta pelo `prefillTarget`.
                 let sell = model.sell
@@ -276,6 +321,14 @@ struct TradeView: View {
             }
             picking = nil
         }
+    }
+
+    /// `-tela trocar-sem-comparacao` abre rolada ate o aviso e a caixa do aceite.
+    private var demoScrollAnchor: UnitPoint? {
+        #if DEBUG
+        if DebugDemo.screen == "trocar-sem-comparacao" { return .bottom }
+        #endif
+        return nil
     }
 
     private var tradeScreen: some View {
@@ -316,6 +369,7 @@ struct TradeView: View {
                 .padding(.bottom, Space.xl)
             }
             .scrollDismissesKeyboard(.interactively)
+            .defaultScrollAnchor(demoScrollAnchor)
             // A base do rodape desce ate o fim da tela, por baixo da barra de abas: o toque
             // que cai no vao entre os botoes da barra para nela, e nao numa ordem aberta
             // que esteja rolada por tras (relato do dono, 14/10/2026).
@@ -340,6 +394,13 @@ struct TradeView: View {
             // carteira publica de teste tem. Na Solana nao da: a conta dela foi entregue a
             // um programa por quem conhece a frase, e o app recusa montar.
             if DebugDemo.screen == "trocar-xrp", model.amountText.isEmpty {
+                model.reset(to: .xrpl)
+                model.buy = TokenRegistry.tokens.first { $0.chainID == "xrpl" && $0.symbol == "RLUSD" }
+                model.amountText = "500"
+            }
+            // `-tela trocar-sem-comparacao`: a mesma troca de XRP, com a cotacao ao vivo marcada sem comparacao,
+            // para conferir o aviso e a caixa do aceite (05/11/2026).
+            if DebugDemo.screen == "trocar-sem-comparacao", model.amountText.isEmpty {
                 model.reset(to: .xrpl)
                 model.buy = TokenRegistry.tokens.first { $0.chainID == "xrpl" && $0.symbol == "RLUSD" }
                 model.amountText = "500"
@@ -387,6 +448,7 @@ struct TradeView: View {
                     guard let chosen = quote.choosing(picked) else { return }
                     model.chosenProvider = (picked.provider, model.pairKey)
                     model.acceptedImpactPercent = nil
+                    model.clearUnanchoredAcceptance()
                     model.quote = chosen
                     routeSheet = false
                 }
@@ -401,13 +463,19 @@ struct TradeView: View {
                     model.amountText = ""
                     model.targetPriceText = ""
                     // O aceite do preco vale por ordem: a proxima, mesmo par e mesmo preco, pede de novo (sexta passada).
+                    // O do impacto e o da cotacao sem comparacao tambem, e o recebido digitado sai, como no Android.
                     model.acceptedLimitPrice = nil
+                    model.acceptedImpactPercent = nil
+                    model.clearUnanchoredAcceptance()
+                    model.clearExactOut()
                     model.quote = nil
                     model.editing = nil
                 }
             }, onPlanFailed: { message in
                 reviewing = nil
                 model.planError = message
+                // O plano nao saiu: o aceite da cotacao sem comparacao vale de novo so com outro toque.
+                model.clearUnanchoredAcceptance()
             })
         }
         .fullScreenCover(item: $editingOrder) { edit in
@@ -498,7 +566,8 @@ struct TradeView: View {
     /// recebido, o par, a tolerancia ou a execucao (em partes) mudam.
     private var quoteKey: String {
         let amount = model.exactOut ? "recebe:\(model.receiveText)|\(model.inParts)" : "paga:\(model.amountText)"
-        return "\(model.chain.id)|\(model.sell?.id ?? "")|\(model.buy?.id ?? "")|\(amount)|\(slippage())|\(mode == .now)"
+        // A carteira tambem: a cotacao e os aceites sao da conta dela (revisao de 05/11/2026).
+        return "\(session.selectedWallet?.id.uuidString ?? "")|\(model.chain.id)|\(model.sell?.id ?? "")|\(model.buy?.id ?? "")|\(amount)|\(slippage())|\(mode == .now)"
     }
 
     /// A tolerancia do pedido: a automatica (o par, o dia e a rede) ou a escolhida no
@@ -555,7 +624,11 @@ struct TradeView: View {
                     .accessibilityIdentifier("troca-erro-plano")
             }
             if let quote = model.quote, let parts = quote.parts, let buy = model.buy {
-                ExecutionChoice(quote: quote, parts: parts, buy: buy, inParts: $model.inParts)
+                // Outra execucao: o aceite da cotacao sem comparacao era da outra, como na rota escolhida.
+                ExecutionChoice(quote: quote, parts: parts, buy: buy, inParts: Binding(get: { model.inParts }, set: { value in
+                    if value != model.inParts { model.clearUnanchoredAcceptance() }
+                    model.inParts = value
+                }))
                     .padding(.top, Space.md)
                     .transition(.opacity)
             }
@@ -604,6 +677,8 @@ struct TradeView: View {
         guard let quote = model.quote else { return "" }
         if model.inParts, quote.parts != nil { return String(localized: "Em partes pela CoW, conforme chega liquidez") }
         if quote.execution == .order { return String(localized: "Leilão da CoW, o melhor entre \(quote.providersCompared)") }
+        // Sem comparacao, "o melhor entre" sugeriria a comparacao que o aviso nega (revisao de 05/11/2026).
+        if quote.unanchored, quote.legs.count == 1 { return String(localized: "\(quote.legs[0].provider), sem comparação") }
         if let chosen = model.chosenProvider, chosen.pair == model.pairKey, quote.legs.first?.provider == chosen.provider {
             return String(localized: "\(chosen.provider), escolhido por você")
         }
@@ -653,6 +728,7 @@ struct TradeView: View {
                         .typeStyle(.note).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true)
                 }
                 impactLine(quote)
+                if quote.unanchored { unanchoredLine(quote) }
                 Button { withAnimation(Motion.flip) { model.showDetails.toggle() } } label: {
                     HStack(spacing: 4) {
                         Text("Detalhes").typeStyle(.note).foregroundStyle(Palette.inkSoft)
@@ -702,6 +778,36 @@ struct TradeView: View {
         case .blocked:
             Text("Esta troca perderia \(Fmt.grouped(quote.priceImpactPercent ?? 0, fractionDigits: 0))% para o impacto no preço. Divida em ordens menores ou use uma ordem limite.")
                 .typeStyle(.note).foregroundStyle(Palette.down).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// So uma fonte de cotacao e sem preco de referencia: o aviso e a caixa do aceite (pedido do dono,
+    /// 05/11/2026). A caixa prende a cotacao desenhada; enquanto a do pedido novo nao chega, ela nao muda.
+    private func unanchoredLine(_ quote: TradeQuote) -> some View {
+        let waiting = model.recalculating || (model.exactOut && model.solving)
+        return VStack(alignment: .leading, spacing: Space.xs) {
+            Text("Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Um preço manipulado não seria percebido pela carteira.")
+                .typeStyle(.note).foregroundStyle(Palette.caution).fixedSize(horizontal: false, vertical: true)
+            // O aceite grava a cotacao desenhada: uma recotacao que chegou depois do desenho nao leva o toque.
+            ConsentCheckbox(checked: Binding(get: { model.acceptsUnanchored },
+                                             set: { accepted in
+                                                 // Desmarcar vale sempre; marcar, so na cotacao desenhada e parada.
+                                                 guard accepted else { model.clearUnanchoredAcceptance(); return }
+                                                 guard !(model.recalculating || (model.exactOut && model.solving)), model.quote == quote,
+                                                       let terms = model.unanchoredTerms else { return }
+                                                 model.acceptedUnanchored = (model.pairKey, quote.amountIn, terms.inParts, quote.minimumOut(inParts: terms.inParts))
+                                                 model.unanchoredDropNotice = false
+                                             }),
+                            text: String(localized: "Entendo que agora só há uma fonte de cotação independente e que o preço pode estar manipulado."))
+                .disabled(waiting)
+                .accessibilityIdentifier("aceite-sem-comparacao")
+            if model.unanchoredDropNotice {
+                Text("A cotação mudou. Confira e marque de novo.").typeStyle(.note).foregroundStyle(Palette.inkSoft)
+            }
+        }
+        // O botao apaga sozinho quando o aceite cai: quem usa o VoiceOver ouve por que.
+        .onChange(of: model.unanchoredDropNotice, initial: true) { _, dropped in
+            if dropped { AccessibilityNotification.Announcement(String(localized: "A cotação mudou. Confira e marque de novo.")).post() }
         }
     }
 
@@ -1001,6 +1107,17 @@ struct TradeView: View {
         (0..<exponent).reduce(BigUInt(1)) { result, _ in result * BigUInt(10) }
     }
 
+    #if DEBUG
+    /// A cotacao como viria sem comparacao (`-tela trocar-sem-comparacao`).
+    static func markedUnanchored(_ quote: TradeQuote) -> TradeQuote {
+        TradeQuote(sell: quote.sell, buy: quote.buy, amountIn: quote.amountIn, expectedOut: quote.expectedOut, minimumOut: quote.minimumOut,
+                   priceImpactPercent: quote.priceImpactPercent, networkFees: quote.networkFees, providerFeeNote: quote.providerFeeNote,
+                   legs: quote.legs, alternatives: quote.alternatives, providersCompared: quote.providersCompared,
+                   needsApproval: quote.needsApproval, expiresAt: quote.expiresAt, execution: quote.execution, parts: quote.parts,
+                   unanchored: true)
+    }
+    #endif
+
     /// Congela o pedido e abre a revisao. O motor recota e monta o plano de novo la.
     private func startReview() {
         model.planError = nil
@@ -1013,7 +1130,8 @@ struct TradeView: View {
         case .now:
             guard let quote = model.quote else { return }
             let request = TradeRequest(walletID: wallet.id, chain: model.chain, account: account, sell: sell, buy: buy,
-                                       amountIn: amount, slippageBasisPoints: slippage(), inParts: model.inParts && quote.parts != nil)
+                                       amountIn: amount, slippageBasisPoints: slippage(), inParts: model.inParts && quote.parts != nil,
+                                       acceptsUnanchored: quote.unanchored && model.acceptsUnanchored)
             reviewing = TradeReviewFlow.Item(kind: .swap(request, quote), chain: model.chain, fiat: fiat)
         case .limit:
             guard let minimum = limitMinimumOut else { return }
@@ -1137,6 +1255,8 @@ struct TradeView: View {
     private var primaryEnabled: Bool {
         guard engine != nil, let amount = model.amountIn, !amount.isZero, !over else { return false }
         if mode == .limit { return engine?.supportsLimitOrders == true && limitMinimumOut != nil && limitPriceConfirmed }
+        // Sem comparacao, so com o aceite, tambem em partes (pedido do dono, 05/11/2026).
+        if model.quote?.unanchored == true, !model.acceptsUnanchored { return false }
         // Em partes, cada parte sai por um preco melhor que o da ordem inteira.
         if model.inParts, model.quote?.parts != nil { return true }
         switch PriceImpact.level(model.quote?.priceImpactPercent) {
@@ -1214,6 +1334,7 @@ struct TradeView: View {
             model.quote = nil
             model.quoting = false
             model.recalculating = false
+            model.solving = false
             return
         }
         if model.exactOut {
@@ -1230,10 +1351,12 @@ struct TradeView: View {
             model.quote = nil
             model.quoting = false
             model.recalculating = false
+            model.solving = false
             return
         }
         // Pedido novo (par, valor, rede ou tolerancia): o aceite do impacto era do outro.
         model.acceptedImpactPercent = nil
+        model.clearUnanchoredAcceptance()
         // Na hora, sem esperar a rede: a cotacao na tela e a do pedido anterior. "Voce recebe"
         // vai para a estimativa proporcional (mesmo par), apagada e pulsando, ate a nova chegar.
         if let previous = model.quote {
@@ -1252,7 +1375,12 @@ struct TradeView: View {
             do {
                 let request = TradeRequest(walletID: wallet.id, chain: model.chain, account: account, sell: sell, buy: buy,
                                            amountIn: amount, slippageBasisPoints: slippage())
-                let fresh = try await engine.quote(request)
+                let quoted = try await engine.quote(request)
+                #if DEBUG
+                let fresh = DebugDemo.screen == "trocar-sem-comparacao" ? Self.markedUnanchored(quoted) : quoted
+                #else
+                let fresh = quoted
+                #endif
                 // A cotacao de um pedido que ja mudou (a tolerancia arrastada, o valor
                 // digitado) nao entra, nem o erro dela: o aviso piscava enquanto o dono
                 // arrastava a tolerancia (pedido do dono, 17/10/2026).
@@ -1264,6 +1392,7 @@ struct TradeView: View {
                     model.recalculating = false
                     model.estimate = nil
                 }
+                model.settleUnanchoredAcceptance()
                 // "Max" na moeda nativa: o valor desce para deixar a taxa maxima de fora (o plano
                 // recusaria tudo). O valor novo recota sozinho.
                 if model.maxNative, let reserve = fresh.nativeReserveForMax() {
@@ -1305,10 +1434,12 @@ struct TradeView: View {
             return
         }
         model.acceptedImpactPercent = nil
+        model.clearUnanchoredAcceptance()
+        // O valor a pagar some ate a primeira resposta; nas recotacoes, fica o anterior. Ja na espera: a
+        // cotacao na tela e do recebido anterior, e a caixa do aceite nao muda nela.
+        model.solving = true
         try? await Task.sleep(for: .milliseconds(400))
         guard !Task.isCancelled else { return }
-        // O valor a pagar some ate a primeira resposta; nas recotacoes, fica o anterior.
-        model.solving = true
         while !Task.isCancelled {
             model.quoting = true
             model.error = nil
@@ -1321,6 +1452,7 @@ struct TradeView: View {
                 model.amountText = Fmt.plainDecimal(solution.amountIn, decimals: sell.decimals)
                 if solution.quote.parts == nil { model.inParts = false }
                 model.quote = solution.quote
+                model.settleUnanchoredAcceptance()
                 model.shortOfTarget = !solution.reached
             } catch {
                 guard !Task.isCancelled else { return }
@@ -1566,9 +1698,18 @@ struct TokenPickerSheet: View {
     let exclude: Asset?
     /// "Voce vende": so o que a carteira tem nesta rede (pedido do dono, 17/10/2026).
     var selling = false
+    /// Comprando na troca de agora: qualquer moeda pela busca de Receber, levada para a rede dela (pedido do dono,
+    /// 06/11/2026). Vazio, so a lista.
+    var catalogChains: [Chain] = []
     let onPick: (Asset) -> Void
     @State private var query = ""
     @State private var adding = false
+    @State private var looking: CoinSearchResult?
+    /// O texto que o dono pediu para buscar em todas as moedas. Com a lista daqui achando algo, a busca fora espera esse
+    /// toque: o nome de uma moeda que a carteira ja tem nao sai do aparelho a cada letra (revisao de 06/11/2026).
+    @State private var widened: String?
+
+    private var search: CoinSearchStore { .shared }
 
     /// Fora da lista: as moedas adicionadas e os tokens que a carteira tem, sem suspeita.
     private var unlisted: [Asset] {
@@ -1623,9 +1764,14 @@ struct TokenPickerSheet: View {
         let verified = ordered(TokenRegistry.assets(on: chain).filter { $0.id != exclude?.id && matches($0) })
         let others = ordered(unlisted.filter { $0.id != exclude?.id && matches($0) })
         let elsewhere = ordered(heldElsewhere.filter { $0.id != exclude?.id && matches($0) })
+        // Comprando na troca de agora: a busca de todas as moedas sai sozinha quando nada daqui combina, e com o toque
+        // quando combina.
+        let key = CoinSearchStore.key(query)
+        let nothingLocal = verified.isEmpty && others.isEmpty && elsewhere.isEmpty
+        let searching = !catalogChains.isEmpty && key.count >= 2 && (nothingLocal || widened == key)
         VStack(alignment: .leading, spacing: 0) {
             SheetHeader(title: String(localized: "Escolher token")) { dismiss() }
-            TextField("", text: $query, prompt: Text("Buscar por nome").foregroundColor(Palette.inkDead))
+            TextField("", text: $query, prompt: (catalogChains.isEmpty ? Text("Buscar por nome") : Text("Buscar qualquer moeda")).foregroundColor(Palette.inkDead))
                 .typeStyle(.body).foregroundStyle(Palette.ink)
                 .padding(.horizontal, Space.md).frame(height: 44)
                 .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.rail))
@@ -1644,6 +1790,24 @@ struct TokenPickerSheet: View {
                     if !elsewhere.isEmpty {
                         section(String(localized: "Suas moedas em outras redes"))
                         ForEach(elsewhere) { row($0) }
+                    }
+                    // Qualquer moeda, como em Receber (pedido do dono, 06/11/2026): a rede dela e escolhida depois, e a
+                    // moeda nova passa antes pelo Adicionar moeda.
+                    if searching {
+                        catalogSection(listedIDs: Set((verified + others + elsewhere).compactMap(\.coingeckoID)), nothingListed: nothingLocal)
+                    } else if !catalogChains.isEmpty, key.count >= 2 {
+                        Button { widened = key } label: {
+                            HStack(spacing: Space.sm) {
+                                Image(systemName: "magnifyingglass").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.ink)
+                                    .frame(width: 36, height: 36).background(Circle().fill(Palette.control))
+                                Text("Buscar “\(query.trimmingCharacters(in: .whitespaces))” em todas as moedas")
+                                    .typeStyle(.row).foregroundStyle(Palette.ink).lineLimit(2)
+                                Spacer()
+                            }
+                            .padding(.horizontal, Space.gutter).frame(minHeight: Height.row)
+                        }
+                        .buttonStyle(RowStyle(surface: .body))
+                        .accessibilityIdentifier("troca-buscar-todas")
                     }
                     if selling, verified.isEmpty, others.isEmpty, elsewhere.isEmpty {
                         Text(query.isEmpty ? String(localized: "Nada para vender na \(chain.name) ainda. Receba ou troque em outra rede primeiro.")
@@ -1681,11 +1845,88 @@ struct TokenPickerSheet: View {
             }
             .presentationBackground(Palette.void)
         }
+        .sheet(item: $looking) { result in
+            NavigationStack {
+                TradeCatalogLookup(result: result, chains: catalogChains, exclude: exclude?.id) { asset in
+                    looking = nil
+                    onPick(asset)
+                }
+            }
+            .presentationBackground(Palette.body)
+        }
+        .task(id: searching ? key : "") {
+            guard searching else { return }
+            await search.search(query)
+        }
     }
 
     private func section(_ title: String) -> some View {
         Text(title).typeStyle(.note).foregroundStyle(Palette.inkSoft)
             .padding(.horizontal, Space.gutter).padding(.top, Space.md).padding(.bottom, Space.xxs)
+    }
+
+    /// Os achados da busca fora do que a folha ja mostra, como em Receber.
+    @ViewBuilder
+    private func catalogSection(listedIDs: Set<String>, nothingListed: Bool) -> some View {
+        switch search.status(query) {
+        case .loaded(let results)?:
+            let shown = results.filter { !listedIDs.contains($0.id) }
+            if !shown.isEmpty {
+                section(String(localized: "Mais moedas, fora da lista verificada"))
+                ForEach(shown) { resultRow($0) }
+            } else if nothingListed {
+                searchNote(String(localized: "Nenhuma moeda com esse nome ou símbolo."))
+            }
+        case .failed?:
+            VStack(alignment: .leading, spacing: Space.xs) {
+                searchNote(String(localized: "O CoinGecko não respondeu agora. Aparecem só as moedas verificadas."))
+                TertiaryButton(title: String(localized: "Buscar de novo")) {
+                    search.retry(query)
+                    Task { await search.search(query) }
+                }
+                .padding(.horizontal, Space.gutter)
+            }
+        case .phrase?:
+            searchNote(String(localized: "Isto parece o começo das palavras de uma carteira, e a busca não saiu do iPhone. As palavras só se digitam ao importar uma carteira."))
+        case .loading?, .retrying?, nil:
+            section(String(localized: "Mais moedas, fora da lista verificada"))
+            ForEach(0..<3, id: \.self) { _ in
+                HStack(spacing: Space.sm) {
+                    ShimmerBar(width: 36, height: 36)
+                    VStack(alignment: .leading, spacing: 6) {
+                        ShimmerBar(width: 72, height: 14)
+                        ShimmerBar(width: 140, height: 12)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, Space.gutter).frame(minHeight: Height.row)
+                .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private func searchNote(_ text: String) -> some View {
+        Text(text).typeStyle(.note).foregroundStyle(Palette.inkMuted).fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, Space.gutter).padding(.top, Space.md)
+    }
+
+    private func resultRow(_ result: CoinSearchResult) -> some View {
+        Button { looking = result } label: {
+            HStack(spacing: Space.sm) {
+                CoinLogo(coingeckoID: result.id, symbol: result.symbol, size: 36, remoteURL: result.image, ringColor: Palette.body)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: result.symbol).typeStyle(.row).foregroundStyle(Palette.ink).lineLimit(1)
+                    Text(verbatim: result.name).typeStyle(.note).foregroundStyle(Palette.inkSoft).lineLimit(1)
+                }
+                Spacer()
+                // A posicao no mercado separa a moeda de uma copia com o mesmo simbolo.
+                Text(result.rank.map { String(localized: "Nº \($0) no mercado") } ?? String(localized: "Sem posição no mercado"))
+                    .typeStyle(.note).foregroundStyle(Palette.inkMuted)
+                Image(systemName: "chevron.forward").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.inkMuted)
+            }
+            .padding(.horizontal, Space.gutter).frame(minHeight: Height.row)
+        }
+        .buttonStyle(RowStyle(surface: .body))
     }
 
     private func row(_ asset: Asset) -> some View {
@@ -1709,6 +1950,147 @@ struct TokenPickerSheet: View {
             .padding(.horizontal, Space.gutter).frame(minHeight: Height.row)
         }
         .buttonStyle(RowStyle(surface: .body))
+    }
+}
+
+/// Tocou numa moeda da busca, comprando (pedido do dono, 06/11/2026): as opcoes de compra pela regra de `TradeCatalog`, a
+/// mesma do `RedesDaTroca` do Android. A lista embarcada e a leitura de agora inteira: as linhas so aparecem com o aviso do
+/// CoinGecko e o contrato atual ja lidos. A da lista verificada e a ja adicionada vao direto; a nova passa antes pelo
+/// Adicionar moeda, que le nome, simbolo e casas na propria rede e mostra o contrato inteiro com o aviso de nao verificado.
+struct TradeCatalogLookup: View {
+    @Environment(AppSession.self) private var session
+    @Environment(\.dismiss) private var dismiss
+    let result: CoinSearchResult
+    /// As redes da troca com conta nesta carteira.
+    let chains: [Chain]
+    /// O ativo do outro lado da troca: nao volta como opcao.
+    let exclude: String?
+    let onPick: (Asset) -> Void
+    @State private var adding: TradeCatalog.Option?
+    @State private var read: Read?
+    @State private var round = 0
+
+    /// A lista embarcada e a leitura de agora (nil: nao respondeu).
+    struct Read {
+        let local: CatalogCoin?
+        let live: CatalogCoin?
+    }
+
+    var body: some View {
+        Group {
+            if let read {
+                content(read)
+            } else {
+                VStack(spacing: Space.md) {
+                    Spacer()
+                    ProgressView().tint(Palette.inkSoft)
+                    Text("Buscando as redes de \(result.symbol)")
+                        .typeStyle(.note).foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center)
+                        .padding(.horizontal, Space.gutter)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .background(Palette.body.ignoresSafeArea())
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.inkSoft)
+                }
+                .accessibilityLabel("Fechar")
+            }
+        }
+        // Salva pelo Adicionar moeda (o mesmo contrato na mesma rede), a moeda segue para a troca.
+        .navigationDestination(item: $adding) { option in
+            AddCustomTokenView(preset: AddCustomTokenView.Preset(chain: option.asset.chain, kind: option.asset.kind)) {
+                if let saved = TradeCatalog.saved(option.asset, custom: session.metadata.customTokens) { onPick(saved) } else { adding = nil }
+            }
+        }
+        .task(id: round) {
+            read = nil
+            // Moeda da lista verificada: so as formas verificadas, sem perguntar nada na rede.
+            if TradeCatalog.isListed(result.id) {
+                read = Read(local: nil, live: nil)
+                return
+            }
+            let local = await CoinSearchStore.shared.localCoin(result.id)
+            let live = try? await CoinCatalog.coinAllNetworks(id: result.id, symbol: result.symbol, name: result.name)
+            guard !Task.isCancelled else { return }
+            read = Read(local: local, live: live)
+        }
+    }
+
+    private func content(_ read: Read) -> some View {
+        let options = TradeCatalog.options(coinID: result.id, local: read.local, live: read.live, chains: chains,
+                                           custom: session.metadata.customTokens, exclude: exclude)
+        let symbol = read.live?.symbol ?? read.local?.symbol ?? result.symbol
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: Space.sm) {
+                    CoinLogo(coingeckoID: result.id, symbol: symbol, size: 32, remoteURL: result.image, ringColor: Palette.body)
+                    Text("Comprar \(symbol)").typeStyle(.title).foregroundStyle(Palette.ink)
+                }
+                if read.live?.hasNotice == true {
+                    // O texto do aviso e de quem escreveu, com link: a tela so diz que existe.
+                    Text("O CoinGecko publicou um aviso sobre \(symbol) (ataque, migração ou golpe). Confira as notícias da moeda antes de comprar.")
+                        .typeStyle(.note).foregroundStyle(Palette.caution).fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, Space.sm)
+                }
+                if result.id.hasPrefix(CoinCatalog.paprikaPrefix) {
+                    // Achada so no CoinPaprika: tentar de novo nao muda nada.
+                    Text("Esta moeda não está no CoinGecko. Fora da lista verificada, a troca só compra o contrato que o CoinGecko confirma.")
+                        .typeStyle(.note).foregroundStyle(Palette.inkMuted).fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, Space.sm)
+                } else if !TradeCatalog.isListed(result.id), !TradeCatalog.confirmed(coinID: result.id, live: read.live) {
+                    // Sem a leitura de agora confirmada pelo CoinGecko, nada de fora da lista: o contrato espera por ela.
+                    Text("O CoinGecko não respondeu agora. Aparecem só as moedas verificadas.")
+                        .typeStyle(.note).foregroundStyle(Palette.inkMuted).fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, Space.sm)
+                    TertiaryButton(title: String(localized: "Tentar de novo")) { round += 1 }
+                        .padding(.top, Space.xxs)
+                } else if options.isEmpty {
+                    Text("A troca ainda não compra \(symbol) nas redes desta carteira.")
+                        .typeStyle(.body).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, Space.sm)
+                }
+                if !options.isEmpty {
+                    if options.contains(where: { !$0.ready }) {
+                        Text("Escolha a rede. Fora da lista verificada, a moeda entra pelo contrato que o CoinGecko ou o CoinPaprika listam: antes da troca, a carteira lê nome, símbolo e casas na própria rede e mostra o contrato inteiro.")
+                            .typeStyle(.body).foregroundStyle(Palette.inkSoft).fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, Space.sm)
+                    }
+                    VStack(spacing: 0) {
+                        ForEach(options) { networkRow($0) }
+                    }
+                    .padding(.top, Space.md)
+                }
+            }
+            .padding(.horizontal, Space.gutter)
+            .padding(.top, Space.xs)
+        }
+    }
+
+    private func networkRow(_ option: TradeCatalog.Option) -> some View {
+        let standard = option.asset.kind == .native ? option.asset.symbol : (option.asset.chain.map(ReceiveCoin.standard) ?? "")
+        return Button {
+            if option.ready { onPick(option.asset) } else { adding = option }
+        } label: {
+            HStack(spacing: Space.sm) {
+                if let chain = option.asset.chain { NetworkBadge(chain: chain, size: 32, ring: Palette.body) }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: option.asset.chain?.name ?? "").typeStyle(.row).foregroundStyle(Palette.ink)
+                    Text(verbatim: option.verified ? standard : String(localized: "\(standard) · não verificado"))
+                        .typeStyle(.note).foregroundStyle(Palette.inkSoft)
+                }
+                Spacer()
+                Image(systemName: "chevron.forward").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.inkMuted)
+            }
+            .frame(minHeight: Height.row)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("troca-busca-rede-\(option.asset.chainID)")
     }
 }
 

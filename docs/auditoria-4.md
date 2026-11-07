@@ -35,7 +35,7 @@ Auditoria de segurança completa pedida pelo dono, com sete revisores em paralel
 | B5 | QR ou link de pagamento descartava a tag e o memo sem avisar. | Feito: `dt`, `text` e o memo do SEP-7 vão para o campo, com a nota de onde vieram. |
 | N2 | As palavras não tinham o temporizador de 60 s que a documentação prometia. | Feito. |
 | R7-B1 | Número JSON sem teto de dígitos virava parsing quadrático: um provedor congelava o app. | Feito. Teto de 78 dígitos no `BigUInt(decimal:)` e no `StrictJSON` (20 em `uint64`/`int64`). |
-| R7-B2 | A referência de preço das trocas podia ser um preço velho. | Feito. Só preço com menos de 2 minutos vale como referência; mais velho força duas cotações. |
+| R7-B2 | A referência de preço das trocas podia ser um preço velho. | Feito. Só preço com menos de 2 minutos vale como referência; mais velho força duas cotações. Desde 05/11/2026 (decisão do dono), com uma fonte só a troca segue marcada sem comparação e pede o aceite na tela. |
 | B1 | A simulação da troca na Solana vinha de um RPC só. | Feito. Dois RPCs de operadores diferentes, os dois confirmando; o limite de CU é o maior. |
 | B2 | O bloco das leituras EVM concordantes vinha de um provedor só. | Feito. A menor das pontas de dois provedores, recusando diferença grande. |
 | B4 | Só o vetor 1 do BIP-32 e do SLIP-10 nos testes. | Feito. Vetores 1 a 4 do BIP-32 e 1 e 2 do SLIP-10, secp256k1 e Ed25519. |

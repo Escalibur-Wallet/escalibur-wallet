@@ -188,7 +188,7 @@ enum DebugDemo {
             case "moeda":
                 router.tab = .market
                 router.pendingCoinID = "bitcoin"
-            case "trocar", "trocar-grande", "trocar-xrp", "trocar-recebe", "trocar-shina": router.tab = .trade
+            case "trocar", "trocar-grande", "trocar-xrp", "trocar-recebe", "trocar-shina", "trocar-sem-comparacao": router.tab = .trade
             case "limite", "limite-xrp", "limite-recebe":
                 router.tab = .trade
                 router.tradeMode = .limit
@@ -376,14 +376,16 @@ struct DemoEnvelopes: ViewModifier {
                 .background(Palette.void.ignoresSafeArea())
             }
             // `-tela carregando` e `-tela enviando`: a ordem limite de 1 ETH por USDC na
-            // Base, parada na etapa de montar ou de enviar.
+            // Base, parada na etapa de montar ou de enviar. `-tela enviando-ethereum`: a mesma na
+            // Ethereum, com a nota da autorizacao antes.
             .fullScreenCover(isPresented: Binding(get: { tradeStage != nil }, set: { if !$0 { tradeStage = nil } })) {
-                if let tradeStage, let wallet = session.selectedWallet, let account = wallet.account(.base),
-                   let usdc = TokenRegistry.tokens.first(where: { $0.chainID == "base" && $0.symbol == "USDC" }) {
-                    let request = LimitOrderRequest(walletID: wallet.id, chain: .base, account: account, sell: .native(.base), buy: usdc,
+                let chain: Chain = DebugDemo.screen == "enviando-ethereum" ? .ethereum : .base
+                if let tradeStage, let wallet = session.selectedWallet, let account = wallet.account(chain),
+                   let usdc = TokenRegistry.tokens.first(where: { $0.chainID == chain.id && $0.symbol == "USDC" }) {
+                    let request = LimitOrderRequest(walletID: wallet.id, chain: chain, account: account, sell: .native(chain), buy: usdc,
                                                     amountIn: BigUInt.power(of: 10, 18), minimumOut: BigUInt(2_600) * BigUInt.power(of: 10, 6),
                                                     validFor: 604_800)
-                    TradeReviewFlow(item: .init(kind: .limit(request), chain: .base, fiat: nil), onClose: { _ in self.tradeStage = nil },
+                    TradeReviewFlow(item: .init(kind: .limit(request), chain: chain, fiat: nil), onClose: { _ in self.tradeStage = nil },
                                     debugStage: tradeStage)
                 }
             }
@@ -448,7 +450,7 @@ struct DemoEnvelopes: ViewModifier {
                 if DebugDemo.screen == "animacao" { animationPreview = true }
                 if DebugDemo.screen == "widgets" { widgetPreview = true }
                 if DebugDemo.screen == "carregando" { tradeStage = .planning }
-                if DebugDemo.screen == "enviando" { tradeStage = .sending }
+                if ["enviando", "enviando-ethereum"].contains(DebugDemo.screen) { tradeStage = .sending }
                 if DebugDemo.screen == "ordem-criada" { tradeStage = .done }
                 newWallet = DebugDemo.screen.flatMap(DemoNewWallet.init(rawValue:))
             }

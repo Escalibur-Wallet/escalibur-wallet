@@ -72,7 +72,9 @@ enum Importacao {
         }
     }
 
-    static func segredo(_ frase: SecureBytes, passphrase: SecureBytes?) throws -> WalletSecret {
+    /// `doEnvelope`: a passphrase de um envelope de antes, que pode ter os bytes que uma versao anterior gravou fora de
+    /// NFKD; a conta da Cardano sai deles, como a da carteira de origem (`WalletSecret.fromEnvelope`).
+    static func segredo(_ frase: SecureBytes, passphrase: SecureBytes?, doEnvelope: Bool = false) throws -> WalletSecret {
         let (canonica, veredito) = resolver(frase)
         frase.wipe()
         guard case .valid(let idioma) = veredito else {
@@ -80,20 +82,22 @@ enum Importacao {
             passphrase?.wipe()
             throw Nucleo.Falha(erro: "frase.invalida")
         }
-        // Passou do limite do cofre (256 bytes depois do NFKD): o aviso com nome, antes de gravar.
-        if let passphrase, !PortaDaPassphrase.cabe(passphrase) {
+        // Passou do limite (256 bytes depois do NFKD): o aviso com nome, antes de gravar. Nao no envelope de uma carteira que ja
+        // existe: a de uma versao anterior tinha ate 256 bytes como estavam, e em NFKD pode passar disso.
+        if let passphrase, !doEnvelope, !PortaDaPassphrase.cabe(passphrase) {
             canonica.wipe()
             passphrase.wipe()
             throw Nucleo.Falha(erro: "passphrase.longa")
         }
+        if doEnvelope, let passphrase { return try WalletSecret.fromEnvelope(phrase: canonica, language: idioma, passphrase: passphrase).secret }
         return try WalletSecret.from(phrase: canonica, language: idioma, passphrase: passphrase)
     }
 
     /// Os primeiros enderecos e a impressao digital, antes de guardar: frase com uma palavra
     /// trocada que ainda fecha, ou 25a palavra diferente, abre outra carteira, vazia, sem aviso.
     /// So deriva, sem rede: a tela das palavras fica em silencio.
-    static func previa(_ frase: SecureBytes, passphrase: SecureBytes?) throws -> Previa {
-        let secret = try segredo(frase, passphrase: passphrase)
+    static func previa(_ frase: SecureBytes, passphrase: SecureBytes?, doEnvelope: Bool = false) throws -> Previa {
+        let secret = try segredo(frase, passphrase: passphrase, doEnvelope: doEnvelope)
         defer { secret.wipe() }
         let (contas, digital) = try AccountDeriver.derive(secret, chains: redesDaPrevia + [.tron])
         let enderecos = redesDaPrevia.compactMap { rede in
@@ -119,9 +123,15 @@ enum Importacao {
         return achados.map(\.rawValue).sorted()
     }
 
-    static func importar(_ frase: SecureBytes, passphrase: SecureBytes?, palavras: Int, tronComOutraChave: Bool, credencial: Credencial) throws -> WalletMeta {
+    /// `digital`: a da previa que o dono conferiu. A carteira que se ia gravar e outra (a passphrase mudou no caminho):
+    /// nada e gravado (revisao de seguranca de 05/11/2026).
+    static func importar(_ frase: SecureBytes, passphrase: SecureBytes?, palavras: Int, tronComOutraChave: Bool, digital: String?,
+                         credencial: Credencial) throws -> WalletMeta {
         let secret: WalletSecret
         do {
+            // Sem a digital da previa, nada e gravado: um chamador novo nao fura a conferencia em silencio. A conferencia em si
+            // e na derivacao que vai ao cofre (`adicionarCarteira`).
+            guard digital != nil else { throw Nucleo.Falha(erro: "importacao.mudou") }
             secret = try segredo(frase, passphrase: passphrase)
         } catch {
             credencial.zerar()
@@ -131,7 +141,7 @@ enum Importacao {
         let nome = quantas == 0 ? Textos.carteiraPrincipal : Textos.carteira(quantas + 1)
         return try Sessao.shared.adicionarCarteira(
             secret, nome: nome, origem: .importedPhrase, palavras: palavras, copiaConfirmada: true,
-            tronComOutraChave: tronComOutraChave, credencial: credencial
+            tronComOutraChave: tronComOutraChave, digitalEsperada: digital, credencial: credencial
         )
     }
 

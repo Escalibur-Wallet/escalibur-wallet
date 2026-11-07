@@ -50,12 +50,14 @@ Taxa da Escalibur: zero em todas as trocas, com teste por provedor.
   gas pela menor de duas estimativas ou simulações, mais 20%; tetos por rede compilados
   (`EVMFeeProfile`; na BNB, 1 gwei). O envio de token avisa taxa acima de 3% do valor,
   pelo preço de mercado; sem preço, sem aviso.
-- **Troca EVM**: o mínimo ancora fora do provedor. Com preço de referência do mercado
+- **Troca EVM**: em regra, o mínimo ancora fora do provedor. Com preço de referência do mercado
   (CoinGecko, ou a paridade entre dois stablecoins da lista), a cotação mais de 5% pior
-  bloqueia, e acima de 2% a revisão diz quanto. Sem referência, a troca exige duas
+  bloqueia, e acima de 2% a revisão diz quanto. Sem referência, a troca usa duas
   cotações válidas e só escolhe a que garante o mínimo calculado da maior estimativa
   entre elas; no plano, a recotação tem de garantir pelo menos o mínimo que a tela
-  mostrou.
+  mostrou. Com uma fonte só e sem referência, a cotação vem marcada sem comparação e só
+  vira plano com o aceite do dono na tela, preso ao mínimo que ela mostrou (decisão do
+  dono, 05/11/2026).
 - **Prazo da troca EVM**: nenhum dos quatro routers confere prazo na função que a
   carteira aceita (fonte verificado conferido em 26/09/2026): a Augustus V6 da Velora, o
   MetaAggregationRouterV2 da KyberSwap fora do modo simples (que a carteira recusa), a

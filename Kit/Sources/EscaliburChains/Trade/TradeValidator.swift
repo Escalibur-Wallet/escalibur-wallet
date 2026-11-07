@@ -315,15 +315,35 @@ public enum TradeValidator {
     ///
     /// Cada cotacao ja exige `minOut >= esperado x (1 - tolerancia)`, mas o esperado e o
     /// numero que o proprio provedor anuncia: um provedor que cota baixo rebaixa o proprio
-    /// minimo. Por isso a troca so segue com uma ancora de fora:
+    /// minimo. Por isso a troca so segue com uma ancora de fora (ou, com uma fonte so, marcada
+    /// sem comparacao e com o aceite do dono, `unanchored`):
     /// - com preco de referencia, cada cotacao ja passou pela sanidade (5% pior bloqueia);
     /// - sem referencia, cotacoes validas de pelo menos duas fontes, e so ficam as que garantem
     ///   o minimo calculado da maior estimativa entre elas. As diretas (Uniswap, PancakeSwap,
     ///   ShibaSwap) saem do mesmo RPC e contam como uma fonte so (auditoria 6, A6-06).
     public static func anchored(_ quotes: [ValidatedTradeQuote], market: TradeMarketReference) throws -> [ValidatedTradeQuote] {
         guard !quotes.isEmpty, market.oracleOut == nil else { return quotes }
-        let sources = Set(quotes.map { $0.provider.quotedOnChain ? nil : $0.provider })
-        guard sources.count >= 2, let anchor = quotes.map(\.expectedOut).max() else { throw TradeRefusal.noPriceAnchor }
+        guard sourceCount(quotes) >= 2 else { throw TradeRefusal.noPriceAnchor }
+        return try keptAtHighest(quotes)
+    }
+
+    /// Sem referencia e com uma fonte so, onde `anchored` recusa (pedido do dono, 05/11/2026): a troca
+    /// pode seguir marcada como sem comparacao (`TradeQuote.unanchored`), e so revisa com o aceite do
+    /// dono. Nao ha ancora de fora; entre as cotacoes dessa fonte (as diretas saem do mesmo RPC), ficam
+    /// as que garantem o minimo da maior estimativa, como na regra de duas fontes.
+    public static func unanchored(_ quotes: [ValidatedTradeQuote], market: TradeMarketReference) throws -> [ValidatedTradeQuote] {
+        guard !quotes.isEmpty, market.oracleOut == nil, sourceCount(quotes) == 1 else { throw TradeRefusal.noPriceAnchor }
+        return try keptAtHighest(quotes)
+    }
+
+    /// As fontes independentes: as diretas contam como uma so.
+    static func sourceCount(_ quotes: [ValidatedTradeQuote]) -> Int {
+        Set(quotes.map { $0.provider.quotedOnChain ? nil : $0.provider }).count
+    }
+
+    /// As cotacoes que garantem o minimo calculado da maior estimativa entre elas.
+    static func keptAtHighest(_ quotes: [ValidatedTradeQuote]) throws -> [ValidatedTradeQuote] {
+        guard let anchor = quotes.map(\.expectedOut).max() else { throw TradeRefusal.noPriceAnchor }
         let kept = quotes.filter { $0.guaranteedOut + roundingSlack >= $0.intent.minimumOut(forExpected: anchor) }
         guard !kept.isEmpty else {
             let best = quotes.map(\.guaranteedOut).max() ?? BigUInt()

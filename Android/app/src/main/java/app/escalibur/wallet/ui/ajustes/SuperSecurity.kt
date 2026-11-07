@@ -159,6 +159,8 @@ private class RetratoDoReforco(j: JSONObject) {
     val faltaCopiaID: String? = j.opcional("faltaCopiaID")
     val carteiras = j.optJSONArray("carteiras").objetos()
     val pronto get() = biometriaLigada && faltaCopia == null && carteiras.isNotEmpty()
+    /** A recusa que os metadados ja dizem (passphrase que esta versao nao confere, ou gravada fora de NFKD), antes das palavras. */
+    val recusa: String? get() = carteiras.firstNotNullOfOrNull { it.opcional("aviso") }
 }
 
 private val textoDoAceite get() =
@@ -173,6 +175,7 @@ private fun mensagemDoReforco(falha: FalhaDoNucleo, padrao: String): String = wh
     "reforco.naoConfere" -> t("O que você digitou de %@ não confere com esta carteira. Confira no papel e comece de novo.", falha.dados.optString("nome"))
     "reforco.passphraseAntiga" -> t("A passphrase de %@ foi gravada por uma versão anterior do app, e restaurada pelas palavras a conta da Cardano dela muda. Mova o saldo dela para outra carteira e crie a carteira com passphrase de novo.", falha.dados.optString("nome"))
     "reforco.faltamPalavras" -> t("Digite as palavras de cada carteira antes de ligar.")
+    "reforco.semCarteiras" -> t("Não há carteira com palavras neste celular para conferir. Adicione a carteira antes de escolher Bloquear as carteiras.")
     "sessao.copiaPendente" -> t("Confira a cópia de todas as carteiras antes de ligar.")
     "cofre.pinErrado" -> Autorizacao.mensagemDePinErrado(falha)
     "cofre.espera" -> t("Tentativas demais. Tente de novo em %@.", Formato.duracao(falha.segundos))
@@ -570,7 +573,8 @@ private fun TelaDaPolitica(escolha: EscolhaDoReforco) {
     val ligado = r?.ligado == true
 
     fun escolher(politica: Politica) {
-        if (politica == escolha.politica || trabalhando != null) return
+        // Sem o retrato, ainda nao se sabe se o Super Security esta ligado: o toque espera ele chegar.
+        if (politica == escolha.politica || trabalhando != null || r == null) return
         mensagem = null
         if (politica == Politica.bloquear) {
             Navegacao.cobrir {
@@ -589,8 +593,29 @@ private fun TelaDaPolitica(escolha: EscolhaDoReforco) {
             return
         }
         if (!ligado) {
-            escolha.politica = politica
-            escolha.aceitouBloqueio = false
+            // Sair do bloqueio ja escolhido pede o PIN (pedido do dono, 18/10/2026, como no iPhone). Ligado, a troca ja pede o
+            // PIN e a digital, logo abaixo.
+            if (escolha.politica != Politica.bloquear) {
+                escolha.politica = politica
+                escolha.aceitouBloqueio = false
+                return
+            }
+            escopo.launch {
+                trabalhando = politica
+                try {
+                    val conferido = Autorizacao.tentando(t("Para trocar o que fazer se a digital mudar."), Autorizacao.Presenca.pin) { credencial ->
+                        Api.comSegredo("sessao.conferirPIN", JSONObject().put("credencial", credencial.json()), *credencial.partes())
+                    }
+                    if (conferido != null) {
+                        escolha.politica = politica
+                        escolha.aceitouBloqueio = false
+                    }
+                } catch (falha: Throwable) {
+                    mensagem = Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível mudar agora. Nada mudou: o modo de antes continua valendo.")
+                } finally {
+                    trabalhando = null
+                }
+            }
             return
         }
         // Na espera de "Esperar 24 horas", mudar a politica espera: recusa antes do teclado.
@@ -633,6 +658,15 @@ private fun TelaDaPolitica(escolha: EscolhaDoReforco) {
 }
 
 /**
+ * Super Security em "Bloquear as carteiras": criar, importar e abrir com passphrase recusam antes das palavras (pedido do dono,
+ * 06/11/2026; o `addingWordsBlocked` do iOS). O nucleo recusa de novo ("sessao.bloqueioLigado").
+ */
+internal suspend fun adicionarBloqueado(): Boolean = runCatching {
+    // A regra do nucleo, que falha fechada (o cofre que nao diz conta como bloqueado), como a tela do iOS.
+    Api.objeto("reforco.estado").optBoolean("bloqueado", true)
+}.getOrDefault(true)
+
+/**
  * "Bloquear as carteiras" (o HardenedLockFlow do iOS): a animacao em quatro quadros, o que vale, e o
  * aceite. Desligado, o aceite e a escolha para ligar (as palavras vem no fluxo de ligar); ligado,
  * depois do aceite, a frase de cada carteira, e o PIN e a digital.
@@ -648,11 +682,15 @@ private fun TelaDoBloqueio(ligado: Boolean, aoTerminar: (Boolean) -> Unit) {
     var tentativa by remember { mutableIntStateOf(0) }
     var retrato by remember { mutableStateOf<RetratoDoReforco?>(null) }
     LaunchedEffect(Unit) { retrato = runCatching { RetratoDoReforco(Api.objeto("reforco.estado")) }.getOrNull() }
+    // Ligado, as frases digitadas aqui ficam no nucleo ate a politica mudar: fechar a tela antes esquece (05/11/2026).
+    DisposableEffect(Unit) { onDispose { if (ligado) CoroutineScope(Dispatchers.IO).launch { runCatching { Api.objeto("reforco.esquecer") } } } }
 
     fun aplicar() {
         escopo.launch {
             val credencial = Autorizacao.credencial(t("Para ativar o bloqueio se a digital mudar.")) as? Credencial.Reforcado
             if (credencial == null) {
+                // Sem o PIN, comecar de novo pede as palavras de novo: nada fica esperando.
+                runCatching { Api.objeto("reforco.esquecer") }
                 tentativa++
                 return@launch
             }
@@ -675,6 +713,18 @@ private fun TelaDoBloqueio(ligado: Boolean, aoTerminar: (Boolean) -> Unit) {
         // Desligado: so a escolha. As palavras, o PIN e a digital vem no fluxo de ligar.
         if (!ligado) {
             aoTerminar(true)
+            return
+        }
+        // O que ja se sabe recusa antes das palavras e do PIN: nenhuma carteira com palavras, ou uma que nao vale como copia.
+        val r = retrato
+        if (r != null && r.carteiras.isEmpty()) {
+            mensagem = t("Não há carteira com palavras neste celular para conferir. Adicione a carteira antes de escolher Bloquear as carteiras.")
+            tentativa++
+            return
+        }
+        r?.recusa?.let {
+            mensagem = it
+            tentativa++
             return
         }
         val espera = retrato?.espera ?: 0.0
@@ -841,6 +891,11 @@ private fun DigitalNova() {
 private fun ConferenciaDasPalavras(carteiras: List<JSONObject>, aoTerminar: (Boolean) -> Unit) {
     var indice by remember { mutableIntStateOf(0) }
     var terminou by remember { mutableStateOf(false) }
+    // Saiu do app: o nucleo esqueceu as frases ja conferidas. A entrada fecha, e a proxima comeca do zero (05/11/2026).
+    val vindaInicial = remember { app.escalibur.wallet.ui.Ciclo.vinda }
+    LaunchedEffect(app.escalibur.wallet.ui.Ciclo.vinda) {
+        if (app.escalibur.wallet.ui.Ciclo.vinda != vindaInicial && !terminou) aoTerminar(false)
+    }
     DisposableEffect(Unit) {
         onDispose { if (!terminou) CoroutineScope(Dispatchers.IO).launch { runCatching { Api.objeto("reforco.esquecer") } } }
     }
@@ -849,9 +904,9 @@ private fun ConferenciaDasPalavras(carteiras: List<JSONObject>, aoTerminar: (Boo
     val temPassphrase = carteira.optBoolean("temPassphrase")
     // Uma tela nova a cada carteira: a entrada nasce do tamanho da frase dela.
     androidx.compose.runtime.key(id) {
-        val entrada = remember { EntradaDaFrase(carteira.optInt("palavras", 12)) }
-        val passphrase = remember { Segredo() }
-        val repeticao = remember { Segredo() }
+        val entrada = remember { EntradaDaFrase(carteira.optInt("palavras", 12), limpaAoSair = true) }
+        val passphrase = remember { Segredo(limpaAoSair = true) }
+        val repeticao = remember { Segredo(limpaAoSair = true) }
         DisposableEffect(Unit) {
             onDispose {
                 entrada.zerar()
@@ -896,12 +951,25 @@ private fun FluxoDeLigar(inicial: Politica, aceitoInicial: Boolean) {
     var digitando by remember { mutableStateOf(false) }
     var palavrasProntas by remember { mutableStateOf(false) }
     var rodada by remember { mutableIntStateOf(0) }
+    // Saiu do app: o nucleo esqueceu as frases. Ligar pede as palavras de novo, antes do PIN (05/11/2026).
+    LaunchedEffect(app.escalibur.wallet.ui.Ciclo.vinda) {
+        if (palavrasProntas && !trabalhando) {
+            palavrasProntas = false
+            rodada++
+        }
+    }
     var carteiras by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     LaunchedEffect(Unit) { carteiras = runCatching { RetratoDoReforco(Api.objeto("reforco.estado")).carteiras }.getOrDefault(emptyList()) }
     DisposableEffect(Unit) { onDispose { CoroutineScope(Dispatchers.IO).launch { runCatching { Api.objeto("reforco.esquecer") } } } }
 
     fun ligar() {
         mensagem = null
+        // O que ja se sabe recusa antes das palavras e do PIN (o nucleo recusa de novo dentro do cofre).
+        carteiras.firstNotNullOfOrNull { it.opcional("aviso") }?.let {
+            mensagem = it
+            rodada++
+            return
+        }
         if (politica == Politica.bloquear && !palavrasProntas) {
             digitando = true
             return
@@ -910,6 +978,9 @@ private fun FluxoDeLigar(inicial: Politica, aceitoInicial: Boolean) {
             // O PIN sempre: o cofre pede a biometria duas vezes, uma para abrir e outra para conferir.
             val credencial = Autorizacao.credencial(t("Ligar o Super Security"), forcarPin = true) as? Credencial.Pin
             if (credencial == null) {
+                // Sem o PIN, as frases nao ficam esperando no nucleo: ligar de novo pede as palavras de novo.
+                palavrasProntas = false
+                runCatching { Api.objeto("reforco.esquecer") }
                 rodada++
                 return@launch
             }
@@ -971,7 +1042,9 @@ private fun FluxoDeLigar(inicial: Politica, aceitoInicial: Boolean) {
                     escolhendo = false
                     if (nova == politica) return@fechar
                     mensagem = null
+                    // As frases digitadas para a politica de antes nao valem mais: saem do nucleo (como no iPhone).
                     palavrasProntas = false
+                    escopo.launch { runCatching { Api.objeto("reforco.esquecer") } }
                     if (nova == Politica.bloquear) {
                         // A tela do bloqueio, com a animacao e o aceite, que vale como o aceite de ligar.
                         Navegacao.cobrir {

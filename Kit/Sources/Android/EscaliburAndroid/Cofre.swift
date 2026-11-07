@@ -1,4 +1,5 @@
 import CJNI
+import Crypto
 import EscaliburCore
 import EscaliburKeys
 import Foundation
@@ -231,64 +232,184 @@ public final class KeystoreWrapper: KeyWrapper, @unchecked Sendable {
     public func wrap(_ secret: SecureBytes, slot: WrapSlot) throws -> Data {
         if slot == .hardenedBiometryAny, secret.count <= 32 { throw EnclaveError.failed("kand.qualquer so embrulha o miolo") }
         guard !slot.usesPassword else { throw EnclaveError.failed("o slot do PIN embrulha com a senha") }
-        return try embrulhar(secret, slot: slot, password: nil)
+        return slot.usesBiometry ? try embrulharHibrido(secret, slot: slot) : try embrulhar(secret, slot: slot)
     }
 
     public func wrap(_ secret: SecureBytes, slot: WrapSlot, password: Data) throws -> Data {
         guard slot.usesPassword else { throw EnclaveError.failed("senha so nos slots do PIN") }
-        return try embrulhar(secret, slot: slot, password: password)
+        return try embrulharPeloPin(secret, slot: slot, password: password)
     }
 
-    private func embrulhar(_ secret: SecureBytes, slot: WrapSlot, password: Data?) throws -> Data {
-        let (codigo, blob) = try Cofre.chamarSegredo("Cofre.embrulhar", [.texto(slot.rawValue), .segredo(secret), .bytes(password)])
+    /// O slot do aparelho: o AES-GCM e do Keystore, no hardware.
+    private func embrulhar(_ secret: SecureBytes, slot: WrapSlot) throws -> Data {
+        let (codigo, blob) = try Cofre.chamarSegredo("Cofre.embrulhar", [.texto(slot.rawValue), .segredo(secret), .bytes(nil)])
         guard codigo == .ok, let blob else { throw codigo == .semChave ? EnclaveError.keyMissing : EnclaveError.failed("embrulho") }
         defer { blob.wipe() }
         return blob.withUnsafeBytes { Data($0) }
     }
 
     public func unwrap(_ blob: Data, slot: WrapSlot, reason: String?) throws -> SecureBytes {
-        try abrir(Cofre.chamarSegredo("Cofre.desembrulhar", [.texto(slot.rawValue), .bytes(blob), .bytes(nil), .texto(reason)]), senha: false)
+        if slot.usesBiometry { return try desembrulharHibrido(blob, slot: slot, reason: reason) }
+        return try abrir(Cofre.chamarSegredo("Cofre.desembrulhar", [.texto(slot.rawValue), .bytes(blob), .bytes(nil), .texto(reason)]), senha: false)
     }
 
     public func unwrap(_ blob: Data, slot: WrapSlot, password: Data) throws -> SecureBytes {
-        try abrir(Cofre.chamarSegredo("Cofre.desembrulhar", [.texto(slot.rawValue), .bytes(blob), .bytes(password), .texto(nil)]), senha: true)
+        if slot.usesPassword, blob.first == Self.versaoDoPin { return try desembrulharPeloPin(blob, slot: slot, password: password) }
+        // O formato 1 (a senha so no AAD), dos cofres de teste do emulador: AES-GCM do Keystore.
+        return try abrir(Cofre.chamarSegredo("Cofre.desembrulhar", [.texto(slot.rawValue), .bytes(blob), .bytes(password), .texto(nil)]), senha: true)
     }
 
     private func abrir(_ resposta: (Cofre.Codigo, SecureBytes?), senha: Bool) throws -> SecureBytes {
-        switch resposta {
-        case (.ok, let segredo?): return segredo
-        case (.senha, _): throw senha ? EnclaveError.wrongPassword : EnclaveError.failed("desembrulho")
-        case (.semChave, _): throw EnclaveError.keyMissing
-        case (.bloqueado, _): throw EnclaveError.locked
+        if case (.ok, let segredo?) = resposta { return segredo }
+        throw Self.erro(resposta.0, senha: senha)
+    }
+
+    private static func erro(_ codigo: Cofre.Codigo, senha: Bool) -> EnclaveError {
+        switch codigo {
+        case .senha: senha ? .wrongPassword : .failed("desembrulho")
+        case .semChave: .keyMissing
+        case .bloqueado: .locked
         // Cancelar, nao reconhecer e o bloqueio do sistema: "nao desta vez". Quem decide se o
         // cadastro mudou e o RootKeyVault, pelo estado.
-        case (.cancelado, _), (.indisponivel, _): throw EnclaveError.cancelled
-        default: throw EnclaveError.failed("desembrulho")
+        case .cancelado, .indisponivel: .cancelled
+        default: .failed("desembrulho")
         }
     }
 
     public func unwrap(_ blob: Data, slot: WrapSlot, reason: String, watching watch: Data, with watchSlot: WrapSlot) throws -> (SecureBytes, WatchResult) {
-        let (codigo, corpo) = try Cofre.chamarSegredo("Cofre.desembrulharVigiando", [
-            .texto(slot.rawValue), .bytes(blob), .texto(reason), .texto(watchSlot.rawValue), .bytes(watch),
+        guard slot.usesBiometry, let (chaveCifrada, corpo) = Self.partesHibridas(blob) else { throw EnclaveError.failed("desembrulho") }
+        let vigia = Self.partesHibridas(watch)
+        let (codigo, resposta) = try Cofre.chamarSegredo("Cofre.abrirChaveVigiando", [
+            .texto(slot.rawValue), .bytes(Data(chaveCifrada)), .texto(reason), .texto(watchSlot.rawValue), .bytes(vigia.map { Data($0.0) }),
         ])
-        guard codigo == .ok, let corpo else { return (try abrir((codigo, nil), senha: false), .unknown) }
-        defer { corpo.wipe() }
-        // [vigia][tamanho do segredo em 4 bytes][segredo][conteudo da vigia]
-        return try corpo.withUnsafeBytes { raw -> (SecureBytes, WatchResult) in
-            let bytes = raw.bindMemory(to: UInt8.self)
-            guard bytes.count >= 5 else { throw EnclaveError.failed("desembrulho") }
-            let tamanho = Int(bytes[1]) << 24 | Int(bytes[2]) << 16 | Int(bytes[3]) << 8 | Int(bytes[4])
-            guard tamanho > 0, 5 + tamanho <= bytes.count else { throw EnclaveError.failed("desembrulho") }
-            let segredo = SecureBytes(capacity: tamanho)
-            segredo.append(contentsOf: UnsafeBufferPointer(rebasing: bytes[5..<(5 + tamanho)]))
-            switch bytes[0] {
+        guard codigo == .ok, let resposta else { throw Self.erro(codigo, senha: false) }
+        defer { resposta.wipe() }
+        // [vigia][chave 32][chave da vigia 32, so se abriu]
+        return try resposta.withUnsafeBytes { raw -> (SecureBytes, WatchResult) in
+            guard raw.count == 1 + 32 || raw.count == 1 + 64 else { throw EnclaveError.failed("desembrulho") }
+            let chave = SymmetricKey(data: UnsafeRawBufferPointer(rebasing: raw[1..<33]))
+            guard let segredo = Self.abrirAES(corpo, chave: chave, aad: Self.aad(slot, pin: false)) else {
+                throw EnclaveError.failed("desembrulho")
+            }
+            switch raw[0] {
             case 0:
-                let vigia = SecureBytes(capacity: max(bytes.count - 5 - tamanho, 1))
-                vigia.append(contentsOf: UnsafeBufferPointer(rebasing: bytes[(5 + tamanho)...]))
-                return (segredo, .opened(vigia))
+                guard raw.count == 1 + 64, let vigia else { return (segredo, .unknown) }
+                let chaveDaVigia = SymmetricKey(data: UnsafeRawBufferPointer(rebasing: raw[33..<65]))
+                guard let conteudo = Self.abrirAES(vigia.1, chave: chaveDaVigia, aad: Self.aad(watchSlot, pin: false)) else {
+                    return (segredo, .unknown)
+                }
+                return (segredo, .opened(conteudo))
             case 1: return (segredo, .gone)
             default: return (segredo, .unknown)
             }
         }
+    }
+
+    // MARK: O embrulho dos slots de biometria e do PIN, feito aqui
+    //
+    // O Kotlin so faz o que o Keystore faz: a RSA que abre a chave AES do embrulho (depois da biometria) e o
+    // HMAC da senha do PIN. O AES-GCM e o HKDF ficam aqui, sobre buffers que o nucleo zera: no Kotlin, o
+    // SecretKeySpec e a Conscrypt guardavam copias da chave raiz e das chaves do embrulho no heap do Java
+    // (auditoria das chaves de 06/11/2026). Os formatos sao os de antes, byte a byte:
+    // - biometria: [1][tamanho da chave cifrada, 4 bytes][chave AES cifrada pela RSA][iv 12][cifrado][tag 16]
+    // - PIN: [2][sal 16][iv 12][cifrado][tag 16], com a chave = HKDF-SHA256(HMAC do Keystore, sal, info do slot)
+    // O AAD e "escalibur-wallet/android/v1/embrulho\0" e o slot; no PIN, mais o byte 2.
+
+    static let versaoHibrida: UInt8 = 1
+    static let versaoDoPin: UInt8 = 2
+
+    static func aad(_ slot: WrapSlot, pin: Bool) -> Data {
+        var aad = Data("escalibur-wallet/android/v1/embrulho\u{0}\(slot.rawValue)".utf8)
+        if pin { aad.append(versaoDoPin) }
+        return aad
+    }
+
+    /// A chave cifrada e o resto ([iv][cifrado][tag]) de um embrulho de biometria.
+    static func partesHibridas(_ blob: Data) -> ([UInt8], ArraySlice<UInt8>)? {
+        let bytes = [UInt8](blob)
+        guard bytes.count >= 1 + 4 + 12 + 16, bytes[0] == versaoHibrida else { return nil }
+        let tamanho = Int(bytes[1]) << 24 | Int(bytes[2]) << 16 | Int(bytes[3]) << 8 | Int(bytes[4])
+        guard tamanho > 0, 5 + tamanho + 12 + 16 <= bytes.count else { return nil }
+        return (Array(bytes[5..<(5 + tamanho)]), bytes[(5 + tamanho)...])
+    }
+
+    /// [iv 12][cifrado][tag 16] em AES-256-GCM. Nil se a tag recusa.
+    static func abrirAES(_ corpo: ArraySlice<UInt8>, chave: SymmetricKey, aad: Data) -> SecureBytes? {
+        guard corpo.count >= 12 + 16, let nonce = try? AES.GCM.Nonce(data: corpo.prefix(12)) else { return nil }
+        let resto = corpo.dropFirst(12)
+        guard let caixa = try? AES.GCM.SealedBox(nonce: nonce, ciphertext: resto.dropLast(16), tag: resto.suffix(16)),
+              var claro = try? AES.GCM.open(caixa, using: chave, authenticating: aad)
+        else { return nil }
+        return SecureBytes.consuming(&claro)
+    }
+
+    /// [iv 12][cifrado][tag 16], com um iv sorteado.
+    static func selarAES(_ segredo: SecureBytes, chave: SymmetricKey, aad: Data) throws -> Data {
+        let nonce = AES.GCM.Nonce()
+        let selado = try segredo.withUnsafeData { try AES.GCM.seal($0, using: chave, nonce: nonce, authenticating: aad) }
+        return Data(nonce) + selado.ciphertext + selado.tag
+    }
+
+    /// A chave AES do embrulho do PIN: o HKDF-SHA256 da semente que o HMAC do Keystore tirou da senha.
+    static func chaveDoPin(semente: SecureBytes, sal: [UInt8], slot: WrapSlot) -> SymmetricKey {
+        let ikm = semente.withUnsafeBytes { SymmetricKey(data: $0) }
+        return HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: ikm, salt: sal,
+            info: Array("escalibur-wallet/android/v2/embrulho\u{0}\(slot.rawValue)".utf8), outputByteCount: 32
+        )
+    }
+
+    private func embrulharHibrido(_ secret: SecureBytes, slot: WrapSlot) throws -> Data {
+        guard let resposta = try Cofre.chamarBytes("Cofre.publica", [.texto(slot.rawValue)]), let codigo = resposta.first else {
+            throw EnclaveError.failed("embrulho")
+        }
+        guard codigo == UInt8(Cofre.Codigo.ok.rawValue) else {
+            throw codigo == UInt8(Cofre.Codigo.semChave.rawValue) ? EnclaveError.keyMissing : EnclaveError.failed("embrulho")
+        }
+        let chave = try SecureBytes.random(count: 32)
+        defer { chave.wipe() }
+        let chaveCifrada = try RSAOAEP.encrypt(chave, publicKeyDER: [UInt8](resposta.dropFirst()))
+        let corpo = try Self.selarAES(secret, chave: chave.withUnsafeBytes { SymmetricKey(data: $0) }, aad: Self.aad(slot, pin: false))
+        var blob = Data([Self.versaoHibrida])
+        blob += UInt32(chaveCifrada.count).bigEndianByteArray
+        blob += chaveCifrada
+        blob += corpo
+        return blob
+    }
+
+    private func desembrulharHibrido(_ blob: Data, slot: WrapSlot, reason: String?) throws -> SecureBytes {
+        guard let (chaveCifrada, corpo) = Self.partesHibridas(blob) else { throw EnclaveError.failed("desembrulho") }
+        let (codigo, chave) = try Cofre.chamarSegredo("Cofre.abrirChave", [.texto(slot.rawValue), .bytes(Data(chaveCifrada)), .texto(reason)])
+        guard codigo == .ok, let chave else { throw Self.erro(codigo, senha: false) }
+        defer { chave.wipe() }
+        guard chave.count == 32,
+              let segredo = Self.abrirAES(corpo, chave: chave.withUnsafeBytes { SymmetricKey(data: $0) }, aad: Self.aad(slot, pin: false))
+        else { throw EnclaveError.failed("desembrulho") }
+        return segredo
+    }
+
+    private func embrulharPeloPin(_ secret: SecureBytes, slot: WrapSlot, password: Data) throws -> Data {
+        let sal = try SecureBytes.random(count: 16).withUnsafeBytes { [UInt8]($0) }
+        let (codigo, semente) = try Cofre.chamarSegredo("Cofre.semente", [.texto(slot.rawValue), .bytes(password), .booleano(false)])
+        guard codigo == .ok, let semente, semente.count == 32 else {
+            throw codigo == .semChave ? EnclaveError.keyMissing : EnclaveError.failed("embrulho")
+        }
+        defer { semente.wipe() }
+        let corpo = try Self.selarAES(secret, chave: Self.chaveDoPin(semente: semente, sal: sal, slot: slot), aad: Self.aad(slot, pin: true))
+        return Data([Self.versaoDoPin]) + sal + corpo
+    }
+
+    private func desembrulharPeloPin(_ blob: Data, slot: WrapSlot, password: Data) throws -> SecureBytes {
+        let bytes = [UInt8](blob)
+        guard bytes.count >= 1 + 16 + 12 + 16 else { throw EnclaveError.failed("desembrulho") }
+        let (codigo, semente) = try Cofre.chamarSegredo("Cofre.semente", [.texto(slot.rawValue), .bytes(password), .booleano(true)])
+        guard codigo == .ok, let semente else { throw Self.erro(codigo, senha: true) }
+        defer { semente.wipe() }
+        guard semente.count == 32 else { throw EnclaveError.failed("desembrulho") }
+        // Senha errada da outra chave AES, e a tag recusa.
+        guard let segredo = Self.abrirAES(bytes[17...], chave: Self.chaveDoPin(semente: semente, sal: Array(bytes[1..<17]), slot: slot),
+                                          aad: Self.aad(slot, pin: true))
+        else { throw EnclaveError.wrongPassword }
+        return segredo
     }
 }

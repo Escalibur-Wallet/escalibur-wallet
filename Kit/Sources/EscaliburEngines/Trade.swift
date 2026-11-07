@@ -86,12 +86,16 @@ public struct TradeQuote: Sendable, Equatable {
     public let execution: Execution
     /// So em ordem grande, quando dividir no tempo rende um minimo melhor.
     public let parts: Parts?
+    /// Sem preco de referencia do mercado agora, e so uma fonte cotou: o preco nao teve com o que
+    /// ser comparado (`TradeValidator.unanchored`). A tela avisa e so revisa depois de o dono marcar
+    /// que entende o risco, e o plano recusa sem esse aceite (pedido do dono, 05/11/2026).
+    public let unanchored: Bool
 
     public init(
         sell: Asset, buy: Asset, amountIn: BigUInt, expectedOut: BigUInt, minimumOut: BigUInt,
         priceImpactPercent: Double?, networkFees: [NetworkFee], providerFeeNote: String?, legs: [Leg],
         alternatives: [Alternative], providersCompared: Int, needsApproval: Bool, expiresAt: Date,
-        execution: Execution = .transactions, parts: Parts? = nil
+        execution: Execution = .transactions, parts: Parts? = nil, unanchored: Bool = false
     ) {
         self.sell = sell
         self.buy = buy
@@ -108,6 +112,7 @@ public struct TradeQuote: Sendable, Equatable {
         self.expiresAt = expiresAt
         self.execution = execution
         self.parts = parts
+        self.unanchored = unanchored
     }
 
     /// A taxa de rede na moeda do dono, pelos precos que o app tem. nil sem estimativa ou
@@ -173,7 +178,8 @@ public struct TradeQuote: Sendable, Equatable {
             legs: [Leg(provider: alternative.provider, fraction: 1, amountIn: amountIn, expectedOut: alternative.out)],
             alternatives: others.sorted { $0.out > $1.out }, providersCompared: providersCompared,
             // Outro provedor, outro contrato que gasta: a autorizacao pode faltar. A revisao diz.
-            needsApproval: needsApproval || sell.kind != .native, expiresAt: expiresAt, execution: .transactions, parts: nil
+            needsApproval: needsApproval || sell.kind != .native, expiresAt: expiresAt, execution: .transactions, parts: nil,
+            unanchored: unanchored
         )
     }
 }
@@ -190,10 +196,12 @@ public struct TradeRequest: Sendable {
     public let nonceQueue: PendingNonceQueue?
     /// O dono escolheu a troca em partes (`TradeQuote.parts`).
     public let inParts: Bool
+    /// O dono marcou que entende o risco da cotacao sem comparacao (`TradeQuote.unanchored`).
+    public let acceptsUnanchored: Bool
 
     public init(
         walletID: UUID, chain: Chain, account: DerivedAccount, sell: Asset, buy: Asset, amountIn: BigUInt, slippageBasisPoints: Int,
-        nonceQueue: PendingNonceQueue? = nil, inParts: Bool = false
+        nonceQueue: PendingNonceQueue? = nil, inParts: Bool = false, acceptsUnanchored: Bool = false
     ) {
         self.walletID = walletID
         self.chain = chain
@@ -204,6 +212,7 @@ public struct TradeRequest: Sendable {
         self.slippageBasisPoints = slippageBasisPoints
         self.nonceQueue = nonceQueue
         self.inParts = inParts
+        self.acceptsUnanchored = acceptsUnanchored
     }
 }
 

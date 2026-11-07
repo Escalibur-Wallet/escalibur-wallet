@@ -96,6 +96,11 @@ final class CoinSearchStore {
         searches[key] = .failed
     }
 
+    /// A moeda na lista embarcada, sem perguntar nada: a busca da troca a compara com a leitura de agora (`TradeCatalog`).
+    func localCoin(_ id: String) async -> CatalogCoin? {
+        await coinList()?.coin(id: id)
+    }
+
     /// A busca na lista embarcada, fora da linha principal (sao 22 mil moedas).
     private func localSearch(_ key: String) async -> [CoinSearchResult] {
         guard let list = await coinList() else { return [] }

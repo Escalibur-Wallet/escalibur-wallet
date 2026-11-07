@@ -234,7 +234,7 @@ extension TradeQuote {
             sell: sell, buy: buy, amountIn: amountIn, expectedOut: expectedOut, minimumOut: minimumOut,
             priceImpactPercent: priceImpactPercent, networkFees: networkFees, providerFeeNote: providerFeeNote, legs: legs,
             alternatives: alternatives, providersCompared: providersCompared,
-            needsApproval: needsApproval, expiresAt: expiresAt, execution: execution, parts: option
+            needsApproval: needsApproval, expiresAt: expiresAt, execution: execution, parts: option, unanchored: unanchored
         )
     }
 }

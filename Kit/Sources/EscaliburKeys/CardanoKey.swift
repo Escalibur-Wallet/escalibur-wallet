@@ -157,8 +157,8 @@ public final class CardanoKey: @unchecked Sendable {
         try Ed25519.publicKey(extendedKey: extended)
     }
 
-    func sign(_ message: [UInt8]) throws -> [UInt8] {
-        try Ed25519.signExtended(message, extendedKey: extended)
+    func sign(_ message: [UInt8], hedged: Bool = false) throws -> [UInt8] {
+        try Ed25519.signExtended(message, extendedKey: extended, hedged: hedged)
     }
 
     /// Serializacao para os vetores publicados (kL, kR e chain code em hex) e so para
@@ -206,7 +206,7 @@ enum CardanoSigning {
         defer { key.wipe() }
         let publicKey = try key.publicKey()
         guard Hash.constantTimeEqual(publicKey, request.expectedPublicKey) else { throw Signer.Failure.unexpectedKey }
-        let signature = try key.sign(request.payload)
+        let signature = try key.sign(request.payload, hedged: true)
         guard Ed25519.verify(signature: signature, message: request.payload, publicKey: publicKey) else {
             throw Signer.Failure.verificationFailed
         }

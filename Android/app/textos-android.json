@@ -392,20 +392,6 @@
   "vi": "Dùng sinh trắc học",
   "ar": "استخدام المصادقة الحيوية"
  },
- "Envios, trocas e pontes desta carteira pedem a passphrase antes da biometria ou do PIN.": {
-  "en": "Sends, swaps and bridges from this wallet ask for the passphrase before biometrics or the PIN.",
-  "es": "Los envíos, intercambios y puentes de esta billetera piden la passphrase antes de la biometría o el PIN.",
-  "fr": "Les envois, échanges et ponts de ce portefeuille demandent la passphrase avant la biométrie ou le PIN.",
-  "de": "Sendungen, Tausche und Bridges dieser Wallet fragen vor der Biometrie oder PIN nach der Passphrase.",
-  "hi": "इस वॉलेट से भेजना, स्वैप और ब्रिज बायोमेट्रिक या PIN से पहले पासफ़्रेज़ मांगते हैं।",
-  "id": "Pengiriman, penukaran, dan bridge dari dompet ini meminta passphrase sebelum biometrik atau PIN.",
-  "ja": "このウォレットの送金、スワップ、ブリッジでは、生体認証か PIN の前にパスフレーズを求めます。",
-  "ko": "이 지갑의 송금, 스왑, 브리지는 생체 인증이나 PIN 전에 패스프레이즈를 요구합니다.",
-  "tr": "Bu cüzdandan gönderim, takas ve köprü işlemleri biyometri veya PIN’den önce parola ifadesini ister.",
-  "zh-Hans": "此钱包的发送、兑换和跨链桥，在生物识别或 PIN 之前会先要求输入 passphrase。",
-  "vi": "Gửi, hoán đổi và cầu nối từ ví này đều hỏi passphrase trước sinh trắc học hoặc mã PIN.",
-  "ar": "تطلب عمليات الإرسال والمبادلة والجسور من هذه المحفظة العبارة السرية الإضافية قبل المصادقة الحيوية أو رمز PIN."
- },
  "Remover deste celular": {
   "en": "Remove from this phone",
   "es": "Quitar de este teléfono",
@@ -1354,31 +1340,33 @@
   "vi": "Mở cài đặt",
   "ar": "فتح الإعدادات"
  },
- "Nos próximos %lld minutos, %@ não pede a passphrase para mover saldo. A biometria ou o PIN continuam. Travar o app encerra.": {
-  "en": {
-   "one": "For the next %lld minute, %@ won’t ask for the passphrase to move funds. Biometrics or the PIN still apply. Locking the app ends it.",
-   "other": "For the next %lld minutes, %@ won’t ask for the passphrase to move funds. Biometrics or the PIN still apply. Locking the app ends it."
-  },
-  "es": {
-   "one": "Durante el próximo %lld minuto, %@ no pide la passphrase para mover saldo. La biometría o el PIN siguen. Bloquear la app lo termina.",
-   "other": "Durante los próximos %lld minutos, %@ no pide la passphrase para mover saldo. La biometría o el PIN siguen. Bloquear la app lo termina."
-  },
-  "fr": {
-   "one": "Pendant la prochaine %lld minute, %@ ne demande pas la passphrase pour déplacer des fonds. La biométrie ou le PIN restent requis. Verrouiller l’app y met fin.",
-   "other": "Pendant les %lld prochaines minutes, %@ ne demande pas la passphrase pour déplacer des fonds. La biométrie ou le PIN restent requis. Verrouiller l’app y met fin."
-  },
-  "de": {
-   "one": "In der nächsten %lld Minute fragt %@ nicht nach der Passphrase, um Guthaben zu bewegen. Biometrie oder PIN bleiben. Das Sperren der App beendet es.",
-   "other": "In den nächsten %lld Minuten fragt %@ nicht nach der Passphrase, um Guthaben zu bewegen. Biometrie oder PIN bleiben. Das Sperren der App beendet es."
-  },
-  "hi": "अगले %lld मिनट तक %@ बैलेंस भेजने के लिए पासफ़्रेज़ नहीं मांगेगा। बायोमेट्रिक या PIN फिर भी लगेगा। ऐप लॉक करने पर यह ख़त्म हो जाता है।",
-  "id": "Selama %lld menit berikutnya, %@ tidak meminta passphrase untuk memindahkan saldo. Biometrik atau PIN tetap berlaku. Mengunci aplikasi mengakhirinya.",
-  "ja": "これから %lld 分間、%@ は残高を動かすときにパスフレーズを求めません。生体認証か PIN は引き続き必要です。アプリをロックすると終了します。",
-  "ko": "앞으로 %lld분 동안 %@은(는) 잔액을 옮길 때 패스프레이즈를 묻지 않습니다. 생체 인증이나 PIN은 그대로 필요합니다. 앱을 잠그면 끝납니다.",
-  "tr": "Sonraki %lld dakika boyunca %@, bakiye taşımak için parola ifadesini sormaz. Biyometri veya PIN yine gerekir. Uygulamayı kilitlemek bunu bitirir.",
-  "zh-Hans": "在接下来的 %lld 分钟内，%@ 转移余额时不要求输入 passphrase。生物识别或 PIN 仍然需要。锁定应用即结束。",
-  "vi": "Trong %lld phút tới, %@ không hỏi passphrase khi chuyển số dư. Sinh trắc học hoặc mã PIN vẫn cần. Khóa ứng dụng sẽ kết thúc.",
-  "ar": "خلال الدقائق الـ %lld القادمة، لا تطلب %@ العبارة السرية الإضافية لنقل الرصيد. تبقى المصادقة الحيوية أو رمز PIN مطلوبة. قفل التطبيق ينهي ذلك."
+ "Nos próximos %lld minutos, %@ não pede a passphrase. Até lá ela fica só na memória do app, e sai apagada no fim do tempo, ao sair do app ou ao travar. A biometria ou o PIN continuam.": {
+  "en": "For the next %lld minutes, %@ won't ask for the passphrase. Until then it stays only in the app's memory, and it's erased when the time runs out, when you leave the app or when it locks. Biometrics or the PIN still apply.",
+  "es": "Durante los próximos %lld minutos, %@ no pedirá la passphrase. Hasta entonces queda solo en la memoria de la app, y se borra al terminar el tiempo, al salir de la app o al bloquearla. La biometría o el PIN siguen valiendo.",
+  "fr": "Pendant les %lld prochaines minutes, %@ ne demandera pas la passphrase. D’ici là, elle reste uniquement dans la mémoire de l’app, et elle est effacée à la fin du délai, quand vous quittez l’app ou quand elle se verrouille. La biométrie ou le PIN restent demandés.",
+  "de": "In den nächsten %lld Minuten fragt %@ nicht nach der Passphrase. Bis dahin bleibt sie nur im Speicher der App und wird gelöscht, wenn die Zeit abläuft, wenn du die App verlässt oder sie sperrst. Biometrie oder PIN gelten weiter.",
+  "hi": "अगले %lld मिनट तक %@ पासफ़्रेज़ नहीं मांगेगा. तब तक यह सिर्फ़ ऐप की मेमोरी में रहता है, और समय ख़त्म होने पर, ऐप से बाहर जाने पर या लॉक करने पर मिटा दिया जाता है. बायोमेट्रिक या PIN लागू रहते हैं.",
+  "id": "Selama %lld menit ke depan, %@ tidak akan meminta passphrase. Sampai saat itu passphrase hanya ada di memori aplikasi, dan dihapus saat waktunya habis, saat Anda keluar dari aplikasi, atau saat aplikasi dikunci. Biometrik atau PIN tetap berlaku.",
+  "ja": "今後 %lld 分間、%@ はパスフレーズを求めません。それまでパスフレーズはアプリのメモリだけにあり、時間が終わったとき、アプリを離れたとき、またはロックしたときに消去されます。生体認証または PIN は引き続き必要です。",
+  "ko": "앞으로 %lld분 동안 %@은(는) 패스프레이즈를 묻지 않습니다. 그동안 패스프레이즈는 앱 메모리에만 있으며, 시간이 끝나거나 앱을 나가거나 잠그면 지워집니다. 생체 인증 또는 PIN은 계속 필요합니다.",
+  "tr": "Sonraki %lld dakika boyunca %@ passphrase istemeyecek. O zamana kadar yalnızca uygulamanın belleğinde kalır; süre dolduğunda, uygulamadan çıktığında veya kilitlendiğinde silinir. Biyometri veya PIN geçerliliğini korur.",
+  "zh-Hans": "在接下来的 %lld 分钟内，%@ 不会要求 passphrase。在此期间它只保存在应用内存中，时间结束、离开应用或锁定时都会被清除。生物识别或 PIN 仍然需要。",
+  "vi": "Trong %lld phút tới, %@ sẽ không yêu cầu passphrase. Cho đến lúc đó, passphrase chỉ nằm trong bộ nhớ của ứng dụng và bị xóa khi hết thời gian, khi bạn rời ứng dụng hoặc khi khóa. Sinh trắc học hoặc PIN vẫn được yêu cầu.",
+  "ar": "خلال الـ %lld دقيقة القادمة، لن تطلب %@ عبارة passphrase. حتى ذلك الحين تبقى في ذاكرة التطبيق فقط، وتُمحى عند انتهاء الوقت أو مغادرة التطبيق أو قفله. تبقى المصادقة الحيوية أو رمز PIN مطلوبة."
+ },
+ "Para cancelar a ordem de %@, digite a passphrase. Depois vem a biometria ou o PIN, como sempre.": {
+  "en": "To cancel the order from %@, type the passphrase. Then come biometrics or the PIN, as always.",
+  "es": "Para cancelar la orden de %@, escribe la passphrase. Después viene la biometría o el PIN, como siempre.",
+  "fr": "Pour annuler l’ordre de %@, saisissez la passphrase. Ensuite viennent la biométrie ou le PIN, comme toujours.",
+  "de": "Um die Order von %@ zu stornieren, gib die Passphrase ein. Danach kommen wie immer Biometrie oder PIN.",
+  "hi": "%@ का ऑर्डर रद्द करने के लिए पासफ़्रेज़ लिखें। उसके बाद हमेशा की तरह बायोमेट्रिक या PIN।",
+  "id": "Untuk membatalkan order dari %@, ketik passphrase. Setelah itu biometrik atau PIN, seperti biasa.",
+  "ja": "%@ の注文をキャンセルするには、パスフレーズを入力してください。そのあと、いつもどおり生体認証か PIN です。",
+  "ko": "%@의 주문을 취소하려면 패스프레이즈를 입력하세요. 그다음 평소처럼 생체 인증이나 PIN을 거칩니다.",
+  "tr": "%@ emrini iptal etmek için passphrase'i yaz. Ardından her zamanki gibi biyometri veya PIN gelir.",
+  "zh-Hans": "要取消 %@ 的订单，请输入 passphrase。之后照常进行生物识别或 PIN。",
+  "vi": "Để hủy lệnh của %@, hãy nhập passphrase. Sau đó là sinh trắc học hoặc mã PIN, như mọi khi.",
+  "ar": "لإلغاء أمر %@، اكتب الـ passphrase. وبعدها المصادقة الحيوية أو رمز PIN كالمعتاد."
  },
  "%@ pede a passphrase para mover saldo. Depois dela vem a biometria ou o PIN, como sempre.": {
   "en": "%@ asks for the passphrase to move funds. After it come biometrics or the PIN, as always.",
@@ -4446,19 +4434,19 @@
   "vi": "Lưu trên điện thoại này",
   "ar": "حفظ على هذا الهاتف"
  },
- "A cópia some sozinha em 1 minuto, e o Android não mostra o que ela tem na prévia. Anotar no papel continua sendo o mais seguro.": {
-  "en": "The copy disappears on its own in 1 minute, and Android doesn’t show what it holds in the preview. Writing on paper is still the safest.",
-  "es": "La copia desaparece sola en 1 minuto, y Android no muestra lo que contiene en la vista previa. Anotarlo en papel sigue siendo lo más seguro.",
-  "fr": "La copie disparaît d’elle-même en 1 minute, et Android n’affiche pas son contenu dans l’aperçu. Noter sur papier reste le plus sûr.",
-  "de": "Die Kopie verschwindet nach 1 Minute von selbst, und Android zeigt ihren Inhalt nicht in der Vorschau. Auf Papier notieren bleibt am sichersten.",
-  "hi": "कॉपी 1 मिनट में अपने आप मिट जाती है, और Android प्रीव्यू में नहीं दिखाता कि उसमें क्या है. कागज़ पर लिखना अब भी सबसे सुरक्षित है.",
-  "id": "Salinan hilang sendiri dalam 1 menit, dan Android tidak menampilkan isinya di pratinjau. Mencatat di kertas tetap yang paling aman.",
-  "ja": "コピーは1分で自動的に消え、Androidのプレビューには中身が表示されません。紙に書き留めるのが今でも最も安全です。",
-  "ko": "복사본은 1분 후 저절로 사라지고, Android 미리보기에는 내용이 표시되지 않습니다. 종이에 적어 두는 것이 여전히 가장 안전합니다.",
-  "tr": "Kopya 1 dakika içinde kendiliğinden silinir ve Android önizlemede içeriğini göstermez. Kâğıda yazmak hâlâ en güvenlisidir.",
-  "zh-Hans": "副本会在 1 分钟后自动消失，Android 的预览也不会显示其内容。写在纸上仍然是最安全的。",
-  "vi": "Bản sao tự biến mất sau 1 phút, và Android không hiển thị nội dung của nó trong bản xem trước. Ghi ra giấy vẫn là an toàn nhất.",
-  "ar": "تختفي النسخة تلقائيًا خلال دقيقة واحدة، ولا يعرض Android محتواها في المعاينة. تبقى الكتابة على الورق هي الأكثر أمانًا."
+ "A cópia some sozinha em cerca de 1 minuto. Do Android 13 em diante, a prévia não mostra o que ela tem; antes dele, o teclado pode guardar a cópia. Anotar no papel continua sendo o mais seguro.": {
+  "en": "The copy disappears on its own in about 1 minute. From Android 13 on, the preview doesn’t show what it holds; before that, the keyboard may keep the copy. Writing on paper is still the safest.",
+  "es": "La copia desaparece sola en cerca de 1 minuto. Desde Android 13, la vista previa no muestra lo que contiene; antes, el teclado puede guardar la copia. Anotarlo en papel sigue siendo lo más seguro.",
+  "fr": "La copie disparaît d’elle-même en 1 minute environ. Depuis Android 13, l’aperçu n’affiche pas son contenu ; avant, le clavier peut garder la copie. Noter sur papier reste le plus sûr.",
+  "de": "Die Kopie verschwindet nach etwa 1 Minute von selbst. Ab Android 13 zeigt die Vorschau ihren Inhalt nicht; davor kann die Tastatur die Kopie behalten. Auf Papier notieren bleibt am sichersten.",
+  "hi": "कॉपी लगभग 1 मिनट में अपने आप मिट जाती है. Android 13 से प्रीव्यू नहीं दिखाता कि उसमें क्या है; उससे पहले कीबोर्ड कॉपी रख सकता है. कागज़ पर लिखना अब भी सबसे सुरक्षित है.",
+  "id": "Salinan hilang sendiri dalam sekitar 1 menit. Sejak Android 13, pratinjau tidak menampilkan isinya; sebelumnya, keyboard bisa menyimpan salinan itu. Mencatat di kertas tetap yang paling aman.",
+  "ja": "コピーは約1分で自動的に消えます。Android 13以降はプレビューに中身が表示されませんが、それより前はキーボードがコピーを保存することがあります。紙に書き留めるのが今でも最も安全です。",
+  "ko": "복사본은 약 1분 후 저절로 사라집니다. Android 13부터는 미리보기에 내용이 표시되지 않지만, 그 이전 버전에서는 키보드가 복사본을 보관할 수 있습니다. 종이에 적어 두는 것이 여전히 가장 안전합니다.",
+  "tr": "Kopya yaklaşık 1 dakika içinde kendiliğinden silinir. Android 13'ten itibaren önizleme içeriğini göstermez; daha öncesinde klavye kopyayı saklayabilir. Kâğıda yazmak hâlâ en güvenlisidir.",
+  "zh-Hans": "副本会在大约 1 分钟后自动消失。从 Android 13 起，预览不会显示其内容；在此之前，键盘可能会保存这份副本。写在纸上仍然是最安全的。",
+  "vi": "Bản sao tự biến mất sau khoảng 1 phút. Từ Android 13, bản xem trước không hiển thị nội dung của nó; trước đó, bàn phím có thể giữ lại bản sao. Ghi ra giấy vẫn là an toàn nhất.",
+  "ar": "تختفي النسخة تلقائيًا خلال دقيقة واحدة تقريبًا. بدءًا من Android 13 لا تعرض المعاينة محتواها؛ وقبل ذلك قد تحتفظ لوحة المفاتيح بالنسخة. تبقى الكتابة على الورق هي الأكثر أمانًا."
  },
  "Este celular parece ter root": {
   "en": "This phone seems to be rooted",
@@ -4627,5 +4615,47 @@
   "id": "%@ punya akses aksesibilitas dan bisa melihat di mana Anda mengetuk. Untuk mengetik kata dan kata sandi, matikan dulu: bagian lain dompet tetap terbuka.",
   "vi": "%@ có quyền trợ năng và có thể thấy bạn chạm vào đâu. Để gõ từ và mật khẩu, hãy tắt nó: phần còn lại của ví vẫn mở.",
   "ar": "لدى %@ صلاحية إمكانية الوصول ويمكنه رؤية مكان لمسك. لكتابة الكلمات وكلمات المرور، أوقفه: يبقى باقي المحفظة مفتوحًا."
+ },
+ "A passphrase chegou vazia. Nada foi feito: digite de novo.": {
+  "en": "The passphrase arrived empty. Nothing was done: type it again.",
+  "es": "La passphrase llegó vacía. No se hizo nada: escríbela de nuevo.",
+  "fr": "La passphrase est arrivée vide. Rien n’a été fait : saisissez-la à nouveau.",
+  "de": "Die Passphrase kam leer an. Es ist nichts passiert: Gib sie noch einmal ein.",
+  "hi": "पासफ़्रेज़ खाली पहुँचा. कुछ नहीं किया गया: फिर से लिखें.",
+  "id": "Passphrase sampai dalam keadaan kosong. Tidak ada yang dilakukan: ketik lagi.",
+  "ja": "パスフレーズが空のまま届きました。何も行われていません。もう一度入力してください。",
+  "ko": "패스프레이즈가 비어 있는 채로 전달되었습니다. 아무것도 하지 않았습니다. 다시 입력하세요.",
+  "tr": "Passphrase boş geldi. Hiçbir şey yapılmadı: tekrar yaz.",
+  "zh-Hans": "passphrase 为空。未执行任何操作：请重新输入。",
+  "vi": "Passphrase đến nơi bị trống. Chưa làm gì cả: hãy nhập lại.",
+  "ar": "وصلت الـ passphrase فارغة. لم يُنفَّذ شيء: اكتبها من جديد."
+ },
+ "Não há carteira com palavras neste celular para conferir. Adicione a carteira antes de escolher Bloquear as carteiras.": {
+  "en": "There's no wallet with words on this phone to check. Add the wallet before choosing Lock the wallets.",
+  "es": "No hay ninguna billetera con palabras en este teléfono para verificar. Agrega la billetera antes de elegir Bloquear las billeteras.",
+  "fr": "Il n’y a aucun portefeuille avec des mots sur ce téléphone à vérifier. Ajoutez le portefeuille avant de choisir Bloquer les portefeuilles.",
+  "de": "Auf diesem Handy gibt es keine Wallet mit Wörtern zum Prüfen. Füge die Wallet hinzu, bevor du Wallets sperren wählst.",
+  "hi": "इस फ़ोन पर जाँचने के लिए शब्दों वाला कोई वॉलेट नहीं है. वॉलेट लॉक करें चुनने से पहले वॉलेट जोड़ें.",
+  "id": "Tidak ada dompet dengan kata-kata di ponsel ini untuk diperiksa. Tambahkan dompet sebelum memilih Kunci dompet.",
+  "ja": "この端末には確認する単語付きのウォレットがありません。ウォレットをロックするを選ぶ前に、ウォレットを追加してください。",
+  "ko": "이 휴대폰에는 확인할 단어가 있는 지갑이 없습니다. 지갑 잠그기를 선택하기 전에 지갑을 추가하세요.",
+  "tr": "Bu telefonda kontrol edilecek kelimeli bir cüzdan yok. Cüzdanları kilitle'yi seçmeden önce cüzdanı ekle.",
+  "zh-Hans": "此手机上没有带助记词的钱包可供核对。请先添加钱包，再选择锁定钱包。",
+  "vi": "Không có ví nào có cụm từ trên điện thoại này để kiểm tra. Hãy thêm ví trước khi chọn Khóa các ví.",
+  "ar": "لا توجد على هذا الهاتف محفظة بكلمات للتحقق منها. أضف المحفظة قبل اختيار قفل المحافظ."
+ },
+ "Palavras copiadas. Elas somem em cerca de 1 minuto.": {
+  "en": "Words copied. They disappear in about 1 minute.",
+  "es": "Palabras copiadas. Desaparecen en cerca de 1 minuto.",
+  "fr": "Mots copiés. Ils disparaissent dans environ 1 minute.",
+  "de": "Wörter kopiert. Sie verschwinden in etwa 1 Minute.",
+  "hi": "शब्द कॉपी हुए. ये लगभग 1 मिनट में मिट जाएंगे.",
+  "id": "Kata-kata disalin. Akan hilang dalam sekitar 1 menit.",
+  "ja": "単語をコピーしました。約 1 分で消えます。",
+  "ko": "단어를 복사했습니다. 약 1분 후 사라집니다.",
+  "tr": "Kelimeler kopyalandı. Yaklaşık 1 dakika içinde silinir.",
+  "zh-Hans": "单词已复制。将在大约 1 分钟后消失。",
+  "vi": "Đã sao chép các từ. Chúng sẽ biến mất sau khoảng 1 phút.",
+  "ar": "تم نسخ الكلمات. ستختفي بعد دقيقة واحدة تقريبًا."
  }
 }

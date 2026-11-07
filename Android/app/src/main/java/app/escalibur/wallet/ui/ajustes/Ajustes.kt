@@ -45,9 +45,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import app.escalibur.wallet.BuildConfig
 import app.escalibur.wallet.nucleo.Api
-import app.escalibur.wallet.nucleo.FalhaDoNucleo
 import app.escalibur.wallet.ui.App
-import app.escalibur.wallet.ui.Autorizacao
 import app.escalibur.wallet.ui.Carteira
 import app.escalibur.wallet.ui.Formato
 import app.escalibur.wallet.ui.carteira.AdicionarCarteira
@@ -67,7 +65,6 @@ import app.escalibur.wallet.ui.comp.Icones
 import app.escalibur.wallet.ui.comp.SeloDaRede
 import app.escalibur.wallet.ui.comp.TituloDeAba
 import app.escalibur.wallet.ui.comp.Transferencia
-import app.escalibur.wallet.ui.enviar.PedidoDePassphrase
 import app.escalibur.wallet.ui.legal.DocumentoLegal
 import app.escalibur.wallet.ui.legal.FolhaLegal
 import app.escalibur.wallet.ui.principal.Navegacao
@@ -202,31 +199,6 @@ fun AjustesDaCarteira(id: String) {
 
     fun revelar() { Navegacao.cobrir { FluxoDeRevelar(carteira, copia = !carteira.palavrasConfirmadas) { Navegacao.fechar() } } }
 
-    // Ligar e na hora; desligar pede a passphrase e o PIN, e o cofre confere a passphrase.
-    fun pedirPassphrase(ligar: Boolean) {
-        escopo.launch {
-            if (ligar) {
-                runCatching { App.aplicar(Api.objeto("carteira.pedirPassphraseParaEnviar", JSONObject().put("id", carteira.id))) }
-                return@launch
-            }
-            val digitada = PedidoDePassphrase.pedir(carteira.nome,
-                t("Para deixar de pedir a passphrase nos envios de %@, digite a passphrase. Depois vem o PIN.", carteira.nome)) ?: return@launch
-            try {
-                Autorizacao.tentando(t("Deixar de pedir a passphrase em %@", carteira.nome), Autorizacao.Presenca.pin) { credencial ->
-                    App.aplicar(Api.comSegredo("carteira.naoPedirPassphrase", JSONObject().put("id", carteira.id).put("credencial", credencial.json()),
-                                               *credencial.partes(digitada.bytes.copyOf())))
-                }
-            } catch (falha: FalhaDoNucleo) {
-                Avisos.mostrar(when (falha.codigo) {
-                    "passphrase.errada" -> t("A passphrase não confere. Nada foi assinado. Escreva igual ao que você anotou: maiúscula, acento e espaço contam.")
-                    else -> Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível mudar agora.")
-                })
-            } finally {
-                digitada.bytes.fill(0)
-            }
-        }
-    }
-
     Subtela("") {
         Box(Modifier.padding(horizontal = Espaco.margem)) {
             BasicTextField(
@@ -257,14 +229,8 @@ fun AjustesDaCarteira(id: String) {
                     }
                 }
             }
-            if (carteira.temPassphrase) {
-                SecaoDeAjustes(t("Segurança")) {
-                    LinhaComInterruptor(
-                        Icones.escudo, t("Pedir a passphrase para enviar"), carteira.pedePassphrase,
-                        detalhe = t("Envios, trocas e pontes desta carteira pedem a passphrase antes da biometria ou do PIN."),
-                    ) { pedirPassphrase(it) }
-                }
-            }
+            // O "Pedir a passphrase para enviar" saiu (05/11/2026): sem a passphrase no cofre, toda assinatura da
+            // carteira com passphrase a pede, e nao ha o que desligar.
             carteira.vistaEm?.let {
                 NotaDeAjuste(t("Última vez que a senha da carteira foi exibida: %@.", Formato.relativo(it, naFrase = true)))
             }

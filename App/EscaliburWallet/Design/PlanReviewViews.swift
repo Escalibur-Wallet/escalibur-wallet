@@ -139,6 +139,8 @@ enum PlanWarningText {
             return String(localized: "Na BNB, o \(symbol) é o da Binance (Binance-Peg). Ele vale enquanto a Binance mantiver o lastro e o resgate: não é o \(original).")
         case .publicMempool:
             return String(localized: "Nesta rede a troca passa pela fila pública, sem proteção contra robôs: eles podem comprar antes e vender depois. O mínimo garantido continua valendo, mas o que ficar entre a estimativa e ele pode não chegar.")
+        case .uncomparedPrice:
+            return String(localized: "Não há uma segunda fonte de cotação independente nem preço de referência do mercado: o preço desta troca não foi comparado com nenhum outro.")
         }
     }
 }

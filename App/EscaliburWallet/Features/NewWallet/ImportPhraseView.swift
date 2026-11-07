@@ -191,6 +191,9 @@ struct ImportPhraseView: View {
             passphrase.wipe()
             passphraseAgain.wipe()
         }
+        // Na conferencia do Super Security, as palavras digitadas saem ao sair do app (05/11/2026). Criar e importar ficam: a
+        // previa manda comparar os enderecos noutro app.
+        .onReceive(NotificationCenter.default.publisher(for: SecureInputField.wipeAll)) { _ in if verify != nil { entry.wipe() } }
     }
 
     private var form: some View {
@@ -278,10 +281,10 @@ struct ImportPhraseView: View {
                                 .typeStyle(.note).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
                                 .fixedSize(horizontal: false, vertical: true)
                             PasswordBox(buffer: passphrase, length: $passphraseLength, placeholder: String(localized: "Passphrase"), reveal: $revealPassphrase,
-                                        glyphs: passphraseGlyphs(Self.passphraseSlot, count: passphraseLength))
+                                        glyphs: passphraseGlyphs(Self.passphraseSlot, count: passphraseLength), wipesOnLeave: verify != nil)
                                 .padding(.top, Space.sm)
                             PasswordBox(buffer: passphraseAgain, length: $passphraseAgainLength, placeholder: String(localized: "Repita a passphrase"), reveal: $revealPassphrase,
-                                        glyphs: passphraseGlyphs(Self.passphraseAgainSlot, count: passphraseAgainLength))
+                                        glyphs: passphraseGlyphs(Self.passphraseAgainSlot, count: passphraseAgainLength), wipesOnLeave: verify != nil)
                                 .padding(.top, Space.xs)
                             if PassphraseLimit.overflows(passphraseLength) || PassphraseLimit.overflows(passphraseAgainLength) {
                                 Text(PassphraseLimit.message).typeStyle(.note).foregroundStyle(Palette.down)
@@ -800,7 +803,8 @@ struct ImportPhraseView: View {
             // Desistiu da confirmacao: a conferencia dos enderecos continua na tela.
             guard try await auth.retrying(reason: String(localized: "Guardar a carteira importada neste iPhone"), { credential in
                 try await session.addWallet(secret: pending.secret, name: name, origin: .importedPhrase, wordCount: words,
-                                            backupConfirmed: true, tronForeignControl: tronForeign, credential: credential)
+                                            backupConfirmed: true, tronForeignControl: tronForeign,
+                                            expectedFingerprint: pending.preview.fingerprint, credential: credential)
             }) != nil else { return }
             self.pending = nil
             entry.wipe()

@@ -194,6 +194,9 @@ private fun TrocarPin() {
     var atual by remember { mutableStateOf<ByteArray?>(null) }
     var novo by remember { mutableStateOf<ByteArray?>(null) }
     var trabalhando by remember { mutableStateOf(false) }
+    // A tela que sai leva o PIN atual e o novo zerados (05/11/2026). Os digitos de cada passo zeram ao sair do app
+    // (`EntradaDoPin.limparTodas`).
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { atual?.fill(0); novo?.fill(0) } }
 
     fun cancelar() {
         atual?.fill(0)

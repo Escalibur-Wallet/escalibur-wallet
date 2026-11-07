@@ -278,6 +278,9 @@ public struct PlanReview: Sendable, Equatable {
         /// A troca vai para a fila publica da rede: um robo de sanduiche pode levar o que
         /// ficar entre a estimativa e o minimo garantido (auditoria 4, M2).
         case publicMempool
+        /// A cotacao nao teve com o que ser comparada: so uma fonte respondeu e o preco de
+        /// referencia do mercado estava fora. O dono marcou que entende o risco (05/11/2026).
+        case uncomparedPrice
     }
 
     /// Quanto de qual ativo, em unidades da rede. O ativo e o `Asset.id` da lista

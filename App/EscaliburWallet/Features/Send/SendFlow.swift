@@ -42,6 +42,20 @@ final class SendModel {
     /// com o que comparar, e o Continuar fica desligado: apertado cedo, ele pulava a
     /// conferencia contra o historico (revisao dos enderecos parecidos).
     var historyLoaded = false
+    /// A rede do historico deste envio: a lista de quem ja recebeu so cresce dentro dela, e voltar ao destino nao le de
+    /// novo (revisao de seguranca de 06/11/2026).
+    var historyChainID: String?
+    /// A leitura do historico em curso: o Continuar espera so `historyWait`, e a revisao espera ela terminar.
+    var historyReading: Task<Void, Never>?
+    /// A leitura terminou, lida ou falha.
+    var historySettled = false
+    /// A revisao esperando a leitura: a tela diz por que demora.
+    var checkingHistory = false
+    /// Quando a leitura desta rede comecou: o teto da espera da revisao conta daqui, e nao de cada toque.
+    var historyStartedAt: ContinuousClock.Instant?
+
+    /// O destino de agora passou pelos passos do Continuar: a consulta (tag, ativacao) e a rede do primeiro envio.
+    var destinationStepsDone: Bool { destinationInfo != nil && (!needsNetworkConfirmation || networkConfirmed) }
     /// Primeiro envio sem historico para comparar: os 6 do meio que o dono digita.
     var blindSegment: AddressPoisoning.Segment?
     /// O endereco como foi colado: o desafio do meio e conferido nele, com o trecho
@@ -234,6 +248,7 @@ struct SendFlow: View {
                             } label: {
                                 Image(systemName: "chevron.backward").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.inkSoft)
                             }
+                            .disabled(model.checkingHistory)
                             .accessibilityLabel("Voltar")
                             .accessibilityIdentifier("envio-voltar")
                         }
@@ -275,6 +290,10 @@ struct SendFlow: View {
                 if case .success(let destination) = Address.validate(demo.destinationText, for: chain) { demo.destination = destination }
                 demo.amountText = DebugDemo.screen == "envio-valor" ? "123456789012,123456" : (DebugDemo.screen == "envio-preso" ? "500" : "150")
                 demo.stage = DebugDemo.screen == "envio-enviando" ? .sending : (DebugDemo.screen == "enviado" ? .done : .amount)
+                // A demonstracao entra direto no valor: o historico conta como lido e o destino como consultado.
+                demo.historyLoaded = true
+                demo.historySettled = true
+                demo.destinationInfo = DestinationInfo()
                 if DebugDemo.screen == "envio-conferir" {
                     demo.destination = nil
                     demo.stage = .destination
@@ -304,6 +323,9 @@ struct SendFlow: View {
                     if case .success(let destination) = Address.validate(demo.destinationText, for: near) { demo.destination = destination }
                     demo.amountText = "1"
                     demo.stage = .amount
+                    demo.historyLoaded = true
+                    demo.historySettled = true
+                    demo.destinationInfo = DestinationInfo()
                     model = demo
                 }
             }
@@ -452,6 +474,11 @@ struct SendStages: View {
         .padding(.bottom, Space.xs)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .animation(Motion.crossfade, value: model.stage)
+        // De volta ao destino, por qualquer caminho (o voltar, a revisao, o deslizar, uma leitura tardia), os desafios, a
+        // rede do primeiro envio e a consulta recomecam, iguais aos do Android (rodada 19 dos 3 agentes, 06/11/2026).
+        .onChange(of: model.stage) { old, new in
+            if new == .destination, old != .destination { validate() }
+        }
         .sheet(isPresented: $scanning) {
             QRScannerSheet { text in
                 scanning = false
@@ -504,7 +531,7 @@ struct SendStages: View {
                                     // Entre a carteira de sempre e a com passphrase, o envio fica na blockchain e liga as
                                     // duas (revisao de seguranca de 24/10/2026): o aviso antes de escolher.
                                     if item.wallet.hasPassphrase != (session.selectedWallet?.hasPassphrase ?? false) {
-                                        Text("Este envio liga as duas carteiras na blockchain: quem tiver as palavras vê a ligação com a carteira com passphrase.")
+                                        Text("Quem tiver só as palavras vê este envio e o saldo da carteira com passphrase, sem poder movê-lo.")
                                             .typeStyle(.note).foregroundStyle(Palette.caution).fixedSize(horizontal: false, vertical: true)
                                             .padding(.top, 2)
                                     }
@@ -798,34 +825,89 @@ struct SendStages: View {
             + session.metadata.wallets.filter { !$0.isWatchOnly }.compactMap { $0.account(chain)?.address } + model.historyRecipients
     }
 
+    /// Quanto o Continuar espera a leitura do historico da rede (06/11/2026: na Ethereum, o explorador chegava a 20 s).
+    /// Passado o prazo, valem o que o app ja guardou e o desafio do trecho do endereco no primeiro envio, como sem
+    /// historico; a leitura segue, a revisao espera por ela, e um parecido achado nela volta a pedir a conferencia.
+    static let historyWait: Duration = .seconds(4)
+    /// O teto da espera da revisao pela leitura. Passado, segue como sem historico.
+    static let historyReviewWait: Duration = .seconds(30)
+
     /// Para quem esta carteira ja pagou nesta rede, do historico da propria rede.
     /// Melhor esforco: sem historico, a lista fica com o que o app guardou.
     private func loadHistoryRecipients() async {
-        model.historyLoaded = false
         guard let chain = model.chain, let account = model.wallet.account(chain) else {
             model.historyLoaded = true
+            model.historySettled = true
             return
         }
-        var read: [ActivityEntry]?
-        if let source = ActivitySources.source(for: chain) {
-            read = try? await source.history(chain: chain, account: account, usage: model.wallet.utxoUsage[chain.id])
+        // Outra rede, ou a primeira: a lista e a leitura recomecam. Na mesma rede, a leitura deste envio vale: voltar ao
+        // destino nao le de novo, e a lista so cresce (revisao de seguranca de 06/11/2026).
+        if model.historyChainID != chain.id {
+            model.historyReading?.cancel()
+            model.historyChainID = chain.id
+            model.historyRecipients = []
+            model.historyUnavailable = false
+            model.historySettled = false
+            model.historyLoaded = false
+            model.historyStartedAt = .now
+            let usage = model.wallet.utxoUsage[chain.id]
+            model.historyReading = Task {
+                let read = try? await ActivitySources.source(for: chain)?.history(chain: chain, account: account, usage: usage)
+                guard !Task.isCancelled, model.historyChainID == chain.id else { return }
+                applyHistory(read, chain: chain)
+            }
         }
-        // Leitura cancelada (a rede mudou, ou a tela saiu): a leitura seguinte cuida do
-        // estado, e esta nao libera o Continuar.
-        guard !Task.isCancelled, model.chain?.id == chain.id else { return }
-        defer { model.historyLoaded = true }
+        guard !model.historyLoaded else { return }
+        try? await Task.sleep(for: Self.historyWait)
+        guard !Task.isCancelled, model.historyChainID == chain.id, !model.historyLoaded else { return }
+        // O prazo passou sem a leitura: soma o historico guardado pela Atividade, e o desafio do primeiro envio.
+        let cached = (session.metadata.activityCache?[model.wallet.id] ?? []).compactMap(\.entry).filter { $0.chainID == chain.id }
+        model.historyRecipients = Array(Set(model.historyRecipients + Self.paidTo(cached)))
+        model.historyUnavailable = true
+        model.historyLoaded = true
+        if model.destination != nil { validate() }
+    }
+
+    /// A leitura do historico, no prazo ou depois dele.
+    private func applyHistory(_ read: [ActivityEntry]?, chain: Chain) {
+        model.historySettled = true
+        let late = model.historyLoaded
         guard let entries = read else {
+            guard !late else { return }
             model.historyUnavailable = true
+            model.historyLoaded = true
             if model.destination != nil { validate() }
             return
         }
-        model.historyUnavailable = false
-        let paid = entries.compactMap { entry -> String? in
+        model.historyRecipients = Array(Set(model.historyRecipients + Self.paidTo(entries)))
+        guard late else {
+            model.historyUnavailable = false
+            model.historyLoaded = true
+            if model.destination != nil { validate() }
+            return
+        }
+        // Depois do prazo, o desafio que ja esta na tela fica; um parecido, ou o mesmo M da Stellar com outro ID, achado
+        // agora valida de novo, e a revisao e a assinatura voltam ao destino se ele nao estiver conferido.
+        if let destination = model.destination, lateFinding(destination.address, chain: chain) {
+            validate()
+            // Ja no valor ou na revisao: volta ao destino agora, e nao so no Revisar ou no deslizar.
+            if [.tag, .amount, .review].contains(model.stage) { model.stage = .destination }
+        }
+    }
+
+    /// A leitura tardia achou o que o destino de agora ainda nao conferiu.
+    private func lateFinding(_ address: String, chain: Chain) -> Bool {
+        let known = knownAddresses(chain)
+        if model.lookalike == nil, AddressPoisoning.lookalike(address, among: known, chain: chain) != nil { return true }
+        return model.otherID == nil
+            && AddressPoisoning.sameAccountOtherID(address, among: known, tagged: Self.taggedContacts(chain, session: session), chain: chain) != nil
+    }
+
+    private static func paidTo(_ entries: [ActivityEntry]) -> [String] {
+        Array(Set(entries.compactMap { entry -> String? in
             guard entry.direction == .sent, entry.status == .confirmed, !entry.suspicious else { return nil }
             return entry.counterparty
-        }
-        model.historyRecipients = Array(Set(paid))
-        if model.destination != nil { validate() }
+        }))
     }
 
     /// O que veio do QR ou do colar. O problema do link fica preso ao texto que ele
@@ -865,9 +947,15 @@ struct SendStages: View {
         model.otherID = nil
         model.otherIDCheck = ""
         model.blindSegment = nil
+        // A resposta do trecho escondido e do desafio de antes: cada validacao pede de novo.
+        model.blindCheck = ""
         model.everySendCheck = false
+        // Pular a tag foi escolha para o destino de antes.
+        model.skippedTag = false
         model.networkSuggestion = nil
         model.networkConfirmed = false
+        // A consulta do destino (tag, ativacao) era do destino de antes: o Continuar consulta de novo.
+        model.destinationInfo = nil
         if let link = model.linkProblem {
             if link.text == model.destinationText {
                 model.destinationProblem = link.message
@@ -972,9 +1060,19 @@ struct SendStages: View {
         model.working = true
         defer { model.working = false }
         do {
-            model.destinationInfo = try await engine.destination(destination.address, chain: chain)
+            let info = try await engine.destination(destination.address, chain: chain)
+            // A consulta vale so para o destino consultado, inteiro (o X-address da XRPL e o classico da mesma conta tem o
+            // mesmo endereco e tags diferentes), e so com os passos do destino ainda feitos: o campo, o colar, os contatos,
+            // a rede e uma leitura tardia do historico continuam ativos durante ela (rodada 19 dos 3 agentes, 06/11/2026).
+            guard model.stage == .destination, model.chain?.id == chain.id, model.destination == destination,
+                  model.historyLoaded, model.lookalikeCleared, tagProblem == nil,
+                  !model.needsNetworkConfirmation || model.networkConfirmed else { return }
+            model.destinationProblem = nil
+            model.destinationInfo = info
             model.stage = model.needsTagStep && destination.tag == nil ? .tag : .amount
         } catch {
+            // O erro e da consulta deste destino: com outro na tela, nao aparece debaixo dele.
+            guard model.stage == .destination, model.chain?.id == chain.id, model.destination == destination else { return }
             model.destinationProblem = (error as? LocalizedError)?.errorDescription ?? String(localized: "Não foi possível consultar o destino agora.")
         }
     }
@@ -1100,7 +1198,10 @@ struct SendStages: View {
                 Text(problem).typeStyle(.note).foregroundStyle(Palette.down).padding(.top, Space.xs)
             }
             Spacer()
-            PrimaryButton(title: String(localized: "Continuar"), enabled: !model.tagText.isEmpty && tagProblem == nil) { model.stage = .amount }
+            PrimaryButton(title: String(localized: "Continuar"), enabled: !model.tagText.isEmpty && tagProblem == nil) {
+                model.skippedTag = false
+                model.stage = .amount
+            }
             if !required {
                 SecondaryButton(title: words.skip) {
                     model.skippedTag = true
@@ -1144,6 +1245,9 @@ struct SendStages: View {
                     .foregroundStyle(over ? Palette.down : Palette.ink)
                     .keyboardType(.decimalPad)
                     .focused($amountFocused)
+                    // Enquanto a revisao espera o historico e monta o plano, o valor fica o do toque: as ordens abertas
+                    // ja foram conferidas com ele, e o plano e comparado com ele (rodada 19 dos 3 agentes).
+                    .disabled(model.working)
                     .fixedSize()
                 Text(holding.asset.symbol).typeStyle(.heading).foregroundStyle(Palette.inkSoft).lineLimit(1)
             }
@@ -1165,6 +1269,7 @@ struct SendStages: View {
                         .padding(.horizontal, Space.sm).frame(height: 28)
                         .background(Capsule(style: .continuous).fill(Palette.rail))
                 }
+                .disabled(model.working)
             }
             .padding(.top, Space.lg)
             amountSlider(limit: limit, decimals: holding.asset.decimals)
@@ -1197,6 +1302,10 @@ struct SendStages: View {
                 Banner(kind: .failure, title: error).padding(.top, Space.md)
             }
             Spacer()
+            if model.checkingHistory {
+                Text("Conferindo o histórico da rede").typeStyle(.note).foregroundStyle(Palette.inkSoft)
+                    .frame(maxWidth: .infinity).padding(.bottom, Space.xs)
+            }
             PrimaryButton(title: over ? String(localized: "Saldo insuficiente") : String(localized: "Revisar"), enabled: (model.amount.map { !$0.isZero } ?? false) && !over, loading: model.working) {
                 // Parte do valor esta numa ordem de venda: antes, a tela de liberar.
                 if lockedOver { model.showingLockedOrders = true } else { Task { await review() } }
@@ -1331,16 +1440,39 @@ struct SendStages: View {
     }
 
     private func review() async {
-        guard let engine, let amount = model.amount, let chain = model.chain, let account = model.account else { return }
+        guard let engine, model.amount != nil, let chain = model.chain, let account = model.account else { return }
         model.working = true
         model.error = nil
         defer { model.working = false }
         // A fila de nonces sem o que a rede ja confirmou, antes de entrar no pedido.
         await NonceQueue.prune(session, wallet: model.wallet.id, chain: chain, address: account.address)
         guard !sellsInFlight(chain: chain, address: account.address) else { return }
+        // A leitura do historico ainda corre: a revisao espera por ela (o Continuar so esperou o prazo), para um parecido
+        // achado tarde aparecer antes da assinatura, e nao depois (revisao de seguranca de 06/11/2026). Quase sempre ela
+        // ja terminou enquanto o valor era digitado.
+        let target = model.destination?.address
+        if !model.historySettled {
+            model.checkingHistory = true
+            let deadline = (model.historyStartedAt ?? .now) + Self.historyReviewWait
+            while !model.historySettled, ContinuousClock.now < deadline, !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            model.checkingHistory = false
+        }
+        // Durante a espera, o destino pode ter mudado (o voltar, outra rede): a revisao e a do destino de antes, e para.
+        guard model.stage == .amount, model.chain?.id == chain.id, model.destination?.address == target else { return }
+        guard model.historyLoaded, model.lookalikeCleared, model.destinationStepsDone else {
+            model.stage = .destination
+            return
+        }
+        // O valor de agora, e nao o de antes da espera: o dono pode ter mexido nele.
+        guard let amount = model.amount, !amount.isZero else { return }
         guard let request = request(amount: amount, sendAll: model.sendAll) else { return }
         do {
             let plan = try await engine.plan(request)
+            // O plano demora: o destino tem de ser o mesmo de quando a revisao comecou. Antes do alarme de baixo, que so vale
+            // para o destino que a revisao montou: mexer na tela no meio nao e adulteracao.
+            guard model.stage == .amount, model.chain?.id == chain.id, model.destination?.address == target else { return }
             guard planMatches(plan) else {
                 model.plan = nil
                 model.error = String(localized: "O envio montado não confere com o destino digitado. Nada foi assinado.")
@@ -1376,7 +1508,7 @@ struct SendStages: View {
                 }
             }), in: 0...1)
             .tint(Palette.accent)
-            .disabled(limit.isZero)
+            .disabled(limit.isZero || model.working)
             .accessibilityLabel("Quanto do disponível enviar")
             .accessibilityValue("\(Int((typed * 100).rounded())) por cento")
             HStack {
@@ -1582,7 +1714,7 @@ struct SendStages: View {
         // A conferencia do destino vale ate a assinatura: se a validacao rodou de novo
         // depois do Continuar (historico lido tarde, rede trocada), o desafio volta para a
         // tela do destino e nada e assinado.
-        guard model.historyLoaded, model.lookalikeCleared else {
+        guard model.historyLoaded, model.lookalikeCleared, model.destinationStepsDone else {
             model.stage = .destination
             return
         }
@@ -1612,46 +1744,26 @@ struct SendStages: View {
             model.error = SigningSelfTest.Failure().errorDescription
             return
         }
-        // Carteira com passphrase: a passphrase antes do Face ID ou do PIN, conferida dentro
-        // do assinador (pedido do dono, 16/10/2026).
-        var typedPassphrase: SecureBytes?
-        if PassphraseGate.needed(session.metadata.wallets.first { $0.id == plan.walletID }),
-           let wallet = session.metadata.wallets.first(where: { $0.id == plan.walletID }) {
-            guard let typed = await PassphraseGate.shared.ask(wallet) else { return }
-            typedPassphrase = typed
-        }
-        defer { typedPassphrase?.wipe() }
-        let checkPassphrase = typedPassphrase
-        // A tentativa conta antes de o cofre conferir; com muitas erradas, espera.
-        if checkPassphrase != nil, let wait = PassphraseGate.shared.begin(session, wallet: plan.walletID) {
-            model.error = wait
-            return
-        }
+        // Carteira com passphrase: a passphrase antes do Face ID ou do PIN, conferida dentro do assinador. Ela nunca fica
+        // salva e sai zerada logo depois de assinar (pedido do dono, 05/11/2026; ver `PassphraseGate.sign`).
         model.working = true
         defer { model.working = false }
         let signed: [SignedTransaction]
-        do {
-            guard let result = try await auth.perform(session, reason: plan.review.title, { rk in
-                try Signer.sign(plan, rootKey: rk, vault: KeyServices.wallets, passphrase: checkPassphrase)
-            }) else {
-                if checkPassphrase != nil { PassphraseGate.shared.refund(session, wallet: plan.walletID) }
+        switch await PassphraseGate.shared.sign(plan, session: session, auth: auth, reason: plan.review.title) {
+        case .signed(let result):
+            // De novo depois da voz, da passphrase e do Face ID: uma leitura do historico chegada nesse meio tempo pode ter
+            // achado um parecido. Os bytes assinados ficam aqui, sem sair (revisao de seguranca de 06/11/2026).
+            guard model.historyLoaded, model.lookalikeCleared, model.destinationStepsDone, planMatches(plan) else {
+                model.stage = .destination
                 return
             }
             signed = result
-            // A passphrase confere (o assinador assinou): a conta zera, e o buffer sai ja.
-            if checkPassphrase != nil {
-                PassphraseGate.shared.passed(session, wallet: plan.walletID)
-                PassphraseGate.shared.confirmGrace(plan.walletID)
-            }
-            checkPassphrase?.wipe()
-        } catch {
-            checkPassphrase?.wipe()
-            if (error as? Signer.Failure) == .passphraseMismatch {
-                PassphraseGate.shared.failed(session, wallet: plan.walletID)
-            } else if checkPassphrase != nil {
-                // Parou antes da passphrase (PIN errado, cofre): nada foi conferido, a tentativa volta.
-                PassphraseGate.shared.refund(session, wallet: plan.walletID)
-            }
+        case .cancelled:
+            return
+        case .waiting(let wait):
+            model.error = wait
+            return
+        case .failed(let error):
             model.error = (error as? Signer.Failure) == .passphraseMismatch ? PassphraseGate.mismatchMessage
                 : AuthCoordinator.refusalMessage(error) ?? (error as? LocalizedError)?.errorDescription ?? String(localized: "O envio não saiu. Nada foi debitado.")
             model.stage = .review

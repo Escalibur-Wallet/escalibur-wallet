@@ -40,6 +40,8 @@ class RetratoDoEnvio(json: JSONObject) {
     val preco: Double? = if (json.has("preco")) json.getDouble("preco") else null
     val moeda = json.getString("moeda")
     val pedePassphrase = json.getBoolean("pedePassphrase")
+    /** A carteira com passphrase que esta versao nao confere: recusa antes da passphrase e do PIN. */
+    val semConferencia = json.optBoolean("semConferencia")
     val nomeDaCarteira = json.getString("nomeDaCarteira")
     /** As ordens de venda abertas deste ativo, se houver (o `sellingOrders` do iOS). */
     val ordens: OrdensDoEnvio? = json.optJSONObject("ordens")?.let(::OrdensDoEnvio)
@@ -69,6 +71,10 @@ class RetratoDoEnvio(json: JSONObject) {
     val rotuloDoDestino: String? = e.opcional("rotuloDoDestino")
     val primeiroEnvio: Boolean = e.getBoolean("primeiroEnvio")
     val historicoLido: Boolean = e.getBoolean("historicoLido")
+    /** A revisao esperando a leitura do historico: a tela diz por que demora. */
+    val conferindoHistorico: Boolean = e.optBoolean("conferindoHistorico")
+    /** Sobe a cada validacao: os campos dos desafios zeram junto com o nucleo. */
+    val rodadaDoDesafio: Int = e.optInt("rodadaDoDesafio")
 
     class Parecido(val conhecido: String, val rotulo: String, val trechoColado: Trecho?, val trechoConhecido: Trecho?)
     class OutroID(val conhecido: String, val idConhecido: String, val rotulo: String, val trechoColado: Trecho?, val trechoConhecido: Trecho?)

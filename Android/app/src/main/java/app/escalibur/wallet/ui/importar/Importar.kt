@@ -120,8 +120,11 @@ import java.text.Normalizer
  * As palavras em digitacao, uma por posicao, cada uma em bytes que o app zera (o PhraseEntry do
  * iOS). Na tela, cada palavra fechada aparece em pontos; segurar mostra.
  */
-class EntradaDaFrase(quantas: Int = 12) {
+class EntradaDaFrase(quantas: Int = 12, limpaAoSair: Boolean = false) {
     private var posicoes: MutableList<ByteArray?> = MutableList(quantas) { null }
+
+    init { if (limpaAoSair) synchronized(vivas) { vivas.add(this) } }
+
     var quantidade by mutableIntStateOf(quantas)
         private set
     var ativa by mutableIntStateOf(0)
@@ -200,6 +203,15 @@ class EntradaDaFrase(quantas: Int = 12) {
     }
 
     companion object {
+        /** As entradas `limpaAoSair` vivas (a conferencia do Super Security): sair do app ou travar as zera (05/11/2026). Criar
+         * e importar ficam: a previa manda comparar os enderecos noutro app. */
+        private val vivas: MutableSet<EntradaDaFrase> = java.util.Collections.newSetFromMap(java.util.WeakHashMap())
+
+        fun limparTodas() {
+            val todas = synchronized(vivas) { vivas.toList() }
+            todas.forEach { it.zerar() }
+        }
+
         val TAMANHOS = listOf(12, 15, 18, 21, 24)
     }
 }
@@ -732,7 +744,9 @@ private fun PreviaDaImportacao(dados: JSONObject, entrada: EntradaDaFrase, passp
     ConferenciaDaImportacao(dados, comPassphrase = passphrase != null, doEnvelope = false, aoVoltar = aoVoltar,
                             aoGuardar = { entrada.zerar(); aoGuardar() }) { tronOutraChave ->
         Autorizacao.tentando(t("Guardar a carteira importada neste celular")) { credencial ->
+            // A digital da previa que o dono conferiu: o nucleo so grava a mesma carteira (05/11/2026).
             val corpo = JSONObject().put("credencial", credencial.json()).put("palavras", entrada.quantidade).put("tronOutraChave", tronOutraChave)
+                .apply { dados.optString("digital").ifEmpty { null }?.let { put("digital", it) } }
             val partes = if (passphrase != null) credencial.partes(entrada.frase(), passphrase.bytes()) else credencial.partes(entrada.frase())
             Api.comSegredo("carteira.importar", corpo, *partes)
         } != null

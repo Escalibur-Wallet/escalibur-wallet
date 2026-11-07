@@ -22,6 +22,8 @@ data class Carteira(
     val tronOutraChave: Boolean,
     /** Pede a passphrase para mover saldo e para ver as palavras. */
     val pedePassphrase: Boolean,
+    /** A carteira com passphrase que esta versao nao confere: ver, lacrar e conferir recusam antes do PIN. */
+    val semConferencia: Boolean = false,
     val selecionada: Boolean,
     val digital: String?,
     val contas: List<Pair<String, String>>,
@@ -50,6 +52,7 @@ data class Carteira(
             passphraseConfirmada = json.optBoolean("passphraseConfirmada"),
             tronOutraChave = json.optBoolean("tronOutraChave"),
             pedePassphrase = json.optBoolean("pedePassphrase"),
+            semConferencia = json.optBoolean("semConferencia"),
             selecionada = json.optBoolean("selecionada"),
             digital = json.optString("digital").takeIf { it.isNotEmpty() && it != "null" },
             contas = json.optJSONArray("contas").objetos().map { it.getString("rede") to it.getString("endereco") },

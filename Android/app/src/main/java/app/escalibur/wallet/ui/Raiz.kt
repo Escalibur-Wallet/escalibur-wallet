@@ -31,7 +31,6 @@ import app.escalibur.wallet.ui.abertura.FluxoDeAbertura
 import app.escalibur.wallet.ui.bloqueio.TelaDeBloqueio
 import app.escalibur.wallet.ui.comp.Avisos
 import app.escalibur.wallet.ui.comp.BotaoTerciario
-import app.escalibur.wallet.ui.pin.EntradaDoPin
 import app.escalibur.wallet.ui.pin.TelaDoPin
 import app.escalibur.wallet.ui.principal.Principal
 import app.escalibur.wallet.ui.tema.Espaco
@@ -56,6 +55,14 @@ object Ciclo {
      */
     fun foiParaSegundoPlano() {
         primeiroPlano = false
+        // A copia da passphrase da folga sai ja, ate na ida ao seletor, que nao trava; e a folha da passphrase e a do PIN
+        // fecham, com o que estava digitado zerado: a operacao que esperava por elas para (05/11/2026).
+        app.escalibur.wallet.ui.enviar.PedidoDePassphrase.cancelar()
+        Autorizacao.cancelar()
+        app.escalibur.wallet.ui.comp.Segredo.limparTodos()
+        app.escalibur.wallet.ui.pin.EntradaDoPin.limparTodas()
+        app.escalibur.wallet.ui.importar.EntradaDaFrase.limparTodas()
+        runCatching { Nucleo.chamar("passphrase.encerrarFolgas", "{}") }
         // A biometria que estava na tela cai antes de o nucleo descartar o rosto (auditoria de 03/11/2026).
         app.escalibur.wallet.nucleo.Cofre.cancelarBiometria()
         // O seletor de arquivos do proprio app (salvar ou abrir envelope) e outra Activity: sair para ele
@@ -88,6 +95,11 @@ object Ciclo {
 
     /** O celular travou (a tela apagou). Nada a fazer se o nucleo ainda nao abriu. */
     suspend fun travarAgora() {
+        app.escalibur.wallet.ui.enviar.PedidoDePassphrase.cancelar()
+        Autorizacao.cancelar()
+        app.escalibur.wallet.ui.comp.Segredo.limparTodos()
+        app.escalibur.wallet.ui.pin.EntradaDoPin.limparTodas()
+        app.escalibur.wallet.ui.importar.EntradaDaFrase.limparTodas()
         // Sempre: um destravar em andamento (o Kotlin ainda nao sabe que abriu) para pela epoca do nucleo.
         runCatching { App.aplicar(Api.objeto("sessao.travar")) }
     }
@@ -147,7 +159,7 @@ fun Raiz() {
                 when (fase) {
                     "onboarding" -> FluxoDeAbertura(aparelhoComBloqueio)
                     "locked" -> {
-                        LaunchedEffect(Unit) { app.escalibur.wallet.ui.enviar.PedidoDePassphrase.cancelar() }
+                        LaunchedEffect(Unit) { app.escalibur.wallet.ui.enviar.PedidoDePassphrase.cancelar(); Autorizacao.cancelar() }
                         if (aparelhoComBloqueio) TelaDeBloqueio(Ciclo.vinda) else TelaSemBloqueio()
                     }
                     "unlocked" -> Principal()
@@ -210,7 +222,7 @@ private fun TelaSemBloqueio() {
 /** A folha do PIN para confirmar uma operacao, por cima de qualquer tela. */
 @Composable
 private fun FolhaDePin(pedido: Autorizacao.PedidoDePin) {
-    val entrada = remember(pedido) { EntradaDoPin(App.estado.pinDigitos) }
+    val entrada = pedido.entrada
     LaunchedEffect(pedido) { pedido.erro?.let { entrada.falhar(it) } }
     androidx.activity.compose.BackHandler { entrada.limpar(); pedido.responder(null) }
     TelaDoPin(

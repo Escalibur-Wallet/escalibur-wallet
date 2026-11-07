@@ -26,6 +26,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -174,16 +175,18 @@ fun <T> Segmentado(opcoes: List<Pair<T, String>>, selecao: T, modifier: Modifier
 
 /** A caixa de marcar de um aceite: o dono declara, com um toque, que leu o que esta escrito. */
 @Composable
-fun Aceite(marcado: Boolean, texto: String, modifier: Modifier = Modifier, solto: Boolean = false, aoMudar: (Boolean) -> Unit) {
+fun Aceite(marcado: Boolean, texto: String, modifier: Modifier = Modifier, solto: Boolean = false, habilitado: Boolean = true,
+           aoMudar: (Boolean) -> Unit) {
     val toque = toqueDeSelecao()
     Row(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(Raio.cartao))
             .background(if (solto) Color.Transparent else Paleta.corpo)
-            .clickable(role = Role.Checkbox) {
+            // O estado vai para o leitor de tela: marcado ou nao, e desligado quando nao muda (revisao de 05/11/2026).
+            .toggleable(value = marcado, enabled = habilitado, role = Role.Checkbox) {
                 toque()
-                aoMudar(!marcado)
+                aoMudar(it)
             }
             .padding(if (solto) Espaco.xxs else Espaco.md),
         horizontalArrangement = Arrangement.spacedBy(Espaco.sm),

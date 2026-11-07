@@ -64,6 +64,13 @@ enum Nucleo {
         case "sessao.segundoPlano":
             Sessao.shared.foiParaSegundoPlano()
             return try json(["ok": true])
+        case "passphrase.descartar":
+            PortaDaPassphrase.descartarEntregue()
+            return try json(["ok": true])
+        case "passphrase.encerrarFolgas":
+            // Ida ao seletor de arquivos do app: nao trava, mas a copia da passphrase da folga nao fica (05/11/2026).
+            PortaDaPassphrase.encerrarFolgas()
+            return try json(["ok": true])
         case "sessao.primeiroPlano":
             Sessao.shared.voltouAoPrimeiroPlano()
             return try json(Estado.agora())
@@ -223,6 +230,10 @@ enum Nucleo {
             let id = pedido["id"]?.stringValue ?? ""
             let simbolo = pedido["simbolo"]?.stringValue, nome = pedido["nome"]?.stringValue
             return try json(esperar { try await Receber.redes(id: id, simbolo: simbolo, nome: nome) })
+        case "receber.redesDaTroca":
+            let id = pedido["id"]?.stringValue ?? ""
+            let simbolo = pedido["simbolo"]?.stringValue, nome = pedido["nome"]?.stringValue
+            return try json(esperar { await Receber.redesDaTroca(id: id, simbolo: simbolo, nome: nome, excluir: pedido["excluir"]?.stringValue) })
 
         case let envio where envio.hasPrefix("envio."):
             return try Envio.chamar(envio, pedido)
@@ -334,10 +345,6 @@ enum Nucleo {
             try Sessao.shared.alterar { $0.settings.confirmEveryAddress = true }
             Nucleo.conferenciaLigadaEm.withLock { $0 = PINPolicy.uptime }
             return try json(Estado.agora())
-        case "carteira.pedirPassphraseParaEnviar":
-            // Ligar e na hora; desligar pede a passphrase e o PIN ("carteira.naoPedirPassphrase").
-            try Sessao.shared.atualizar(try uuid(pedido["id"])) { $0.passphraseToSend = true }
-            return try json(Estado.agora())
         case "carteira.removerObservacao":
             // So observar: nao ha chave a proteger, nada pede o PIN.
             let id = try uuid(pedido["id"])
@@ -355,6 +362,13 @@ enum Nucleo {
             return try json(esperar { await TesteTLS.rodar() })
         case "cofre.teste":
             return try json(TesteCofre.rodar(biometria: pedido["biometria"]?.boolValue ?? false, etapa: pedido["etapa"]?.stringValue ?? "completo"))
+        case "cofre.rsaTeste":
+            // So de depuracao: o RSA-OAEP do nucleo com uma chave publica do Keystore, para o Kotlin abrir e comparar.
+            let publica = Data(base64Encoded: pedido["publica"]?.stringValue ?? "") ?? Data()
+            let claro = try SecureBytes.random(count: 32)
+            defer { claro.wipe() }
+            let cifrado = try RSAOAEP.encrypt(claro, publicKeyDER: [UInt8](publica))
+            return try json(["cifrado": Data(cifrado).base64EncodedString(), "claro": claro.withUnsafeBytes { Data($0) }.base64EncodedString()])
         #endif
         default:
             throw Falha(erro: "metodo desconhecido: \(metodo)")
@@ -373,6 +387,22 @@ enum Nucleo {
             guard !partes.isEmpty else { throw Falha(erro: "segredo incompleto") }
             return partes.removeFirst()
         }
+        // A passphrase que chega vazia (um campo zerado no caminho) nunca vira "sem passphrase": isso gravaria, mostraria ou
+        // assinaria a carteira de base no lugar da com passphrase (revisao de seguranca de 05/11/2026). Nenhum chamador
+        // legitimo manda parte vazia: a folha e a importacao exigem o campo preenchido.
+        func passphraseOpcional(_ cred: Credencial?) throws -> SecureBytes? {
+            guard !partes.isEmpty else { return nil }
+            return try passphraseCheia(cred)
+        }
+        func passphraseCheia(_ cred: Credencial?) throws -> SecureBytes {
+            let parte = try proxima()
+            guard parte.count > 0 else {
+                parte.wipe()
+                cred?.zerar()
+                throw Falha(erro: "passphrase.vazia")
+            }
+            return parte
+        }
         func credencial() throws -> Credencial {
             let motivo = pedido["credencial"]?["motivo"]?.stringValue ?? ""
             switch pedido["credencial"]?["tipo"]?.stringValue {
@@ -386,7 +416,7 @@ enum Nucleo {
 
         switch metodo {
         case let reforco where reforco.hasPrefix("reforco."):
-            return try Reforco.chamar(reforco, pedido, segredo: proxima, segundo: { partes.isEmpty ? nil : try proxima() })
+            return try Reforco.chamar(reforco, pedido, segredo: proxima, segundo: { partes.isEmpty ? nil : try passphraseCheia(nil) })
         case "sessao.cadastrarPIN":
             try Sessao.shared.cadastrarPIN(try proxima())
             return try json(Estado.agora())
@@ -398,6 +428,11 @@ enum Nucleo {
             return try json(Estado.agora())
         case "sessao.desligarBiometria":
             try Sessao.shared.desligarBiometria(try credencial())
+            return try json(Estado.agora())
+        case "sessao.conferirPIN":
+            // So o PIN, sem mudar nada: desfazer uma escolha feita com aceite, antes de ligar (sair de "Bloquear as carteiras"
+            // com o Super Security desligado, pedido do dono de 18/10/2026, como no iPhone). Errar conta como em toda conferencia.
+            try Sessao.shared.comChaveRaiz(try credencial()) { _ in }
             return try json(Estado.agora())
         case "sessao.trocarPIN":
             let atual = try credencial()
@@ -428,17 +463,17 @@ enum Nucleo {
             return try json(Importacao.validar(try proxima()))
         case "carteira.previa":
             let frase = try proxima()
-            let passphrase = partes.isEmpty ? nil : try proxima()
+            let passphrase = try passphraseOpcional(nil)
             return try json(Importacao.previa(frase, passphrase: passphrase))
         case "carteira.idiomas":
             return try json(["idiomas": Importacao.idiomas(try proxima())])
         case "carteira.importar":
             let cred = try credencial()
             let frase = try proxima()
-            let passphrase = partes.isEmpty ? nil : try proxima()
+            let passphrase = try passphraseOpcional(cred)
             let wallet = try Importacao.importar(
                 frase, passphrase: passphrase, palavras: Int(pedido["palavras"]?.doubleValue ?? 12),
-                tronComOutraChave: pedido["tronOutraChave"]?.boolValue ?? false, credencial: cred
+                tronComOutraChave: pedido["tronOutraChave"]?.boolValue ?? false, digital: pedido["digital"]?.stringValue, credencial: cred
             )
             return try json(CarteiraResumo(wallet, selecionada: true))
         case "ajustes.tecladoProprio":
@@ -476,28 +511,27 @@ enum Nucleo {
             try Sessao.shared.comChaveRaiz(cred) { _ in }
             try Chaves.root.setWipeAfterErrors(limite)
             return try json(Estado.agora())
-        case "carteira.naoPedirPassphrase":
-            let id = try uuid(pedido["id"])
-            let cred = try credencial()
-            try Sessao.shared.naoPedirPassphrase(id, credencial: cred, digitada: try proxima())
-            return try json(Estado.agora())
+        case "passphrase.entregar":
+            // A passphrase digitada para a proxima assinatura, sem credencial: o Kotlin zera a dele na volta.
+            PortaDaPassphrase.entregar(try passphraseCheia(nil))
+            return try json(["ok": true])
         case "envio.assinar":
             let cred = try credencial()
-            let passphrase = partes.isEmpty ? nil : try proxima()
+            let passphrase = try passphraseOpcional(cred)
             return try Envio.assinar(cred, passphrase: passphrase, folga: pedido["folga"]?.doubleValue.map { Int($0) },
                                      versao: pedido["versao"]?.doubleValue.map { Int($0) })
         case "ponte.assinar":
             let cred = try credencial()
-            let passphrase = partes.isEmpty ? nil : try proxima()
+            let passphrase = try passphraseOpcional(cred)
             return try Ponte.assinar(cred, passphrase: passphrase, folga: pedido["folga"]?.doubleValue.map { Int($0) })
         case "troca.assinar":
             let cred = try credencial()
-            let passphrase = partes.isEmpty ? nil : try proxima()
+            let passphrase = try passphraseOpcional(cred)
             return try Troca.assinar(cred, passphrase: passphrase, folga: pedido["folga"]?.doubleValue.map { Int($0) }, alvo: pedido["alvo"]?.stringValue)
         case "envelope.abrirCarteira":
             let id = try uuid(pedido["id"])
             let cred = try credencial()
-            let passphrase = partes.isEmpty ? nil : try proxima()
+            let passphrase = try passphraseOpcional(cred)
             return try json(["nome": try Envelopes.abrirCarteira(id, credencial: cred, passphraseDigitada: passphrase)])
         case "envelope.medir":
             return try json(Envelopes.medir(try proxima()))
@@ -507,6 +541,9 @@ enum Nucleo {
             return try json(try Envelopes.lacrar(repeticao: try proxima(), rotulo: pedido["nome"]?.stringValue ?? ""))
         case "envelope.abrir":
             return try json(try Envelopes.abrir(senha: try proxima()))
+        case "envelope.conferirPassphrase":
+            try Envelopes.conferirPassphrase(try passphraseCheia(nil))
+            return try json(["ok": true])
         case "envelope.importar":
             let wallet = try Envelopes.importar(tronComOutraChave: pedido["tronOutraChave"]?.boolValue ?? false, credencial: try credencial())
             return try json(CarteiraResumo(wallet, selecionada: Sessao.shared.metadata.selectedWalletID == wallet.id))
@@ -515,7 +552,7 @@ enum Nucleo {
             let cred = try credencial()
             let nome = String((pedido["nome"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
             let anterior = Sessao.shared.metadata.selectedWalletID
-            let (wallet, jaAberta) = try Sessao.shared.abrirComPassphrase(base: base, passphrase: try proxima(), nome: nome, credencial: cred)
+            let (wallet, jaAberta) = try Sessao.shared.abrirComPassphrase(base: base, passphrase: try passphraseCheia(cred), nome: nome, credencial: cred)
             return try json(AbertaComPassphrase(carteira: CarteiraResumo(wallet, selecionada: true), jaAberta: jaAberta, anterior: anterior?.uuidString))
         case "carteira.usoDaPassphrase":
             // A busca de movimento na carteira recem-aberta (o UsageCheck, igual ao iOS).
@@ -533,13 +570,13 @@ enum Nucleo {
             return try json(Estado.agora())
         case "carteira.revelar":
             let cred = try credencial()
-            let passphrase = partes.isEmpty ? nil : try proxima()
+            let passphrase = try passphraseOpcional(cred)
             let aberto = try Sessao.shared.revelar(try uuid(pedido["id"]), credencial: cred, passphraseDigitada: passphrase)
             return try json(Revelado(palavras: aberto.palavras, passphrase: aberto.passphrase))
         case "carteira.conferirPassphrase":
             // Com o rascunho aberto, so a passphrase vem; sem ele, o PIN primeiro.
             let cred = pedido["credencial"] == nil ? nil : try credencial()
-            let resultado = try Sessao.shared.conferirPassphrase(try uuid(pedido["id"]), digitada: try proxima(), credencial: cred)
+            let resultado = try Sessao.shared.conferirPassphrase(try uuid(pedido["id"]), digitada: try passphraseCheia(cred), credencial: cred)
             return try json(["resultado": resultado.rawValue])
         case "carteira.remover":
             let id = try uuid(pedido["id"])
@@ -637,7 +674,15 @@ enum Nucleo {
                 saida["nome"] = .string(nome)
             case .faltamPalavras:
                 saida["erro"] = .string("reforco.faltamPalavras")
+            case .semCarteiras:
+                saida["erro"] = .string("reforco.semCarteiras")
             }
+        case is PortaDaPassphrase.SemConferencia:
+            saida["erro"] = .string("passphrase.semConferencia")
+            saida["mensagem"] = .string(Textos.t("Esta versão do app não consegue conferir a passphrase desta carteira, e ela não assina aqui. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39."))
+        case is PortaDaPassphrase.CardanoAntiga:
+            saida["erro"] = .string("passphrase.semConferencia")
+            saida["mensagem"] = .string(Textos.t("A conta da Cardano desta carteira saiu da passphrase exatamente como foi digitada na criação. Digite igual: o mesmo teclado, a mesma forma dos acentos e da largura dos caracteres."))
         case let espera as PortaDaPassphrase.Espera:
             saida["erro"] = .string("passphrase.espera")
             saida["ate"] = .number(espera.ate.timeIntervalSince1970 * 1000)
@@ -803,8 +848,10 @@ struct CarteiraResumo: Encodable {
     let temPassphrase: Bool
     let passphraseConfirmada: Bool
     let tronOutraChave: Bool
-    /// Pede a passphrase para mover saldo e para ver as palavras.
+    /// Pede a passphrase para assinar e para ver as palavras: toda carteira com passphrase (05/11/2026).
     let pedePassphrase: Bool
+    /// A carteira com passphrase que esta versao nao confere: ver, lacrar e conferir recusam antes da passphrase e do PIN.
+    let semConferencia: Bool
     let selecionada: Bool
     let digital: String?
     let contas: [Conta]
@@ -826,6 +873,7 @@ struct CarteiraResumo: Encodable {
         passphraseConfirmada = wallet.passphraseConfirmed
         tronOutraChave = wallet.tronForeignControl ?? false
         pedePassphrase = PortaDaPassphrase.pede(wallet)
+        semConferencia = PortaDaPassphrase.semConferencia(wallet)
         self.selecionada = selecionada
         digital = wallet.fingerprint?.uppercased()
         contas = wallet.accounts.map { Conta(rede: $0.chainID, endereco: $0.address, curto: Fmt.endereco($0.address, chain: Chain.find($0.chainID))) }

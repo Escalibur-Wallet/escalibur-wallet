@@ -92,4 +92,71 @@ struct BIP39BytesTests {
         let jp = try BIP39.seed(phrase: japanese, passphrase: secure("\u{334D}\u{30AC}\u{30D0}\u{30F4}\u{30A1}\u{3071}\u{3070}\u{3050}\u{309E}\u{3061}\u{3062}\u{5341}\u{4EBA}\u{5341}\u{8272}"))
         #expect(jp.withUnsafeBytes { Array($0) }.hex == "a262d6fb6122ecf45be09c50492b31f92e9beb7d9a845987a02cefda57a15f9c467a17872029a9e92299b5cbdf306e3a0ee620245cbd508959b6cb7ca637bd55")
     }
+
+    /// O NFKD de antes, pela `String` inteira: a referencia do de hoje, que decompoe letra por letra.
+    func wholeString(_ bytes: [UInt8]) -> [UInt8] {
+        Array(String(decoding: bytes, as: UTF8.self).decomposedStringWithCompatibilityMapping.utf8)
+    }
+
+    /// O caminho de reserva (trecho por trecho entre os ASCII), que vale onde as tabelas divergem.
+    func segmentedFallback(_ bytes: [UInt8]) -> [UInt8] {
+        let buffer = SecureBytes(capacity: max(bytes.count, 1))
+        buffer.replaceAll(with: bytes)
+        return BIP39.wholeStringNFKD(buffer).withUnsafeBytes { Array($0) }
+    }
+
+    func letterByLetter(_ bytes: [UInt8]) -> [UInt8] {
+        let buffer = SecureBytes(capacity: max(bytes.count, 1))
+        buffer.replaceAll(with: bytes)
+        return BIP39.nfkd(buffer).withUnsafeBytes { Array($0) }
+    }
+
+    @Test("NFKD letra por letra da o mesmo que o da String inteira: cada escalar, marcas fora de ordem, Hangul e UTF-8 quebrado")
+    func nfkdLetterByLetter() {
+        // Cada escalar do Unicode fora do ASCII, sozinho e entre letras.
+        for value in UInt32(0x80)...UInt32(0x10FFFF) {
+            guard let scalar = Unicode.Scalar(value), value <= 0x2FFFF || (0xE0000...0xE01EF).contains(value) else { continue }
+            let alone = Array(String(Character(scalar)).utf8)
+            #expect(letterByLetter(alone) == wholeString(alone), "U+\(String(value, radix: 16))")
+        }
+        // Marcas de classes diferentes, em todas as ordens, coladas em letras que ja trazem marca.
+        let marks: [UInt32] = [0x0301, 0x0323, 0x0308, 0x031B, 0x0327, 0x05B0, 0x0E38, 0x3099, 0x1D165, 0x0345]
+        let bases = ["a", "\u{1EC7}", "\u{01D5}", "\u{1E69}", "\u{FB2C}", "\u{AC00}", "\u{304B}", "\u{2460}", "\u{FDFA}", "\u{0390}"]
+        for base in bases {
+            for i in marks.indices {
+                for j in marks.indices where j != i {
+                    for k in marks.indices where k != i && k != j && (i + j + k) % 3 == 0 {
+                        let text = base + String(String.UnicodeScalarView([marks[i], marks[j], marks[k]].compactMap(Unicode.Scalar.init))) + "x" + base
+                        #expect(letterByLetter(Array(text.utf8)) == wholeString(Array(text.utf8)), "\(text.unicodeScalars.map { String($0.value, radix: 16) })")
+                    }
+                }
+            }
+        }
+        // A tabela de classes do Swift e a do Foundation concordam neste build (senao vale o NFKD de antes), e cada marca
+        // depois de U+0345 (classe 240), tambem por aqui; e o texto que comeca por marca.
+        #expect(BIP39.letterByLetterAgrees)
+        for value in UInt32(0x300)...UInt32(0x10FFFF) {
+            guard let mark = Unicode.Scalar(value), mark.properties.canonicalCombiningClass.rawValue != 0 else { continue }
+            for probe in ["a\u{0345}" + String(Character(mark)), "a" + String(Character(mark)) + "\u{0334}"] {
+                let text = Array(probe.utf8)
+                #expect(letterByLetter(text) == wholeString(text), "\(probe.unicodeScalars.map { String($0.value, radix: 16) })")
+            }
+        }
+        // Frases inteiras, com espaco ideografico, kana com dakuten separado e compatibilidade.
+        for text in ["canção de ninar", "\u{334D}\u{30AC}\u{30D0}\u{30F4}\u{30A1}\u{3071}\u{3070}\u{3050}\u{309E}\u{3061}\u{3062}\u{5341}\u{4EBA}\u{5341}\u{8272}",
+                     "\u{304B}\u{3099}\u{3000}\u{FB01}\u{2075}\u{00BD}", "한국어 비밀번호", "Ǆemal ŉ ﷺ ẛ̣", "e\u{0301}\u{0323}e\u{0323}\u{0301}", "\u{0301}\u{0323}", "\u{0345}\u{0301}a", "a\u{0345}\u{0378}", "a\u{0301}\u{0378}\u{0323}"] {
+            #expect(letterByLetter(Array(text.utf8)) == wholeString(Array(text.utf8)), "\(text)")
+        }
+        // O caminho de reserva tambem da o mesmo, nas frases, nas marcas fora de ordem e no UTF-8 quebrado.
+        for text in ["canção de ninar", "e\u{0301}\u{0323}e\u{0323}\u{0301}x", "\u{0301}\u{0323}", "a\u{0345}\u{0378}", "한국어 비밀번호", "\u{304B}\u{3099}\u{3000}\u{FB01}"] {
+            #expect(segmentedFallback(Array(text.utf8)) == wholeString(Array(text.utf8)), "\(text)")
+        }
+        for broken: [UInt8] in [[0xC3], [0x61, 0xC3, 0x28], [0xE2, 0x82], [0xFF, 0xC3, 0xA7, 0x80], [0xC0, 0xAF, 0xE0, 0x80, 0xAF]] {
+            #expect(segmentedFallback(broken) == wholeString(broken), "\(broken)")
+        }
+        // UTF-8 quebrado vira U+FFFD, como no `String(decoding:)`.
+        for broken: [UInt8] in [[0xC3], [0x61, 0xC3, 0x28], [0xE2, 0x82], [0xF0, 0x9F, 0x98], [0xED, 0xA0, 0x80], [0xFF, 0xC3, 0xA7, 0x80], [0xC0, 0xAF, 0xE0, 0x80, 0xAF]] {
+            #expect(letterByLetter(broken) == wholeString(broken), "\(broken)")
+        }
+    }
 }

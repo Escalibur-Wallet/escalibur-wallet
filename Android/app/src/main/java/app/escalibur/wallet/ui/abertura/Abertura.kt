@@ -60,6 +60,8 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -127,6 +129,8 @@ fun FluxoDeAbertura(aparelhoComBloqueio: Boolean) {
     val entrada = remember { EntradaDoPin(setOf(6)) }
     var primeiro by remember { mutableStateOf<ByteArray?>(null) }
     var trabalhando by remember { mutableStateOf(false) }
+    // A tela que sai leva o primeiro PIN zerado (05/11/2026). Os digitos de cada passo zeram ao sair do app.
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { primeiro?.fill(0) } }
     var documento by remember { mutableStateOf<DocumentoLegal?>(null) }
     val escopo = rememberCoroutineScope()
 
@@ -223,7 +227,12 @@ private fun BoasVindas(aparelhoComBloqueio: Boolean, aoComecar: () -> Unit, aoAb
             )
         }
         val contextoDoRoot = androidx.compose.ui.platform.LocalContext.current
-        val comRoot = remember { app.escalibur.wallet.ui.novacarteira.Checagem.pareceTerRoot(contextoDoRoot) }
+        // Conferido de novo a cada volta ao app: um depurador ou codigo injetado depois da abertura tambem acende
+        // a faixa (auditoria das chaves de 06/11/2026). Acesa, fica acesa.
+        var comRoot by remember { mutableStateOf(app.escalibur.wallet.ui.novacarteira.Checagem.pareceTerRoot(contextoDoRoot)) }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+            if (!comRoot) comRoot = app.escalibur.wallet.ui.novacarteira.Checagem.pareceTerRoot(contextoDoRoot)
+        }
         Column(Modifier.padding(horizontal = Espaco.margem), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(t("Só você pode"), style = estilo(Tipo.heroi), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.lg))
             Text(

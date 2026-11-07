@@ -215,7 +215,13 @@ fun TelaDeTrocar() {
     }
     if (r == null) return
     escolhendoToken?.let { vende ->
-        FolhaDeTokens(controle, vende, r, aoFechar = { escolhendoToken = null }) { mudar(JSONObject().put(if (vende) "vende" else "compra", it)) }
+        // Comprando na troca de agora, qualquer moeda pela busca (pedido do dono, 06/11/2026); a ordem limite fica como esta.
+        val daBusca: ((String, String) -> Unit)? = if (!vende && r.modo == "agora" && !controle.naPonte) {
+            { rede, id -> mudar(JSONObject().put("rede", rede).put("compra", id)) }
+        } else null
+        FolhaDeTokens(controle, vende, r, aoFechar = { escolhendoToken = null }, aoComprarDaBusca = daBusca) {
+            mudar(JSONObject().put(if (vende) "vende" else "compra", it))
+        }
     }
     val cotacao = r.cotacao
     if (vendoRota && cotacao != null) FolhaDaRota(cotacao, aoFechar = { vendoRota = false }) { provedor ->

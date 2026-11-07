@@ -43,6 +43,10 @@ enum EVMEngineFailure: Error, Equatable, Sendable {
     case priceMoved
     /// O impacto no preco subiu desde a cotacao e agora pede a confirmacao do dono.
     case riskIncreased
+    /// A cotacao sem comparacao (`TradeQuote.unanchored`) chegou ao plano sem o aceite do dono.
+    case unanchoredNotAccepted
+    /// Na cotacao sem comparacao, a recotacao garante menos que o minimo que o dono aceitou.
+    case belowAcceptedMinimum
     /// Nenhum provedor devolveu cotacao valida.
     case noQuote
     /// Houve cotacoes, mas todas foram recusadas pela validacao.
@@ -95,6 +99,14 @@ enum EVMEngineSupport {
             throw EVMEngineFailure.accountMismatch
         }
         return account
+    }
+
+    /// O dono do historico: a conta remontada da chave, como no envio; na carteira de observacao, o endereco observado
+    /// (so leitura: montar e assinar continuam exigindo `account`).
+    static func historyOwner(_ derived: DerivedAccount, chain: Chain) throws -> EVMAddress {
+        guard derived.isAddressOnly else { return try account(derived, chain: chain).address }
+        guard derived.chainID == chain.id, let address = try? EVMAddress(derived.address) else { throw EVMEngineFailure.accountMismatch }
+        return address
     }
 
     /// O ativo do pedido pela lista curada. Do `Asset` que o app manda so se usa o

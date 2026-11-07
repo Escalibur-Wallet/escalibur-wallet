@@ -399,10 +399,16 @@ struct TradeReviewFlow: View {
     /// Ordem da CoW com autorizacao antes: a CoW so aceita a ordem depois que a
     /// autorizacao confirma na rede, e a espera e essa.
     private var sendingNote: String {
+        #if DEBUG
+        // `-tela enviando-ethereum`: a nota da autorizacao antes, sem plano montado.
+        if DebugDemo.screen == "enviando-ethereum" { return String(localized: "Esta ordem precisa de uma confirmação na Ethereum antes. Leva uns 15 a 30 segundos. Não feche o app até terminar.") }
+        #endif
         guard let plan, plan.transactions.last is EIP712ValidatedMessage, plan.transactions.count > 1 else {
             return String(localized: "Não feche o app até terminar.")
         }
-        return String(localized: "A autorização vai primeiro. A ordem segue para a CoW assim que ela confirmar na \(item.chain.name). Não feche o app até terminar.")
+        // Na Ethereum, um bloco a cada 12 s: a espera, dita, nao parece travamento (pedido do dono, 06/11/2026).
+        if item.chain.evmChainID == 1 { return String(localized: "Esta ordem precisa de uma confirmação na Ethereum antes. Leva uns 15 a 30 segundos. Não feche o app até terminar.") }
+        return String(localized: "Esta ordem precisa de uma confirmação na \(item.chain.name) antes. Leva alguns segundos. Não feche o app até terminar.")
     }
 
     // MARK: Acoes
@@ -465,7 +471,7 @@ struct TradeReviewFlow: View {
             case .swap(let r, let quote):
                 let request = TradeRequest(walletID: r.walletID, chain: r.chain, account: r.account, sell: r.sell, buy: r.buy,
                                            amountIn: r.amountIn, slippageBasisPoints: r.slippageBasisPoints, nonceQueue: queue,
-                                           inParts: r.inParts)
+                                           inParts: r.inParts, acceptsUnanchored: r.acceptsUnanchored)
                 built = try await engine.plan(request, quote: quote)
             case .limit(let r):
                 // Editando, depois do cancelamento confirmado: a ordem antiga sai da soma das abertas.
@@ -563,44 +569,22 @@ struct TradeReviewFlow: View {
             error = SigningSelfTest.Failure().errorDescription
             return
         }
-        // Carteira com passphrase: a passphrase antes do Face ID ou do PIN, conferida dentro
-        // do assinador. Cancelar uma ordem nao tira valor: nao pede (pedido do dono, 16/10/2026).
-        var typedPassphrase: SecureBytes?
-        if !isCancel, PassphraseGate.needed(session.metadata.wallets.first { $0.id == plan.walletID }),
-           let wallet = session.metadata.wallets.first(where: { $0.id == plan.walletID }) {
-            guard let typed = await PassphraseGate.shared.ask(wallet) else { return }
-            typedPassphrase = typed
-        }
-        defer { typedPassphrase?.wipe() }
-        let checkPassphrase = typedPassphrase
-        // A tentativa conta antes de o cofre conferir; com muitas erradas, espera.
-        if checkPassphrase != nil, let wait = PassphraseGate.shared.begin(session, wallet: plan.walletID) {
+        // Carteira com passphrase: a passphrase antes do Face ID ou do PIN, conferida dentro do assinador. Ela nunca fica
+        // salva e sai zerada logo depois de assinar (pedido do dono, 05/11/2026; ver `PassphraseGate.sign`). Cancelar uma
+        // ordem tambem assina, e sem a passphrase o cofre nao tem como.
+        let cancelPrompt: ((WalletMeta) -> String)? = isCancel
+            ? { String(localized: "Para cancelar a ordem de \($0.name), digite a passphrase. Depois vem o \(KeyServices.biometryName) ou o PIN, como sempre.") }
+            : nil
+        let signed: [SignedTransaction]
+        switch await PassphraseGate.shared.sign(plan, session: session, auth: auth, reason: plan.review.title, prompt: cancelPrompt) {
+        case .signed(let result):
+            signed = result
+        case .cancelled:
+            return
+        case .waiting(let wait):
             self.error = wait
             return
-        }
-        let signed: [SignedTransaction]
-        do {
-            guard let result = try await auth.perform(session, reason: plan.review.title, { rk in
-                try Signer.sign(plan, rootKey: rk, vault: KeyServices.wallets, passphrase: checkPassphrase)
-            }) else {
-                if checkPassphrase != nil { PassphraseGate.shared.refund(session, wallet: plan.walletID) }
-                return
-            }
-            signed = result
-            // A passphrase confere (o assinador assinou): a conta zera, e o buffer sai ja.
-            if checkPassphrase != nil {
-                PassphraseGate.shared.passed(session, wallet: plan.walletID)
-                PassphraseGate.shared.confirmGrace(plan.walletID)
-            }
-            checkPassphrase?.wipe()
-        } catch {
-            checkPassphrase?.wipe()
-            if (error as? Signer.Failure) == .passphraseMismatch {
-                PassphraseGate.shared.failed(session, wallet: plan.walletID)
-            } else if checkPassphrase != nil {
-                // Parou antes da passphrase (PIN errado, cofre): nada foi conferido, a tentativa volta.
-                PassphraseGate.shared.refund(session, wallet: plan.walletID)
-            }
+        case .failed(let error):
             self.error = (error as? Signer.Failure) == .passphraseMismatch ? PassphraseGate.mismatchMessage
                 : AuthCoordinator.refusalMessage(error) ?? (error as? LocalizedError)?.errorDescription
                 ?? text(swap: String(localized: "A troca não saiu. Nada foi debitado."), limit: String(localized: "A ordem não saiu. Nada foi debitado."),

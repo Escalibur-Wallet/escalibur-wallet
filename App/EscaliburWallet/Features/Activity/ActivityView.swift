@@ -100,7 +100,7 @@ final class ActivityFeed {
     /// A leitura valida: uma de carteira trocada no meio termina sem mexer na tela.
     private var generation = 0
     /// A carteira cujo historico esta na tela, e ele por rede.
-    private var shownWalletID: UUID?
+    private(set) var shownWalletID: UUID?
     private var byChain: [String: [ActivityEntry]] = [:]
 
     /// O historico guardado da carteira, na tela antes de qualquer rede responder.

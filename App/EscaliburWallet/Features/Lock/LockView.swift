@@ -71,6 +71,8 @@ struct LockView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background {
                 triedBiometry = false
+                // Os digitos ja digitados nao ficam na memoria do app suspenso (05/11/2026).
+                entry.reset()
                 // O rosto confirmado nao fica para a volta: na proxima vinda, o rosto de novo.
                 if facePass != nil { KeyServices.root.discardHardenedFace(); facePass = nil }
             }

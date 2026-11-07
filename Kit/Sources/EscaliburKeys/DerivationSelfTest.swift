@@ -101,7 +101,7 @@ public enum DerivationSelfTest {
     ]
 
     static func secret(_ source: Source, passphrase: String) throws -> WalletSecret {
-        // O segredo fica com o buffer da passphrase (o ASCII entra sem copia), e o `wipe()` dele o zera.
+        // O segredo tem a propria copia da passphrase; `from` zera `typed`.
         let typed = SecureBytes(capacity: max(passphrase.utf8.count, 1))
         Array(passphrase.utf8).withUnsafeBufferPointer { typed.append(contentsOf: $0) }
         let words: SecureBytes

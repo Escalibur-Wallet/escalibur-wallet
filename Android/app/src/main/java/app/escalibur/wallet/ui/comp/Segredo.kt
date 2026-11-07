@@ -56,9 +56,26 @@ import java.nio.CharBuffer
  * e nao so o ultimo byte dele.
  */
 @Stable
-class Segredo {
+class Segredo(limpaAoSair: Boolean = false) {
     private var buffer = ByteArray(64)
     private var usados = 0
+
+    init { if (limpaAoSair) synchronized(vivos) { vivos.add(this) } }
+
+    companion object {
+        /**
+         * Os campos `limpaAoSair` vivos, sem segura-los: sair do app ou travar zera todos (05/11/2026). O `onDispose` da tela
+         * nao roda com a composicao parada no fundo. So os de conferir e de usar e descartar (as folhas, conferir a copia,
+         * o Super Security): os de criar e importar ficam, porque a propria previa manda comparar os enderecos noutro app,
+         * e um campo zerado ali gravaria outra carteira.
+         */
+        private val vivos: MutableSet<Segredo> = java.util.Collections.newSetFromMap(java.util.WeakHashMap())
+
+        fun limparTodos() {
+            val todos = synchronized(vivos) { vivos.toList() }
+            todos.forEach { it.clearText() }
+        }
+    }
 
     /** Quantos caracteres ha: o que a tela mostra, e o que se observa para saber o tamanho. */
     var tamanho by mutableIntStateOf(0)

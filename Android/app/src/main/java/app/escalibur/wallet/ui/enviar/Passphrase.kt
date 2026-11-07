@@ -52,21 +52,38 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 /**
- * A passphrase antes de mover saldo (o `PassphraseGate` do iOS): carteira com passphrase e "Pedir a
- * passphrase para enviar" pede ela antes da biometria ou do PIN. A conferencia e do assinador, no
- * nucleo; esta folha so coleta o que foi digitado, em bytes que o chamador zera.
+ * A passphrase antes de cada assinatura (o `PassphraseGate` do iOS): a carteira com passphrase pede ela
+ * antes da biometria ou do PIN. Ela nunca fica salva no app (pedido do dono, 05/11/2026): a conferencia
+ * e do assinador, no nucleo, pelo fingerprint da raiz; esta folha so coleta o que foi digitado, em bytes
+ * que o chamador zera.
  */
 object PedidoDePassphrase {
     class Resposta(val bytes: ByteArray, val folga: Int?)
 
-    class Pedido(val nomeDaCarteira: String, val motivo: String, val ofereceFolga: Boolean, val responder: (Resposta?) -> Unit)
+    /** `campo`: o que a folha digita, do pedido, e nao da tela: fechar o pedido de fora (o app saiu, travou) o zera na hora. */
+    class Pedido(val nomeDaCarteira: String, val motivo: String, val ofereceFolga: Boolean, val responder: (Resposta?) -> Unit) {
+        val campo = Segredo(limpaAoSair = true)
+    }
 
     var pedido by mutableStateOf<Pedido?>(null)
         private set
 
     val escolhasDeFolga = listOf(5, 10, 15, 20)
 
-    suspend fun pedir(nomeDaCarteira: String, motivo: String? = null): Resposta? = suspendCancellableCoroutine { continuacao ->
+    /** Soma um a cada `cancelar`: a resposta que chega depois de o app sair ou travar nao segue (sai zerada). */
+    @Volatile private var epoca = 0
+
+    suspend fun pedir(nomeDaCarteira: String, motivo: String? = null): Resposta? {
+        val inicio = epoca
+        val resposta = pedirAgora(nomeDaCarteira, motivo)
+        if (resposta != null && epoca != inicio) {
+            resposta.bytes.fill(0)
+            return null
+        }
+        return resposta
+    }
+
+    private suspend fun pedirAgora(nomeDaCarteira: String, motivo: String?): Resposta? = suspendCancellableCoroutine { continuacao ->
         pedido?.responder?.invoke(null)
         val linha = motivo ?: t("%@ pede a passphrase para mover saldo. Depois dela vem a biometria ou o PIN, como sempre.", nomeDaCarteira)
         pedido = Pedido(nomeDaCarteira, linha, motivo == null) { resposta ->
@@ -76,14 +93,19 @@ object PedidoDePassphrase {
         continuacao.invokeOnCancellation { pedido = null }
     }
 
-    /** O app travou: a folha aberta responde "fechou". */
-    fun cancelar() { pedido?.responder?.invoke(null) }
+    /** O app travou ou saiu: a folha aberta responde "fechou", e o que estava digitado sai zerado. */
+    fun cancelar() {
+        epoca++
+        val aberto = pedido ?: return
+        aberto.campo.clearText()
+        aberto.responder(null)
+    }
 }
 
 /** A folha, por cima de qualquer tela (desenhada na raiz, como a do PIN). */
 @Composable
 fun FolhaDaPassphrase(pedido: PedidoDePassphrase.Pedido) {
-    val campo = remember(pedido) { Segredo() }
+    val campo = pedido.campo
     var mostrar by remember { mutableStateOf(false) }
     var folgaLigada by remember(pedido) { mutableStateOf(false) }
     var minutos by remember(pedido) { mutableIntStateOf(PedidoDePassphrase.escolhasDeFolga.first()) }
@@ -134,7 +156,7 @@ fun FolhaDaPassphrase(pedido: PedidoDePassphrase.Pedido) {
                         Interruptor(folgaLigada, { folgaLigada = it })
                     }
                     Text(
-                        if (folgaLigada) t("Nos próximos %lld minutos, %@ não pede a passphrase para mover saldo. A biometria ou o PIN continuam. Travar o app encerra.", minutos, pedido.nomeDaCarteira)
+                        if (folgaLigada) t("Nos próximos %lld minutos, %@ não pede a passphrase. Até lá ela fica só na memória do app, e sai apagada no fim do tempo, ao sair do app ou ao travar. A biometria ou o PIN continuam.", minutos, pedido.nomeDaCarteira)
                         else t("Depois de a passphrase conferir, os próximos envios, trocas e ordens pulam esta etapa por alguns minutos."),
                         style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(end = 64.dp),
                     )

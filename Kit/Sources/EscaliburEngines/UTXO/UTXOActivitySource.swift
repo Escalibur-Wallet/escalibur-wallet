@@ -28,6 +28,14 @@ struct UTXOActivitySource: ActivitySource {
     func history(chain: Chain, account: DerivedAccount, usage: UTXOUsage?) async throws -> [ActivityEntry] {
         guard chain == self.chain else { throw SendEngineError.message(NetworkFailureText.wrongAccount) }
         do {
+            // Carteira de observacao: so o endereco observado, sem xpub para varrer (como o saldo dela).
+            if account.isAddressOnly {
+                guard account.chainID == chain.id else { throw SendEngineError.message(NetworkFailureText.wrongAccount) }
+                let items = try await reader.history(address: account.address, limit: Self.limit)
+                return ChainActivityEntries.entries(
+                    items, chain: chain, own: [account.address], resolve: { $0 == .native ? Asset.native(chain) : nil }
+                )
+            }
             let utxoAccount = try UTXOEngineSupport.account(account, chain: chain)
             let discovery = try await UTXODiscoveryCache.discover(
                 utxoAccount, usage: usage, reader: reader, maxAge: UTXODiscoveryCache.displayLifetime

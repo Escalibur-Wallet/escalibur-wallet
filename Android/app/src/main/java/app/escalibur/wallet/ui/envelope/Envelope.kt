@@ -187,7 +187,9 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
     val senha = remember { Segredo() }
     val repeticao = remember { Segredo() }
     var revelar by remember { mutableStateOf(false) }
-    var nome by remember { mutableStateOf(carteira.nome) }
+    // O envelope leva so as palavras, que abrem a carteira de base: o nome da carteira com passphrase nao vai nele (auditoria
+    // do envelope de 06/11/2026).
+    var nome by remember { mutableStateOf(if (carteira.pedePassphrase) "" else carteira.nome) }
     var risco by remember { mutableStateOf<JSONObject?>(null) }
     var arquivo by remember { mutableStateOf<ByteArray?>(null) }
     var nomeDoArquivo by remember { mutableStateOf("") }
@@ -271,23 +273,29 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
         }
     }
 
-    // Depois do deslize: o PIN e a biometria abrem as palavras. Na carteira que pede a passphrase,
-    // ela vem antes e o cofre confere.
+    // Depois do deslize: o PIN e a biometria abrem as palavras. Na carteira com passphrase, ela vem
+    // antes e confere pelo fingerprint da raiz, mas nao vai no envelope (05/11/2026).
     fun abrirCarteira() {
+        if (carteira.semConferencia) {
+            erro = t("Esta versão do app não consegue conferir a passphrase desta carteira, e ela não assina aqui. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39.")
+            passo = "explicacao"
+            return
+        }
         escopo.launch {
             erro = null
             var passphrase: PedidoDePassphrase.Resposta? = null
             if (carteira.pedePassphrase) {
                 passphrase = PedidoDePassphrase.pedir(carteira.nome,
-                    t("O envelope de %@ leva a passphrase junto. Digite a passphrase para seguir; depois vem a confirmação de sempre.", carteira.nome))
+                    t("Para lacrar as palavras de %@, digite a passphrase. Ela não vai no envelope: guarde-a à parte. Depois vem a confirmação de sempre.", carteira.nome))
                 if (passphrase == null) { passo = "explicacao"; return@launch }
             }
             trabalhando = true
             try {
-                val segredo = passphrase?.bytes
+                // A passphrase vai para o nucleo antes do PIN, e a daqui sai zerada ja (05/11/2026).
+                passphrase?.let { Api.comSegredo("passphrase.entregar", JSONObject(), it.bytes) }
+                if (passphrase != null && !app.escalibur.wallet.ui.Ciclo.primeiroPlano) { passo = "explicacao"; return@launch }
                 val aberta = Autorizacao.tentando(t("Lacrar a senha de %@ num envelope", carteira.nome), Autorizacao.Presenca.pinEBiometria) { credencial ->
-                    val partes = if (segredo != null) credencial.partes(segredo.copyOf()) else credencial.partes()
-                    Api.comSegredo("envelope.abrirCarteira", JSONObject().put("id", carteira.id).put("credencial", credencial.json()), *partes)
+                    Api.comSegredo("envelope.abrirCarteira", JSONObject().put("id", carteira.id).put("credencial", credencial.json()), *credencial.partes())
                 }
                 if (aberta == null) { passo = "explicacao"; return@launch }
                 sortear()
@@ -300,6 +308,7 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
                 passo = "explicacao"
             } finally {
                 passphrase?.bytes?.fill(0)
+                if (passphrase != null) runCatching { app.escalibur.wallet.nucleo.Nucleo.chamar("passphrase.descartar", "{}") }
                 trabalhando = false
             }
         }
@@ -433,6 +442,9 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
                     Box(Modifier.padding(top = Espaco.xs)) { CampoDeTexto(nome) { nome = it.take(64) } }
                     Text(t("O nome fica cifrado. O arquivo não diz de quem é."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
                          modifier = Modifier.padding(top = Espaco.xs))
+                    if (carteira.pedePassphrase) {
+                        Text(t("Esta carteira tem passphrase. O envelope leva só as palavras, que abrem a carteira de base. Não use aqui o nome da carteira com passphrase."), style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs))
+                    }
                 }
                 Rodape { BotaoPrimario(t("Lacrar envelope"), ligado = repeticao.text.isNotEmpty()) { lacrar() } }
             }
@@ -726,7 +738,7 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
     var nomeDoArquivo by remember { mutableStateOf("") }
     var segundos by remember { mutableStateOf(3.0) }
     var erro by remember { mutableStateOf<String?>(null) }
-    val senha = remember { Segredo() }
+    val senha = remember { Segredo(limpaAoSair = true) }
     var revelar by remember { mutableStateOf(false) }
     var pesado by remember { mutableStateOf(false) }
     var pesadoConfirmado by remember { mutableStateOf(false) }
@@ -734,6 +746,25 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
     var previa by remember { mutableStateOf<JSONObject?>(null) }
     var trabalhando by remember { mutableStateOf(false) }
     var palavras by remember { mutableStateOf(12) }
+    // Super Security em "Bloquear as carteiras": importar recusa antes da senha; so ver as palavras continua (como no iOS).
+    // Ate o nucleo responder, nem aberto nem fechado: a faixa so com sim, e os botoes so com nao (falha fechada, rodada 19).
+    var bloqueado by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(Unit) { bloqueado = app.escalibur.wallet.ui.ajustes.adicionarBloqueado() }
+    // Saiu do app: o nucleo esqueceu o conteudo aberto, e o arquivo cifrado ficou. A volta e pela senha (05/11/2026). Com a
+    // previa ou a gravacao em curso, a volta espera elas terminarem; as palavras abertas saem tambem.
+    var vindaVista by remember { mutableStateOf(Ciclo.vinda) }
+    LaunchedEffect(Ciclo.vinda, trabalhando) {
+        if (Ciclo.vinda != vindaVista && !trabalhando) {
+            vindaVista = Ciclo.vinda
+            if (passo == "aberto" || passo == "previa" || passo == "palavras") {
+                if (passo == "palavras") runCatching { Api.objeto("carteira.descartarRascunho") }
+                aberto = null
+                previa = null
+                erro = null
+                passo = "senha"
+            }
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -812,6 +843,8 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
                     "envelope.invalidPhrase" -> t("Este envelope está danificado e não abre. Se você tem outra cópia do arquivo, use a outra.")
                     "envelope.unknownLanguage" -> t("O envelope abriu, mas a senha da carteira dentro dele está num idioma que esta versão não reconhece.")
                     "envelope.caro" -> mensagemDeMemoria(falha.dados.optInt("mib"))
+                    // Saiu do app durante o Argon2: o conteudo nao ficou, e a senha e pedida de novo, sem erro.
+                    "sessao.travada" -> { senha.clearText(); null }
                     "envelope.cannotOpen" -> { senha.clearText(); t("Não abriu. Confira a senha, com maiúsculas, acentos e espaços, e tente de novo.") }
                     else -> { senha.clearText(); t("Não foi possível abrir este envelope agora. Tente de novo.") }
                 }
@@ -820,15 +853,43 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
         }
     }
 
+    // O envelope lacrado antes de 05/11/2026 leva a passphrase, que nao fica no app nem aparece na tela: sem saber
+    // ela, quem importa ficaria com uma carteira que nao envia. Ela e digitada antes e o nucleo compara com a do envelope.
     fun mostrarPrevia() {
-        trabalhando = true
         erro = null
         escopo.launch {
+            if (aberto?.optBoolean("comPassphrase") == true) {
+                val nome = aberto?.optString("rotulo")?.ifEmpty { null } ?: t("Envelope")
+                val resposta = PedidoDePassphrase.pedir(nome,
+                    t("O envelope de %@ leva a passphrase da carteira, e este app não a guarda: ela vai ser pedida a cada envio. Digite a passphrase que você anotou para importar.", nome))
+                if (resposta == null) {
+                    // Fechada por sair do app, nao por nao saber a passphrase: nada a dizer.
+                    if (app.escalibur.wallet.ui.Ciclo.primeiroPlano) {
+                        erro = t("Sem a passphrase, esta carteira não envia neste app. Ela está dentro deste envelope: se você não a anotou, o decifrador público da Escalibur (github.com/Escalibur-Wallet/escalibur-wallet, arquivo tools/referencia/decifrar.py) mostra a passphrase num computador sem internet.")
+                    }
+                    return@launch
+                }
+                try {
+                    Api.comSegredo("envelope.conferirPassphrase", JSONObject(), resposta.bytes)
+                } catch (falha: FalhaDoNucleo) {
+                    // Saiu do app no meio (o conteudo aberto ja foi esquecido): a volta e pela senha, sem erro.
+                    erro = if (falha.codigo == "envelope.notAnEnvelope" || !app.escalibur.wallet.ui.Ciclo.primeiroPlano) null
+                    else if (falha.codigo == "passphrase.errada") {
+                        t("Não confere com a passphrase do envelope. Escreva igual ao que você anotou: maiúscula, acento e espaço contam.")
+                    } else Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível importar a carteira.")
+                    return@launch
+                } finally {
+                    resposta.bytes.fill(0)
+                }
+            }
+            trabalhando = true
             try {
                 previa = Api.objeto("envelope.previa")
                 passo = "previa"
             } catch (falha: FalhaDoNucleo) {
-                erro = Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível importar a carteira.")
+                // Saiu do app durante a previa: a volta e pela senha, sem erro.
+                erro = if (falha.codigo == "sessao.travada" || !app.escalibur.wallet.ui.Ciclo.primeiroPlano) null
+                else Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível importar a carteira.")
             } finally {
                 trabalhando = false
             }
@@ -840,11 +901,17 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
         Box(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
             ConferenciaDaImportacao(conferir, comPassphrase = aberto?.optBoolean("comPassphrase") == true, doEnvelope = true,
                                     aoVoltar = { passo = "aberto" }, aoGuardar = aoTerminar) { tronOutraChave ->
-                val salva = Autorizacao.tentando(t("Guardar a carteira do envelope neste celular")) { credencial ->
-                    Api.comSegredo("envelope.importar", JSONObject().put("tronOutraChave", tronOutraChave).put("credencial", credencial.json()), *credencial.partes())
+                // A gravacao conta como trabalho: sair do app no meio nao manda a tela de volta para a senha antes de ela terminar.
+                trabalhando = true
+                try {
+                    val salva = Autorizacao.tentando(t("Guardar a carteira do envelope neste celular")) { credencial ->
+                        Api.comSegredo("envelope.importar", JSONObject().put("tronOutraChave", tronOutraChave).put("credencial", credencial.json()), *credencial.partes())
+                    }
+                    salva?.let { Avisos.mostrar(t("%@ foi guardada neste celular.", it.optString("nome"))) }
+                    salva != null
+                } finally {
+                    trabalhando = false
                 }
-                salva?.let { Avisos.mostrar(t("%@ foi guardada neste celular.", it.optString("nome"))) }
-                salva != null
             }
         }
         return
@@ -890,7 +957,11 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
                     Spacer(Modifier.height(104.dp))
                 }
                 }
-                Rodape { BotaoPrimario(t("Escolher arquivo")) { Ciclo.abrindoSeletor(); escolher.launch(arrayOf("*/*")) } }
+                Rodape {
+                    // Com "Bloquear as carteiras" ligado, o envelope abre so para ver as palavras: o aviso vem antes da senha.
+                    if (bloqueado == true) Faixa(TipoDeFaixa.cautela, t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova."), Modifier.padding(bottom = Espaco.sm))
+                    BotaoPrimario(t("Escolher arquivo")) { Ciclo.abrindoSeletor(); escolher.launch(arrayOf("*/*")) }
+                }
             }
             "senha" -> {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md),
@@ -934,9 +1005,10 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
                              (if (dados.optBoolean("comPassphrase")) t(" · com passphrase") else ""),
                          style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xxs))
                     erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
+                    if (bloqueado == true) Faixa(TipoDeFaixa.cautela, t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova."), Modifier.padding(top = Espaco.md))
                 }
                 Rodape {
-                    BotaoPrimario(t("Importar esta carteira"), carregando = trabalhando) { mostrarPrevia() }
+                    BotaoPrimario(t("Importar esta carteira"), ligado = bloqueado == false, carregando = trabalhando) { mostrarPrevia() }
                     BotaoSecundario(t("Só ver as palavras"), Modifier.padding(top = Espaco.sm)) {
                         escopo.launch {
                             if (runCatching { Api.objeto("envelope.verPalavras") }.isSuccess) passo = "palavras"

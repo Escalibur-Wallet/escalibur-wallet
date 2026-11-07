@@ -199,6 +199,7 @@ public enum WordLexicon {
         for language in latin {
             guard let lists = nfkdWords[language] else { continue }
             var positions: [UInt16] = []
+            positions.reserveCapacity(words.count)
             defer { positions.resetIndices() }
             for word in words {
                 guard let position = position(of: word, in: language) else { break }

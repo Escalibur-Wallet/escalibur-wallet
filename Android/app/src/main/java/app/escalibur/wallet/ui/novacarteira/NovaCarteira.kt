@@ -648,8 +648,9 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, comPassphrase: Boolea
                     Api.lista("carteira.palavras", JSONObject().put("de", 0).put("ate", palavras)).let { lista -> (0 until lista.length()).map { lista.getString(it) } }
                 }.getOrDefault(emptyList())
                 if (frase.size != palavras) return@launch
-                Transferencia.copiar(contexto, frase.joinToString(" "), segundos = 60)
-                Avisos.mostrar(t("Palavras copiadas. Elas somem em 1 minuto."))
+                Transferencia.copiar(contexto, frase.joinToString(" "), segundos = 60, segredo = true)
+                // O alarme do sistema e inexato: "cerca de" (auditoria do envelope de 06/11/2026).
+                Avisos.mostrar(t("Palavras copiadas. Elas somem em cerca de 1 minuto."))
             }
         }) { copiando = false }
     }

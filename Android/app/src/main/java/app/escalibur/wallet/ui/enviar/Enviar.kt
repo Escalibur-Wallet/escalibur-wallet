@@ -255,11 +255,12 @@ private fun ColumnScope.Etapas(controle: ControleDoEnvio, r: RetratoDoEnvio, vol
         "destino" -> voltarParaEscolha
         else -> null
     }
-    BackHandler(enabled = !enviando) { voltar?.invoke() ?: Navegacao.fechar() }
+    // Durante "Conferindo o historico da rede" o voltar fica parado, como no iOS (rodada 19 dos 3 agentes).
+    BackHandler(enabled = !enviando) { if (!r.conferindoHistorico) voltar?.invoke() ?: Navegacao.fechar() }
     // Como no iOS: com etapa anterior (a tag, o valor, a revisao), o voltar a esquerda e o fechar a
     // direita (pedido do dono, 23/10/2026: o valor nao tinha como voltar ao endereco).
     CabecalhoDeFolha("", if (enviando) null else ({ Navegacao.fechar() }),
-                     aoVoltar = if (r.etapa in setOf("tag", "valor", "revisao")) voltar else null)
+                     aoVoltar = if (r.etapa in setOf("tag", "valor", "revisao") && !r.conferindoHistorico) voltar else null)
     Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = Espaco.margem).padding(top = Espaco.md, bottom = Espaco.xs)) {
         when (r.etapa) {
             "destino" -> EtapaDoDestino(controle, r)
@@ -296,9 +297,9 @@ private fun ColumnScope.EtapaDoDestino(controle: ControleDoEnvio, r: RetratoDoEn
     var envios by remember { mutableIntStateOf(0) }
     var carteiras by remember { mutableStateOf(false) }
     var tag by remember { mutableStateOf(r.tag) }
-    var conferenciaDoParecido by remember(r.destino) { mutableStateOf("") }
-    var conferenciaDoOutroID by remember(r.destino) { mutableStateOf("") }
-    var conferenciaCega by remember(r.destino) { mutableStateOf("") }
+    var conferenciaDoParecido by remember(r.destino, r.rodadaDoDesafio) { mutableStateOf("") }
+    var conferenciaDoOutroID by remember(r.destino, r.rodadaDoDesafio) { mutableStateOf("") }
+    var conferenciaCega by remember(r.destino, r.rodadaDoDesafio) { mutableStateOf("") }
 
     // A ultima mudanca do destino manda: o campo segue o nucleo quando ele apaga o texto (a frase
     // colada por engano sai na hora) ou quando o link trouxe outro endereco.
@@ -421,7 +422,8 @@ private fun ColumnScope.EtapaDoDestino(controle: ControleDoEnvio, r: RetratoDoEn
         }
 
         if (r.precisaConfirmarRede) {
-            var confirmada by remember(r.destino) { mutableStateOf(false) }
+            // Zera junto com o nucleo, que desliga a confirmacao a cada validacao (como o Toggle do iOS, ligado ao modelo).
+            var confirmada by remember(r.destino, r.rodadaDoDesafio) { mutableStateOf(false) }
             Column(
                 Modifier.padding(top = Espaco.md).fillMaxWidth().background(Paleta.corpo, RoundedCornerShape(Raio.cartao))
                     .border(1.dp, Paleta.borda, RoundedCornerShape(Raio.cartao)).padding(Espaco.md),
@@ -658,7 +660,7 @@ private fun FolhaDeCarteiras(r: RetratoDoEnvio, aoFechar: () -> Unit, aoEscolher
                             Text(carteira.nome, style = estilo(Tipo.linha), color = Paleta.tinta)
                             Text(Formato.endereco(carteira.endereco), style = estilo(Tipo.monoPequeno), color = Paleta.tintaSuave)
                             // Entre a carteira de sempre e a com passphrase, o aviso antes de escolher.
-                            if (carteira.liga) Text(t("Este envio liga as duas carteiras na blockchain: quem tiver as palavras vê a ligação com a carteira com passphrase."),
+                            if (carteira.liga) Text(t("Quem tiver só as palavras vê este envio e o saldo da carteira com passphrase, sem poder movê-lo."),
                                                     style = estilo(Tipo.nota), color = Paleta.cautela, modifier = Modifier.padding(top = 2.dp))
                         }
                         Icone(Icones.avancar, Paleta.tintaApagada, tamanho = 13.dp)
@@ -740,6 +742,10 @@ private fun ColumnScope.EtapaDoValor(controle: ControleDoEnvio, r: RetratoDoEnvi
     LaunchedEffect(r.rede, r.ativoID) { controle.chamar("envio.ordens") }
 
     fun mudar(texto: String, tudo: Boolean) {
+        // Enquanto a revisao espera o historico e monta o plano, o valor fica o do toque: as ordens abertas ja foram
+        // conferidas com ele, e o plano e comparado com ele (rodada 19 dos 3 agentes, 06/11/2026). Vale para o campo, o
+        // Max e o deslizante, que passam todos por aqui.
+        if (controle.trabalhando) return
         valor = texto
         escopo.launch { controle.chamar("envio.valor", JSONObject().put("texto", texto).put("tudo", tudo)) }
     }
@@ -804,6 +810,10 @@ private fun ColumnScope.EtapaDoValor(controle: ControleDoEnvio, r: RetratoDoEnvi
     }
     r.erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
     Spacer(Modifier.weight(1f))
+    if (r.conferindoHistorico) {
+        Text(t("Conferindo o histórico da rede"), style = estilo(Tipo.nota), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
+             modifier = Modifier.fillMaxWidth().padding(bottom = Espaco.xs))
+    }
     BotaoPrimario(
         if (passou) t("Saldo insuficiente") else t("Revisar"),
         ligado = pedido != null && pedido.signum() > 0 && !passou, carregando = controle.trabalhando,
@@ -1023,17 +1033,20 @@ private fun ColumnScope.EtapaDaRevisao(controle: ControleDoEnvio, r: RetratoDoEn
  * texto do erro, ou nil.
  */
 private suspend fun assinar(controle: ControleDoEnvio, r: RetratoDoEnvio, motivo: String, versao: Int): String? {
+    if (r.semConferencia) return t("Esta versão do app não consegue conferir a passphrase desta carteira, e ela não assina aqui. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39.")
     var passphrase: PedidoDePassphrase.Resposta? = null
     if (r.pedePassphrase) passphrase = PedidoDePassphrase.pedir(r.nomeDaCarteira) ?: return null
     controle.trabalhando = true
     try {
-        val segredo = passphrase?.bytes
+        // A passphrase vai para o nucleo antes do PIN, num buffer seguro dele, e a daqui sai zerada ja: assinar e transmitir
+        // estao na mesma chamada, e a copia daqui vivia ate o fim da transmissao (05/11/2026). Entregue com o app ja no
+        // fundo, ela sai e nada segue: o PIN abriria no fundo.
+        passphrase?.let { Api.comSegredo("passphrase.entregar", JSONObject(), it.bytes) }
+        if (passphrase != null && !app.escalibur.wallet.ui.Ciclo.primeiroPlano) return null
         Autorizacao.tentando(motivo) { credencial ->
             val corpo = JSONObject().put("credencial", credencial.json()).put("versao", versao)
             passphrase?.folga?.let { corpo.put("folga", it) }
-            // Cada tentativa leva a sua copia: a chamada zera o que recebe.
-            val partes = if (segredo != null) credencial.partes(segredo.copyOf()) else credencial.partes()
-            controle.aplicar(Api.comSegredo("envio.assinar", corpo, *partes))
+            controle.aplicar(Api.comSegredo("envio.assinar", corpo, *credencial.partes()))
         }
         return null
     } catch (falha: FalhaDoNucleo) {
@@ -1047,6 +1060,7 @@ private suspend fun assinar(controle: ControleDoEnvio, r: RetratoDoEnvio, motivo
         }
     } finally {
         passphrase?.bytes?.fill(0)
+        if (passphrase != null) runCatching { app.escalibur.wallet.nucleo.Nucleo.chamar("passphrase.descartar", "{}") }
         controle.trabalhando = false
     }
 }

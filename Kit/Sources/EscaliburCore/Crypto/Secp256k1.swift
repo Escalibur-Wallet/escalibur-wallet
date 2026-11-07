@@ -4,9 +4,10 @@ import Foundation
 /// A curva secp256k1, sobre o libsecp256k1 do bitcoin-core.
 ///
 /// Toda chave privada entra aqui como `SecureBytes` e nunca vira `Data` ou `[UInt8]`
-/// no caminho. As assinaturas ECDSA saem deterministicas (RFC 6979) e ja em forma
-/// low-S, que e o que Bitcoin, Ethereum, XRP Ledger e Tron exigem; a biblioteca
-/// garante as duas coisas por construcao, e os testes conferem.
+/// no caminho. As assinaturas ECDSA saem em forma low-S, que e o que Bitcoin, Ethereum,
+/// XRP Ledger e Tron exigem; a biblioteca garante isso por construcao, e os testes conferem.
+/// O nonce e o do RFC 6979; na assinatura de verdade (`hedged`) ele leva tambem 32 bytes do
+/// gerador do sistema, e os vetores fixos (testes e `SigningSelfTest`) assinam sem eles.
 public enum Secp256k1 {
     public enum Failure: Error, Equatable {
         case invalidPrivateKey
@@ -80,16 +81,44 @@ public enum Secp256k1 {
 
     // MARK: Assinatura
 
+    /// O contexto e o `ndata` de uma assinatura. Com `hedged` (auditoria das chaves de 06/11/2026): um
+    /// contexto so desta assinatura, aleatorizado com 32 bytes novos e destruido no fim (a biblioteca zera
+    /// o cegamento), e 32 bytes do gerador do sistema somados ao nonce do RFC 6979. Duas assinaturas do
+    /// mesmo digesto nunca usam o mesmo nonce, uma falha induzida numa delas nao se combina com outra, e quem mede o consumo do aparelho
+    /// nunca ve a mesma conta duas vezes sobre o mesmo digesto. A rede nao confere como o nonce nasceu, e
+    /// toda assinatura e conferida antes de sair. Sem `hedged`: o contexto comum e o RFC 6979 puro.
+    private static func withSigning<T>(hedged: Bool, _ body: (OpaquePointer, UnsafeRawPointer?) throws -> T) throws -> T {
+        guard hedged else { return try body(context, nil) }
+        guard let own = secp256k1_context_create(UInt32(SECP256K1_CONTEXT_NONE)) else { throw Failure.signingFailed }
+        defer { secp256k1_context_destroy(own) }
+        let seed = try SecureBytes.random(count: 32)
+        defer { seed.wipe() }
+        let extra = try SecureBytes.random(count: 32)
+        defer { extra.wipe() }
+        return try seed.withUnsafeBytes { seedRaw in
+            guard secp256k1_context_randomize(own, seedRaw.bindMemory(to: UInt8.self).baseAddress!) == 1 else {
+                throw Failure.signingFailed
+            }
+            return try extra.withUnsafeBytes { extraRaw in try body(own, extraRaw.baseAddress!) }
+        }
+    }
+
     /// Assinatura recuperavel: `r || s` em 64 bytes e o identificador de
     /// recuperacao (0 a 3). Ethereum, Tron e mensagens assinadas usam esta forma.
     public static func signRecoverable(digest: [UInt8], privateKey: SecureBytes) throws -> (compact: [UInt8], recoveryID: UInt8) {
+        try signRecoverable(digest: digest, privateKey: privateKey, hedged: false)
+    }
+
+    public static func signRecoverable(digest: [UInt8], privateKey: SecureBytes, hedged: Bool) throws -> (compact: [UInt8], recoveryID: UInt8) {
         guard digest.count == 32 else { throw Failure.signingFailed }
         guard privateKey.count == 32 else { throw Failure.invalidPrivateKey }
         var signature = secp256k1_ecdsa_recoverable_signature()
-        let ok = privateKey.withUnsafeBytes { raw in
-            secp256k1_ecdsa_sign_recoverable(
-                context, &signature, digest, raw.bindMemory(to: UInt8.self).baseAddress!, nil, nil
-            )
+        let ok = try withSigning(hedged: hedged) { ctx, extra in
+            privateKey.withUnsafeBytes { raw in
+                secp256k1_ecdsa_sign_recoverable(
+                    ctx, &signature, digest, raw.bindMemory(to: UInt8.self).baseAddress!, nil, extra
+                )
+            }
         }
         guard ok == 1 else { throw Failure.signingFailed }
         var output = [UInt8](repeating: 0, count: 64)
@@ -100,11 +129,17 @@ public enum Secp256k1 {
 
     /// Assinatura ECDSA em DER, low-S. Bitcoin, Litecoin, Dogecoin e XRP Ledger.
     public static func signDER(digest: [UInt8], privateKey: SecureBytes) throws -> [UInt8] {
+        try signDER(digest: digest, privateKey: privateKey, hedged: false)
+    }
+
+    public static func signDER(digest: [UInt8], privateKey: SecureBytes, hedged: Bool) throws -> [UInt8] {
         guard digest.count == 32 else { throw Failure.signingFailed }
         guard privateKey.count == 32 else { throw Failure.invalidPrivateKey }
         var signature = secp256k1_ecdsa_signature()
-        let ok = privateKey.withUnsafeBytes { raw in
-            secp256k1_ecdsa_sign(context, &signature, digest, raw.bindMemory(to: UInt8.self).baseAddress!, nil, nil)
+        let ok = try withSigning(hedged: hedged) { ctx, extra in
+            privateKey.withUnsafeBytes { raw in
+                secp256k1_ecdsa_sign(ctx, &signature, digest, raw.bindMemory(to: UInt8.self).baseAddress!, nil, extra)
+            }
         }
         guard ok == 1 else { throw Failure.signingFailed }
         var output = [UInt8](repeating: 0, count: 72)

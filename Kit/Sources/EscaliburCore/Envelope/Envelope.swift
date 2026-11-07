@@ -77,11 +77,17 @@ public enum Envelope {
         // piso de forca, so com o "sim" explicito que a tela de confirmacao entrega:
         // nenhum caminho de codigo lacra senha fraca por acidente. A senha sorteada pelo
         // app vale a entropia do sorteio (`generatedBits`), nao a estimativa.
-        guard PasswordStrength.scalarCount(password) >= PasswordStrength.minimumLength else { throw Failure.weakPassword }
-        let strength = generatedBits ?? PasswordStrength.bits(password)
+        let measured = PasswordStrength.measure(password)
+        guard measured.scalars >= PasswordStrength.minimumLength else { throw Failure.weakPassword }
+        let strength = generatedBits ?? measured.bits
         guard strength >= PasswordStrength.minimumBits || acceptedRisk else { throw Failure.weakPassword }
         guard KDFCalibration.canSeal() else { throw Failure.notEnoughMemory }
         let chosen = parameters ?? KDFCalibration.calibrate()
+        // A mesma folga da abertura (`inspect`, m + 300 MiB): sem ela, o Argon2 rodava inteiro e a conferencia final recusava
+        // o proprio envelope (rodada 3 da auditoria do envelope de 06/11/2026).
+        guard KDFCalibration.availableMemoryBytes() >= UInt64(chosen.memoryKiB) * 1024 + 300 * 1024 * 1024 else {
+            throw Failure.notEnoughMemory
+        }
         let language: BIP39Language
         if case .valid(let detected) = BIP39.validate(phrase) { language = detected } else { throw Failure.invalidPhrase }
         let emptyPassphrase = SecureBytes(capacity: 1)

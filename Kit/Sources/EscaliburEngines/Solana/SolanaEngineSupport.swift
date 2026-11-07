@@ -25,6 +25,16 @@ enum SolanaEngineGuard {
         return SolanaOwner(path: account.path, publicKey: key)
     }
 
+    /// O dono do historico: a conta conferida pela chave, como no envio; na carteira de observacao, a chave do endereco
+    /// observado (so leitura: montar e assinar continuam exigindo `owner`).
+    static func historyOwner(_ account: DerivedAccount) throws -> SolanaPublicKey {
+        guard account.isAddressOnly else { return try owner(account).publicKey }
+        guard account.chainID == Chain.solana.id, let key = try? SolanaPublicKey(base58: account.address), key.base58 == account.address else {
+            throw SolanaEngineProblem.accountMismatch
+        }
+        return key
+    }
+
     /// O destino digitado, como chave. Programas da lista e mints da lista sao
     /// recusados aqui, sem consultar a rede: o valor ficaria preso numa conta que nao
     /// devolve nada.

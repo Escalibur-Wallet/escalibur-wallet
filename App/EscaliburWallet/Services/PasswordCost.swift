@@ -46,7 +46,9 @@ enum PasswordCost {
         if crime < 86_400 { return .veryWeak }
         if crime < 10 * year { return .weak }
         if stateSeconds(bits: bits, kdf: kdf) < 1_000 * year { return .fair }
-        return .strong
+        // Forte so com o piso do nucleo (60 bits): com 512 MiB e mais passes, o tempo passava de 1.000 anos um pouco antes,
+        // e a tela dizia "Forte" a uma senha que o lacre ainda trata como risco (rodada 3 da auditoria do envelope).
+        return bits >= PasswordStrength.minimumBits ? .strong : .fair
     }
 
     /// A frase da faixa, com o tempo calculado.

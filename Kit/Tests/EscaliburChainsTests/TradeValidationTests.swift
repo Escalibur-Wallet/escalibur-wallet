@@ -416,6 +416,34 @@ struct TradeValidationTests {
         #expect(try TradeValidator.anchored([uniswap], market: TradeMarketReference(oracleOut: uniswap.expectedOut)).count == 1)
     }
 
+    @Test("Fonte unica sem referencia: segue marcada sem comparacao, presa a maior estimativa dela; nunca com referencia ou duas fontes")
+    func singleSourceUnanchored() throws {
+        let intent = try S.baseIntent()
+        let velora = try TradeValidator.validate(S.proposal(.velora, "velora-base-usdc-eth"), intent: intent, now: S.recordedAt)
+        let kyber = try TradeValidator.validate(S.proposal(.kyberSwap, "kyber-base-usdc-eth-build"), intent: intent, now: S.recordedAt)
+        #expect(try TradeValidator.unanchored([velora], market: .none) == [velora])
+        // So onde `anchored` recusa: sem cotacao, com referencia ou com duas fontes, nao vale.
+        #expect(throws: TradeRefusal.noPriceAnchor) { try TradeValidator.unanchored([], market: .none) }
+        #expect(throws: TradeRefusal.noPriceAnchor) {
+            try TradeValidator.unanchored([velora], market: TradeMarketReference(oracleOut: velora.expectedOut))
+        }
+        #expect(throws: TradeRefusal.noPriceAnchor) { try TradeValidator.unanchored([velora, kyber], market: .none) }
+
+        // As diretas do mesmo RPC sao uma fonte so: entre elas, fica quem garante o minimo da maior estimativa.
+        let uniswap = try TradeValidator.validate(S.proposal(.uniswap, "uniswap-base-usdc-eth"), intent: intent, now: S.recordedAt)
+        let base = try #require(PancakeDeployment.on(.base))
+        let low = uniswap.expectedOut * 9 / 10
+        let route = try PancakeCalldata.encode(route: .v3(tokens: [S.baseUSDC.contract, base.wrappedNative], fees: [500]), intent: intent,
+                                               minimumOut: intent.minimumOut(forExpected: low),
+                                               deadline: UInt64(S.recordedAt.timeIntervalSince1970) + 600, deployment: base)
+        let pancake = try TradeValidator.validate(
+            TradeProposal(provider: .pancakeswap, chainID: 8453, from: S.owner, to: base.router, value: 0, data: route.data,
+                          expectedOut: low, spender: base.router, gasEstimate: nil, routeSources: nil, reportedPriceImpactBps: nil),
+            intent: intent, now: S.recordedAt
+        )
+        #expect(try TradeValidator.unanchored([uniswap, pancake], market: .none).map(\.provider) == [.uniswap])
+    }
+
     @Test("Velora com o sufixo ERC-8021 (builder code da Base): o sufixo sai, a calldata decodificada e a assinada")
     func veloraAttributionSuffix() throws {
         let intent = try S.baseIntent()

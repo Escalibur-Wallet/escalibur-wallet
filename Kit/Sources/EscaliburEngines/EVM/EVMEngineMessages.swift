@@ -78,6 +78,9 @@ enum EVMEngineMessages {
         case .quoteExpired: return kitText("A cotação venceu. Atualize e revise de novo.")
         case .priceMoved: return kitText("O preço mudou mais que a sua tolerância desde a cotação. Atualize a cotação e revise de novo.")
         case .riskIncreased: return kitText("O impacto no preço subiu desde a cotação. Atualize a cotação e confirme de novo.")
+        case .unanchoredNotAccepted:
+            return kitText("Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Marque que entende o risco para trocar.")
+        case .belowAcceptedMinimum: return kitText("O mínimo garantido caiu desde o seu aceite. Atualize a cotação e marque de novo.")
         case .noQuote: return kitText("Nenhum provedor cotou esta troca agora. Tente um valor menor ou outro par.")
         case .allQuotesRefused: return kitText("Nenhuma cotação passou na conferência de segurança da carteira. Nada foi assinado.")
         case .limitOrdersUnavailable: return kitText("Ordens limite ainda não estão disponíveis na \(chain.name).")
@@ -184,8 +187,8 @@ enum EVMEngineMessages {
              .simulationUnexpectedApproval:
             return simulationMismatch
         case .priceFarFromOracle: return kitText("O preço desta cotação está longe demais do preço médio de mercado. Troca bloqueada.")
-        case .noPriceAnchor:
-            return kitText("Sem preço de referência do mercado agora, a troca precisa de pelo menos duas cotações para comparar, e só uma respondeu. Tente de novo em instantes.")
+        // Inalcancavel na EVM: sem ancora, o motor segue com a cotacao sem comparacao (`TradeValidator.unanchored`).
+        case .noPriceAnchor: return quoteRefused
         case .priceImpactTooHigh: return kitText("Esta troca perderia demais para o impacto no preço. Tente um valor menor ou uma ordem limite.")
         case .missingTokenState, .missingApprovalGas: return nil
         case .providerNotOnChain, .chainIDMismatch, .senderMismatch, .routerNotAllowed, .spenderNotAllowed, .selectorNotAllowed,

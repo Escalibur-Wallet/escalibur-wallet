@@ -172,7 +172,7 @@ final class AppSession {
                 ? try KeyServices.root.unlockHardened(pin: pin, reason: reason, use: .openApp)
                 : try KeyServices.root.unlock(pin: pin)
             defer { rk.wipe() }
-            return (IndexCipher.key(from: rk), Self.missingAccounts(rk: rk))
+            return (IndexCipher.key(from: rk), Self.unlockUpdates(rk: rk))
         }
         try open(with: key, adding: updates, epoch: epoch)
     }
@@ -190,7 +190,7 @@ final class AppSession {
             defer { pin.wipe() }
             let rk = try KeyServices.root.unlockHardened(pin: pin, face: face, use: .openApp)
             defer { rk.wipe() }
-            return (IndexCipher.key(from: rk), Self.missingAccounts(rk: rk))
+            return (IndexCipher.key(from: rk), Self.unlockUpdates(rk: rk))
         }
         try open(with: key, adding: updates, epoch: epoch)
     }
@@ -200,17 +200,58 @@ final class AppSession {
         let (key, updates) = try await Offload.run {
             let rk = try KeyServices.root.unlockWithBiometry(reason: String(localized: "Destravar a Escalibur"))
             defer { rk.wipe() }
-            return (IndexCipher.key(from: rk), Self.missingAccounts(rk: rk))
+            return (IndexCipher.key(from: rk), Self.unlockUpdates(rk: rk))
         }
         try open(with: key, adding: updates, epoch: epoch)
+    }
+
+    /// O que o destravar acerta nas carteiras, com a RK aberta.
+    struct UnlockUpdates: Sendable {
+        var accounts: [UUID: [DerivedAccount]] = [:]
     }
 
     /// Redes que entraram numa versao nova ainda nao tem endereco nas carteiras
     /// antigas. Como a RK ja esta aberta neste desbloqueio, os enderecos que faltam
     /// sao derivados agora, sem pedir o Face ID de novo. Cada registro e zerado ao
-    /// fim da derivacao.
-    nonisolated private static func missingAccounts(rk: SecureBytes) -> [UUID: [DerivedAccount]] {
-        guard let metadata = try? MetadataStore.load(key: IndexCipher.key(from: rk)) else { return [:] }
+    /// fim da derivacao. A carteira com passphrase fica para a proxima assinatura,
+    /// quando a passphrase e digitada (`PassphraseGate.sign`): o cofre nao a tem.
+    ///
+    /// E a passphrase que uma versao anterior gravou sai do cofre, no primeiro destravar
+    /// depois de atualizar (pedido do dono, 05/11/2026). A que estava fora de NFKD deixa so a
+    /// marca `legacyCardanoPassphrase`, gravada antes de ela sair: sem a marca gravada, ela
+    /// espera o proximo destravar. Se o chaveiro recusar, tambem; o registro aberto ja nao a
+    /// devolve a ninguem.
+    nonisolated private static func unlockUpdates(rk: SecureBytes) -> UnlockUpdates {
+        let key = IndexCipher.key(from: rk)
+        guard var metadata = try? MetadataStore.load(key: key) else { return UnlockUpdates() }
+        // Os fatos sobre a antiga (fora de NFKD; nao da a raiz da criacao) viram marcas, gravadas antes de ela sair: sem as
+        // marcas gravadas, ela espera o proximo destravar.
+        var found: [(id: UUID, legacy: Bool, verified: Bool)] = []
+        for wallet in metadata.wallets where wallet.hasPassphrase && !wallet.isWatchOnly {
+            let fingerprint = wallet.fingerprint.flatMap(Hex.decode)
+            if case .present(let legacy, let verified) = try? KeyServices.wallets.storedPassphrase(walletID: wallet.id, rk: rk, fingerprint: fingerprint) {
+                found.append((wallet.id, legacy, verified))
+            }
+        }
+        let marks = found.filter { $0.legacy || !$0.verified }
+        var marked = true
+        if !marks.isEmpty {
+            for index in metadata.wallets.indices {
+                guard let mark = marks.first(where: { $0.id == metadata.wallets[index].id }) else { continue }
+                if mark.legacy { metadata.wallets[index].legacyCardanoPassphrase = true }
+                if !mark.verified { metadata.wallets[index].passphraseUnverified = true }
+            }
+            marked = (try? MetadataStore.save(metadata, key: key)) != nil
+        }
+        for item in found where marked || !(item.legacy || !item.verified) {
+            _ = try? KeyServices.wallets.purgePassphrase(walletID: item.id, rk: rk)
+        }
+        // E a de um registro sem carteira na lista, que uma versao anterior deixou ao parar no meio de gravar.
+        let listed = Set(metadata.wallets.map(\.id))
+        for id in KeyServices.wallets.storedWalletIDs() where !listed.contains(id) {
+            _ = try? KeyServices.wallets.purgePassphrase(walletID: id, rk: rk)
+        }
+        var result = UnlockUpdates()
         var updates: [UUID: [DerivedAccount]] = [:]
         // Carteira so de observacao de endereco EVM: o mesmo endereco vale nas redes EVM
         // novas, como em `addWatchWallet`. Nada e derivado; so se repete o endereco.
@@ -223,7 +264,7 @@ final class AppSession {
                 DerivedAccount(chainID: $0.id, path: evm.path, address: evm.address, publicKey: evm.publicKey, accountXPub: nil)
             }
         }
-        for wallet in metadata.wallets where !wallet.isWatchOnly {
+        for wallet in metadata.wallets where !wallet.isWatchOnly && !wallet.hasPassphrase {
             let have = Set(wallet.accounts.map(\.chainID))
             let missing = Chain.all.filter { !have.contains($0.id) }
             guard !missing.isEmpty, let secret = try? KeyServices.wallets.open(walletID: wallet.id, rk: rk) else { continue }
@@ -232,7 +273,18 @@ final class AppSession {
                 updates[wallet.id] = accounts
             }
         }
-        return updates
+        result.accounts = updates
+        return result
+    }
+
+    /// As redes que nasceram numa assinatura da carteira com passphrase. So as que ainda faltam.
+    func addAccounts(_ accounts: [DerivedAccount], to walletID: UUID) {
+        guard phase == .unlocked, let index = metadata.wallets.firstIndex(where: { $0.id == walletID }) else { return }
+        let have = Set(metadata.wallets[index].accounts.map(\.chainID))
+        let fresh = accounts.filter { !have.contains($0.chainID) }
+        guard !fresh.isEmpty else { return }
+        metadata.wallets[index].accounts += fresh
+        try? persist()
     }
 
     /// Cada `lock()` soma um. O destravar que comecou antes de um travar (o iPhone bloqueado durante o
@@ -240,7 +292,7 @@ final class AppSession {
     /// `protectedDataWillBecomeUnavailable` (revisao de seguranca do iPhone de 27/10/2026).
     private(set) var lockEpoch = 0
 
-    private func open(with key: SymmetricKey, adding updates: [UUID: [DerivedAccount]] = [:], epoch: Int) throws {
+    private func open(with key: SymmetricKey, adding unlocked: UnlockUpdates = UnlockUpdates(), epoch: Int) throws {
         guard epoch == lockEpoch else { throw WalletError.locked }
         metadata = try MetadataStore.load(key: key)
         indexKey = key
@@ -250,8 +302,8 @@ final class AppSession {
             metadata.quoteCache = [:]
             try? persist()
         }
-        if !updates.isEmpty {
-            for (id, accounts) in updates {
+        if !unlocked.accounts.isEmpty {
+            for (id, accounts) in unlocked.accounts {
                 guard let index = metadata.wallets.firstIndex(where: { $0.id == id }) else { continue }
                 metadata.wallets[index].accounts += accounts
             }
@@ -335,6 +387,7 @@ final class AppSession {
         PassphraseGate.shared.cancel()
         VoiceGate.shared.cancel()
         PassphraseGate.shared.clearGrace()
+        NotificationCenter.default.post(name: SecureInputField.wipeAll, object: nil)
         // Um rosto do Super Security confirmado e ainda sem PIN nao vale depois de travar.
         KeyServices.root.discardHardenedFace()
         indexKey = nil
@@ -349,9 +402,17 @@ final class AppSession {
         switch scenePhase {
         case .background:
             backgroundedAt = PINPolicy.uptime
+            // A copia da passphrase da folga nao fica para a volta: sair do app a zera (pedido do dono, 05/11/2026). E a
+            // folha da passphrase e a do PIN abertas fecham, com o que estava digitado zerado: suspenso, o app nao recebe o
+            // aviso de o iPhone bloquear, e a digitada ficaria na memoria ate a volta.
+            PassphraseGate.shared.cancel()
+            onLock?()
+            PassphraseGate.shared.clearGrace()
+            NotificationCenter.default.post(name: SecureInputField.wipeAll, object: nil)
             // Um rosto do Super Security confirmado e ainda sem PIN nao fica para a volta.
             KeyServices.root.discardHardenedFace()
         case .active:
+            DeviceIntegrity.recheck()
             // Fora da thread principal: com um PIN sendo cadastrado ou conferido (dois
             // Argon2, segundos), o cofre fica trancado, e esperar por ele aqui congelava
             // a tela inteira (amostra de 15/10/2026: a espada da abertura parada no
@@ -381,6 +442,7 @@ final class AppSession {
     /// sincrona, fora do MainActor. A RK nao atravessa nenhum `await`: nasce, e usada
     /// e zerada dentro da mesma funcao sincrona (docs/seguranca.md §2.9).
     func withRootKey<T: Sendable>(_ credential: Credential, _ body: @escaping @Sendable (SecureBytes) throws -> T) async throws -> T {
+        DeviceIntegrity.recheck()
         do {
             return try await rootKeyTask(credential, body)
         } catch RootKeyVault.Failure.wiped {
@@ -459,6 +521,20 @@ final class AppSession {
     // MARK: Modo reforcado
 
     var hardenedModeOn: Bool { KeyServices.root.securityMode == .hardened }
+    /// Super Security em "Bloquear as carteiras": nenhuma carteira com palavras entra (pedido do dono, 06/11/2026). As palavras
+    /// inteiras de cada carteira sao conferidas ao escolher "Bloquear"; uma adicionada depois ficaria presa a um papel nunca
+    /// conferido inteiro. Troca a politica, adiciona, e volta: o app pede as palavras de todas. So observar continua.
+    var addingWordsBlocked: Bool { Self.wordsBlocked(KeyServices.root) }
+
+    /// Na duvida, recusa: o chaveiro mudo, ou o cabecalho do Super Security ilegivel, contam como "Bloquear" (revisao de
+    /// seguranca de 06/11/2026). Sem trava propria do cofre: vale tambem com a RK aberta, logo antes de gravar.
+    nonisolated static func wordsBlocked(_ root: RootKeyVault) -> Bool {
+        switch root.securityMode {
+        case .normal: return false
+        case .unknown: return true
+        case .hardened: return root.hardenedFaceChange.map { $0 == .lock } ?? true
+        }
+    }
     /// As palavras no teclado proprio: escolhido em Seguranca, ou sempre no modo reforcado.
     var ownKeyboardOn: Bool {
         #if DEBUG
@@ -552,8 +628,14 @@ final class AppSession {
     /// "Carteira principal" nunca se confunde com a do dono.
     func addWallet(
         secret: WalletSecret, name: String, origin: WalletMeta.Origin, wordCount: Int,
-        backupConfirmed: Bool, select: Bool = true, tronForeignControl: Bool = false, credential: Credential
+        backupConfirmed: Bool, select: Bool = true, tronForeignControl: Bool = false,
+        passphraseConfirmed: Bool = false, legacyCardano: Bool = false, expectedFingerprint: String? = nil, credential: Credential
     ) async throws -> WalletMeta {
+        guard !addingWordsBlocked else {
+            secret.wipe()
+            credential.wipe()
+            throw WalletError.lockPolicy
+        }
         let id = UUID()
         let hasPassphrase = secret.passphrase.count > 0
         // O autoteste antes de abrir a RK, e a derivacao antes de gravar: se ela falha, nada fica no cofre (a frase ficava
@@ -566,7 +648,14 @@ final class AppSession {
         let (accounts, fingerprint, saved): ([DerivedAccount], [UInt8], Bool) = try await withRootKey(credential) { rk in
             defer { secret.wipe() }
             let derived = try AccountDeriver.derive(secret)
+            // A importacao so grava a carteira da digital que o dono conferiu na previa, na mesma derivacao que vai ao cofre
+            // (revisao de blockchain de 05/11/2026).
+            if let expectedFingerprint, derived.fingerprint.hex.uppercased() != expectedFingerprint.uppercased() {
+                throw WalletError.importChanged
+            }
             guard !known.contains(derived.fingerprint.hex) else { return (derived.accounts, derived.fingerprint, false) }
+            // De novo com o cofre aberto, logo antes de gravar: a politica pode ter mudado no meio.
+            guard !Self.wordsBlocked(KeyServices.root) else { throw WalletError.lockPolicy }
             try KeyServices.wallets.save(secret, walletID: id, rk: rk)
             return (derived.accounts, derived.fingerprint, true)
         }
@@ -588,6 +677,9 @@ final class AppSession {
             backupConfirmedAt: backupConfirmed ? .now : nil
         )
         if tronForeignControl { wallet.tronForeignControl = true }
+        // As marcas do envelope de antes nascem com a carteira, e nao numa gravacao depois (revisao de blockchain de 05/11/2026).
+        if wallet.hasPassphrase, passphraseConfirmed { wallet.passphraseConfirmedAt = .now }
+        if wallet.hasPassphrase, legacyCardano { wallet.legacyCardanoPassphrase = true }
         metadata.wallets.append(wallet)
         // A mesma conta de volta (removida e importada de novo nesta sessao) volta a ter os avisos de ordem.
         let returning = Self.evmOwners(wallet)
@@ -635,6 +727,10 @@ final class AppSession {
         // Passphrase vazia seria a carteira de sempre marcada como "com passphrase": o assinador recusa
         // passphrase vazia, e ela nao enviaria nem deixaria de pedir (revisao de blockchain de 26/10/2026).
         guard passphrase.count > 0 else { throw WalletError.emptyPassphrase }
+        guard !addingWordsBlocked else {
+            credential.wipe()
+            throw WalletError.lockPolicy
+        }
         let baseID = base.id
         let id = UUID()
         // Como em `addWallet`: o autoteste antes da RK, a derivacao antes de gravar, e a carteira que ja esta aqui nao e
@@ -650,11 +746,14 @@ final class AppSession {
             // mas a chave da Cardano (Icarus) usa os bytes como estao: com os bytes do teclado
             // (NFC), "ação" aqui dava outra conta da Cardano que a da importacao das mesmas
             // palavras (revisao do modo reforcado, N1).
-            let normalized = passphrase.withUnsafeBytes({ raw in raw.contains { $0 >= 0x80 } }) ? BIP39.nfkd(passphrase) : passphrase
+            // Uma copia propria sempre (o NFKD copia ate no ASCII): o segredo nunca divide o buffer de quem chama.
+            let normalized = BIP39.nfkd(passphrase)
             let secret = WalletSecret(entropy: entropy, language: original.language, passphrase: normalized)
             defer { secret.wipe() }
             let derived = try AccountDeriver.derive(secret)
             guard !known.contains(derived.fingerprint.hex) else { return (derived.accounts, derived.fingerprint, false) }
+            // De novo com o cofre aberto, logo antes de gravar: a politica pode ter mudado no meio.
+            guard !Self.wordsBlocked(KeyServices.root) else { throw WalletError.lockPolicy }
             try KeyServices.wallets.save(secret, walletID: id, rk: rk)
             return (derived.accounts, derived.fingerprint, true)
         }
@@ -815,6 +914,8 @@ final class AppSession {
     /// Apaga tudo deste aparelho: chaves do SE e itens do chaveiro primeiro.
     func eraseEverything() {
         lockEpoch &+= 1
+        PassphraseGate.shared.cancel()
+        PassphraseGate.shared.clearGrace()
         afterUnlock = []
         KeyServices.root.wipeAll()
         MetadataStore.deleteFile()
@@ -851,6 +952,14 @@ enum WalletError: LocalizedError {
     case passphraseBase
     /// A carteira que ja estava aqui quando o cofre abriu saiu no meio: nada foi gravado.
     case changedDuringSave
+    /// A carteira que ia ser gravada nao e a da previa que o dono conferiu: nada foi gravado.
+    case importChanged
+    /// Super Security em "Bloquear as carteiras": nenhuma carteira com palavras entra.
+    case lockPolicy
+
+    static var lockPolicyMessage: String {
+        String(localized: "Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova.")
+    }
 
     var errorDescription: String? {
         switch self {
@@ -861,6 +970,8 @@ enum WalletError: LocalizedError {
         case .emptyPassphrase: return String(localized: "Digite a passphrase")
         case .passphraseBase: return String(localized: "Abra a carteira com passphrase a partir da carteira de sempre, a que não tem passphrase.")
         case .changedDuringSave: return String(localized: "As carteiras mudaram enquanto o cofre abria. Nada foi guardado; tente de novo.")
+        case .importChanged: return String(localized: "A carteira mudou desde a conferência dos endereços. Nada foi guardado: comece de novo.")
+        case .lockPolicy: return Self.lockPolicyMessage
         }
     }
 }

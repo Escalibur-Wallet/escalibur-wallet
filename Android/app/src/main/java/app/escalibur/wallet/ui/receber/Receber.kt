@@ -122,7 +122,7 @@ data class MoedaRecebivel(
 }
 
 /** Uma moeda achada na busca, fora da lista verificada (o `Receber.Resultado` do nucleo). */
-data class ResultadoDaBusca(val id: String, val simbolo: String, val nome: String)
+data class ResultadoDaBusca(val id: String, val simbolo: String, val nome: String, val posicao: Int? = null)
 
 /**
  * As redes de uma moeda da busca em que a carteira recebe ela (o `Receber.Redes` do nucleo): cada
@@ -345,7 +345,7 @@ fun CampoDeBusca(texto: String, dica: String, modifier: Modifier = Modifier, sup
 }
 
 @Composable
-private fun TituloDeSecao(texto: String) {
+internal fun TituloDeSecao(texto: String) {
     Text(texto, style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md, bottom = Espaco.xxs))
 }
 
@@ -372,13 +372,13 @@ private fun LinhaDeMoeda(moeda: MoedaRecebivel, aoTocar: () -> Unit) {
 }
 
 @Composable
-private fun NotaDaBusca(texto: String) {
+internal fun NotaDaBusca(texto: String) {
     Text(texto, style = estilo(Tipo.nota), color = Paleta.tintaApagada)
 }
 
 /** O lugar de uma moeda enquanto a busca responde. */
 @Composable
-private fun LinhaEsperando() {
+internal fun LinhaEsperando() {
     Row(
         Modifier.fillMaxWidth().heightIn(min = Altura.linha).padding(horizontal = Espaco.margem),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
@@ -392,7 +392,7 @@ private fun LinhaEsperando() {
 }
 
 @Composable
-private fun LinhaDoResultado(achado: ResultadoDaBusca, aoTocar: () -> Unit) {
+internal fun LinhaDoResultado(achado: ResultadoDaBusca, mostrarPosicao: Boolean = false, aoTocar: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = aoTocar).heightIn(min = Altura.linha).padding(horizontal = Espaco.margem),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
@@ -401,6 +401,10 @@ private fun LinhaDoResultado(achado: ResultadoDaBusca, aoTocar: () -> Unit) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(achado.simbolo, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1)
             Text(achado.nome, style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
+        }
+        // Na troca, a posicao no mercado separa a moeda de uma copia com o mesmo simbolo (como no iOS).
+        if (mostrarPosicao) {
+            Text(achado.posicao?.let { t("Nº %lld no mercado", it) } ?: t("Sem posição no mercado"), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
         }
         Icone(Icones.avancar, Paleta.tintaApagada, tamanho = 14.dp)
     }
@@ -495,7 +499,7 @@ private fun EscolhaDaRede(moeda: MoedaRecebivel, aoVoltar: () -> Unit, aoEscolhe
 }
 
 @Composable
-private fun LinhaDeRede(ativo: AtivoRecebivel, titulo: String, detalhe: String?, aoTocar: () -> Unit) {
+internal fun LinhaDeRede(ativo: AtivoRecebivel, titulo: String, detalhe: String?, aoTocar: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = aoTocar).heightIn(min = Altura.linha),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),

@@ -67,6 +67,19 @@ import kotlin.math.sin
 class EntradaDoPin(tamanhos: Set<Int>) {
     var tamanhos by mutableStateOf(tamanhos)
         private set
+
+    init { synchronized(vivas) { vivas.add(this) } }
+
+    companion object {
+        /** Toda entrada de PIN viva, sem segura-la: sair do app ou travar zera os digitos ja digitados (05/11/2026). O
+         * `onDispose` da tela nao roda com a composicao parada no fundo. */
+        private val vivas: MutableSet<EntradaDoPin> = java.util.Collections.newSetFromMap(java.util.WeakHashMap())
+
+        fun limparTodas() {
+            val todas = synchronized(vivas) { vivas.toList() }
+            todas.forEach { it.limpar() }
+        }
+    }
     var quantos by mutableIntStateOf(0)
         private set
     var erro by mutableStateOf<String?>(null)

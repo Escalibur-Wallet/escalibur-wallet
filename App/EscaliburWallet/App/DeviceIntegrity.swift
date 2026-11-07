@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import Observation
 import MachO
 
 /// Sinais de jailbreak e de depurador (docs/seguranca.md §7).
@@ -9,7 +10,21 @@ import MachO
 /// o app mostra uma faixa recomendando mover saldo alto para carteira de hardware.
 /// Nunca bloqueia, nunca apaga, nunca avisa servidor nenhum.
 enum DeviceIntegrity {
-    static let suspicious: Bool = {
+    /// Conferido na abertura, de novo a cada volta ao primeiro plano e antes de cada operacao com a chave
+    /// raiz: um depurador ou uma biblioteca injetada depois do primeiro quadro tambem acende a faixa
+    /// (auditoria das chaves de 06/11/2026). Acesa, fica acesa ate o app fechar. Observavel: a faixa
+    /// aparece na hora, e nao so quando a tela redesenha por outro motivo.
+    @MainActor @Observable final class Signal {
+        static let shared = Signal()
+        private(set) var suspicious = DeviceIntegrity.check()
+        func recheck() { if !suspicious { suspicious = DeviceIntegrity.check() } }
+    }
+
+    @MainActor static var suspicious: Bool { Signal.shared.suspicious }
+
+    @MainActor static func recheck() { Signal.shared.recheck() }
+
+    static func check() -> Bool {
         #if targetEnvironment(simulator)
         return false
         #else
@@ -17,7 +32,7 @@ enum DeviceIntegrity {
         // jailbreak dariam alarme falso. O resto vale igual.
         return (!onMac && hasJailbreakFiles) || canWriteOutsideSandbox || hasInjectedLibraries || isBeingTraced
         #endif
-    }()
+    }
 
     /// O app de iPhone rodando num Mac com Apple Silicon.
     static var onMac: Bool { ProcessInfo.processInfo.isiOSAppOnMac }

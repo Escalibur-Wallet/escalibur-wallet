@@ -253,13 +253,19 @@ internal fun Enderecos(linhas: List<Pair<String, String>>, modifier: Modifier = 
 }
 
 /**
- * Assina e transmite. A carteira com passphrase pede ela antes da biometria ou do PIN (menos no
- * cancelamento, que nao tira valor); o nucleo confere dentro do assinador. Devolve o texto do erro,
- * ou nil.
+ * Assina e transmite. A carteira com passphrase pede ela antes da biometria ou do PIN, tambem no
+ * cancelamento, que assina e, sem a passphrase no cofre (05/11/2026), nao tem como sem ela; o nucleo
+ * confere dentro do assinador. Devolve o texto do erro, ou nil.
  */
 private suspend fun assinar(controle: ControleDaTroca, r: RetratoDaTroca, frases: RetratoDaTroca.Frases, motivo: String): String? {
+    if (r.semConferencia) return t("Esta versão do app não consegue conferir a passphrase desta carteira, e ela não assina aqui. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39.")
     var passphrase: PedidoDePassphrase.Resposta? = null
-    if (r.pedePassphrase && frases.tipo != "cancelar") passphrase = PedidoDePassphrase.pedir(r.nomeDaCarteira) ?: return null
+    if (r.pedePassphrase) {
+        val pedido = if (frases.tipo == "cancelar") {
+            t("Para cancelar a ordem de %@, digite a passphrase. Depois vem a biometria ou o PIN, como sempre.", r.nomeDaCarteira)
+        } else null
+        passphrase = PedidoDePassphrase.pedir(r.nomeDaCarteira, pedido) ?: return null
+    }
     val naoSaiu = when (frases.tipo) {
         "limite" -> t("A ordem não saiu. Nada foi debitado.")
         "cancelar" -> t("O cancelamento não saiu. A ordem continua aberta.")
@@ -267,13 +273,15 @@ private suspend fun assinar(controle: ControleDaTroca, r: RetratoDaTroca, frases
     }
     controle.trabalhando = true
     try {
-        val segredo = passphrase?.bytes
+        // A passphrase vai para o nucleo antes do PIN, num buffer seguro dele, e a daqui sai zerada ja: assinar e transmitir
+        // estao na mesma chamada, e a copia daqui vivia ate o fim da transmissao (05/11/2026). Entregue com o app ja no
+        // fundo, ela sai e nada segue: o PIN abriria no fundo.
+        passphrase?.let { Api.comSegredo("passphrase.entregar", JSONObject(), it.bytes) }
+        if (passphrase != null && !app.escalibur.wallet.ui.Ciclo.primeiroPlano) return null
         Autorizacao.tentando(motivo) { credencial ->
             val corpo = JSONObject().put("credencial", credencial.json()).put("alvo", controle.alvo)
             passphrase?.folga?.let { corpo.put("folga", it) }
-            // Cada tentativa leva a sua copia: a chamada zera o que recebe.
-            val partes = if (segredo != null) credencial.partes(segredo.copyOf()) else credencial.partes()
-            controle.aplicar(Api.comSegredo("troca.assinar", corpo, *partes))
+            controle.aplicar(Api.comSegredo("troca.assinar", corpo, *credencial.partes()))
         }
         return null
     } catch (falha: FalhaDoNucleo) {
@@ -287,6 +295,7 @@ private suspend fun assinar(controle: ControleDaTroca, r: RetratoDaTroca, frases
         }
     } finally {
         passphrase?.bytes?.fill(0)
+        if (passphrase != null) runCatching { app.escalibur.wallet.nucleo.Nucleo.chamar("passphrase.descartar", "{}") }
         controle.trabalhando = false
     }
 }

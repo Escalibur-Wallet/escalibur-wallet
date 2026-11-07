@@ -88,6 +88,10 @@
             android:name=".vigias.ConferenciaDoFundo"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+        <!-- O alarme que apaga a frase copiada no prazo (so o AlarmManager do sistema, pelo PendingIntent do app). -->
+        <receiver
+            android:name=".ui.comp.ApagarTransferencia"
+            android:exported="false" />
         <!-- O receiver exportado que o profileinstaller do Compose traz (so o adb o aciona): fora. A unica
              porta aberta do app e a MainActivity (auditoria Android de 31/10/2026, AA-05). -->
         <receiver

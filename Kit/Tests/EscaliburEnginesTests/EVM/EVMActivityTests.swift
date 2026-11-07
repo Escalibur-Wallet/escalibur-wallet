@@ -51,6 +51,22 @@ struct EVMActivityTests {
         } catch {}
     }
 
+    @Test("Carteira de observacao: so o endereco le o mesmo historico, e o envio continua recusando a conta sem chave")
+    func watchOnlyHistory() async throws {
+        let watched = DerivedAccount(chainID: "base", path: DerivationPath(components: []), address: A.binance8.checksummed, publicKey: [], accountXPub: nil)
+        #expect(watched.isAddressOnly)
+        #expect(!A.binance8(on: .base).isAddressOnly)
+        let owned = try await Self.source(try Self.blockscout()).history(chain: .base, account: A.binance8(on: .base), usage: nil)
+        let observed = try await Self.source(try Self.blockscout()).history(chain: .base, account: watched, usage: nil)
+        #expect(!observed.isEmpty)
+        #expect(observed.map(\.id) == owned.map(\.id))
+        #expect(throws: EVMEngineFailure.self) { _ = try EVMEngineSupport.account(watched, chain: .base) }
+        // Outra rede, ou endereco que nao e EVM: recusa, como antes.
+        #expect(throws: EVMEngineFailure.self) { _ = try EVMEngineSupport.historyOwner(watched, chain: .arbitrum) }
+        let broken = DerivedAccount(chainID: "base", path: DerivationPath(components: []), address: "nao-e-endereco", publicKey: [], accountXPub: nil)
+        #expect(throws: EVMEngineFailure.self) { _ = try EVMEngineSupport.historyOwner(broken, chain: .base) }
+    }
+
     @Test("Pagina real da Base: tokens de golpe e po ficam de fora, o recebimento real e as chamadas do dono aparecem")
     func recordedPage() async throws {
         let transport = try Self.blockscout()

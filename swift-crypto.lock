@@ -3,7 +3,10 @@
   "versao": "5.0.1",
   "commit": "1c80d3aff53fedc445b60692980cb4f19a618657",
   "boringssl": "0226f30467f540a3f62ef48d453f93927da199b6",
-  "nota": "So o modulo Crypto e o que ele usa fora das plataformas Apple (BoringSSL, CryptoBoringWrapper, XKCP), para o build Android. No iOS o app usa o CryptoKit do sistema. As pastas com espaco no nome foram renomeadas com _ (o verificar.sh recusa espaco no caminho); o conteudo de cada arquivo e o do commit.",
+  "nota": "So o modulo Crypto e o que ele usa fora das plataformas Apple (BoringSSL, CryptoBoringWrapper, XKCP), para o build Android. No iOS o app usa o CryptoKit do sistema. As pastas com espaco no nome foram renomeadas com _ (o verificar.sh recusa espaco no caminho); o conteudo de cada arquivo e o do commit, menos os remendos listados em \"remendos\".",
+  "remendos": {
+    "CryptoBoringWrapper/AEAD/BoringSSLAEAD.swift": "deinit do AEADContext zera o EVP_AEAD_CTX com OPENSSL_cleanse depois do cleanup (auditoria das chaves de 06/11/2026: o cleanup do AES-GCM e do ChaCha20-Poly1305 nao zera a chave, e o Android nao zera o heap liberado)"
+  },
   "arquivos": {
     "CCryptoBoringSSL/CMakeLists.txt": "8d4d4362a4e09a96a9d8361fc7e6fad176a75ae4eb90353edd9a3f36628a6ad5",
     "CCryptoBoringSSL/PrivacyInfo.xcprivacy": "42fb8a30dd8d7ba0900e1bf17fe64ed8c12cfdb8a9c791ab6b4e1eceb0f299c0",
@@ -759,7 +762,7 @@
     "Crypto/Util/SecureBytes.swift": "9ce2157ca5f2f162d00747e41819bae42d5dfdb39992ebee1e3f1034c8b8bffe",
     "Crypto/Util/Zeroization.swift": "ddd690c92ad3e178b2052aa416736d8432c69a03664ddc582c22ad3e80c3f80f",
     "Crypto/vendored-sources.txt": "724134991c81791265f58780293b0a7634fe173195927a5ac53c15632931acad",
-    "CryptoBoringWrapper/AEAD/BoringSSLAEAD.swift": "9be4573f0167a0dc1ab3381ef6a55389920b0bb920e7f2af9d06ce4103feb64c",
+    "CryptoBoringWrapper/AEAD/BoringSSLAEAD.swift": "e430e49b7d962a98a36401fc401f664559c11aaf416ff6ed06f8dfb773ac374e",
     "CryptoBoringWrapper/CMakeLists.txt": "4f056a507cb3a2c143ecc1898b755debc0574b141ecb39a7e2e13d69c94b0f46",
     "CryptoBoringWrapper/CryptoKitErrors_boring.swift": "a285fdf476ef017f04d782d47e9cb16be3fece1f7cbb5090cdbeb4cf3aa5bb39",
     "CryptoBoringWrapper/EC/EllipticCurve.swift": "f9616efbc918b65168774d08beba27630554e10ce2b539a1d0f469b27b30e8f6",

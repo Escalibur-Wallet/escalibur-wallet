@@ -69,6 +69,17 @@ final class Envio: @unchecked Sendable {
     private var trechoCego: AddressPoisoning.Segment?
     private var fonteCega = ""
     private var conferenciaCega = ""
+    /// A rede do historico deste envio: a lista de quem ja recebeu so cresce dentro dela, e voltar ao destino nao le de
+    /// novo (revisao de seguranca de 06/11/2026; o `historyChainID` do iOS).
+    private var historicoRede: String?
+    /// A leitura do historico terminou, lida ou falha. A revisao espera por ela.
+    private var historicoTerminado = false
+    /// A revisao esperando a leitura: a tela diz por que demora.
+    private var conferindoHistorico = false
+    /// Sobe a cada validacao: a tela zera os campos dos desafios junto com o nucleo.
+    private var rodadaDoDesafio = 0
+    /// Quando a leitura desta rede comecou: o teto da espera da revisao conta daqui, e nao de cada toque.
+    private var historicoInicio: ContinuousClock.Instant?
     private var primeiroEnvio = false
     private var tag = ""
     private var tagDoLink: String?
@@ -146,6 +157,8 @@ final class Envio: @unchecked Sendable {
         let rotuloDoDestino: String?
         let primeiroEnvio: Bool
         let historicoLido: Bool
+        let conferindoHistorico: Bool
+        let rodadaDoDesafio: Int
         let parecido: Parecido?
         let outroID: OutroID?
         let cego: Cego?
@@ -228,7 +241,8 @@ final class Envio: @unchecked Sendable {
             sugestao: sugestaoDeRede.flatMap { s in s.asset.chain.map { Estado.Sugestao(ativo: s.asset.id, simbolo: s.asset.symbol, redeNome: $0.name) } },
             rotuloDoDestino: destino.map { _ in chain.id == "xrpl" ? preencher(Textos.t("Endereço do %@"), chain.name)
                 : preencher(Textos.t("Endereço da %@"), chain.name) },
-            primeiroEnvio: primeiroEnvio, historicoLido: historicoLido, parecido: parecidoDTO, outroID: outroDTO, cego: cego,
+            primeiroEnvio: primeiroEnvio, historicoLido: historicoLido, conferindoHistorico: conferindoHistorico,
+            rodadaDoDesafio: rodadaDoDesafio, parecido: parecidoDTO, outroID: outroDTO, cego: cego,
             precisaConfirmarRede: precisaConfirmarRede, notaDaRede: precisaConfirmarRede ? notaDaConfirmacao(chain) : nil,
             textoDaConfirmacaoDeRede: precisaConfirmarRede ? (chain.family == .near ? Textos.t("Este endereço é de uma conta NEAR")
                 : preencher(Textos.t("Quem vai receber aceita %@ pela %@"), asset.symbol, chain.name)) : nil,
@@ -347,34 +361,101 @@ final class Envio: @unchecked Sendable {
 
     // MARK: Destino
 
+    /// Quanto o Continuar espera a leitura do historico da rede (06/11/2026: na Ethereum, o explorador chegava a 20 s). O
+    /// `historyWait` do iOS. Passado o prazo, valem o que o app ja guardou e o trecho escondido no primeiro envio, como sem
+    /// historico; a leitura segue, a revisao espera por ela, e um parecido achado nela volta a pedir a conferencia.
+    static let esperaDoHistorico: Duration = .seconds(4)
+    /// O teto da espera da revisao pela leitura. Passado, segue como sem historico.
+    static let esperaDaRevisao: Duration = .seconds(30)
+
     /// Para quem esta carteira ja pagou nesta rede, do historico da propria rede. Sem ele, o
-    /// primeiro envio pede o trecho escondido.
+    /// primeiro envio pede o trecho escondido. Volta com a leitura ou com o prazo, o que vier antes.
     func lerHistorico() async {
         guard let chain, let conta else {
-            trava.withLock { historicoLido = true }
+            trava.withLock {
+                historicoLido = true
+                historicoTerminado = true
+            }
             return
         }
-        trava.withLock { historicoLido = false }
-        var lido: [ActivityEntry]?
-        if let fonte = ActivitySources.source(for: chain) {
-            lido = try? await fonte.history(chain: chain, account: conta, usage: wallet.utxoUsage[chain.id])
+        // Outra rede, ou a primeira: a lista e a leitura recomecam. Na mesma rede, a leitura deste envio vale: voltar ao
+        // destino nao le de novo, e a lista so cresce (revisao de seguranca de 06/11/2026).
+        let comecar = trava.withLock { () -> Bool in
+            guard historicoRede != chain.id else { return false }
+            historicoRede = chain.id
+            historico = []
+            historicoIndisponivel = false
+            historicoTerminado = false
+            historicoLido = false
+            historicoInicio = .now
+            return true
+        }
+        if comecar {
+            let uso = wallet.utxoUsage[chain.id]
+            Task {
+                let lido = try? await ActivitySources.source(for: chain)?.history(chain: chain, account: conta, usage: uso)
+                if self.aplicarHistorico(lido, chain: chain) { self.avisar() }
+            }
+        }
+        let inicio = ContinuousClock.now
+        while !trava.withLock({ historicoLido }), ContinuousClock.now - inicio < Self.esperaDoHistorico {
+            try? await Task.sleep(nanoseconds: 100_000_000)
         }
         trava.withLock {
-            guard self.chain?.id == chain.id else { return }
-            defer { historicoLido = true }
-            guard let entradas = lido else {
-                historicoIndisponivel = true
-                if destino != nil { validar() }
-                return
-            }
-            historicoIndisponivel = false
-            let pagos = entradas.compactMap { entrada -> String? in
-                guard entrada.direction == .sent, entrada.status == .confirmed, !entrada.suspicious else { return nil }
-                return entrada.counterparty
-            }
-            historico = Array(Set(pagos))
+            guard self.chain?.id == chain.id, historicoRede == chain.id, !historicoLido else { return }
+            // O prazo passou sem a leitura: soma o historico guardado pela Atividade, e o trecho escondido do primeiro envio.
+            let guardado = (Sessao.shared.metadata.activityCache?[wallet.id] ?? []).compactMap(\.entry).filter { $0.chainID == chain.id }
+            historico = Array(Set(historico + Self.pagos(guardado)))
+            historicoIndisponivel = true
+            historicoLido = true
             if destino != nil { validar() }
         }
+    }
+
+    /// A leitura do historico, no prazo ou depois dele. Devolve se validou de novo depois do prazo: a tela precisa saber.
+    private func aplicarHistorico(_ lido: [ActivityEntry]?, chain: Chain) -> Bool {
+        trava.withLock { () -> Bool in
+            guard self.chain?.id == chain.id, historicoRede == chain.id else { return false }
+            historicoTerminado = true
+            let tarde = historicoLido
+            guard let entradas = lido else {
+                guard !tarde else { return false }
+                historicoIndisponivel = true
+                historicoLido = true
+                if destino != nil { validar() }
+                return false
+            }
+            historico = Array(Set(historico + Self.pagos(entradas)))
+            guard tarde else {
+                historicoIndisponivel = false
+                historicoLido = true
+                if destino != nil { validar() }
+                return false
+            }
+            // Depois do prazo, o trecho escondido que ja esta na tela fica; um parecido, ou o mesmo M da Stellar com outro ID,
+            // achado agora valida de novo, e a revisao e a assinatura voltam ao destino se ele nao estiver conferido.
+            guard let destino, achadoTardio(destino.address, chain: chain) else { return false }
+            validar()
+            // Ja na tag, no valor ou na revisao: volta ao destino agora, antes de a passphrase e o PIN serem pedidos para um
+            // envio que a assinatura recusaria (rodada 19 dos 3 agentes, 06/11/2026).
+            if [.tag, .valor, .revisao].contains(etapa) { etapa = .destino }
+            return true
+        }
+    }
+
+    /// A leitura tardia achou o que o destino de agora ainda nao conferiu.
+    private func achadoTardio(_ endereco: String, chain: Chain) -> Bool {
+        let conhecidos = conhecidos(chain)
+        if parecido == nil, AddressPoisoning.lookalike(endereco, among: conhecidos, chain: chain) != nil { return true }
+        return outroID == nil
+            && AddressPoisoning.sameAccountOtherID(endereco, among: conhecidos, tagged: contatosComTag(chain), chain: chain) != nil
+    }
+
+    private static func pagos(_ entradas: [ActivityEntry]) -> [String] {
+        Array(Set(entradas.compactMap { entrada -> String? in
+            guard entrada.direction == .sent, entrada.status == .confirmed, !entrada.suspicious else { return nil }
+            return entrada.counterparty
+        }))
     }
 
     func mudarDestino(_ texto: String) {
@@ -437,6 +518,13 @@ final class Envio: @unchecked Sendable {
         outroID = nil
         conferenciaDoOutroID = ""
         trechoCego = nil
+        // A resposta do trecho escondido e do desafio de antes: cada validacao pede de novo.
+        conferenciaCega = ""
+        rodadaDoDesafio &+= 1
+        // A consulta do destino (tag, ativacao) era do destino de antes: o Continuar consulta de novo (como no iOS).
+        infoDoDestino = nil
+        // Pular a tag foi escolha para o destino de antes.
+        pulouTag = false
         cegoDeTodoEnvio = false
         sugestaoDeRede = nil
         redeConfirmada = false
@@ -620,9 +708,18 @@ final class Envio: @unchecked Sendable {
             trechoCego = nil
             cegoDeTodoEnvio = false
             conferenciaCega = ""
+            infoDoDestino = nil
+            pulouTag = false
             tag = ""
             tagDoLink = nil
         }
+    }
+
+    /// De volta ao destino por um guard (a revisao, a assinatura): os passos dele recomecam, iguais na tela e no nucleo,
+    /// como no `voltar` (rodada 19 dos 3 agentes). Chamar com a trava.
+    private func voltarAoDestino() {
+        etapa = .destino
+        validar()
     }
 
     /// Continuar do destino: a rede diz se o destino existe e se exige tag.
@@ -636,11 +733,20 @@ final class Envio: @unchecked Sendable {
         do {
             let info = try await motor.destination(destino.address, chain: chain)
             trava.withLock {
+                // A consulta vale so para o destino consultado, inteiro (o X-address da XRPL e o classico da mesma conta tem o
+                // mesmo endereco e tags diferentes), e so com os passos do destino ainda feitos: o campo, os contatos, a rede e
+                // uma leitura tardia do historico continuam ativos durante ela (rodada 19 dos 3 agentes, 06/11/2026).
+                guard etapa == .destino, self.destino == destino, self.chain?.id == chain.id, montarEstado().podeContinuar else { return }
+                problema = nil
                 infoDoDestino = info
                 etapa = precisaEtapaDaTag && destino.tag == nil ? .tag : .valor
             }
         } catch {
-            trava.withLock { problema = (error as? LocalizedError)?.errorDescription ?? Textos.t("Não foi possível consultar o destino agora.") }
+            trava.withLock {
+                // O erro e da consulta deste destino: com outro na tela, nao aparece debaixo dele.
+                guard etapa == .destino, self.destino == destino, self.chain?.id == chain.id else { return }
+                problema = (error as? LocalizedError)?.errorDescription ?? Textos.t("Não foi possível consultar o destino agora.")
+            }
         }
     }
 
@@ -652,7 +758,10 @@ final class Envio: @unchecked Sendable {
                 etapa = .valor
             } else if !texto.isEmpty {
                 tag = String(texto.prefix(120))
-                if problemaDaTag == nil { etapa = .valor }
+                if problemaDaTag == nil {
+                    pulouTag = false
+                    etapa = .valor
+                }
             }
         }
     }
@@ -666,6 +775,9 @@ final class Envio: @unchecked Sendable {
             if let atual = ordem.firstIndex(of: self.etapa), alvo >= atual { return }
             self.etapa = etapa
             erro = nil
+            // De volta ao destino, os passos dele recomecam (a rede do primeiro envio, os desafios, a consulta): a tela, que
+            // monta de novo vazia, e o nucleo ficam iguais, e o Continuar confere tudo de novo.
+            if etapa == .destino { validar() }
         }
     }
 
@@ -702,6 +814,29 @@ final class Envio: @unchecked Sendable {
     }
 
     func revisar() async {
+        // A leitura do historico ainda corre: a revisao espera por ela (o Continuar so esperou o prazo), para um parecido
+        // achado tarde aparecer antes da assinatura, e nao depois (revisao de seguranca de 06/11/2026). Quase sempre ela ja
+        // terminou enquanto o valor era digitado.
+        if !trava.withLock({ historicoTerminado }) {
+            let limite = (trava.withLock { historicoInicio } ?? .now) + Self.esperaDaRevisao
+            trava.withLock { conferindoHistorico = true }
+            avisar()
+            while !trava.withLock({ historicoTerminado }), ContinuousClock.now < limite {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+            trava.withLock { conferindoHistorico = false }
+        }
+        // A leitura tardia achou um parecido: de volta ao destino, com o desafio na tela.
+        let voltou = trava.withLock { () -> Bool in
+            guard etapa == .valor || etapa == .revisao,
+                  !(historicoLido && liberado && infoDoDestino != nil && (!precisaConfirmarRede || redeConfirmada)) else { return false }
+            voltarAoDestino()
+            return true
+        }
+        if voltou {
+            avisar()
+            return
+        }
         let preparo = trava.withLock { () -> (any SendEngine, Chain, DerivedAccount, BigUInt)? in
             erro = nil
             // O nucleo confere os passos, e nao so a tela: destino consultado (tag e ativacao), rede
@@ -714,10 +849,17 @@ final class Envio: @unchecked Sendable {
         guard let (motor, chain, conta, _) = preparo else { return }
         await FilaDeNonces.podar(carteira: wallet.id, rede: chain, endereco: conta.address)
         guard !emTransito(rede: chain, endereco: conta.address) else { return }
-        guard let pedido = trava.withLock({ quantidade.flatMap { pedido(quantidade: $0, tudo: tudo) } }) else { return }
+        // O pedido e o destino, o valor e o "tudo" de agora: o plano e comparado com eles, e nao com o que a tela tiver depois.
+        guard let (pedido, destinoDoPedido, quantidadeDoPedido, tudoDoPedido) = trava.withLock({
+            quantidade.flatMap { q in pedido(quantidade: q, tudo: tudo).map { ($0, destino, q, tudo) } }
+        }) else { return }
         do {
             let novo = try await motor.plan(pedido)
             trava.withLock {
+                // O plano demora: se a tela saiu do valor no meio (o voltar), ou o destino, a rede ou o valor mudaram, a revisao
+                // e do pedido de antes, e para sem alarme (mexer na tela nao e adulteracao).
+                guard etapa == .valor || etapa == .revisao, self.destino == destinoDoPedido, self.chain?.id == chain.id,
+                      self.tudo == tudoDoPedido, tudoDoPedido || self.quantidade == quantidadeDoPedido else { return }
                 guard confere(novo) else {
                     plano = nil
                     erro = Textos.t("O envio montado não confere com o destino digitado. Nada foi assinado.")
@@ -868,6 +1010,8 @@ final class Envio: @unchecked Sendable {
             return preencher(Textos.t("Na BNB, o %@ é o da Binance (Binance-Peg). Ele vale enquanto a Binance mantiver o lastro e o resgate: não é o %@."), simbolo, original)
         case .publicMempool:
             return Textos.t("Nesta rede a troca passa pela fila pública, sem proteção contra robôs: eles podem comprar antes e vender depois. O mínimo garantido continua valendo, mas o que ficar entre a estimativa e ele pode não chegar.")
+        case .uncomparedPrice:
+            return Textos.t("Não há uma segunda fonte de cotação independente nem preço de referência do mercado: o preço desta troca não foi comparado com nenhum outro.")
         }
     }
 
@@ -883,9 +1027,9 @@ final class Envio: @unchecked Sendable {
         defer { passphrase?.wipe() }
         let preparo = trava.withLock { () -> (SigningPlan, any SendEngine, Chain)? in
             erro = nil
-            guard let plano, let motor, let chain else { return nil }
-            guard etapa == .revisao, historicoLido, liberado, infoDoDestino != nil, !precisaConfirmarRede || redeConfirmada else {
-                etapa = .destino
+            guard let plano, let motor, let chain, etapa == .revisao else { return nil }
+            guard historicoLido, liberado, infoDoDestino != nil, !precisaConfirmarRede || redeConfirmada else {
+                voltarAoDestino()
                 return nil
             }
             guard confere(plano) else {
@@ -918,38 +1062,29 @@ final class Envio: @unchecked Sendable {
             return
         }
         let carteira = Sessao.shared.metadata.wallets.first { $0.id == plano.walletID }
-        if PortaDaPassphrase.precisa(carteira), passphrase == nil {
-            credencial.zerar()
-            throw Nucleo.Falha(erro: "envio.pedePassphrase")
-        }
         // O autoteste da assinatura antes da porta da passphrase e da RK: com um defeito do aparelho, nada conta nem abre
         // (o Signer confere de novo antes de abrir o cofre; revisao da decima terceira passada).
         guard SigningSelfTest.passed(for: plano) else { credencial.zerar(); throw SigningSelfTest.Failure() }
-        let conferir = PortaDaPassphrase.pede(carteira) ? passphrase : nil
-        if conferir != nil {
-            do { try PortaDaPassphrase.comecar(plano.walletID) } catch { credencial.zerar(); throw error }
-        }
-        let assinado: [SignedTransaction]
-        do {
-            assinado = try Sessao.shared.comChaveRaiz(credencial) { rk in
-                try Signer.sign(plano, rootKey: rk, vault: Chaves.wallets, passphrase: conferir)
-            }
-        } catch {
-            if conferir != nil {
-                if (error as? Signer.Failure) == .passphraseMismatch { PortaDaPassphrase.errou(plano.walletID) } else { PortaDaPassphrase.devolver(plano.walletID) }
-            }
-            throw error
-        }
-        if conferir != nil {
-            PortaDaPassphrase.passou(plano.walletID)
-            PortaDaPassphrase.comecarFolga(plano.walletID, minutos: folga)
-        }
+        // Carteira com passphrase: ela nunca fica salva, e sai zerada logo depois de assinar (pedido do dono,
+        // 05/11/2026; ver `PortaDaPassphrase.assinar`).
+        let assinado = try PortaDaPassphrase.assinar(plano, carteira: carteira, digitada: passphrase, folga: folga, credencial: credencial)
         // Travou entre assinar e transmitir: nada sai. Travado, o que o envio anota (nonce, troco)
         // nao gravaria, e o proximo envio repetiria o nonce (caca de bugs de 25/10/2026). Destravado,
         // o dono envia de novo.
         guard Sessao.shared.fase == .unlocked else { throw Sessao.Falha.travada }
-        trava.withLock { etapa = .enviando }
+        // De novo depois do PIN e da renovacao: uma leitura do historico chegada nesse meio tempo pode ter achado um parecido.
+        // Os bytes assinados ficam aqui, sem sair (revisao de seguranca de 06/11/2026).
+        let segue = trava.withLock { () -> Bool in
+            guard etapa == .revisao else { return false }
+            guard historicoLido, liberado, infoDoDestino != nil, !precisaConfirmarRede || redeConfirmada, confere(plano) else {
+                voltarAoDestino()
+                return false
+            }
+            etapa = .enviando
+            return true
+        }
         avisar()
+        guard segue else { return }
         await transmitir(assinado, plano: plano, motor: motor, chain: chain)
     }
 
@@ -1394,6 +1529,7 @@ extension Envio {
         let preco = Saldos.shared.preco(envio.holding.asset)
         return try Nucleo.json(Retrato(numero: numero, id: envio.id.uuidString, envio: estado, preco: preco, moeda: Sessao.shared.metadata.settings.currency,
                                        pedePassphrase: PortaDaPassphrase.precisa(envio.wallet), nomeDaCarteira: envio.wallet.name,
+                                       semConferencia: PortaDaPassphrase.semConferencia(envio.wallet),
                                        ordens: Ordens.shared.retratoDoEnvio(envio.holding.asset)))
     }
 
@@ -1416,6 +1552,8 @@ extension Envio {
         let moeda: String
         let pedePassphrase: Bool
         let nomeDaCarteira: String
+        /// A carteira com passphrase que esta versao nao confere: a tela recusa antes de pedir a passphrase e o PIN.
+        let semConferencia: Bool
         /// As ordens de venda abertas deste ativo, se houver (lidas com "envio.ordens").
         let ordens: Ordens.DoEnvio?
     }

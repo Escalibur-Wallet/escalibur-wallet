@@ -66,6 +66,13 @@ public enum CustomToken {
         }
     }
 
+    /// O endereco de contrato que e a propria nativa da rede, em minusculas. Fontes: o MRC20 de sistema da Polygon
+    /// (docs.polygon.technology) e a dualidade de token da Celo (docs.celo.org, o mesmo de `EVMReader.nativeTokenContracts`).
+    static let nativeAsContract: [String: String] = [
+        "polygon": "0x0000000000000000000000000000000000001010",
+        "celo": "0x471ece3750da237f93b8e339c536989b8978a438",
+    ]
+
     /// Contrato (EVM, Tron), mint (Solana) ou mestre de jetton (TON).
     public static func kind(chain: Chain, address raw: String) throws -> Asset.Kind {
         guard supports(chain), !usesIssuer(chain) else { throw Problem.unsupportedChain }
@@ -76,6 +83,9 @@ public enum CustomToken {
         case .evm:
             guard let address = try? EVMAddress(text) else { throw Problem.invalidAddress }
             guard !address.bytes.allSatisfy({ $0 == 0 }) else { throw Problem.invalidAddress }
+            // A propria moeda nativa com cara de contrato (o POL de sistema na Polygon, o CELO da dualidade na Celo): como
+            // token, o envio pode nao mover nada e o saldo sairia em dobro (revisao de seguranca de 06/11/2026).
+            if Self.nativeAsContract[chain.id] == address.checksummed.lowercased() { throw Problem.notAToken }
             kind = .token(contract: address.checksummed)
         case .solana:
             guard let key = try? SolanaPublicKey(base58: text), key.base58 == text else { throw Problem.invalidAddress }

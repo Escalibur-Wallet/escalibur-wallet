@@ -16,6 +16,8 @@ final class AuthCoordinator {
         /// O erro da tentativa anterior (PIN errado, espera), em vermelho no teclado.
         var error: String? = nil
         let continuation: CheckedContinuation<Credential?, Never>
+        /// Os digitos, do pedido e nao da tela: fechar o pedido de fora (o app saiu, travou) os zera na hora.
+        let entry: PINEntry
     }
 
     var pinRequest: PINRequest?
@@ -36,6 +38,8 @@ final class AuthCoordinator {
     /// A credencial para uma operacao. `reason` aparece no Face ID e na folha do PIN
     /// ("Enviar 50 XRP"). Nil quando o dono cancela.
     func credential(reason: String, forcePIN: Bool = false, notice: String? = nil, error: String? = nil, faceFirst: Bool = false) async -> Credential? {
+        // O app travou ou saiu enquanto o rosto era pedido: a folha do PIN nao abre (ver `cancelEpoch`).
+        let epoch = cancelEpoch
         // Modo reforcado: toda operacao e o PIN e o rosto, pela criptografia. Nas operacoes
         // (`faceFirst`: enviar, trocar, ver as palavras), o rosto vem antes do PIN (pedido do dono,
         // 01/11/2026); o cofre guarda o rosto confirmado para um PIN so. Rosto que nao confirmou: o
@@ -54,8 +58,12 @@ final class AuthCoordinator {
                     shownError = Self.refusalMessage(error) ?? shownError
                 }
             }
+            guard epoch == cancelEpoch else {
+                if pass != nil { KeyServices.root.discardHardenedFace() }
+                return nil
+            }
             let pin: Credential? = await withCheckedContinuation { continuation in
-                let request = PINRequest(reason: reason, notice: shownNotice, error: shownError, continuation: continuation)
+                let request = PINRequest(reason: reason, notice: shownNotice, error: shownError, continuation: continuation, entry: PINEntry())
                 pinRequest = request
                 OverlayWindow.shared.show(PINRequestSheet(request: request, coordinator: self))
             }
@@ -73,8 +81,9 @@ final class AuthCoordinator {
         let notice = notice ?? (afterRestart && !forcePIN
             ? String(localized: "O iPhone reiniciou: o PIN é necessário uma vez antes do \(KeyServices.biometryName) voltar a valer.")
             : nil)
+        guard epoch == cancelEpoch else { return nil }
         return await withCheckedContinuation { continuation in
-            let request = PINRequest(reason: reason, notice: notice, error: error, continuation: continuation)
+            let request = PINRequest(reason: reason, notice: notice, error: error, continuation: continuation, entry: PINEntry())
             pinRequest = request
             OverlayWindow.shared.show(PINRequestSheet(request: request, coordinator: self))
         }
@@ -104,6 +113,7 @@ final class AuthCoordinator {
             try Self.checkPINAndBiometry()
         }
         let both = presence == .pinAndBiometry
+        let epoch = cancelEpoch
         guard var attempt = await credential(reason: reason, forcePIN: presence != .either, notice: both ? Self.bothNotice : nil, faceFirst: true) else { return nil }
         while true {
             if both, case .pin(let pin) = attempt { attempt = .pinAndBiometry(pin, reason: reason) }
@@ -127,6 +137,8 @@ final class AuthCoordinator {
             } catch RootKeyVault.Failure.biometryNotConfirmed(let remaining) {
                 error = Self.faceNotConfirmedMessage(remaining)
             }
+            // O app travou ou saiu durante o rosto: nada de reabrir o PIN.
+            guard epoch == cancelEpoch else { return nil }
             guard let next = await credential(reason: reason, forcePIN: true, notice: notice ?? (both ? Self.bothNotice : nil), error: error, faceFirst: true) else { return nil }
             attempt = next
         }
@@ -226,12 +238,20 @@ final class AuthCoordinator {
         return String(localized: "PIN incorreto.")
     }
 
-    /// O app travou: a folha aberta responde "fechou".
+    /// Soma um a cada `cancel` (o app travou ou saiu): a operacao que esperava pelo rosto ou pelo PIN
+    /// nao reabre a folha do PIN depois disso, nem em segundo plano (revisao de seguranca de 05/11/2026:
+    /// o Face ID cancelado pela saida caia para o PIN, que abria com o app ja no fundo, e a passphrase
+    /// em voo ficava na memoria durante a suspensao).
+    private(set) var cancelEpoch = 0
+
+    /// O app travou ou saiu: a folha aberta responde "fechou", com os digitos zerados.
     func cancel() {
+        cancelEpoch &+= 1
         if let pinRequest { finish(pinRequest, with: nil) }
     }
 
     fileprivate func finish(_ request: PINRequest, with credential: Credential?) {
+        request.entry.reset()
         pinRequest = nil
         OverlayWindow.shared.hide()
         request.continuation.resume(returning: credential)
@@ -242,7 +262,7 @@ final class AuthCoordinator {
 struct PINRequestSheet: View {
     let request: AuthCoordinator.PINRequest
     let coordinator: AuthCoordinator
-    @State private var entry = PINEntry()
+    private var entry: PINEntry { request.entry }
 
     var body: some View {
         PINScreen(title: String(localized: "Confirme com o PIN"), subtitle: request.notice.map { "\(request.reason)\n\($0)" } ?? request.reason, entry: entry, onComplete: {

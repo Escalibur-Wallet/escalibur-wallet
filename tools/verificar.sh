@@ -716,6 +716,12 @@ fora_da_swift_crypto=$(comm -23 <(cd Kit/Sources/SwiftCrypto && find . -type f |
     <(sed -n 's/^    "\([^"]*\)": "[0-9a-f]\{64\}".*/\1/p' swift-crypto.lock | sort))
 [ -n "$fora_da_swift_crypto" ] && { aviso "arquivo na swift-crypto fora do swift-crypto.lock"; echo "$fora_da_swift_crypto"; } \
     || ok "a pasta da swift-crypto so tem o que o swift-crypto.lock lista"
+# O remendo da swift-crypto: o AEADContext zera o EVP_AEAD_CTX ao sair (auditoria das chaves de 06/11/2026). Uma troca da
+# swift-crypto que o perca deixa a chave do AES-GCM e do ChaCha no heap liberado do Android.
+# Como codigo, pelo leitor do compilador: a linha comentada nao conta (rodada 3).
+python3 -I tools/codigo.py --exige Kit/Sources/SwiftCrypto/CryptoBoringWrapper/AEAD/BoringSSLAEAD.swift \
+    'CCryptoBoringSSL_OPENSSL_cleanse(contextPointer, MemoryLayout<EVP_AEAD_CTX>.size)' --plataforma android \
+    && ok "o AEAD da swift-crypto zera a chave ao sair (remendo)" || aviso "o remendo que zera o EVP_AEAD_CTX saiu da swift-crypto"
 conferir_lock modelos.lock App/EscaliburWallet/Resources/Moeda3D "moeda 3D"
 fora_do_lock=$(comm -23 <(ls App/EscaliburWallet/Resources/Moeda3D | sort) <(sed -n 's/^    "\([^"]*\)": "[0-9a-f]\{64\}".*/\1/p' modelos.lock | sort))
 [ -n "$fora_do_lock" ] && { aviso "arquivo na moeda 3D fora do modelos.lock"; echo "$fora_do_lock"; } || ok "a pasta da moeda 3D so tem o que o modelos.lock lista"
@@ -1156,7 +1162,8 @@ for arquivo, linha in definicoes.items():
 cardano = open(chaves + "CardanoKey.swift", encoding="utf-8").read()
 certo &= cardano.split("\n").count("    static func icarusMaster(entropy: SecureBytes, passphrase: SecureBytes) throws -> CardanoKey {") == 1
 signer = open(chaves + "Signer.swift", encoding="utf-8").read()
-certo &= signer.count("HDKey.master(") == 3 and signer.count("CardanoKey.derivedAccount(") == 1
+# A assinatura, a derivacao (secp256k1 e ed25519) e a conferencia da passphrase, que nao fica no cofre (05/11/2026).
+certo &= signer.count("HDKey.master(") == 4 and signer.count("CardanoKey.derivedAccount(") == 2
 rastreados = subprocess.run(["git", "ls-files", "-z", "--", "*.swift"], capture_output=True, check=True).stdout.decode().split("\0")
 for arquivo in filter(None, rastreados):
     texto = open(arquivo, encoding="utf-8").read()

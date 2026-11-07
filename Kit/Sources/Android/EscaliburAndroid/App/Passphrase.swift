@@ -1,14 +1,54 @@
+import EscaliburChains
 import EscaliburCore
 import EscaliburKeys
 import Foundation
 
-/// A passphrase antes de mover saldo (o `PassphraseGate` do iOS, sem a folha): a carteira com
-/// passphrase e "Pedir a passphrase para enviar" pede ela antes da biometria ou do PIN. A
-/// conferencia e do assinador (`Signer.sign`, NFKD e tempo constante); aqui ficam a conta das
-/// tentativas, a espera depois dos erros e a folga de alguns minutos depois de acertar.
+/// A passphrase antes de cada assinatura (o `PassphraseGate` do iOS, sem a folha): a carteira com
+/// passphrase pede ela antes da biometria ou do PIN, em envio, troca, ponte e cancelar ordem. Ela
+/// nunca fica salva no app (pedido do dono, 05/11/2026): o cofre guarda so a entropia, e o
+/// assinador (`Signer.sign`) deriva a raiz com a digitada e confere o fingerprint da criacao. Aqui
+/// ficam a conta das tentativas, a espera depois dos erros e a folga de alguns minutos depois de
+/// acertar, que guarda uma copia so na memoria.
 enum PortaDaPassphrase {
     private static let trava = NSLock()
     nonisolated(unsafe) private static var folgaAte: [UUID: TimeInterval] = [:]
+    /// A passphrase da folga, num buffer seguro (preso na RAM e fora do core dump), so da carteira
+    /// em que ela conferiu. Zerada no fim do prazo, ao sair do app, ao travar, ao remover a
+    /// carteira e ao apagar tudo; desligar ou reiniciar o celular apaga a RAM inteira, e nada dela
+    /// vai para o disco.
+    nonisolated(unsafe) private static var guardadas: [UUID: SecureBytes] = [:]
+    /// A folga de agora de cada carteira: o relogio de uma folga anterior nao encerra a nova.
+    nonisolated(unsafe) private static var rodadas: [UUID: UUID] = [:]
+    /// Soma um a cada encerramento: a folga pedida antes de um travar, sair do app ou remover a carteira
+    /// (o Argon2 do PIN leva segundos) nao nasce depois dele.
+    nonisolated(unsafe) private static var geracao = 0
+    /// A passphrase que a folha acabou de entregar para a proxima assinatura ("passphrase.entregar"): o
+    /// Kotlin zera a dele logo depois de entregar, e esta fica num buffer seguro so ate assinar (zerada
+    /// ao assinar, ao errar, ao fechar o pedido, ao travar e ao sair do app). Antes, a do Kotlin vivia
+    /// ate o fim da transmissao, que esta dentro da mesma chamada.
+    nonisolated(unsafe) private static var entregue: SecureBytes?
+    /// A geracao em que ela chegou: a que chega depois de travar ou sair do app nao vale.
+    nonisolated(unsafe) private static var entregueNaGeracao = 0
+
+    static func entregar(_ passphrase: SecureBytes) {
+        trava.withLock {
+            entregue?.wipe()
+            entregue = passphrase
+            entregueNaGeracao = geracao
+        }
+    }
+
+    static func descartarEntregue() { trava.withLock { entregue?.wipe(); entregue = nil } }
+
+    /// Uma copia da entregue (de quem chama, que zera), se ela chegou na geracao de agora.
+    static func copiaEntregue() -> SecureBytes? {
+        trava.withLock {
+            guard let entregue, entregue.count > 0, entregueNaGeracao == geracao else { return nil }
+            let copia = SecureBytes(capacity: entregue.count)
+            entregue.withUnsafeBytes { copia.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+            return copia
+        }
+    }
 
     static let escolhasDeFolga = [5, 10, 15, 20]
     /// Erros livres antes da primeira espera; a espera comeca em 1 minuto e dobra a cada erro,
@@ -38,9 +78,19 @@ enum PortaDaPassphrase {
         metadata.wallets.contains { $0.hasPassphrase && !$0.isWatchOnly }
     }
 
+    /// Toda carteira com passphrase pede: sem ela nao ha como assinar, porque o cofre nao a tem. O
+    /// "Pedir a passphrase para enviar" de antes saiu.
     static func pede(_ wallet: WalletMeta?) -> Bool {
         guard let wallet, wallet.hasPassphrase, !wallet.isWatchOnly else { return false }
-        return wallet.passphraseToSend ?? true
+        // A que esta versao nao confere: pedir so contaria erro (`semConferencia`).
+        return wallet.passphraseUnverified != true
+    }
+
+    /// A carteira com passphrase que esta versao nao confere (`passphraseUnverified`): assinar, ver as palavras, lacrar e
+    /// conferir a copia recusam com o texto proprio, sem pedir a passphrase nem contar erro.
+    static func semConferencia(_ wallet: WalletMeta?) -> Bool {
+        guard let wallet, wallet.hasPassphrase, !wallet.isWatchOnly else { return false }
+        return wallet.passphraseUnverified == true
     }
 
     static func precisa(_ wallet: WalletMeta?) -> Bool {
@@ -48,12 +98,11 @@ enum PortaDaPassphrase {
         return !emFolga(wallet.id)
     }
 
-    /// A passphrase digitada confere com a do cofre? As duas em NFKD, em tempo constante: a mesma
-    /// regra do assinador.
-    static func confere(_ guardada: SecureBytes, _ digitada: SecureBytes) -> Bool {
-        let a = BIP39.nfkd(guardada), b = BIP39.nfkd(digitada)
-        defer { a.wipe(); b.wipe() }
-        return a.count > 0 && Hash.constantTimeEqual(a, b)
+    /// A passphrase digitada da a carteira? Pelo fingerprint da raiz e, com a conta Cardano, se ela foi
+    /// gravada fora de NFKD por uma versao anterior. Com o registro ja aberto.
+    static func confere(_ guardada: WalletSecret, _ digitada: SecureBytes, _ carteira: WalletMeta?, cardano: Bool = false) throws -> PassphraseProof.Result {
+        try PassphraseProof.check(guardada, typed: digitada, fingerprint: carteira?.fingerprint.flatMap(Hex.decode),
+                                  cardanoPublicKey: cardano ? carteira?.accounts.first { $0.chainID == Chain.cardano.id }?.publicKey : nil)
     }
 
     /// A passphrase cabe no papel? Caractere de controle, de formato (largura zero, bidirecional),
@@ -81,23 +130,188 @@ enum PortaDaPassphrase {
         }
     }
 
-    /// Cabe no cofre: 256 bytes depois do NFKD, onde uma letra com acento ocupa tres.
+    /// Cabe no limite: 256 bytes depois do NFKD, onde uma letra com acento ocupa tres. Era o do cofre, que
+    /// nao a guarda mais, e continua o mesmo para quem ja tem uma.
     static func cabe(_ segredo: SecureBytes) -> Bool {
         let normalizada = BIP39.nfkd(segredo)
         defer { normalizada.wipe() }
         return normalizada.count <= WalletVault.maxPassphraseBytes
     }
 
-    static func emFolga(_ id: UUID) -> Bool { trava.withLock { (folgaAte[id] ?? 0) > PINPolicy.uptime } }
-
-    /// O assinador conferiu: a folga escolhida na folha comeca agora, so na memoria.
-    static func comecarFolga(_ id: UUID, minutos: Int?) {
-        guard let minutos, escolhasDeFolga.contains(minutos) else { return }
-        trava.withLock { folgaAte[id] = PINPolicy.uptime + TimeInterval(minutos * 60) }
+    static func emFolga(_ id: UUID) -> Bool {
+        trava.withLock {
+            guard guardadas[id] != nil else { return false }
+            guard (folgaAte[id] ?? 0) > PINPolicy.uptime else {
+                encerrarSemTrava(id)
+                return false
+            }
+            return true
+        }
     }
 
-    /// Travar encerra toda folga: quem destrava com o PIN depois nao pula a passphrase.
-    static func encerrarFolgas() { trava.withLock { folgaAte = [:] } }
+    /// Uma copia da passphrase da folga, de quem chama (que zera depois de assinar), ou nil sem folga.
+    /// A folga vencida sai zerada aqui mesmo.
+    private static func copiaDaFolga(_ id: UUID) -> SecureBytes? {
+        trava.withLock {
+            guard let guardada = guardadas[id] else { return nil }
+            guard (folgaAte[id] ?? 0) > PINPolicy.uptime else {
+                encerrarSemTrava(id)
+                return nil
+            }
+            let copia = SecureBytes(capacity: max(guardada.count, 1))
+            guardada.withUnsafeBytes { copia.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+            return copia
+        }
+    }
+
+    /// O assinador conferiu: a folga escolhida na folha comeca agora, com uma copia da passphrase,
+    /// so na memoria. Sem folga escolhida, nada fica, e nada fica se a folga foi encerrada depois de
+    /// `antes` (travou, saiu do app ou a carteira saiu enquanto o cofre abria).
+    private static func comecarFolga(_ id: UUID, minutos: Int?, passphrase: SecureBytes, antes: Int) {
+        guard let minutos, escolhasDeFolga.contains(minutos) else { return }
+        let copia = SecureBytes(capacity: max(passphrase.count, 1))
+        passphrase.withUnsafeBytes { copia.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+        let segundos = TimeInterval(minutos * 60)
+        let rodada = UUID()
+        let comecou = trava.withLock { () -> Bool in
+            // So a geracao: travar() passa por `encerrarFolgas`. Perguntar a Sessao aqui inverteria a ordem das travas
+            // (a Sessao chama esta trava por dentro da dela, ao remover a carteira).
+            guard geracao == antes else { return false }
+            encerrarSemTrava(id)
+            guardadas[id] = copia
+            folgaAte[id] = PINPolicy.uptime + segundos
+            rodadas[id] = rodada
+            return true
+        }
+        guard comecou else {
+            copia.wipe()
+            return
+        }
+        // Zerada no fim do prazo mesmo sem ninguem perguntar por ela. Pelo relogio de parede, que anda com o
+        // celular dormindo; quem decide e o monotono, a cada uso.
+        DispatchQueue.global().asyncAfter(wallDeadline: .now() + segundos) {
+            trava.withLock { if rodadas[id] == rodada { encerrarSemTrava(id) } }
+        }
+    }
+
+    /// A folga desta carteira acaba, e a copia da passphrase sai zerada.
+    static func encerrarFolga(_ id: UUID) {
+        trava.withLock {
+            geracao &+= 1
+            encerrarSemTrava(id)
+        }
+    }
+
+    private static func encerrarSemTrava(_ id: UUID) {
+        guardadas.removeValue(forKey: id)?.wipe()
+        folgaAte[id] = nil
+        rodadas[id] = nil
+    }
+
+    /// Travar, sair do app ou apagar tudo: toda copia da passphrase sai zerada, e quem destrava com o PIN
+    /// depois nao pula a passphrase.
+    static func encerrarFolgas() {
+        trava.withLock {
+            geracao &+= 1
+            for id in Array(guardadas.keys) + Array(folgaAte.keys) { encerrarSemTrava(id) }
+            entregue?.wipe()
+            entregue = nil
+        }
+    }
+
+    /// Assina o plano na carteira dele. Com passphrase: a digitada agora (que conta como tentativa) ou a
+    /// copia da folga; o assinador a confere pelo fingerprint da raiz; a folga escolhida comeca depois de
+    /// conferir; e as redes que uma versao nova trouxe nascem nessa mesma abertura do cofre (sem a
+    /// passphrase, nao ha outro jeito). A digitada e a copia saem zeradas logo depois de assinar, antes de
+    /// transmitir: so a copia da folga, se o dono a pediu, continua na memoria.
+    /// A passphrase que uma versao anterior gravou nao dava a raiz da criacao (`passphraseUnverified`): a digitada
+    /// tambem nao assina nesta versao, e a tela diz isso em vez de contar erro.
+    struct SemConferencia: Error {}
+
+    /// A raiz conferiu, mas a Cardano de uma carteira antiga saiu dos bytes da criacao, que a digitada nao repetiu
+    /// (`legacyCardanoPassphrase`).
+    struct CardanoAntiga: Error {}
+
+    static func assinar(_ plano: SigningPlan, carteira: WalletMeta?, digitada: SecureBytes?, folga: Int?, credencial: Credencial) throws -> [SignedTransaction] {
+        defer { digitada?.wipe() }
+        // A geracao antes de qualquer copia: travar ou sair do app daqui em diante nao deixa a folga nascer.
+        let antes = trava.withLock { geracao }
+        if semConferencia(carteira) {
+            credencial.zerar()
+            throw SemConferencia()
+        }
+        var conferir: SecureBytes?
+        var nova = false
+        if pede(carteira), let carteira {
+            if let digitada {
+                conferir = digitada
+                nova = true
+            } else if let copia = copiaEntregue() {
+                conferir = copia
+                nova = true
+            } else if let copia = copiaDaFolga(carteira.id) {
+                conferir = copia
+            } else {
+                credencial.zerar()
+                throw Nucleo.Falha(erro: "envio.pedePassphrase")
+            }
+        }
+        defer { conferir?.wipe() }
+        if nova {
+            do { try comecar(plano.walletID) } catch { credencial.zerar(); throw error }
+        }
+        let digital = carteira?.fingerprint.flatMap(Hex.decode)
+        let tem = Set(carteira?.accounts.map(\.chainID) ?? [])
+        let faltam = conferir == nil ? [] : Chain.all.filter { !tem.contains($0.id) }
+        let resultado: ([SignedTransaction], [DerivedAccount])
+        do {
+            resultado = try Sessao.shared.comChaveRaiz(credencial) { rk in
+                // Assina antes (o plano vencido recusa antes de a passphrase ser usada), e so depois as redes que faltam,
+                // com uma copia da RK, que o assinador zera. Ao contrario, a passphrase era testada antes do vencimento, e o
+                // plano vencido devolvia a tentativa (revisao de seguranca de 05/11/2026).
+                // A copia so nasce quando ha rede para derivar: no caso comum, a RK morre no assinador, como antes.
+                var outra: SecureBytes?
+                if conferir != nil, !faltam.isEmpty {
+                    let copia = SecureBytes(capacity: max(rk.count, 1))
+                    rk.withUnsafeBytes { copia.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+                    outra = copia
+                }
+                defer { outra?.wipe() }
+                let assinado = try Signer.sign(plano, rootKey: rk, vault: Chaves.wallets, passphrase: conferir, fingerprint: digital)
+                // Uma rede que nao nasce (aparelho com defeito) nao segura a assinatura: so fica para a proxima.
+                let novas = outra.flatMap { chave in
+                    conferir.flatMap { passphrase in
+                        try? PassphraseProof.missingAccounts(walletID: plano.walletID, rootKey: chave, vault: Chaves.wallets,
+                                                             typed: passphrase, fingerprint: digital, chains: faltam)
+                    }
+                } ?? []
+                return (assinado, novas)
+            }
+        } catch {
+            let errada = (error as? Signer.Failure) == .passphraseMismatch
+            // A errada nao serve para a proxima tentativa; o PIN errado, sim (a folha do PIN volta).
+            if errada { descartarEntregue() }
+            if nova {
+                if errada { errou(plano.walletID) } else { devolver(plano.walletID) }
+            } else if errada {
+                encerrarFolga(plano.walletID)
+            }
+            if (error as? Signer.Failure) == .unexpectedKey, carteira?.legacyCardanoPassphrase == true, plano.chain.family == .cardano {
+                throw CardanoAntiga()
+            }
+            throw error
+        }
+        // Assinou: a entregue sai ja, antes de transmitir.
+        descartarEntregue()
+        if let conferir {
+            if nova {
+                passou(plano.walletID)
+                comecarFolga(plano.walletID, minutos: folga, passphrase: conferir, antes: antes)
+            }
+            if !resultado.1.isEmpty { Sessao.shared.acrescentarContas(resultado.1, em: plano.walletID) }
+        }
+        return resultado.0
+    }
 
     struct Espera: Error { let ate: Date }
 
@@ -219,7 +433,9 @@ enum PortaDaPassphrase {
     }
 
     /// A carteira saiu deste celular: a conta dela sai junto.
+    /// A carteira saiu deste celular: a conta dela sai junto, e a copia da folga, zerada.
     static func esquecer(_ metadata: inout Metadata, _ carteira: UUID) {
+        encerrarFolga(carteira)
         metadata.settings.passphraseGuards?[chave(carteira, false)] = nil
         metadata.settings.passphraseGuards?[chave(carteira, true)] = nil
         if metadata.settings.passphraseGuards?.isEmpty == true { metadata.settings.passphraseGuards = nil }

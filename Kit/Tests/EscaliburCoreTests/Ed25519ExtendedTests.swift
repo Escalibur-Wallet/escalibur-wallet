@@ -69,6 +69,20 @@ struct Ed25519ExtendedTests {
         #expect(Ed25519.verify(signature: signature, message: message, publicKey: Hex.decode(vector.publicKey)!))
     }
 
+    @Test("Com hedged, r leva bytes do gerador: assinaturas diferentes e validas")
+    func hedged() throws {
+        let vector = Self.vectors[0]
+        let key = Self.extended(fromSeed: vector.secret)
+        defer { key.wipe() }
+        let message = Hex.decode(vector.message)!
+        let publicKey = Hex.decode(vector.publicKey)!
+        let first = try Ed25519.signExtended(message, extendedKey: key, hedged: true)
+        let second = try Ed25519.signExtended(message, extendedKey: key, hedged: true)
+        #expect(first != second && Hex.encode(first) != vector.signature)
+        #expect(Ed25519.verify(signature: first, message: message, publicKey: publicKey))
+        #expect(Ed25519.verify(signature: second, message: message, publicKey: publicKey))
+    }
+
     @Test("A mesma chave publica que o CryptoKit tira da semente")
     func matchesCryptoKit() throws {
         let seed = SecureBytes(capacity: 32)

@@ -38,10 +38,29 @@ sealed class Credencial {
  * biometria falhar. Uma folha de PIN so, desenhada na raiz do app. O `AuthCoordinator` do iOS.
  */
 object Autorizacao {
-    class PedidoDePin(val motivo: String, val aviso: String?, val erro: String?, val responder: (ByteArray?) -> Unit)
+    /** `entrada`: os digitos, do pedido e nao da tela: fechar o pedido de fora (o app saiu, travou) os zera na hora. */
+    class PedidoDePin(val motivo: String, val aviso: String?, val erro: String?, val responder: (ByteArray?) -> Unit) {
+        val entrada = app.escalibur.wallet.ui.pin.EntradaDoPin(App.estado.pinDigitos)
+    }
 
     var pedido by mutableStateOf<PedidoDePin?>(null)
         private set
+
+    /**
+     * Soma um a cada `cancelar` (o app saiu ou travou): a operacao que esperava pela biometria ou pelo PIN nao reabre a
+     * folha do PIN depois disso, nem em segundo plano (revisao de seguranca de 05/11/2026: a biometria cancelada pela
+     * saida caia para o PIN, que abria com o app ja no fundo).
+     */
+    @Volatile var epoca = 0
+        private set
+
+    /** O app saiu ou travou: a folha do PIN aberta responde "fechou", com os digitos zerados, e a operacao para. */
+    fun cancelar() {
+        epoca++
+        val aberto = pedido ?: return
+        aberto.entrada.limpar()
+        aberto.responder(null)
+    }
 
     /** O que uma operacao pede ao dono. */
     enum class Presenca {
@@ -63,7 +82,9 @@ object Autorizacao {
 
     /** A credencial para uma operacao. Nil quando o dono cancela. */
     suspend fun credencial(motivo: String, forcarPin: Boolean = false, aviso: String? = null, erro: String? = null,
-                           rostoPrimeiro: Boolean = false): Credencial? {
+                           rostoPrimeiro: Boolean = false, desde: Int = epoca): Credencial? {
+        // `desde`: a epoca de quando a operacao comecou, e nao a de agora (o `tentando` passa a dele).
+        val inicio = desde
         val estado = App.estado
         if (estado.reforcado) {
             // Nas operacoes (enviar, trocar, ver as palavras), a biometria antes do PIN (pedido do dono,
@@ -81,7 +102,7 @@ object Autorizacao {
                                              else mensagemDeRecusa(falha)
                 }
             }
-            val pin = pedirPin(motivo, avisoFinal, erroFinal)
+            val pin = if (epoca == inicio) pedirPin(motivo, avisoFinal, erroFinal) else null
             if (pin == null) {
                 if (confirmado) runCatching { Api.objeto("sessao.descartarRosto") }
                 return null
@@ -91,6 +112,7 @@ object Autorizacao {
         val depoisDeReiniciar = estado.biometriaLigada && estado.pedePINDepoisDeReiniciar
         if (!forcarPin && estado.biometriaLigada && !depoisDeReiniciar) return Credencial.Biometria(motivo)
         val avisoFinal = aviso ?: if (depoisDeReiniciar && !forcarPin) avisoDeReinicio else null
+        if (epoca != inicio) return null
         val pin = pedirPin(motivo, avisoFinal, erro) ?: return null
         return Credencial.Pin(pin, motivo)
     }
@@ -102,10 +124,13 @@ object Autorizacao {
      */
     suspend fun <T> tentando(motivo: String, presenca: Presenca = Presenca.qualquer, operacao: suspend (Credencial) -> T): T? {
         val ambos = presenca == Presenca.pinEBiometria
+        val inicio = epoca
         // A espera depois de a biometria mudar, e a biometria perdida e nao religada, recusam antes
         // do teclado (o `retrying` do iOS): digitar o PIN para ouvir "espere" nao ajuda ninguem.
         Api.objeto("sessao.podeComecar", JSONObject().put("ambos", ambos))
-        var tentativa = credencial(motivo, forcarPin = presenca != Presenca.qualquer, aviso = if (ambos) avisoDosDois else null, rostoPrimeiro = true) ?: return null
+        if (epoca != inicio) return null
+        var tentativa = credencial(motivo, forcarPin = presenca != Presenca.qualquer, aviso = if (ambos) avisoDosDois else null, rostoPrimeiro = true,
+                                   desde = inicio) ?: return null
         while (true) {
             if (ambos && tentativa is Credencial.Pin) tentativa = Credencial.PinEBiometria(tentativa.pin, motivo)
             var aviso: String? = null
@@ -125,11 +150,19 @@ object Autorizacao {
                     "cofre.pinErrado" -> erro = mensagemDePinErrado(falha)
                     "cofre.espera" -> erro = t("Tentativas demais. Tente de novo em %@.", Formato.duracao(falha.segundos))
                     "cofre.biometriaNaoConfirmou" -> erro = mensagemDeBiometriaNaoConfirmou(falha.restantes)
-                    else -> throw falha
+                    else -> {
+                        // O PIN errado que apagou tudo: toda tela que pede o PIN por aqui segue o nucleo na hora (como o
+                        // iPhone, que apaga num lugar so).
+                        if (falha.codigo == "cofre.wiped") runCatching { App.recarregar() }
+                        throw falha
+                    }
                 }
             }
             App.recarregar()
-            tentativa = credencial(motivo, forcarPin = true, aviso = aviso ?: if (ambos) avisoDosDois else null, erro = erro, rostoPrimeiro = true) ?: return null
+            // O app saiu ou travou durante a biometria: nada de reabrir o PIN.
+            if (epoca != inicio) return null
+            tentativa = credencial(motivo, forcarPin = true, aviso = aviso ?: if (ambos) avisoDosDois else null, erro = erro, rostoPrimeiro = true,
+                                   desde = inicio) ?: return null
         }
     }
 
@@ -175,6 +208,11 @@ object Autorizacao {
             "cofre.biometryLockedOut" -> t("O celular bloqueou a biometria depois de tentativas demais. Bloqueie e desbloqueie o celular com o PIN da tela, e tente de novo.")
             "cofre.wiped" -> t("Tentativas demais: as carteiras deste celular foram apagadas. Só as palavras de cada carteira trazem de volta.")
             "sessao.travada" -> t("O app travou antes de terminar. Destrave e tente de novo.")
+            "passphrase.vazia" -> t("A passphrase chegou vazia. Nada foi feito: digite de novo.")
+            "importacao.mudou" -> t("A carteira mudou desde a conferência dos endereços. Nada foi guardado: comece de novo.")
+            "sessao.bloqueioLigado" -> t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova.")
+            // A passphrase que esta versao nao confere (`passphraseUnverified`): o texto vem do nucleo.
+            "passphrase.semConferencia" -> falha.dados.optString("mensagem", "").ifEmpty { null }
             "sessao.listaMudou" -> t("As carteiras mudaram enquanto o cofre abria. Nada foi guardado; tente de novo.")
             // O aparelho que calcula diferente dos vetores publicos: o problema e o aparelho, e nao o papel.
             "autoteste.derivacao" -> t("Este aparelho calculou um endereço de teste diferente do esperado. Por segurança, nenhuma carteira é criada ou importada aqui.")

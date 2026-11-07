@@ -802,6 +802,22 @@ public struct UTXOReader: Sendable {
         )
     }
 
+    /// O historico de um endereco avulso (carteira de observacao): sem xpub nao ha varredura, e so ele e "nosso". A poeira
+    /// segue o tipo do endereco (P2PKH, P2SH, o resto pelo P2WPKH).
+    public func history(address: String, limit: Int = 30) async throws -> [ChainActivity] {
+        let script = try UTXOScript.scriptPubKey(for: address, chain: chain)
+        let tip = try? await tipHeight()
+        let page = try await withProvider(prefer: { $0.servesFullHistory }) { try await $0.history(address) }
+        let kind: UTXOInputKind
+        switch UTXOScript.classify(script)?.type {
+        case .p2pkh?: kind = .p2pkh
+        case .p2sh?: kind = .p2shP2wpkh
+        default: kind = .p2wpkh
+        }
+        let threshold = UTXORules.for(chain).protectionThreshold(for: kind, chain: chain)
+        return Self.activities(pages: [page], ours: [script], chain: chain, tip: tip, threshold: threshold, limit: limit, knownCounterparties: [])
+    }
+
     static func activities(
         pages: [UTXOHistoryPage], ours: Set<[UInt8]>, chain: Chain, tip: UInt32?, threshold: UInt64,
         limit: Int, knownCounterparties: Set<String>

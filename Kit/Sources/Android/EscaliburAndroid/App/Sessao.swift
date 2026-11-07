@@ -54,6 +54,8 @@ final class Sessao: @unchecked Sendable {
         /// Passphrase vazia ao abrir uma carteira com passphrase.
         case passphraseVazia
         /// Abrir com passphrase a partir de uma carteira que ja tem passphrase.
+        /// Super Security em "Bloquear as carteiras": nenhuma carteira com palavras entra.
+        case bloqueioLigado
         case baseComPassphrase
         /// A carteira que ja estava aqui quando o cofre abriu saiu no meio: nada foi gravado.
         case listaMudou
@@ -167,9 +169,17 @@ final class Sessao: @unchecked Sendable {
     func destrancar(pin: SecureBytes) throws {
         defer { pin.wipe() }
         let epoca = trava.withLock { epocaDeTravar }
-        let rk = Chaves.root.securityMode == .hardened
-            ? try abrirReforcado(pin: pin, motivo: Textos.destravar, uso: .openApp)
-            : try Chaves.root.unlock(pin: pin)
+        let rk: SecureBytes
+        do {
+            rk = Chaves.root.securityMode == .hardened
+                ? try abrirReforcado(pin: pin, motivo: Textos.destravar, uso: .openApp)
+                : try Chaves.root.unlock(pin: pin)
+        } catch RootKeyVault.Failure.wiped {
+            // O ultimo PIN errado no bloqueio: os metadados vao junto aqui mesmo, como nas operacoes, e a tela segue o
+            // apagar sem depender de a dela ainda estar aberta (06/11/2026). O "sessao.apagarTudo" da tela fica de reforco.
+            apagarTudo()
+            throw RootKeyVault.Failure.wiped
+        }
         defer { rk.wipe() }
         try abrir(com: IndexCipher.key(from: rk), novasContas: Self.contasQueFaltam(rk: rk), epoca: epoca)
     }
@@ -187,9 +197,39 @@ final class Sessao: @unchecked Sendable {
     private var epocaDeTravar = 0
 
     /// Redes que entraram numa versao nova ainda nao tem endereco nas carteiras antigas: com a RK
-    /// aberta neste desbloqueio, os enderecos que faltam sao derivados agora.
+    /// aberta neste desbloqueio, os enderecos que faltam sao derivados agora. A carteira com
+    /// passphrase fica para a proxima assinatura, quando a passphrase e digitada
+    /// (`PortaDaPassphrase.assinar`): o cofre nao a tem.
+    ///
+    /// E a passphrase que uma versao anterior gravou sai do cofre, no primeiro destravar depois de
+    /// atualizar (pedido do dono, 05/11/2026). A que estava fora de NFKD deixa so a marca
+    /// `legacyCardanoPassphrase`, gravada antes de ela sair: sem a marca gravada, ela espera o
+    /// proximo destravar. Se o cofre recusar, tambem; o registro aberto ja nao a devolve a ninguem.
     private static func contasQueFaltam(rk: SecureBytes) -> [UUID: [DerivedAccount]] {
-        guard let metadata = try? MetadataStore.load(key: IndexCipher.key(from: rk)) else { return [:] }
+        let chave = IndexCipher.key(from: rk)
+        guard var metadata = try? MetadataStore.load(key: chave) else { return [:] }
+        // Os fatos sobre a antiga (fora de NFKD; nao da a raiz da criacao) viram marcas, gravadas antes de ela sair: sem as
+        // marcas gravadas, ela espera o proximo destravar.
+        var achadas: [(id: UUID, antiga: Bool, conferida: Bool)] = []
+        for wallet in metadata.wallets where wallet.hasPassphrase && !wallet.isWatchOnly {
+            let digital = wallet.fingerprint.flatMap(Hex.decode)
+            if case .present(let antiga, let conferida) = try? Chaves.wallets.storedPassphrase(walletID: wallet.id, rk: rk, fingerprint: digital) {
+                achadas.append((wallet.id, antiga, conferida))
+            }
+        }
+        let marcas = achadas.filter { $0.antiga || !$0.conferida }
+        var marcada = true
+        if !marcas.isEmpty {
+            for indice in metadata.wallets.indices {
+                guard let marca = marcas.first(where: { $0.id == metadata.wallets[indice].id }) else { continue }
+                if marca.antiga { metadata.wallets[indice].legacyCardanoPassphrase = true }
+                if !marca.conferida { metadata.wallets[indice].passphraseUnverified = true }
+            }
+            marcada = (try? MetadataStore.save(metadata, key: chave)) != nil
+        }
+        for item in achadas where marcada || !(item.antiga || !item.conferida) {
+            _ = try? Chaves.wallets.purgePassphrase(walletID: item.id, rk: rk)
+        }
         var novas: [UUID: [DerivedAccount]] = [:]
         for wallet in metadata.wallets where wallet.isWatchOnly {
             guard let evm = wallet.accounts.first(where: { Chain.find($0.chainID)?.family == .evm }) else { continue }
@@ -200,7 +240,7 @@ final class Sessao: @unchecked Sendable {
                 DerivedAccount(chainID: $0.id, path: evm.path, address: evm.address, publicKey: evm.publicKey, accountXPub: nil)
             }
         }
-        for wallet in metadata.wallets where !wallet.isWatchOnly {
+        for wallet in metadata.wallets where !wallet.isWatchOnly && !wallet.hasPassphrase {
             let tem = Set(wallet.accounts.map(\.chainID))
             let faltam = Chain.all.filter { !tem.contains($0.id) }
             guard !faltam.isEmpty, let secret = try? Chaves.wallets.open(walletID: wallet.id, rk: rk) else { continue }
@@ -296,8 +336,14 @@ final class Sessao: @unchecked Sendable {
     /// O app foi para o segundo plano (a tela ja fica coberta pelo FLAG_SECURE).
     func foiParaSegundoPlano() {
         trava.withLock { segundoPlanoDesde = PINPolicy.uptime }
-        // A biometria confirmada e ainda sem PIN nao fica para a volta.
+        // A biometria confirmada e ainda sem PIN nao fica para a volta, nem a copia da passphrase da folga
+        // (pedido do dono, 05/11/2026).
         descartarRosto()
+        PortaDaPassphrase.encerrarFolgas()
+        // E o que as telas guardavam com a passphrase: o envelope aberto (o arquivo cifrado fica) e as frases do Super Security.
+        // O lacre nao leva a passphrase e fica, como no iPhone. A ida ao seletor de arquivos do app nao passa por aqui.
+        Envelopes.esquecerAberto()
+        Reforco.esquecerFrases()
     }
 
     /// Voltou: trava se passou do tempo escolhido (padrao 1 minuto). Devolve se travou.
@@ -317,6 +363,17 @@ final class Sessao: @unchecked Sendable {
 
     /// Destranca a RK com presenca nova e executa `corpo` com ela. A RK nasce, e usada e e zerada
     /// dentro desta chamada.
+    /// As redes que nasceram numa assinatura da carteira com passphrase. So as que ainda faltam.
+    func acrescentarContas(_ contas: [DerivedAccount], em id: UUID) {
+        try? alterar { metadata in
+            guard let indice = metadata.wallets.firstIndex(where: { $0.id == id }) else { return }
+            let tem = Set(metadata.wallets[indice].accounts.map(\.chainID))
+            let novas = contas.filter { !tem.contains($0.chainID) }
+            guard !novas.isEmpty else { return }
+            metadata.wallets[indice].accounts += novas
+        }
+    }
+
     func comChaveRaiz<T>(_ credencial: Credencial, _ corpo: (SecureBytes) throws -> T) throws -> T {
         do {
             let rk: SecureBytes
@@ -396,8 +453,14 @@ final class Sessao: @unchecked Sendable {
     /// Guarda uma carteira nova ou importada. A RK so existe durante esta chamada.
     func adicionarCarteira(
         _ secret: WalletSecret, nome: String, origem: WalletMeta.Origin, palavras: Int,
-        copiaConfirmada: Bool, selecionar: Bool = true, tronComOutraChave: Bool = false, credencial: Credencial
+        copiaConfirmada: Bool, selecionar: Bool = true, tronComOutraChave: Bool = false,
+        passphraseConfirmada: Bool = false, cardanoAntiga: Bool = false, digitalEsperada: String? = nil, credencial: Credencial
     ) throws -> WalletMeta {
+        guard !adicionarBloqueado else {
+            secret.wipe()
+            credencial.zerar()
+            throw Falha.bloqueioLigado
+        }
         let id = UUID()
         let temPassphrase = secret.passphrase.count > 0
         // O autoteste antes de abrir a RK, e a derivacao antes de gravar: se ela falha, nada fica no cofre (a frase ficava
@@ -409,7 +472,14 @@ final class Sessao: @unchecked Sendable {
         let (contas, digital, gravada): ([DerivedAccount], [UInt8], Bool) = try comChaveRaiz(credencial) { rk in
             defer { secret.wipe() }
             let derivadas = try AccountDeriver.derive(secret)
+            // A importacao so grava a carteira da digital que o dono conferiu na previa, na mesma derivacao que vai ao cofre
+            // (revisao de blockchain de 05/11/2026).
+            if let digitalEsperada, derivadas.fingerprint.hex.uppercased() != digitalEsperada.uppercased() {
+                throw Nucleo.Falha(erro: "importacao.mudou")
+            }
             guard !conhecidas.contains(derivadas.fingerprint.hex) else { return (derivadas.accounts, derivadas.fingerprint, false) }
+            // De novo com o cofre aberto, logo antes de gravar: a politica pode ter mudado no meio.
+            guard !Self.palavrasBloqueadas(Chaves.root) else { throw Falha.bloqueioLigado }
             try Chaves.wallets.save(secret, walletID: id, rk: rk)
             return (derivadas.accounts, derivadas.fingerprint, true)
         }
@@ -428,6 +498,9 @@ final class Sessao: @unchecked Sendable {
                 backupConfirmedAt: copiaConfirmada ? .now : nil
             )
             if tronComOutraChave { wallet.tronForeignControl = true }
+            // As marcas do envelope de antes nascem com a carteira, e nao numa gravacao depois (revisao de blockchain de 05/11/2026).
+            if wallet.hasPassphrase, passphraseConfirmada { wallet.passphraseConfirmedAt = .now }
+            if wallet.hasPassphrase, cardanoAntiga { wallet.legacyCardanoPassphrase = true }
             metadata.wallets.append(wallet)
             // A mesma conta de volta (removida e importada de novo nesta sessao) volta a ter os avisos de ordem.
             VigiaDeOrdens.lembrar(donos: Self.donosEVM(wallet))
@@ -447,6 +520,10 @@ final class Sessao: @unchecked Sendable {
     /// passphrase tenta lembrar (pedido do dono, 25/10/2026).
     func abrirComPassphrase(base id: UUID, passphrase: SecureBytes, nome: String, credencial: Credencial) throws -> (WalletMeta, jaAberta: Bool) {
         defer { passphrase.wipe() }
+        guard !adicionarBloqueado else {
+            credencial.zerar()
+            throw Falha.bloqueioLigado
+        }
         guard let base = metadata.wallets.first(where: { $0.id == id }), case .phrase(let palavras) = base.kind else {
             credencial.zerar()
             throw Falha.carteiraNaoEncontrada
@@ -500,6 +577,8 @@ final class Sessao: @unchecked Sendable {
                 let derivadas = try AccountDeriver.derive(secret)
                 // A mesma frase com a mesma passphrase ja aberta: nada e gravado de novo.
                 guard !conhecidas.contains(derivadas.fingerprint.hex) else { return (derivadas.accounts, derivadas.fingerprint, false) }
+                // De novo com o cofre aberto, logo antes de gravar: a politica pode ter mudado no meio.
+                guard !Self.palavrasBloqueadas(Chaves.root) else { throw Falha.bloqueioLigado }
                 try Chaves.wallets.save(secret, walletID: novo, rk: rk)
                 return (derivadas.accounts, derivadas.fingerprint, true)
             }
@@ -715,7 +794,26 @@ final class Sessao: @unchecked Sendable {
 
     /// A frase nasce e a carteira e guardada **antes** de mostrar as palavras: se o dono sair no
     /// meio, ela existe marcada "palavras nao confirmadas" e nao recebe.
+    /// Super Security em "Bloquear as carteiras": nenhuma carteira com palavras entra (pedido do dono, 06/11/2026; o
+    /// `addingWordsBlocked` do iOS). As palavras inteiras de cada carteira sao conferidas ao escolher "Bloquear"; uma
+    /// adicionada depois ficaria presa a um papel nunca conferido inteiro. So observar continua.
+    var adicionarBloqueado: Bool { Self.palavrasBloqueadas(Chaves.root) }
+
+    /// Na duvida, recusa: o cofre mudo, ou o cabecalho do Super Security ilegivel, contam como "Bloquear" (revisao de
+    /// seguranca de 06/11/2026; o `wordsBlocked` do iOS). Sem trava propria do cofre: vale tambem com a RK aberta.
+    static func palavrasBloqueadas(_ root: RootKeyVault) -> Bool {
+        switch root.securityMode {
+        case .normal: return false
+        case .unknown: return true
+        case .hardened: return root.hardenedFaceChange.map { $0 == .lock } ?? true
+        }
+    }
+
     func criarCarteira(palavras: Int, credencial: Credencial) throws -> WalletMeta {
+        guard !adicionarBloqueado else {
+            credencial.zerar()
+            throw Falha.bloqueioLigado
+        }
         let frase = try BIP39.generate(wordCount: palavras)
         return try guardarRascunho(Rascunho(frase: frase, palavras: palavras), credencial: credencial)
     }
@@ -723,6 +821,10 @@ final class Sessao: @unchecked Sendable {
     /// O dono escolheu as primeiras palavras; o app sorteia a ultima, que fecha a conta.
     func criarComPalavras(_ primeiras: SecureBytes, palavras: Int, credencial: Credencial) throws -> WalletMeta {
         defer { primeiras.wipe() }
+        guard !adicionarBloqueado else {
+            credencial.zerar()
+            throw Falha.bloqueioLigado
+        }
         let frase: SecureBytes
         do {
             frase = try BIP39.completing(primeiras)
@@ -761,49 +863,34 @@ final class Sessao: @unchecked Sendable {
     }
 
     /// As palavras conferidas: a carteira ganha a copia e o rascunho e zerado. Revelado de uma
-    /// carteira com passphrase, ele fica para a conferencia dela, logo depois.
+    /// carteira com passphrase ainda nao conferida, ele fica para a conferencia dela, logo depois.
     func confirmarCopia(_ id: UUID) throws {
         try atualizar(id) { $0.backupConfirmedAt = .now }
-        let ficaParaAPassphrase = trava.withLock { rascunho?.carteira == id && rascunho?.passphrase != nil }
+        let carteira = metadata.wallets.first { $0.id == id }
+        let ficaParaAPassphrase = carteira?.hasPassphrase == true && carteira?.passphraseConfirmedAt == nil
+            && trava.withLock { rascunho?.carteira == id }
         if !ficaParaAPassphrase { descartarRascunho() }
-    }
-
-    /// Deixar de pedir a passphrase para mover saldo: pede a passphrase e o PIN (nunca so o rosto),
-    /// conferida com a do cofre: quem viu o PIN nao tira a protecao.
-    func naoPedirPassphrase(_ id: UUID, credencial: Credencial, digitada: SecureBytes) throws {
-        defer { digitada.wipe() }
-        do { try PortaDaPassphrase.comecar(id) } catch { credencial.zerar(); throw error }
-        let confere: Bool
-        do {
-            confere = try comChaveRaiz(credencial) { rk in
-                let secret = try Chaves.wallets.open(walletID: id, rk: rk)
-                defer { secret.wipe() }
-                return PortaDaPassphrase.confere(secret.passphrase, digitada)
-            }
-        } catch {
-            PortaDaPassphrase.devolver(id)
-            throw error
-        }
-        guard confere else {
-            PortaDaPassphrase.errou(id)
-            throw Signer.Failure.passphraseMismatch
-        }
-        PortaDaPassphrase.passou(id)
-        try atualizar(id) { $0.passphraseToSend = false }
     }
 
     // MARK: Ver as palavras de uma carteira guardada
 
     /// Abre a frase de uma carteira guardada, para ver ou para a copia que faltou (o RevealFlow
-    /// do iOS). Com a passphrase ligada para mover saldo, ela vem digitada e o cofre confere antes
-    /// de qualquer palavra sair: quem tem o PIN e o rosto nao le a passphrase sem saber ela.
+    /// do iOS). Na carteira com passphrase, ela vem digitada e confere pelo fingerprint da raiz antes
+    /// de qualquer palavra sair: sem a carteira de base neste celular, quem tem o PIN e o rosto
+    /// levaria as palavras daqui e testaria passphrases fora do aparelho. Ela sai zerada no fim.
     func revelar(_ id: UUID, credencial: Credencial, passphraseDigitada: SecureBytes?) throws -> (palavras: Int, passphrase: Bool) {
         defer { passphraseDigitada?.wipe() }
         guard let wallet = metadata.wallets.first(where: { $0.id == id }), !wallet.isWatchOnly else {
             credencial.zerar()
             throw Falha.carteiraNaoEncontrada
         }
-        let conferir = PortaDaPassphrase.pede(wallet) ? passphraseDigitada : nil
+        if PortaDaPassphrase.semConferencia(wallet) {
+            credencial.zerar()
+            throw PortaDaPassphrase.SemConferencia()
+        }
+        // A digitada vem na chamada, ou entregue pela folha antes do PIN (o Kotlin zera a dele na hora).
+        let conferir = PortaDaPassphrase.pede(wallet) ? (passphraseDigitada ?? PortaDaPassphrase.copiaEntregue()) : nil
+        defer { conferir?.wipe() }
         if PortaDaPassphrase.pede(wallet), conferir == nil {
             credencial.zerar()
             throw Nucleo.Falha(erro: "envio.pedePassphrase")
@@ -811,39 +898,38 @@ final class Sessao: @unchecked Sendable {
         if conferir != nil {
             do { try PortaDaPassphrase.comecar(id) } catch { credencial.zerar(); throw error }
         }
-        let aberto: (SecureBytes, SecureBytes?)
+        let frase: SecureBytes
         do {
-            aberto = try comChaveRaiz(credencial) { rk in
+            frase = try comChaveRaiz(credencial) { rk in
                 let secret = try Chaves.wallets.open(walletID: id, rk: rk)
                 defer { secret.wipe() }
-                if let conferir, !PortaDaPassphrase.confere(secret.passphrase, conferir) { throw Signer.Failure.passphraseMismatch }
-                var pass: SecureBytes?
-                if secret.passphrase.count > 0 {
-                    let copia = SecureBytes(capacity: secret.passphrase.count)
-                    secret.passphrase.withUnsafeBytes { copia.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
-                    pass = copia
-                }
-                return (try secret.phrase(), pass)
+                if let conferir, try PortaDaPassphrase.confere(secret, conferir, wallet) == .mismatch { throw Signer.Failure.passphraseMismatch }
+                return try secret.phrase()
             }
         } catch {
             if conferir != nil {
-                if (error as? Signer.Failure) == .passphraseMismatch { PortaDaPassphrase.errou(id) } else { PortaDaPassphrase.devolver(id) }
+                if (error as? Signer.Failure) == .passphraseMismatch {
+                    PortaDaPassphrase.descartarEntregue()
+                    PortaDaPassphrase.errou(id)
+                } else {
+                    PortaDaPassphrase.devolver(id)
+                }
             }
             throw error
         }
+        PortaDaPassphrase.descartarEntregue()
         if conferir != nil { PortaDaPassphrase.passou(id) }
-        let (frase, pass) = aberto
         let palavras = frase.withUnsafeBytes { raw in raw.filter { $0 == 0x20 }.count + 1 }
         // So guarda com a sessao aberta, sob a mesma trava do travar(): o app que travou durante a
         // abertura do cofre nao fica com as palavras na memoria (revisao de seguranca do Android de
         // 26/10/2026).
-        guard mostrar(Rascunho(frase: frase, palavras: palavras, passphrase: pass, carteira: id)) else { throw Falha.travada }
-        return (palavras, pass != nil)
+        guard mostrar(Rascunho(frase: frase, palavras: palavras, carteira: id)) else { throw Falha.travada }
+        return (palavras, wallet.hasPassphrase)
     }
 
-    /// A passphrase nunca sai do nucleo para a tela, nem a de uma carteira guardada nem a de um
-    /// envelope: ver as palavras mostra so as palavras (pedido do dono, 01/11/2026). No rascunho ela
-    /// fica so para `conferirPassphrase` e para importar o envelope.
+    /// A passphrase nunca sai do nucleo para a tela, nem a de um envelope: ver as palavras mostra so
+    /// as palavras (pedido do dono, 01/11/2026), e a de uma carteira guardada nem esta no cofre
+    /// (05/11/2026). No rascunho so fica a de um envelope aberto, para importar.
     func passphraseDoRascunho() -> String? { nil }
 
     /// Fechou a tela das palavras: a carteira anota quando elas foram vistas e o rascunho sai.
@@ -855,44 +941,55 @@ final class Sessao: @unchecked Sendable {
 
     enum ConferenciaDaPassphrase: String, Encodable { case confere, naoConfere, antiga }
 
-    /// A passphrase digitada de onde o dono anotou. Logo depois das palavras, compara com a do
-    /// rascunho; sozinha (palavras ja conferidas), pelo cofre com o PIN, contando a tentativa.
+    /// A passphrase digitada de onde o dono anotou. Ela nao fica no cofre (05/11/2026): confere pelo
+    /// fingerprint da raiz que a criacao gravou. Logo depois das palavras, a seed sai do rascunho;
+    /// sozinha (palavras ja conferidas), pelo cofre com o PIN. Nos dois casos a tentativa conta.
     func conferirPassphrase(_ id: UUID, digitada: SecureBytes, credencial: Credencial?) throws -> ConferenciaDaPassphrase {
         defer { digitada.wipe() }
-        func comparar(_ guardada: SecureBytes) -> ConferenciaDaPassphrase {
-            let a = BIP39.nfkd(guardada), b = BIP39.nfkd(digitada)
-            defer { a.wipe(); b.wipe() }
-            guard a.count > 0, Hash.constantTimeEqual(a, b) else { return .naoConfere }
-            // Gravada fora de NFKD por uma versao anterior.
-            return Hash.constantTimeEqual(a, guardada) ? .confere : .antiga
+        let carteira = metadata.wallets.first { $0.id == id }
+        if PortaDaPassphrase.semConferencia(carteira) {
+            credencial?.zerar()
+            throw PortaDaPassphrase.SemConferencia()
         }
-        let doRascunho = trava.withLock { () -> ConferenciaDaPassphrase? in
-            guard let rascunho, rascunho.carteira == id, let guardada = rascunho.passphrase else { return nil }
-            return comparar(guardada)
-        }
-        let resultado: ConferenciaDaPassphrase
-        if let doRascunho {
-            resultado = doRascunho
-        } else {
-            guard let credencial else { throw Nucleo.Falha(erro: "credencial desconhecida") }
-            do { try PortaDaPassphrase.comecar(id) } catch { credencial.zerar(); throw error }
-            do {
-                resultado = try comChaveRaiz(credencial) { rk in
-                    let secret = try Chaves.wallets.open(walletID: id, rk: rk)
-                    defer { secret.wipe() }
-                    return comparar(secret.passphrase)
-                }
-            } catch {
-                PortaDaPassphrase.devolver(id)
-                throw error
+        let digital = carteira?.fingerprint.flatMap(Hex.decode)
+        let cardano = carteira?.accounts.first { $0.chainID == Chain.cardano.id }?.publicKey
+        do { try PortaDaPassphrase.comecar(id) } catch { credencial?.zerar(); throw error }
+        let resultado: PassphraseProof.Result
+        do {
+            // A frase sai do rascunho numa copia, e a conta (PBKDF2) corre fora da trava.
+            let frase = trava.withLock { () -> SecureBytes? in
+                guard let rascunho, rascunho.carteira == id else { return nil }
+                let copia = SecureBytes(capacity: max(rascunho.frase.count, 1))
+                rascunho.frase.withUnsafeBytes { copia.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+                return copia
             }
-            if resultado == .naoConfere { PortaDaPassphrase.errou(id) } else { PortaDaPassphrase.passou(id) }
+            defer { frase?.wipe() }
+            if let frase, case .valid(let idioma) = BIP39.validate(frase) {
+                credencial?.zerar()
+                resultado = try PassphraseProof.check(phrase: frase, language: idioma, typed: digitada, fingerprint: digital, cardanoPublicKey: cardano)
+            } else {
+                guard let credencial else { throw Nucleo.Falha(erro: "credencial desconhecida") }
+                resultado = try comChaveRaiz(credencial) { rk in
+                    try PassphraseProof.check(walletID: id, rootKey: rk, vault: Chaves.wallets, typed: digitada,
+                                              fingerprint: digital, cardanoPublicKey: cardano)
+                }
+            }
+        } catch {
+            PortaDaPassphrase.devolver(id)
+            throw error
         }
-        if resultado == .confere {
+        if resultado == .mismatch { PortaDaPassphrase.errou(id) } else { PortaDaPassphrase.passou(id) }
+        switch resultado {
+        case .match:
             try atualizar(id) { $0.passphraseConfirmedAt = .now }
             descartarRascunho()
+            return .confere
+        case .legacy:
+            try? atualizar(id) { $0.legacyCardanoPassphrase = true }
+            return .antiga
+        case .mismatch:
+            return .naoConfere
         }
-        return resultado
     }
 
     func descartarRascunho() {

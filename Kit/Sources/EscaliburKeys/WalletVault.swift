@@ -10,7 +10,8 @@ import Foundation
 ///
 /// Guarda-se a entropia (16 a 32 bytes), nao as palavras: e o menor segredo que
 /// reconstroi a frase e a seed, e o registro fica do mesmo tamanho para qualquer
-/// carteira.
+/// carteira. A 25a palavra nunca e guardada (pedido do dono, 05/11/2026): ela so existe
+/// aqui durante uma operacao, digitada pelo dono (`PassphraseProof`).
 public struct WalletSecret: Sendable {
     public let entropy: SecureBytes
     public let language: BIP39Language
@@ -22,18 +23,33 @@ public struct WalletSecret: Sendable {
         self.passphrase = passphrase
     }
 
-    /// A partir de uma frase ja canonica e validada. Fica com a 25a palavra (quem
-    /// chama passa uma copia e nao a zera depois), gravada ja em NFKD: a seed de hoje
-    /// e a de qualquer outra carteira BIP-39 sao a mesma, e derivar nunca precisa
-    /// normalizar de novo.
+    /// A partir de uma frase ja canonica e validada. A 25a palavra entra numa copia propria, ja em
+    /// NFKD: a seed de hoje e a de qualquer outra carteira BIP-39 sao a mesma, e derivar nunca precisa
+    /// normalizar de novo. A de quem chama sai zerada: o segredo nunca divide o buffer com quem chama,
+    /// e zera-lo depois nao muda a carteira (revisao de blockchain de 05/11/2026: no Android, o buffer
+    /// ASCII era o mesmo, e o zerar de depois gravava a carteira de base).
     public static func from(phrase: SecureBytes, language: BIP39Language, passphrase: SecureBytes? = nil) throws -> WalletSecret {
         let entropy = try BIP39.entropy(fromPhrase: phrase, language: language)
-        var stored = passphrase ?? SecureBytes(capacity: 1)
-        if let passphrase, passphrase.withUnsafeBytes({ raw in raw.contains { $0 >= 0x80 } }) {
-            stored = BIP39.nfkd(passphrase)
-            passphrase.wipe()
-        }
+        let stored = passphrase.map(BIP39.nfkd) ?? SecureBytes(capacity: 1)
+        passphrase?.wipe()
         return WalletSecret(entropy: entropy, language: language, passphrase: stored)
+    }
+
+    /// A passphrase de um envelope de antes: a que uma versao anterior gravou fora de NFKD (com acento
+    /// composto) deu a conta da Cardano pelos bytes como estao, e a carteira importada tem de dar a mesma.
+    /// Devolve o segredo com esses bytes (a raiz e as outras redes normalizam sozinhas) e se era o caso;
+    /// fora dele, o `from` de sempre, em NFKD. A passphrase entra numa copia propria, e a de quem chama sai zerada.
+    public static func fromEnvelope(phrase: SecureBytes, language: BIP39Language, passphrase: SecureBytes) throws -> (secret: WalletSecret, legacy: Bool) {
+        let normalized = BIP39.nfkd(passphrase)
+        let legacy = passphrase.count > 0 && !Hash.constantTimeEqual(normalized, passphrase)
+        normalized.wipe()
+        guard legacy else { return (try from(phrase: phrase, language: language, passphrase: passphrase), false) }
+        let entropy = try BIP39.entropy(fromPhrase: phrase, language: language)
+        // Uma copia propria, como no `from`: a de quem chama sai zerada.
+        let own = SecureBytes(capacity: passphrase.count)
+        passphrase.withUnsafeBytes { own.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+        passphrase.wipe()
+        return (WalletSecret(entropy: entropy, language: language, passphrase: own), true)
     }
 
     public func phrase() throws -> SecureBytes {
@@ -67,11 +83,12 @@ public final class WalletVault: @unchecked Sendable {
     public enum Failure: Error, Equatable, Sendable {
         case notFound
         case corrupted
-        case passphraseTooLong
     }
 
     static let version: UInt8 = 1
     static let recordLength = 320
+    /// O tamanho maximo da passphrase digitada, depois do NFKD. Nao e mais um limite do registro
+    /// (ela nao e gravada), e continua o mesmo para quem ja tem uma.
     public static let maxPassphraseBytes = 256
 
     let store: any SecretStore
@@ -91,16 +108,27 @@ public final class WalletVault: @unchecked Sendable {
 
     // MARK: Gravar
 
+    /// Grava a entropia e o idioma. A passphrase do `secret` nunca entra no registro (pedido do
+    /// dono, 05/11/2026): o tamanho dela vai zero, e o lugar dela, preenchido com zeros como o resto.
     public func save(_ secret: WalletSecret, walletID: UUID, rk: SecureBytes) throws {
-        guard secret.passphrase.count <= Self.maxPassphraseBytes else { throw Failure.passphraseTooLong }
+        let blob = try sealedBlob(secret, walletID: walletID, rk: rk)
+        let account = Self.account(walletID)
+        if store.exists(account) {
+            try store.update(blob, account: account)
+        } else {
+            try store.add(blob, account: account, protection: .standard, context: nil)
+        }
+    }
+
+    /// O registro cifrado, sem gravar.
+    private func sealedBlob(_ secret: WalletSecret, walletID: UUID, rk: SecureBytes) throws -> Data {
         let record = SecureBytes(capacity: Self.recordLength)
         record.append(Self.version)
         record.append(secret.language.storageCode)
         record.append(UInt8(secret.entropy.count))
         secret.entropy.withUnsafeBytes { record.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
-        UInt16(secret.passphrase.count).bigEndianByteArray.withUnsafeBufferPointer { record.append(contentsOf: $0) }
-        secret.passphrase.withUnsafeBytes { record.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
-        // Tamanho fixo: o registro nao conta se ha 25a palavra nem quantas palavras.
+        UInt16(0).bigEndianByteArray.withUnsafeBufferPointer { record.append(contentsOf: $0) }
+        // Tamanho fixo: o registro nao conta quantas palavras a carteira tem.
         while record.count < Self.recordLength { record.append(0) }
         defer { record.wipe() }
 
@@ -123,21 +151,87 @@ public final class WalletVault: @unchecked Sendable {
         blob += wrapped.ciphertext + wrapped.tag
         blob += seedSalt
         blob += sealed.ciphertext + sealed.tag
-
-        let account = Self.account(walletID)
-        if store.exists(account) {
-            try store.update(blob, account: account)
-        } else {
-            try store.add(blob, account: account, protection: .standard, context: nil)
-        }
+        return blob
     }
 
     // MARK: Abrir
 
     /// Abre o registro. Chamar so dentro de uma operacao que zera tudo no fim
     /// (assinar, revelar, exportar): nada daqui fica em memoria entre operacoes.
+    ///
+    /// A passphrase vem sempre vazia. A que uma versao anterior gravou nao sai do registro aberto,
+    /// que e zerado aqui; `purgePassphrase` a tira do cofre.
     public func open(walletID: UUID, rk: SecureBytes) throws -> WalletSecret {
+        try openRecord(walletID: walletID, rk: rk, includeOld: false).secret
+    }
+
+    /// A passphrase que uma versao anterior gravou neste registro.
+    public enum StoredPassphrase: Sendable, Equatable {
+        case none
+        /// `legacy`: gravada fora de NFKD (com acento composto), e entao a conta da Cardano dela saiu
+        /// dos bytes digitados e muda se a carteira for restaurada pelas palavras. `verified`: ela, em
+        /// NFKD como a digitada vai entrar, da a raiz da criacao (`fingerprint`); sem isso, a digitada
+        /// tambem nao assinaria nesta versao. Sao os unicos fatos sobre ela que podem sobrar, como
+        /// marcas nos metadados, antes de ela sair.
+        case present(legacy: Bool, verified: Bool)
+    }
+
+    /// Ha passphrase de uma versao anterior no registro? So os fatos: ela nao sai daqui.
+    public func storedPassphrase(walletID: UUID, rk: SecureBytes, fingerprint: [UInt8]? = nil) throws -> StoredPassphrase {
+        let opened = try openRecord(walletID: walletID, rk: rk, includeOld: true)
+        defer { opened.secret.wipe(); opened.old?.wipe() }
+        guard let old = opened.old, let legacy = opened.legacy else { return .none }
+        let entropy = SecureBytes(capacity: opened.secret.entropy.count)
+        opened.secret.entropy.withUnsafeBytes { entropy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+        let probe = WalletSecret(entropy: entropy, language: opened.secret.language, passphrase: BIP39.nfkd(old))
+        defer { probe.wipe() }
+        // Duas contas: um defeito passageiro do aparelho nao vira a marca permanente de que ela nao confere, ja que a antiga
+        // sai logo depois e nao ha como conferir de novo (revisao de blockchain de 05/11/2026).
+        let verified = try PassphraseProof.verify(probe, fingerprint: fingerprint, cardanoPublicKey: nil) == .match
+            || PassphraseProof.verify(probe, fingerprint: fingerprint, cardanoPublicKey: nil) == .match
+        return .present(legacy: legacy, verified: verified)
+    }
+
+    /// A passphrase que uma versao anterior gravou sai do cofre, sempre (pedido do dono, 05/11/2026: em
+    /// hipotese alguma ela fica). Nada no app a le mais: `open` a descarta, e o assinador so usa a
+    /// digitada. O registro novo, com salts e DEK novos e sem ela, e aberto em memoria antes de valer, e
+    /// lido de volta depois; se nao bate, o de antes volta. Devolve se havia uma. O chaveiro troca o item
+    /// de uma vez (antigo ou novo, nunca metade). Vale tambem para um registro sem carteira na lista: a
+    /// entropia fica (pode ser a unica copia), so a passphrase sai.
+    @discardableResult
+    public func purgePassphrase(walletID: UUID, rk: SecureBytes) throws -> Bool {
+        let account = Self.account(walletID)
+        guard let before = try store.read(account, context: nil) else { throw Failure.notFound }
+        let opened = try openBlob(before, walletID: walletID, rk: rk, includeOld: true)
+        defer { opened.secret.wipe(); opened.old?.wipe() }
+        guard opened.old != nil else { return false }
+        let after = try sealedBlob(opened.secret, walletID: walletID, rk: rk)
+        let check = try openBlob(after, walletID: walletID, rk: rk, includeOld: true)
+        defer { check.secret.wipe(); check.old?.wipe() }
+        guard check.old == nil, check.secret.language == opened.secret.language,
+              Hash.constantTimeEqual(check.secret.entropy, opened.secret.entropy) else { throw Failure.corrupted }
+        try store.update(after, account: account)
+        guard try store.read(account, context: nil) == after else {
+            try? store.update(before, account: account)
+            throw Failure.corrupted
+        }
+        return true
+    }
+
+    /// Os registros deste cofre (para achar os sem carteira na lista, que um gravar que parou no meio
+    /// deixou numa versao anterior). So o chaveiro do iPhone sabe lista-los.
+    public func storedWalletIDs() -> [UUID] {
+        store.accounts(prefix: "seed.").compactMap { UUID(uuidString: String($0.dropFirst("seed.".count))) }
+    }
+
+    /// O segredo sem a passphrase; com `includeOld`, a de uma versao anterior, a parte (de quem chama,
+    /// que zera), e se ela estava fora de NFKD. Sem ele, a antiga nem e copiada nem passa pelo NFKD.
+    private func openRecord(walletID: UUID, rk: SecureBytes, includeOld: Bool) throws -> (secret: WalletSecret, old: SecureBytes?, legacy: Bool?) {
         guard let blob = try store.read(Self.account(walletID), context: nil) else { throw Failure.notFound }
+        return try openBlob(blob, walletID: walletID, rk: rk, includeOld: includeOld)
+    }
+
+    private func openBlob(_ blob: Data, walletID: UUID, rk: SecureBytes, includeOld: Bool) throws -> (secret: WalletSecret, old: SecureBytes?, legacy: Bool?) {
         let bytes = [UInt8](blob)
         let expected = 1 + 32 + 48 + 32 + Self.recordLength + 16
         guard bytes.count == expected, bytes[0] == Self.version else { throw Failure.corrupted }
@@ -161,7 +255,7 @@ public final class WalletVault: @unchecked Sendable {
         let record = SecureBytes.consuming(&plain)
         defer { record.wipe() }
 
-        return try record.withUnsafeBytes { raw -> WalletSecret in
+        return try record.withUnsafeBytes { raw -> (secret: WalletSecret, old: SecureBytes?, legacy: Bool?) in
             let r = raw.bindMemory(to: UInt8.self)
             guard r.count == Self.recordLength, r[0] == Self.version else { throw Failure.corrupted }
             let entropyLength = Int(r[2])
@@ -176,9 +270,19 @@ public final class WalletVault: @unchecked Sendable {
                 entropy.wipe()
                 throw Failure.corrupted
             }
-            let passphrase = SecureBytes(capacity: max(passLength, 1))
-            passphrase.append(contentsOf: UnsafeBufferPointer(rebasing: r[(at + 2)..<(at + 2 + passLength)]))
-            return WalletSecret(entropy: entropy, language: language, passphrase: passphrase)
+            // A passphrase de uma versao anterior nunca entra no segredo: so vai a parte, para a purga conferir antes de
+            // apagar e dizer se ela estava fora de NFKD. O registro, o `defer` zera.
+            var old: SecureBytes?
+            var legacy: Bool?
+            if includeOld, passLength > 0 {
+                let copy = SecureBytes(capacity: passLength)
+                copy.append(contentsOf: UnsafeBufferPointer(rebasing: r[(at + 2)..<(at + 2 + passLength)]))
+                let normalized = BIP39.nfkd(copy)
+                legacy = !Hash.constantTimeEqual(normalized, copy)
+                normalized.wipe()
+                old = copy
+            }
+            return (WalletSecret(entropy: entropy, language: language, passphrase: SecureBytes(capacity: 1)), old, legacy)
         }
     }
 
@@ -244,7 +348,7 @@ public enum IndexCipher {
 extension SecureBytes {
     /// Move o conteudo de um `Data` que saiu de uma API para o buffer seguro, e zera
     /// a origem.
-    static func consuming(_ data: inout Data) -> SecureBytes {
+    public static func consuming(_ data: inout Data) -> SecureBytes {
         let out = SecureBytes(capacity: max(data.count, 1))
         data.withUnsafeMutableBytes { raw in
             out.append(contentsOf: raw.bindMemory(to: UInt8.self).withMemoryRebound(to: UInt8.self) { UnsafeBufferPointer($0) })

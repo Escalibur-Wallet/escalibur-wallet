@@ -155,6 +155,7 @@ class MainActivity : ComponentActivity() {
             val resultado = withContext(Dispatchers.IO) {
                 when (teste) {
                     "tls" -> Nucleo.chamar("tls.teste", "{}")
+                    "rsa" -> testeDoRsa()
                     "cofre" -> Nucleo.chamar(
                         "cofre.teste",
                         """{"biometria":${intent.getBooleanExtra("biometria", false)},"etapa":"${intent.getStringExtra("etapa") ?: "completo"}"}""",
@@ -163,6 +164,37 @@ class MainActivity : ComponentActivity() {
                 }
             }
             android.util.Log.i("Escalibur", "$teste: $resultado")
+        }
+    }
+
+    /** So de depuracao: o embrulho do slot de biometria cifra no nucleo (RSA-OAEP da BoringSSL) e o Keystore abre com o
+     * mesmo `oaep` do Cofre, numa chave de teste sem biometria, apagada no fim (auditoria das chaves de 06/11/2026). */
+    private fun testeDoRsa(): String {
+        val alias = "app.escalibur.wallet.teste.rsa"
+        val keyStore = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        return try {
+            java.security.KeyPairGenerator.getInstance(android.security.keystore.KeyProperties.KEY_ALGORITHM_RSA, "AndroidKeyStore").run {
+                initialize(android.security.keystore.KeyGenParameterSpec.Builder(alias,
+                    android.security.keystore.KeyProperties.PURPOSE_DECRYPT or android.security.keystore.KeyProperties.PURPOSE_ENCRYPT)
+                    .setKeySize(2048)
+                    .setDigests(android.security.keystore.KeyProperties.DIGEST_SHA256)
+                    .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_RSA_OAEP)
+                    .build())
+                generateKeyPair()
+            }
+            val publica = android.util.Base64.encodeToString(keyStore.getCertificate(alias).publicKey.encoded, android.util.Base64.NO_WRAP)
+            val resposta = org.json.JSONObject(Nucleo.chamar("cofre.rsaTeste", org.json.JSONObject().put("publica", publica).toString()))
+            val cifrado = android.util.Base64.decode(resposta.getString("cifrado"), android.util.Base64.NO_WRAP)
+            val claro = android.util.Base64.decode(resposta.getString("claro"), android.util.Base64.NO_WRAP)
+            val rsa = javax.crypto.Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
+            rsa.init(javax.crypto.Cipher.DECRYPT_MODE, keyStore.getKey(alias, null) as java.security.PrivateKey,
+                javax.crypto.spec.OAEPParameterSpec("SHA-256", "MGF1", java.security.spec.MGF1ParameterSpec.SHA1, javax.crypto.spec.PSource.PSpecified.DEFAULT))
+            val aberto = rsa.doFinal(cifrado)
+            "rsa ${cifrado.size} bytes, keystore abre: ${if (aberto.contentEquals(claro)) "igual" else "DIFERENTE"}"
+        } catch (e: Exception) {
+            "rsa ERRO ${e.javaClass.simpleName}: ${e.message}"
+        } finally {
+            runCatching { keyStore.deleteEntry(alias) }
         }
     }
 }

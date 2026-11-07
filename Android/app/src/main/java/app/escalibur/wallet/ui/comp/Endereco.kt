@@ -2,11 +2,16 @@ package app.escalibur.wallet.ui.comp
 
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.PersistableBundle
+import android.os.SystemClock
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -64,6 +69,10 @@ fun ImagemDoQR(texto: String, tamanho: Dp, modifier: Modifier = Modifier) {
  * rotulo e o prazo ficam num arquivo (sem o texto): no prazo, ou quando o app volta a ter o foco,
  * mesmo depois de o processo morrer, a copia vencida que ainda for a do app e apagada.
  *
+ * A frase (`segredo`) nao espera o app voltar: um alarme do sistema acorda o app no prazo, mesmo
+ * congelado ou fechado, e apaga sem ler, porque apagar nao precisa do foco (auditoria das chaves de
+ * 06/11/2026). O custo: se o dono copiar outra coisa dentro daquele minuto, ela sai junto.
+ *
  * Colar, em qualquer tela, le so o texto do item (`text`), nunca `coerceToText`: sem texto, ele
  * abriria a `content://` URI do app que copiou e leria o fluxo inteiro na thread da interface
  * (auditoria Android de 31/10/2026, AA-04). O verificar.sh recusa `coerceToText` no Kotlin.
@@ -71,8 +80,9 @@ fun ImagemDoQR(texto: String, tamanho: Dp, modifier: Modifier = Modifier) {
 object Transferencia {
     private val escopo = CoroutineScope(Dispatchers.Main)
     private const val ARQUIVO = "transferencia.pendente"
+    private const val SEGREDO = "segredo"
 
-    fun copiar(contexto: Context, texto: String, segundos: Long = 120, rotulo: String = "Escalibur") {
+    fun copiar(contexto: Context, texto: String, segundos: Long = 120, rotulo: String = "Escalibur", segredo: Boolean = false) {
         val gerente = contexto.getSystemService(ClipboardManager::class.java)
         val sorteio = ByteArray(8).also { java.security.SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
         val marca = "$rotulo $sorteio"
@@ -80,10 +90,24 @@ object Transferencia {
         clipe.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
         gerente.setPrimaryClip(clipe)
         val aplicativo = contexto.applicationContext
-        runCatching { java.io.File(aplicativo.noBackupFilesDir, ARQUIVO).writeText("$marca\n${System.currentTimeMillis() + segundos * 1000}") }
+        runCatching {
+            java.io.File(aplicativo.noBackupFilesDir, ARQUIVO)
+                .writeText("$marca\n${System.currentTimeMillis() + segundos * 1000}\n${if (segredo) SEGREDO else ""}")
+        }
         escopo.launch {
             delay(segundos * 1000)
             apagarSeVenceu(aplicativo, comFoco = false)
+        }
+        val alarmes = aplicativo.getSystemService(AlarmManager::class.java) ?: return
+        // Um alarme so: a copia nova substitui o da anterior, e a que nao e segredo cancela o da frase.
+        val aviso = PendingIntent.getBroadcast(
+            aplicativo, 0, Intent(aplicativo, ApagarTransferencia::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        if (segredo) {
+            runCatching { alarmes.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + segundos * 1000, aviso) }
+        } else {
+            runCatching { alarmes.cancel(aviso) }
         }
     }
 
@@ -91,20 +115,31 @@ object Transferencia {
      * Apaga a copia do app se o prazo passou e ela ainda esta la. Sem o foco, o Android nao deixa
      * ler: fica para quando o app voltar (`comFoco`).
      */
-    fun apagarSeVenceu(contexto: Context, comFoco: Boolean) {
+    fun apagarSeVenceu(contexto: Context, comFoco: Boolean, peloAlarme: Boolean = false) {
         val arquivo = java.io.File(contexto.noBackupFilesDir, ARQUIVO)
         val linhas = runCatching { arquivo.readLines() }.getOrNull() ?: return
         val marca = linhas.getOrNull(0) ?: return
         val prazo = linhas.getOrNull(1)?.toLongOrNull() ?: return
-        if (System.currentTimeMillis() < prazo) return
+        val segredo = linhas.getOrNull(2) == SEGREDO
+        // O alarme e o proprio prazo: o relogio de parede, mexido no meio, nao segura a frase.
+        if (!(peloAlarme && segredo) && System.currentTimeMillis() < prazo) return
         val gerente = contexto.getSystemService(ClipboardManager::class.java)
         val descricao = runCatching { gerente.primaryClipDescription }.getOrNull()
         if (descricao == null) {
-            if (comFoco) arquivo.delete()
+            // Sem o foco o Android nao deixa ler; a frase sai mesmo assim, sem ler.
+            if (segredo) runCatching { gerente.clearPrimaryClip() }
+            if (comFoco || segredo) arquivo.delete()
             return
         }
         if (descricao.label?.toString() == marca) runCatching { gerente.clearPrimaryClip() }
         arquivo.delete()
+    }
+}
+
+/** O prazo da copia da frase: o sistema acorda o app aqui, mesmo em segundo plano, congelado ou fechado. */
+class ApagarTransferencia : BroadcastReceiver() {
+    override fun onReceive(contexto: Context, intent: Intent) {
+        Transferencia.apagarSeVenceu(contexto.applicationContext, comFoco = false, peloAlarme = true)
     }
 }
 

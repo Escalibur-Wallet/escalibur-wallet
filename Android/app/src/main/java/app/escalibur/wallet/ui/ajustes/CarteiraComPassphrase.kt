@@ -92,6 +92,10 @@ import java.util.Date
 fun FluxoDaCarteiraComPassphrase(base: Carteira) {
     var passo by remember { mutableStateOf("explicacao") }
     val palavras = base.palavras ?: 12
+    // Super Security em "Bloquear as carteiras": recusa antes da passphrase (como no iOS).
+    // Ate o nucleo responder, nem aberto nem fechado: a faixa so com sim, e os botoes so com nao (falha fechada, rodada 19).
+    var bloqueado by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(Unit) { bloqueado = adicionarBloqueado() }
     BackHandler {
         when (passo) {
             "checagem" -> passo = "explicacao"
@@ -101,7 +105,7 @@ fun FluxoDaCarteiraComPassphrase(base: Carteira) {
     }
     if (passo == "explicacao") {
         // Como no iOS: o conteudo rola por baixo do voltar, e o Continuar fica preso embaixo.
-        TelaComBarra({ Navegacao.fechar() }, rodape = { BotaoPrimario(t("Continuar")) { passo = "checagem" } }) { espaco ->
+        TelaComBarra({ Navegacao.fechar() }, rodape = { BotaoPrimario(t("Continuar"), ligado = bloqueado == false) { passo = "checagem" } }) { espaco ->
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(espaco).padding(horizontal = Espaco.margem).padding(vertical = Espaco.md),
                    horizontalAlignment = Alignment.CenterHorizontally) {
                 // A parede de pixels com a porta escondida: as palavras abrem a de sempre, e a chave
@@ -123,6 +127,9 @@ fun FluxoDaCarteiraComPassphrase(base: Carteira) {
                     PontoDaPassphrase(Icones.olhoRiscado, t("Quem achar só as %lld palavras vê a carteira de sempre, não a da passphrase.", palavras))
                     PontoDaPassphrase(Icones.lapis, t("Anote a passphrase longe das %lld. Para abrir a carteira com passphrase em outro aparelho, você vai precisar das duas.", palavras))
                     PontoDaPassphrase(Icones.alerta, t("Esquecer a passphrase é perder o acesso à carteira com passphrase. Ninguém recupera, nem a Escalibur."))
+                }
+                if (bloqueado == true) {
+                    app.escalibur.wallet.ui.comp.Faixa(app.escalibur.wallet.ui.comp.TipoDeFaixa.cautela, t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova."), Modifier.padding(top = Espaco.md))
                 }
             }
         }

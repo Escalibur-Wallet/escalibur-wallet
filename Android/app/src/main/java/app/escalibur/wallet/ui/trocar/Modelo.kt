@@ -41,6 +41,8 @@ class RetratoDaTroca(json: JSONObject) {
     val numero = json.getInt("numero")
     val moeda: String = json.getString("moeda")
     val pedePassphrase = json.getBoolean("pedePassphrase")
+    /** A carteira com passphrase que esta versao nao confere: recusa antes da passphrase e do PIN. */
+    val semConferencia = json.optBoolean("semConferencia")
     val nomeDaCarteira: String = json.getString("nomeDaCarteira")
     private val e = json.getJSONObject("troca")
 
@@ -108,6 +110,10 @@ class RetratoDaTroca(json: JSONObject) {
         val alternativas: List<Alternativa> = j.getJSONArray("alternativas").objetos().map {
             Alternativa(it.getString("provedor"), it.getString("garante"), it.opcional("diferenca"), it.getBoolean("usar"))
         }
+        /** So uma fonte de cotacao e sem preco de referencia: a tela avisa e pede o aceite. */
+        val semComparacao: Boolean = j.getBoolean("semComparacao")
+        /** O valor a pagar desta cotacao, na menor unidade: volta junto do aceite. */
+        val entrada: String = j.getString("entrada")
     }
 
     class Validade(val segundos: Double?, val titulo: String)
@@ -139,6 +145,8 @@ class RetratoDaTroca(json: JSONObject) {
     val erroDoPlano: String? = e.opcional("erroDoPlano")
     val naoVerificado: String? = e.opcional("naoVerificado")
     val impactoAceito: Boolean = e.getBoolean("impactoAceito")
+    val semComparacaoAceita: Boolean = e.getBoolean("semComparacaoAceita")
+    val semComparacaoCaiu: Boolean = e.getBoolean("semComparacaoCaiu")
     val botao: String = e.getString("botao")
     val botaoLigado: Boolean = e.getBoolean("botaoLigado")
     val protecao: Boolean = e.getBoolean("protecao")

@@ -149,8 +149,12 @@ struct AddContactSheet: View {
             guard !saved.contains(key), seen.insert(key).inserted, let chain = Chain.find(chainID) else { return }
             out.append((chain, address))
         }
-        for entry in ActivityFeed.shared.entries.sorted(by: { $0.date > $1.date }) where entry.direction == .sent && !entry.suspicious {
-            if let to = entry.counterparty { add(entry.chainID, to) }
+        // So o historico da carteira selecionada, e nunca o de uma de observacao: os envios de quem e observado nao sao
+        // do dono (como no Android, que usa so os enviados guardados; revisao de seguranca de 06/11/2026).
+        if let selected = session.selectedWallet, !selected.isWatchOnly, ActivityFeed.shared.shownWalletID == selected.id {
+            for entry in ActivityFeed.shared.entries.sorted(by: { $0.date > $1.date }) where entry.direction == .sent && !entry.suspicious {
+                if let to = entry.counterparty { add(entry.chainID, to) }
+            }
         }
         for (chainID, list) in session.metadata.sentTo.sorted(by: { $0.key < $1.key }) {
             for address in list.reversed() { add(chainID, address) }

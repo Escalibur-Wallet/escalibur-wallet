@@ -70,6 +70,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -133,7 +135,12 @@ object Redes {
 fun TelaDaCarteira() {
     val estado = App.estado
     val contextoDoRoot = LocalContext.current
-    val comRoot = remember { app.escalibur.wallet.ui.novacarteira.Checagem.pareceTerRoot(contextoDoRoot) }
+    // Conferido de novo a cada volta ao app: um depurador ou codigo injetado depois da abertura tambem acende
+    // a faixa (auditoria das chaves de 06/11/2026). Acesa, fica acesa.
+    var comRoot by remember { mutableStateOf(app.escalibur.wallet.ui.novacarteira.Checagem.pareceTerRoot(contextoDoRoot)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (!comRoot) comRoot = app.escalibur.wallet.ui.novacarteira.Checagem.pareceTerRoot(contextoDoRoot)
+    }
     val carteira = estado.carteira ?: return
     val retrato = Saldos.retrato
     val ocultar = App.ocultarSaldos

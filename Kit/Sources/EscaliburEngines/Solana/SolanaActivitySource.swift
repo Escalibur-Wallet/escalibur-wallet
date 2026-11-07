@@ -28,9 +28,9 @@ struct SolanaActivitySource: ActivitySource {
     func history(chain: Chain, account: DerivedAccount, usage: UTXOUsage?) async throws -> [ActivityEntry] {
         do {
             try SolanaEngineGuard.chain(chain)
-            let owner = try SolanaEngineGuard.owner(account)
-            let activities = try await network.recentActivity(owner: owner.publicKey, limit: Self.limit)
-            return Self.entries(activities, owner: owner.publicKey)
+            let owner = try SolanaEngineGuard.historyOwner(account)
+            let activities = try await network.recentActivity(owner: owner, limit: Self.limit)
+            return Self.entries(activities, owner: owner)
         } catch {
             throw SolanaEngineMessages.map(error, .history)
         }

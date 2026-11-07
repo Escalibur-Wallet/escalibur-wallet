@@ -591,7 +591,7 @@ struct RootKeyVaultTests {
 struct WalletVaultTests {
     static let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
-    @Test("Registro guarda entropia e 25a palavra; a RK errada nao abre")
+    @Test("Registro guarda so a entropia e o idioma, nunca a 25a palavra; a RK errada nao abre")
     func record() throws {
         let vault = WalletVault(store: MemoryStore())
         let rk = try SecureBytes.random(count: 32)
@@ -600,9 +600,65 @@ struct WalletVaultTests {
         try vault.save(secret, walletID: id, rk: rk)
         let opened = try vault.open(walletID: id, rk: rk)
         #expect(opened.entropy.withUnsafeBytes { Array($0) } == [UInt8](repeating: 0, count: 16))
-        #expect(opened.passphrase.withUnsafeBytes { String(decoding: $0, as: UTF8.self) } == "TREZOR")
-        #expect(try opened.seed().withUnsafeBytes { Array($0) }.hex.hasPrefix("c55257c360c07c72"))
+        #expect(opened.passphrase.count == 0)
+        // A seed sem passphrase (vetor do BIP-39), e nao a do "TREZOR" (c55257c3...).
+        #expect(try opened.seed().withUnsafeBytes { Array($0) }.hex.hasPrefix("5eb00bbddcf06908"))
+        #expect(try vault.storedPassphrase(walletID: id, rk: rk) == .none)
+        #expect(try vault.purgePassphrase(walletID: id, rk: rk) == false)
         #expect(throws: WalletVault.Failure.corrupted) { try vault.open(walletID: id, rk: try SecureBytes.random(count: 32)) }
+    }
+
+    /// Um registro no formato de antes de 05/11/2026, com a 25a palavra dentro.
+    static func legacyBlob(_ secret: WalletSecret, walletID: UUID, rk: SecureBytes) throws -> Data {
+        let record = SecureBytes(capacity: WalletVault.recordLength)
+        record.append(WalletVault.version)
+        record.append(secret.language.storageCode)
+        record.append(UInt8(secret.entropy.count))
+        secret.entropy.withUnsafeBytes { record.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+        UInt16(secret.passphrase.count).bigEndianByteArray.withUnsafeBufferPointer { record.append(contentsOf: $0) }
+        secret.passphrase.withUnsafeBytes { record.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+        while record.count < WalletVault.recordLength { record.append(0) }
+        let walletSalt = try WalletVault.randomBytes(32), seedSalt = try WalletVault.randomBytes(32)
+        let dek = try SecureBytes.random(count: 32)
+        let wrapped = try dek.withUnsafeData {
+            try ChaChaPoly.seal($0, using: WalletVault.kek(rk: rk, salt: walletSalt, walletID: walletID),
+                                nonce: WalletVault.zeroNonce, authenticating: WalletVault.aad(walletID, type: 0x01))
+        }
+        let sealed = try record.withUnsafeData {
+            try ChaChaPoly.seal($0, using: WalletVault.seedKey(dek: dek, salt: seedSalt), nonce: WalletVault.zeroNonce,
+                                authenticating: WalletVault.aad(walletID, type: 0x02))
+        }
+        return Data([WalletVault.version]) + walletSalt + wrapped.ciphertext + wrapped.tag + seedSalt + sealed.ciphertext + sealed.tag
+    }
+
+    @Test("A 25a palavra de uma versao anterior nao sai do cofre e e apagada dele")
+    func legacyPassphrasePurged() throws {
+        let store = MemoryStore()
+        let vault = WalletVault(store: store)
+        let rk = try SecureBytes.random(count: 32)
+        let id = UUID()
+        let secret = try WalletSecret.from(phrase: BIP39.canonical(Self.phrase), language: .english, passphrase: secure("TREZOR"))
+        let old = try Self.legacyBlob(secret, walletID: id, rk: rk)
+        try store.add(old, account: WalletVault.account(id), protection: .standard, context: nil)
+        let opened = try vault.open(walletID: id, rk: rk)
+        #expect(opened.passphrase.count == 0)
+        #expect(opened.entropy.withUnsafeBytes { Array($0) } == [UInt8](repeating: 0, count: 16))
+        // Os fatos que podem sobrar como marca: fora de NFKD, e se ela da a raiz da criacao.
+        let (_, fingerprint) = try AccountDeriver.derive(secret)
+        #expect(try vault.storedPassphrase(walletID: id, rk: rk, fingerprint: fingerprint) == .present(legacy: false, verified: true))
+        #expect(try vault.storedPassphrase(walletID: id, rk: rk, fingerprint: [0, 0, 0, 0]) == .present(legacy: false, verified: false))
+        #expect(try vault.storedPassphrase(walletID: id, rk: rk) == .present(legacy: false, verified: false))
+        #expect(try store.read(WalletVault.account(id), context: nil) == old)
+        // Sai sempre, com ou sem a prova (pedido do dono, 05/11/2026).
+        #expect(try vault.purgePassphrase(walletID: id, rk: rk) == true)
+        // Gravado de novo, com salts e DEK novos: nada do registro antigo sobra.
+        let new = try #require(try store.read(WalletVault.account(id), context: nil))
+        #expect(new != old && new.count == old.count)
+        #expect(try vault.purgePassphrase(walletID: id, rk: rk) == false)
+        #expect(try vault.storedPassphrase(walletID: id, rk: rk) == .none)
+        let again = try vault.open(walletID: id, rk: rk)
+        #expect(again.language == .english && again.passphrase.count == 0)
+        #expect(again.entropy.withUnsafeBytes { Array($0) } == [UInt8](repeating: 0, count: 16))
     }
 
     /// Um registro gravado em portugues pelo `save` de hoje: a RK e o id de
@@ -636,6 +692,39 @@ struct WalletVaultTests {
         defer { phrase.wipe() }
         #expect(phrase.withUnsafeBytes { String(decoding: $0, as: UTF8.self) }
             == "abacate joia lareira joaninha enchente colar bengala cetim pilotar feno hidratar zarpar")
+    }
+
+    @Test("Registro sem carteira na lista: a 25a palavra sai, e a entropia fica")
+    func orphanPassphrasePurged() throws {
+        let store = MemoryStore()
+        let vault = WalletVault(store: store)
+        let rk = try SecureBytes.random(count: 32)
+        let id = UUID()
+        let secret = try WalletSecret.from(phrase: BIP39.canonical(Self.phrase), language: .english, passphrase: secure("TREZOR"))
+        try store.add(try Self.legacyBlob(secret, walletID: id, rk: rk), account: WalletVault.account(id), protection: .standard, context: nil)
+        #expect(try vault.purgePassphrase(walletID: id, rk: rk) == true)
+        #expect(try vault.storedPassphrase(walletID: id, rk: rk) == .none)
+        #expect(try vault.open(walletID: id, rk: rk).entropy.withUnsafeBytes { Array($0) } == [UInt8](repeating: 0, count: 16))
+    }
+
+    @Test("O segredo tem a propria copia da 25a palavra: zerar a de quem chamou nao muda a carteira (ASCII, acento, envelope antigo)")
+    func secretOwnsItsPassphrase() throws {
+        for text in ["TREZOR", "ação secreta"] {
+            let given = secure(text)
+            let secret = try WalletSecret.from(phrase: BIP39.canonical(Self.phrase), language: .english, passphrase: given)
+            given.wipe()
+            #expect(secret.passphrase.count > 0, "\(text)")
+            let expected = try WalletSecret.from(phrase: BIP39.canonical(Self.phrase), language: .english, passphrase: secure(text))
+            #expect(try AccountDeriver.derive(secret).fingerprint == AccountDeriver.derive(expected).fingerprint, "\(text)")
+        }
+        let raw = secure("ação secreta")
+        let (legacy, isLegacy) = try WalletSecret.fromEnvelope(phrase: BIP39.canonical(Self.phrase), language: .english, passphrase: raw)
+        raw.wipe()
+        #expect(isLegacy && legacy.passphrase.withUnsafeBytes { Array($0) } == Array("ação secreta".utf8))
+        let nfkd = secure("ação secreta".decomposedStringWithCompatibilityMapping)
+        let (modern, isModern) = try WalletSecret.fromEnvelope(phrase: BIP39.canonical(Self.phrase), language: .english, passphrase: nfkd)
+        nfkd.wipe()
+        #expect(!isModern && modern.passphrase.count > 0)
     }
 
     @Test("Contas publicas derivadas uma vez batem com os vetores")
@@ -679,7 +768,7 @@ struct WalletVaultTests {
         let plan = SigningPlan(walletID: id, chain: .ethereum, review: PlanReview(kind: .send, title: "teste", lines: []), transactions: [tx])
         let restored = SecureBytes(capacity: 32)
         restored.replaceAll(with: keep)
-        let result = try Signer.sign(plan, rootKey: restored, vault: vault, passphrase: nil)
+        let result = try Signer.sign(plan, rootKey: restored, vault: vault, passphrase: nil, fingerprint: nil)
         #expect(result.count == 1)
         #expect(result[0].raw.count == 64 + 64)
         #expect(restored.count == 0)  // a RK foi zerada
@@ -691,67 +780,104 @@ struct WalletVaultTests {
         let wrongPlan = SigningPlan(walletID: id, chain: .ethereum, review: PlanReview(kind: .send, title: "x", lines: []), transactions: [wrong])
         let again = SecureBytes(capacity: 32)
         again.replaceAll(with: keep)
-        #expect(throws: Signer.Failure.unexpectedKey) { try Signer.sign(wrongPlan, rootKey: again, vault: vault, passphrase: nil) }
+        #expect(throws: Signer.Failure.unexpectedKey) { try Signer.sign(wrongPlan, rootKey: again, vault: vault, passphrase: nil, fingerprint: nil) }
 
         // Plano vencido: nada e assinado.
         let old = SigningPlan(walletID: id, chain: .ethereum, review: PlanReview(kind: .send, title: "x", lines: []), transactions: [tx], createdAt: .now.addingTimeInterval(-120))
         let third = SecureBytes(capacity: 32)
         third.replaceAll(with: keep)
-        #expect(throws: Signer.Failure.expired) { try Signer.sign(old, rootKey: third, vault: vault, passphrase: nil) }
+        #expect(throws: Signer.Failure.expired) { try Signer.sign(old, rootKey: third, vault: vault, passphrase: nil, fingerprint: nil) }
     }
 
-    @Test("Com a passphrase pedida para enviar, so a certa assina, em NFC ou NFKD")
+    @Test("Carteira com passphrase: o cofre nao a tem, e so a digitada certa assina, em NFC ou NFKD")
     func signerPassphrase() throws {
         let store = MemoryStore()
         let vault = WalletVault(store: store)
         let rk = try SecureBytes.random(count: 32)
         let keep = rk.withUnsafeBytes { Array($0) }
         let id = UUID()
-        // A passphrase gravada em NFKD, como a criacao grava ("ação" com o til separado).
-        let raw = SecureBytes(capacity: 64)
-        raw.replaceAll(with: Array("ação secreta".utf8))
-        let stored = BIP39.nfkd(raw)
-        let base = try WalletSecret.from(phrase: BIP39.canonical(Self.phrase), language: .english)
-        let entropy = SecureBytes(capacity: base.entropy.count)
-        base.entropy.withUnsafeBytes { entropy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
-        let secret = WalletSecret(entropy: entropy, language: base.language, passphrase: stored)
+        func key() -> SecureBytes { let k = SecureBytes(capacity: 32); k.replaceAll(with: keep); return k }
+        func typed(_ text: String) -> SecureBytes { let b = SecureBytes(capacity: 64); b.replaceAll(with: Array(text.utf8)); return b }
+        // A criacao: a carteira deriva com a passphrase (NFKD), e o cofre fica so com a entropia.
+        let secret = try WalletSecret.from(phrase: BIP39.canonical(Self.phrase), language: .english, passphrase: typed("ação secreta"))
         try vault.save(secret, walletID: id, rk: rk)
-        let (accounts, _) = try AccountDeriver.derive(secret)
+        let (accounts, fingerprint) = try AccountDeriver.derive(secret)
+        #expect(try vault.open(walletID: id, rk: key()).passphrase.count == 0)
         let eth = try #require(accounts.first { $0.chainID == "ethereum" })
+        let ada = try #require(accounts.first { $0.chainID == "cardano" })
         let digest = Hash.keccak256(Array("mensagem".utf8))
         let tx = FakeTransaction(chain: .ethereum, signingRequests: [
             SigningRequest(path: eth.path, curve: .secp256k1, scheme: .ecdsaRecoverable, payload: digest, expectedPublicKey: eth.publicKey),
         ])
         let plan = SigningPlan(walletID: id, chain: .ethereum, review: PlanReview(kind: .send, title: "teste", lines: []), transactions: [tx])
-        func key() -> SecureBytes { let k = SecureBytes(capacity: 32); k.replaceAll(with: keep); return k }
-        func typed(_ text: String) -> SecureBytes { let b = SecureBytes(capacity: 64); b.replaceAll(with: Array(text.utf8)); return b }
-
-        // A digitada em NFC (como vem do teclado) assina.
-        let given = typed("ação secreta")
-        #expect(try Signer.sign(plan, rootKey: key(), vault: vault, passphrase: given).count == 1)
-        #expect(given.count > 0)  // o buffer continua do chamador
-        // Carteira antiga, com a passphrase gravada em NFC: a digitada (NFC) tambem confere,
-        // porque as duas passam por NFKD antes de comparar.
-        let legacyID = UUID()
-        let legacyRaw = typed("ação secreta")
-        let legacyEntropy = SecureBytes(capacity: base.entropy.count)
-        base.entropy.withUnsafeBytes { legacyEntropy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
-        let legacy = WalletSecret(entropy: legacyEntropy, language: base.language, passphrase: legacyRaw)
-        try vault.save(legacy, walletID: legacyID, rk: key())
-        let (legacyAccounts, _) = try AccountDeriver.derive(legacy)
-        let legacyEth = try #require(legacyAccounts.first { $0.chainID == "ethereum" })
-        let legacyPlan = SigningPlan(walletID: legacyID, chain: .ethereum, review: PlanReview(kind: .send, title: "teste", lines: []), transactions: [
-            FakeTransaction(chain: .ethereum, signingRequests: [
-                SigningRequest(path: legacyEth.path, curve: .secp256k1, scheme: .ecdsaRecoverable, payload: digest, expectedPublicKey: legacyEth.publicKey),
+        let cardanoPlan = SigningPlan(walletID: id, chain: .cardano, review: PlanReview(kind: .send, title: "teste", lines: []), transactions: [
+            FakeTransaction(chain: .cardano, signingRequests: [
+                SigningRequest(path: ada.path, curve: .ed25519, scheme: .ed25519Cardano, payload: Array(repeating: 7, count: 32), expectedPublicKey: ada.publicKey),
             ]),
         ])
-        #expect(try Signer.sign(legacyPlan, rootKey: key(), vault: vault, passphrase: typed("ação secreta")).count == 1)
+
+        // A digitada em NFC (como vem do teclado) e em NFKD assinam, na Ethereum e na Cardano.
+        let given = typed("ação secreta")
+        #expect(try Signer.sign(plan, rootKey: key(), vault: vault, passphrase: given, fingerprint: fingerprint).count == 1)
+        #expect(given.count > 0)  // o buffer continua do chamador
+        #expect(try Signer.sign(plan, rootKey: key(), vault: vault, passphrase: BIP39.nfkd(typed("ação secreta")), fingerprint: fingerprint).count == 1)
+        #expect(try Signer.sign(cardanoPlan, rootKey: key(), vault: vault, passphrase: typed("ação secreta"), fingerprint: fingerprint).count == 1)
         // Uma letra a menos, maiuscula diferente ou vazia: nada e assinado.
         for wrong in ["ação secret", "Ação secreta", ""] {
             #expect(throws: Signer.Failure.passphraseMismatch) {
-                try Signer.sign(plan, rootKey: key(), vault: vault, passphrase: typed(wrong))
+                try Signer.sign(plan, rootKey: key(), vault: vault, passphrase: typed(wrong), fingerprint: fingerprint)
             }
         }
+        // Sem o fingerprint da criacao, nada confere.
+        #expect(throws: Signer.Failure.passphraseMismatch) {
+            try Signer.sign(plan, rootKey: key(), vault: vault, passphrase: typed("ação secreta"), fingerprint: nil)
+        }
+        // Sem passphrase, o cofre da a carteira de base: com o fingerprint, a raiz recusa antes de qualquer chave de pedido;
+        // sem ele, a chave esperada recusa.
+        #expect(throws: Signer.Failure.unexpectedKey) { try Signer.sign(plan, rootKey: key(), vault: vault, passphrase: nil, fingerprint: fingerprint) }
+        #expect(throws: Signer.Failure.unexpectedKey) { try Signer.sign(plan, rootKey: key(), vault: vault, passphrase: nil, fingerprint: nil) }
+
+        // A conferencia sem assinar: pelo cofre e pela frase.
+        #expect(try PassphraseProof.check(walletID: id, rootKey: key(), vault: vault, typed: typed("ação secreta"),
+                                          fingerprint: fingerprint, cardanoPublicKey: ada.publicKey) == .match)
+        #expect(try PassphraseProof.check(walletID: id, rootKey: key(), vault: vault, typed: typed("acao secreta"),
+                                          fingerprint: fingerprint, cardanoPublicKey: ada.publicKey) == .mismatch)
+        #expect(try PassphraseProof.check(phrase: BIP39.canonical(Self.phrase), language: .english, typed: typed("ação secreta"),
+                                          fingerprint: fingerprint, cardanoPublicKey: ada.publicKey) == .match)
+        // As redes que faltam nascem com a digitada certa, e com a errada nada nasce.
+        let missing = try PassphraseProof.missingAccounts(walletID: id, rootKey: key(), vault: vault, typed: typed("ação secreta"),
+                                                          fingerprint: fingerprint, chains: [.ethereum])
+        #expect(missing.first?.address == eth.address)
+        #expect(try PassphraseProof.missingAccounts(walletID: id, rootKey: key(), vault: vault, typed: typed("ação secretA"),
+                                                    fingerprint: fingerprint, chains: [.ethereum]).isEmpty)
+    }
+
+    @Test("Passphrase com acento gravada fora de NFKD por uma versao anterior: a Cardano dela ainda move o saldo")
+    func legacyCardanoPassphrase() throws {
+        let store = MemoryStore()
+        let vault = WalletVault(store: store)
+        let rk = try SecureBytes.random(count: 32)
+        let keep = rk.withUnsafeBytes { Array($0) }
+        let id = UUID()
+        func key() -> SecureBytes { let k = SecureBytes(capacity: 32); k.replaceAll(with: keep); return k }
+        func typed(_ text: String) -> SecureBytes { let b = SecureBytes(capacity: 64); b.replaceAll(with: Array(text.utf8)); return b }
+        // Antes, a criacao gravava os bytes digitados (NFC): a seed BIP-39 normaliza sozinha, a Icarus nao.
+        let base = try WalletSecret.from(phrase: BIP39.canonical(Self.phrase), language: .english)
+        let legacy = WalletSecret(entropy: base.entropy, language: base.language, passphrase: typed("ação secreta"))
+        try store.add(try Self.legacyBlob(legacy, walletID: id, rk: rk), account: WalletVault.account(id), protection: .standard, context: nil)
+        let (accounts, fingerprint) = try AccountDeriver.derive(legacy)
+        let ada = try #require(accounts.first { $0.chainID == "cardano" })
+        #expect(try PassphraseProof.check(walletID: id, rootKey: key(), vault: vault, typed: typed("ação secreta"),
+                                          fingerprint: fingerprint, cardanoPublicKey: ada.publicKey) == .legacy)
+        let plan = SigningPlan(walletID: id, chain: .cardano, review: PlanReview(kind: .send, title: "teste", lines: []), transactions: [
+            FakeTransaction(chain: .cardano, signingRequests: [
+                SigningRequest(path: ada.path, curve: .ed25519, scheme: .ed25519Cardano, payload: Array(repeating: 7, count: 32), expectedPublicKey: ada.publicKey),
+            ]),
+        ])
+        #expect(try Signer.sign(plan, rootKey: key(), vault: vault, passphrase: typed("ação secreta"), fingerprint: fingerprint).count == 1)
+        #expect(try vault.storedPassphrase(walletID: id, rk: key(), fingerprint: fingerprint) == .present(legacy: true, verified: true))
+        #expect(try vault.purgePassphrase(walletID: id, rk: key()) == true)
+        #expect(try Signer.sign(plan, rootKey: key(), vault: vault, passphrase: typed("ação secreta"), fingerprint: fingerprint).count == 1)
     }
 
     @Test("Metadados cifrados com a chave de indice")

@@ -47,6 +47,30 @@ final class TradeQuoteTests: XCTestCase {
         shot("t2-cotacao-base-detalhe", app)
     }
 
+    /// Cotacao sem comparacao (`-tela trocar-sem-comparacao`: a do XRP Ledger, ao vivo, marcada como viria
+    /// com uma fonte so e sem preco de referencia): o aviso e a caixa aparecem, o botao de revisar so liga com
+    /// a caixa marcada e desliga ao desmarcar. Nada e revisado nem assinado (05/11/2026).
+    func testUnanchoredConsent() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-reset", "-demo", "-tela", "trocar-sem-comparacao"]
+        app.launch()
+        let consent = app.buttons["aceite-sem-comparacao"]
+        XCTAssertTrue(consent.waitForExistence(timeout: 60), "a cotacao sem comparacao nao chegou")
+        let warning = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Um'")).firstMatch
+        XCTAssertTrue(warning.exists)
+        let review = app.buttons["Revisar troca"]
+        XCTAssertTrue(review.waitForExistence(timeout: 10))
+        XCTAssertFalse(review.isEnabled, "o botao ligou sem o aceite")
+        shot("u1-sem-comparacao", app)
+        consent.tap()
+        XCTAssertEqual(consent.value as? String, "Marcado")
+        XCTAssertTrue(review.isEnabled, "o botao nao ligou com o aceite")
+        shot("u2-sem-comparacao-aceite", app)
+        // A recotacao de 15 s pode ter desmarcado sozinha: so toca se ainda esta marcada.
+        if consent.value as? String == "Marcado" { consent.tap() }
+        XCTAssertFalse(review.isEnabled, "o botao ficou ligado depois de desmarcar")
+    }
+
     /// XRP por RLUSD no livro do XRP Ledger: a cotacao vem do livro, e o plano, sem
     /// assinar, nunca pode cair na recusa de "nao confere com o pedido". A carteira
     /// publica de teste tem a conta do XRP Ledger tomada (chave mestra desativada por

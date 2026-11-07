@@ -15,6 +15,8 @@ enum Reforco {
         case passphraseAntiga(String)
         /// "Bloquear as carteiras" sem as palavras de todas digitadas antes.
         case faltamPalavras
+        /// "Bloquear as carteiras" sem nenhuma carteira com palavras: nao ha papel a conferir.
+        case semCarteiras
     }
 
     private static let trava = NSLock()
@@ -46,6 +48,8 @@ enum Reforco {
         let palavras: Int
         let temPassphrase: Bool
         let conferida: Bool
+        /// O que recusa esta carteira no Super Security, ja sabido pelos metadados: a tela diz antes das palavras e do PIN.
+        let aviso: String?
     }
 
     struct Retrato: Encodable {
@@ -60,6 +64,9 @@ enum Reforco {
         let faltaCopia: String?
         let faltaCopiaID: String?
         let carteiras: [Carteira]
+        /// Carteira nova com palavras recusa ("Bloquear as carteiras", ou o cofre que nao diz): a regra do nucleo, que falha
+        /// fechada, para a tela avisar antes das palavras (revisao de seguranca de 06/11/2026).
+        let bloqueado: Bool
     }
 
     /// As carteiras que tem frase (as de observacao ficam de fora).
@@ -78,8 +85,12 @@ enum Reforco {
             biometriaLigada: root.isBiometryEnabled, biometriaPronta: KeyPlatform.current.biometry() == .ready,
             faltaCopia: falta?.name, faltaCopiaID: falta?.id.uuidString,
             carteiras: carteiras.map {
-                Carteira(id: $0.id.uuidString, nome: $0.name, palavras: $0.wordCount ?? 12, temPassphrase: $0.hasPassphrase, conferida: digitadas.contains($0.id))
-            }
+                Carteira(id: $0.id.uuidString, nome: $0.name, palavras: $0.wordCount ?? 12, temPassphrase: $0.hasPassphrase, conferida: digitadas.contains($0.id),
+                         aviso: PortaDaPassphrase.semConferencia($0) ? String(format: Textos.t("A passphrase de %@ não pode ser conferida por esta versão do app, e no Super Security a cópia é o único caminho de volta: com ela aqui, o Super Security recusa. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39."), $0.name)
+                             : $0.hasPassphrase && $0.legacyCardanoPassphrase == true
+                                 ? String(format: Textos.t("A passphrase de %@ foi gravada por uma versão anterior do app, e restaurada pelas palavras a conta da Cardano dela muda. Mova o saldo dela para outra carteira e crie a carteira com passphrase de novo."), $0.name) : nil)
+            },
+            bloqueado: Sessao.shared.adicionarBloqueado
         )
     }
 
@@ -91,15 +102,23 @@ enum Reforco {
             passphrase?.wipe()
             throw Sessao.Falha.carteiraNaoEncontrada
         }
+        // A rodada antes do PBKDF2: sair do app ou travar no meio (que esquece as frases) nao deixa esta para tras.
+        let rodada = trava.withLock { rodadaDasFrases }
         let segredo: WalletSecret
         do { segredo = try Importacao.segredo(frase, passphrase: passphrase) } catch {
             passphrase?.wipe()
             throw error
         }
         passphrase?.wipe()
-        trava.withLock {
+        let guardou = trava.withLock { () -> Bool in
+            guard rodadaDasFrases == rodada else { return false }
             frases[id]?.wipe()
             frases[id] = segredo
+            return true
+        }
+        guard guardou else {
+            segredo.wipe()
+            throw Sessao.Falha.travada
         }
         // Travou enquanto a frase era conferida: o travar() ja zerou as frases, e esta sai tambem.
         guard Sessao.shared.fase == .unlocked else {
@@ -108,42 +127,80 @@ enum Reforco {
         }
     }
 
+    /// Soma um a cada esquecer: a frase que termina de ser guardada depois disso nao fica.
+    nonisolated(unsafe) private static var rodadaDasFrases = 0
+
     static func esquecerFrases() {
         trava.withLock {
+            rodadaDasFrases &+= 1
             frases.values.forEach { $0.wipe() }
             frases = [:]
         }
     }
 
+    /// A conferencia pronta: o que roda dentro do cofre e as frases que ele le, tiradas da lista, que quem chama zera ao terminar.
+    private struct Conferencia {
+        let check: (SecureBytes) throws -> Void
+        let digitadas: [UUID: WalletSecret]
+
+        func zerar() { digitadas.values.forEach { $0.wipe() } }
+    }
+
     /// A conferencia que roda sob a trava do cofre, com a RK aberta: so o `WalletVault`, nunca o
     /// `RootKeyVault`. Indo para o bloqueio, a frase de cada carteira tem de bater com a guardada
-    /// (o papel passa a ser o unico caminho de volta); nas outras politicas, so a passphrase
-    /// gravada fora de NFKD por uma versao anterior recusa.
-    private static func conferencia(_ politica: Politica, carteiras: [WalletMeta]) throws -> (SecureBytes) throws -> Void {
-        let digitadas = trava.withLock { frases }
+    /// (o papel passa a ser o unico caminho de volta), e a passphrase digitada, com a raiz e a conta
+    /// da Cardano da criacao: o cofre nao a tem (05/11/2026). Ao ligar, em qualquer politica, e na ida para o
+    /// bloqueio, a passphrase gravada fora de NFKD por uma versao anterior, ou que esta versao nao confere, recusa.
+    private static func conferencia(_ politica: Politica, carteiras: [WalletMeta]) throws -> Conferencia {
+        // O que recusa sem ler frase vem antes de tirar as frases da lista.
         if politica == .lock {
-            guard carteiras.allSatisfy({ digitadas[$0.id] != nil }) else { throw Falha.faltamPalavras }
+            guard !carteiras.isEmpty else { throw Falha.semCarteiras }
+            let guardadas = trava.withLock { Set(frases.keys) }
+            guard carteiras.allSatisfy({ guardadas.contains($0.id) }) else { throw Falha.faltamPalavras }
         }
-        return { rk in
-            for carteira in carteiras {
-                let guardada = try Chaves.wallets.open(walletID: carteira.id, rk: rk)
-                defer { guardada.wipe() }
-                let salva = BIP39.nfkd(guardada.passphrase)
-                defer { salva.wipe() }
-                if politica == .lock, let digitada = digitadas[carteira.id] {
-                    // A entropia, nao as palavras: nenhuma frase vira String, e o idioma vem junto.
-                    guard guardada.language == digitada.language, Hash.constantTimeEqual(guardada.entropy, digitada.entropy) else {
-                        throw Falha.naoConfere(carteira.name)
-                    }
-                    if carteira.hasPassphrase {
-                        guard Hash.constantTimeEqual(salva, digitada.passphrase) else { throw Falha.naoConfere(carteira.name) }
-                    }
-                }
-                if carteira.hasPassphrase {
-                    guard Hash.constantTimeEqual(salva, guardada.passphrase) else { throw Falha.passphraseAntiga(carteira.name) }
+        // A que esta versao nao confere nao vale como copia (`passphraseUnverified`).
+        if carteiras.contains(where: PortaDaPassphrase.semConferencia) { throw PortaDaPassphrase.SemConferencia() }
+        if let antiga = carteiras.first(where: { $0.hasPassphrase && $0.legacyCardanoPassphrase == true }) {
+            throw Falha.passphraseAntiga(antiga.name)
+        }
+        // So na ida para o bloqueio, a unica que le as frases, elas saem da lista em vez de copiadas (uma so na memoria):
+        // sair do app no meio nao toca no que a conferencia le, e quem chama as zera ao terminar (revisao de 05/11/2026).
+        let digitadas = politica != .lock ? [:] : trava.withLock { () -> [UUID: WalletSecret] in
+            let tiradas = frases
+            frases = [:]
+            rodadaDasFrases &+= 1
+            return tiradas
+        }
+        // Sair do app entre a conferencia de cima e a tirada esquece as frases: confere de novo nas tiradas.
+        if politica == .lock, !carteiras.allSatisfy({ digitadas[$0.id] != nil }) {
+            digitadas.values.forEach { $0.wipe() }
+            throw Falha.faltamPalavras
+        }
+        return Conferencia(check: { rk in
+            // A que ainda esta no cofre fora de NFKD, com a marca que nao chegou a ser gravada, recusa tambem.
+            for carteira in carteiras where carteira.hasPassphrase {
+                if case .present(legacy: true, _) = try Chaves.wallets.storedPassphrase(walletID: carteira.id, rk: rk) {
+                    throw Falha.passphraseAntiga(carteira.name)
                 }
             }
-        }
+            guard politica == .lock else { return }
+            for carteira in carteiras {
+                guard let digitada = digitadas[carteira.id] else { throw Falha.faltamPalavras }
+                let guardada = try Chaves.wallets.open(walletID: carteira.id, rk: rk)
+                defer { guardada.wipe() }
+                // A entropia, nao as palavras: nenhuma frase vira String, e o idioma vem junto.
+                guard guardada.language == digitada.language, Hash.constantTimeEqual(guardada.entropy, digitada.entropy) else {
+                    throw Falha.naoConfere(carteira.name)
+                }
+                if carteira.hasPassphrase {
+                    switch try PortaDaPassphrase.confere(guardada, digitada.passphrase, carteira, cardano: true) {
+                    case .mismatch: throw Falha.naoConfere(carteira.name)
+                    case .legacy: throw Falha.passphraseAntiga(carteira.name)
+                    case .match: break
+                    }
+                }
+            }
+        }, digitadas: digitadas)
     }
 
     /// Ligar: o cofre pede o PIN e a biometria do slot de hoje, roda a conferencia, grava o
@@ -155,11 +212,12 @@ enum Reforco {
         }
         let carteiras = carteirasComFrase()
         guard !carteiras.isEmpty, carteiras.allSatisfy(\.hasBackup) else { throw Sessao.Falha.copiaPendente }
-        let check = try conferencia(politica, carteiras: carteiras)
+        let conferida = try conferencia(politica, carteiras: carteiras)
+        defer { conferida.zerar() }
         do {
             try Chaves.root.enableHardened(pin: pin, reason: Textos.t("Ligar o Super Security"),
                                            confirmReason: Textos.t("Confirme a biometria para conferir o Super Security"),
-                                           faceChange: politica, check: check)
+                                           faceChange: politica, check: conferida.check)
         } catch RootKeyVault.Failure.wiped {
             Sessao.shared.apagarTudo()
             throw RootKeyVault.Failure.wiped
@@ -189,10 +247,14 @@ enum Reforco {
             pin.wipe()
             esquecerFrases()
         }
-        let check = try conferencia(politica, carteiras: carteirasComFrase())
+        // So a ida para o bloqueio confere (como no iPhone): trocar entre as outras politicas, ou sair do bloqueio, nao poe nem
+        // tira carteira do Super Security, e sair do bloqueio e a direcao que diminui o risco de perda.
+        let conferida = politica == .lock ? try conferencia(.lock, carteiras: carteirasComFrase()) : nil
+        defer { conferida?.zerar() }
         do {
             try Chaves.root.setHardenedFaceChange(politica, pin: pin, reason: Textos.t("Mudar o que acontece quando a biometria mudar"),
-                                                  confirmReason: Textos.t("Confirme a biometria para conferir o Super Security"), check: check)
+                                                  confirmReason: Textos.t("Confirme a biometria para conferir o Super Security"),
+                                                  check: conferida?.check ?? { _ in })
         } catch RootKeyVault.Failure.wiped {
             Sessao.shared.apagarTudo()
             throw RootKeyVault.Failure.wiped

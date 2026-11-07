@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,7 +66,11 @@ import kotlin.math.sin
 @Composable
 fun AdicionarCarteira(primeira: Boolean, aoTerminar: () -> Unit) {
     var rota by remember { mutableStateOf<String?>(null) }
+    // Super Security em "Bloquear as carteiras": criar e importar recusam antes das palavras; so observar continua.
+    // Ate o nucleo responder, nem aberto nem fechado: a faixa so com sim, e os botoes so com nao (falha fechada, rodada 19).
+    var bloqueado by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(Unit) { Redes.carregar() }
+    LaunchedEffect(Unit) { bloqueado = app.escalibur.wallet.ui.ajustes.adicionarBloqueado() }
     when (rota) {
         "criar" -> { FluxoDeNovaCarteira(primeira) { rota = null; aoTerminar() }; return }
         "importar" -> { FluxoDeImportar(aoCancelar = { rota = null }) { rota = null; aoTerminar() }; return }
@@ -81,22 +86,26 @@ fun AdicionarCarteira(primeira: Boolean, aoTerminar: () -> Unit) {
                 Text(if (primeira) t("Sua primeira carteira") else t("Adicionar carteira"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
                 Text(t("Uma frase, um endereço em cada rede. As chaves ficam só neste celular."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
             }
+            if (bloqueado == true) {
+                app.escalibur.wallet.ui.comp.Faixa(app.escalibur.wallet.ui.comp.TipoDeFaixa.cautela, t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova."),
+                    Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md))
+            }
             Column(Modifier.padding(top = Espaco.md)) {
-                LinhaDeOrigem(t("Importar com a senha da carteira"), t("Você já tem 12 ou 24 palavras de outra carteira."), Icones.palavras) { rota = "importar" }
-                LinhaDeOrigem(t("Importar de um envelope Escalibur"), t("O arquivo .esclbr e a senha do envelope."), Icones.envelope) { rota = "envelope" }
+                LinhaDeOrigem(t("Importar com a senha da carteira"), t("Você já tem 12 ou 24 palavras de outra carteira."), Icones.palavras, ligada = bloqueado == false) { rota = "importar" }
+                LinhaDeOrigem(t("Importar de um envelope Escalibur"), t("O arquivo .esclbr e a senha do envelope."), Icones.envelope, ligada = bloqueado == false) { rota = "envelope" }
                 LinhaDeOrigem(t("Só observar um endereço"), t("Acompanhe um saldo sem poder enviar."), Icones.olho) { rota = "observar" }
             }
             Spacer(Modifier.weight(1f))
-            Rodape { BotaoPrimario(t("Criar carteira nova")) { rota = "criar" } }
+            Rodape { BotaoPrimario(t("Criar carteira nova"), ligado = bloqueado == false) { rota = "criar" } }
         }
         if (!primeira) BotaoDeCanto(Icones.fechar, t("Fechar"), Modifier.padding(start = Espaco.xs), acao = aoTerminar)
     }
 }
 
 @Composable
-private fun LinhaDeOrigem(titulo: String, subtitulo: String, icone: ImageVector, acao: () -> Unit) {
+private fun LinhaDeOrigem(titulo: String, subtitulo: String, icone: ImageVector, ligada: Boolean = true, acao: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = acao).height(72.dp).padding(horizontal = Espaco.margem),
+        Modifier.fillMaxWidth().alpha(if (ligada) 1f else 0.4f).clickable(enabled = ligada, onClick = acao).height(72.dp).padding(horizontal = Espaco.margem),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
     ) {
         Box(Modifier.size(40.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) { Icone(icone, Color.White, tamanho = 18.dp) }

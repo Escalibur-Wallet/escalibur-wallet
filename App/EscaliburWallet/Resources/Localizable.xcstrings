@@ -7210,6 +7210,82 @@
         }
       }
     },
+    "%@, sem comparação" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@، دون مقارنة"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, ohne Vergleich"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, not compared"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, sin comparar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, sans comparaison"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, बिना तुलना के"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, tanpa perbandingan"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、比較なし"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, 비교 없음"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, karşılaştırılmadı"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, chưa so sánh"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@，未经比较"
+          }
+        }
+      }
+    },
     "%@, volta para a sua carteira" : {
       "localizations" : {
         "ar" : {
@@ -16488,82 +16564,6 @@
         }
       }
     },
-    "A autorização vai primeiro. A ordem segue para a CoW assim que ela confirmar na %@. Não feche o app até terminar." : {
-      "localizations" : {
-        "ar" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "تأتي الموافقة أولًا. يُرسَل الأمر إلى CoW بمجرد تأكيد الموافقة على %@. لا تغلق التطبيق حتى ينتهي."
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die Genehmigung kommt zuerst. Die Order geht an CoW, sobald die Genehmigung auf %@ bestätigt ist. Schließ die App nicht, bis alles fertig ist."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The approval goes first. The order goes to CoW as soon as the approval confirms on %@. Don't close the app until it's done."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La autorización va primero. La orden pasa a CoW en cuanto la autorización se confirme en %@. No cierres la app hasta que termine."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "L’autorisation passe en premier. L’ordre part chez CoW dès qu’elle est confirmée sur %@. Ne fermez pas l’app avant la fin."
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "पहले अनुमति जाती है. %@ पर अनुमति कन्फ़र्म होते ही ऑर्डर CoW को जाता है. पूरा होने तक ऐप बंद न करें."
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Persetujuan dilakukan lebih dulu. Order dikirim ke CoW segera setelah persetujuan terkonfirmasi di %@. Jangan tutup aplikasi sampai selesai."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "承認が先に行われます。%@ で承認が確認されるとすぐに、注文が CoW に送られます。完了するまでアプリを閉じないでください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "승인이 먼저 진행됩니다. %@ 네트워크에서 승인이 확정되는 즉시 주문이 CoW로 전송됩니다. 완료될 때까지 앱을 닫지 마세요."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Önce onay işlemi gider. %@ ağında onaylanır onaylanmaz emir CoW'a gönderilir. Bitene kadar uygulamayı kapatma."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Phê duyệt diễn ra trước. Lệnh được gửi đến CoW ngay khi phê duyệt được xác nhận trên %@. Đừng đóng ứng dụng cho đến khi hoàn tất."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "授权先执行。授权在 %@ 上确认后，订单会立即发送给 CoW。完成前请勿关闭 App。"
-          }
-        }
-      }
-    },
     "A banda deste envio sai do stake ou da cota grátis da conta, sem queimar TRX." : {
       "localizations" : {
         "ar" : {
@@ -17244,6 +17244,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "钱包会发送一笔交易使订单永久失效，需支付网络费。交易确认后，订单将无法再成交，未卖出的部分仍留在你的钱包中。"
+          }
+        }
+      }
+    },
+    "A carteira mudou desde a conferência dos endereços. Nada foi guardado: comece de novo." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تغيّرت المحفظة منذ التحقق من العناوين. لم يُحفظ شيء: ابدأ من جديد."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Wallet hat sich seit der Prüfung der Adressen geändert. Es wurde nichts gespeichert: Fang noch einmal an."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The wallet changed since the addresses were checked. Nothing was saved: start again."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La billetera cambió desde la verificación de las direcciones. No se guardó nada: empieza de nuevo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le portefeuille a changé depuis la vérification des adresses. Rien n’a été enregistré : recommencez."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पतों की जाँच के बाद वॉलेट बदल गया. कुछ भी सेव नहीं हुआ: फिर से शुरू करें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dompet berubah sejak alamat diperiksa. Tidak ada yang disimpan: mulai lagi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アドレスを確認した後にウォレットが変わりました。何も保存されていません。最初からやり直してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "주소를 확인한 뒤 지갑이 바뀌었습니다. 아무것도 저장되지 않았습니다. 처음부터 다시 시작하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adresler kontrol edildikten sonra cüzdan değişti. Hiçbir şey kaydedilmedi: baştan başla."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ví đã thay đổi kể từ lúc kiểm tra địa chỉ. Chưa lưu gì cả: hãy bắt đầu lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "核对地址之后钱包发生了变化。未保存任何内容：请重新开始。"
           }
         }
       }
@@ -18853,6 +18929,82 @@
         }
       }
     },
+    "A conta da Cardano desta carteira saiu da passphrase exatamente como foi digitada na criação. Digite igual: o mesmo teclado, a mesma forma dos acentos e da largura dos caracteres." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "حساب Cardano في هذه المحفظة نتج عن الـ passphrase تمامًا كما كُتبت عند الإنشاء. اكتبها بالطريقة نفسها: لوحة المفاتيح نفسها، والشكل نفسه للتشكيل وعرض الأحرف."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Cardano-Konto dieser Wallet stammt aus der Passphrase genau so, wie sie bei der Erstellung eingegeben wurde. Gib sie genauso ein: dieselbe Tastatur, dieselbe Form der Akzente und der Zeichenbreite."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This wallet's Cardano account came from the passphrase exactly as it was typed when it was created. Type it the same way: the same keyboard, the same form of accents and character width."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La cuenta de Cardano de esta billetera salió de la passphrase exactamente como se escribió al crearla. Escríbela igual: el mismo teclado, la misma forma de los acentos y del ancho de los caracteres."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le compte Cardano de ce portefeuille vient de la passphrase exactement telle qu’elle a été saisie à la création. Saisissez-la pareil : le même clavier, la même forme des accents et de la largeur des caractères."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस वॉलेट का Cardano खाता पासफ़्रेज़ से ठीक वैसे ही बना जैसे वह बनाते समय लिखा गया था. वैसे ही लिखें: वही कीबोर्ड, मात्राओं और अक्षरों की चौड़ाई का वही रूप."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Akun Cardano dompet ini berasal dari passphrase persis seperti yang diketik saat dibuat. Ketik dengan cara yang sama: keyboard yang sama, bentuk aksen dan lebar karakter yang sama."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このウォレットの Cardano アカウントは、作成時に入力されたとおりのパスフレーズから作られました。同じように入力してください。同じキーボード、同じアクセントと文字幅の形です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 지갑의 Cardano 계정은 생성할 때 입력한 그대로의 패스프레이즈에서 만들어졌습니다. 똑같이 입력하세요. 같은 키보드, 같은 악센트와 문자 너비 형태로요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu cüzdanın Cardano hesabı, passphrase'in oluşturulurken yazıldığı haliyle tam olarak ondan çıktı. Aynı şekilde yaz: aynı klavye, aksanların ve karakter genişliğinin aynı biçimi."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tài khoản Cardano của ví này được tạo từ passphrase đúng như lúc gõ khi tạo ví. Hãy gõ giống hệt: cùng bàn phím, cùng dạng dấu và độ rộng ký tự."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此钱包的 Cardano 账户来自创建时原样输入的 passphrase。请以同样方式输入：同一键盘、同样的重音形式和字符宽度。"
+          }
+        }
+      }
+    },
     "A conta da Solana desta carteira foi entregue a um programa, e o saldo dela não paga taxa nem pode sair. Só quem tem a senha da carteira faz isso: se não foi você, a senha vazou e esta carteira não é mais segura." : {
       "localizations" : {
         "ar" : {
@@ -20076,6 +20228,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "报价比市场参考价差 %@%%。兑换已阻止。"
+          }
+        }
+      }
+    },
+    "A cotação mudou. Confira e marque de novo." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "تغيّر عرض السعر. راجعه وضع العلامة مرة أخرى."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Angebot hat sich geändert. Prüfe es und setze das Häkchen erneut."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The quote changed. Review it and check the box again."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La cotización cambió. Revísala y marca de nuevo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La cotation a changé. Vérifiez-la et cochez à nouveau."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "कोट बदल गया है. इसे जांचें और फिर से टिक करें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kuotasi berubah. Periksa dan centang lagi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "見積もりが変わりました。確認して、もう一度チェックしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "견적이 바뀌었습니다. 확인하고 다시 체크하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teklif değişti. Kontrol et ve yeniden işaretle."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Báo giá đã thay đổi. Hãy kiểm tra và đánh dấu lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报价已变化。请查看后重新勾选。"
           }
         }
       }
@@ -23716,6 +23944,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 的 passphrase 是由旧版本 App 保存的，用助记词恢复时它的 Cardano 账户会改变。请把它的余额转到另一个钱包，然后重新创建带 passphrase 的钱包。"
+          }
+        }
+      }
+    },
+    "A passphrase de %@ não pode ser conferida por esta versão do app, e no Super Security a cópia é o único caminho de volta: com ela aqui, o Super Security recusa. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا يستطيع هذا الإصدار من التطبيق التحقق من الـ passphrase الخاصة بـ %@، وفي Super Security تكون النسخة هي الطريق الوحيد للعودة: ما دامت هنا يرفض Super Security. الكلمات مع الـ passphrase ما زالت تفتح المحفظة في أي محفظة BIP-39."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Passphrase von %@ kann von dieser Version der App nicht geprüft werden, und in Super Security ist die Kopie der einzige Weg zurück: Mit ihr hier lehnt Super Security ab. Die Wörter mit der Passphrase öffnen die Wallet weiterhin in jeder BIP-39-Wallet."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The passphrase of %@ can't be verified by this version of the app, and in Super Security the copy is the only way back: with it here, Super Security refuses. The words with the passphrase still open the wallet in any BIP-39 wallet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La passphrase de %@ no puede ser verificada por esta versión de la app, y en Super Security la copia es el único camino de vuelta: con ella aquí, Super Security se niega. Las palabras con la passphrase siguen abriendo la billetera en cualquier billetera BIP-39."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La passphrase de %@ ne peut pas être vérifiée par cette version de l’app, et dans Super Security la copie est le seul chemin de retour : avec elle ici, Super Security refuse. Les mots avec la passphrase ouvrent toujours le portefeuille dans n’importe quel portefeuille BIP-39."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ का पासफ़्रेज़ ऐप के इस वर्शन से जाँचा नहीं जा सकता, और Super Security में कॉपी ही वापसी का अकेला रास्ता है: इसके यहाँ रहते Super Security मना कर देता है. पासफ़्रेज़ के साथ शब्द किसी भी BIP-39 वॉलेट में इस वॉलेट को खोलते रहते हैं."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passphrase %@ tidak bisa diperiksa oleh versi aplikasi ini, dan di Super Security salinan adalah satu-satunya jalan kembali: selama dompet ini ada di sini, Super Security menolak. Kata-kata beserta passphrase tetap membuka dompet ini di dompet BIP-39 mana pun."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ のパスフレーズはこのバージョンのアプリでは確認できません。Super Security ではコピーが唯一の復元手段なので、このウォレットがある間は Super Security が拒否します。単語とパスフレーズがあれば、どの BIP-39 ウォレットでも引き続きこのウォレットを開けます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 패스프레이즈는 이 버전의 앱에서 확인할 수 없고, Super Security에서는 사본이 유일한 복구 방법이라 이 지갑이 있는 동안 Super Security가 거부합니다. 단어와 패스프레이즈로는 어떤 BIP-39 지갑에서도 이 지갑을 계속 열 수 있습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ cüzdanının passphrase'i uygulamanın bu sürümünce doğrulanamıyor ve Super Security'de kopya tek dönüş yolu: bu cüzdan buradayken Super Security reddeder. Kelimeler passphrase ile birlikte cüzdanı herhangi bir BIP-39 cüzdanında açmaya devam eder."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passphrase của %@ không thể được phiên bản ứng dụng này kiểm tra, và trong Super Security bản sao là cách duy nhất để khôi phục: khi ví này còn ở đây, Super Security từ chối. Các từ cùng passphrase vẫn mở được ví trong bất kỳ ví BIP-39 nào."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本的应用无法验证 %@ 的 passphrase，而在 Super Security 中副本是唯一的恢复途径：只要它在这里，Super Security 就会拒绝。助记词加 passphrase 仍可在任何 BIP-39 钱包中打开此钱包。"
           }
         }
       }
@@ -35385,6 +35689,82 @@
         }
       }
     },
+    "A troca ainda não compra %@ nas redes desta carteira." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا يمكن للمبادلة شراء %@ بعد على شبكات هذه المحفظة."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Tausch kann %@ in den Netzwerken dieser Wallet noch nicht kaufen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swap can't buy %@ yet on this wallet's networks."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El intercambio todavía no compra %@ en las redes de esta billetera."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’échange n’achète pas encore %@ sur les réseaux de ce portefeuille."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "स्वैप अभी इस वॉलेट के नेटवर्क पर %@ नहीं खरीद सकता."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tukar belum bisa membeli %@ di jaringan dompet ini."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このウォレットのネットワークでは、スワップでまだ %@ を購入できません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 지갑의 네트워크에서는 아직 스왑으로 %@을(를) 살 수 없습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Takas, bu cüzdanın ağlarında henüz %@ satın alamıyor."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hoán đổi chưa mua được %@ trên các mạng của ví này."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "兑换暂时无法在此钱包的网络上购买 %@。"
+          }
+        }
+      }
+    },
     "A troca deixaria na conta menos SOL que a reserva mínima da rede. Diminua o valor." : {
       "localizations" : {
         "ar" : {
@@ -46916,6 +47296,994 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "立即更新"
+          }
+        }
+      }
+    },
+    "Buscar “%@” em todas as moedas" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ابحث عن ”%@“ في كل العملات"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ in allen Coins suchen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search “%@” in all coins"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar “%@” en todas las monedas"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechercher « %@ » dans toutes les monnaies"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "सभी कॉइन में “%@” खोजें"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cari “%@” di semua koin"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのコインで「%@」を検索"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 코인에서 “%@” 검색"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tüm coin'lerde “%@” ara"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tìm “%@” trong tất cả coin"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在所有币种中搜索“%@”"
+          }
+        }
+      }
+    },
+    "Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "مع تفعيل قفل المحافظ، لا يمكن إضافة محفظة جديدة. غيّر خيار Super Security هذا، وأضف المحفظة، ثم عُد إلى قفل المحافظ بكتابة كلمات كل المحافظ، ومنها الجديدة."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit Wallets sperren aktiv kommt keine neue Wallet hinzu. Ändere diese Option von Super Security, füge die Wallet hinzu und wechsle zurück zu Wallets sperren, indem du die Wörter aller Wallets eingibst, auch der neuen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "With Lock the wallets on, no new wallet can be added. Change this Super Security option, add the wallet and switch back to Lock the wallets, typing the words of every wallet, including the new one."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Con Bloquear las billeteras activado, no entra ninguna billetera nueva. Cambia esta opción de Super Security, agrega la billetera y vuelve a Bloquear las billeteras escribiendo las palabras de todas, incluida la nueva."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avec Verrouiller les portefeuilles activé, aucun nouveau portefeuille n’entre. Changez cette option du Super Security, ajoutez le portefeuille et revenez à Verrouiller les portefeuilles en saisissant les mots de tous, y compris le nouveau."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "वॉलेट लॉक करें चालू होने पर नया वॉलेट नहीं जुड़ता. Super Security का यह विकल्प बदलें, वॉलेट जोड़ें और सभी वॉलेट के शब्द, नए वाले के भी, टाइप करके वापस वॉलेट लॉक करें चुनें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saat Kunci dompet aktif, dompet baru tidak bisa ditambahkan. Ubah opsi Super Security ini, tambahkan dompetnya, lalu kembali ke Kunci dompet dengan mengetik kata-kata semua dompet, termasuk yang baru."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「ウォレットをロック」がオンの間は、新しいウォレットを追加できません。Super Security のこの設定を変更してウォレットを追加し、新しいものも含めすべてのウォレットの単語を入力して「ウォレットをロック」に戻してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지갑 잠그기가 켜져 있으면 새 지갑을 추가할 수 없습니다. Super Security의 이 옵션을 바꾸고 지갑을 추가한 뒤, 새 지갑을 포함한 모든 지갑의 단어를 입력해 지갑 잠그기로 돌아가세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cüzdanları kilitle açıkken yeni cüzdan eklenemez. Super Security'nin bu seçeneğini değiştir, cüzdanı ekle ve yenisi dahil tüm cüzdanların kelimelerini yazarak Cüzdanları kilitle'ye geri dön."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Khi bật Khóa các ví, không thể thêm ví mới. Hãy đổi tùy chọn này của Super Security, thêm ví rồi quay lại Khóa các ví bằng cách nhập các từ của tất cả ví, kể cả ví mới."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启“锁定钱包”时，不能添加新钱包。先更改 Super Security 的这个选项，添加钱包，再输入所有钱包（包括新钱包）的助记词，切回“锁定钱包”。"
+          }
+        }
+      }
+    },
+    "Conferindo o histórico da rede" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "جارٍ التحقق من سجل الشبكة"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Netzwerkverlauf wird geprüft"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking the network history"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revisando el historial de la red"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vérification de l’historique du réseau"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "नेटवर्क का इतिहास जाँचा जा रहा है"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memeriksa riwayat jaringan"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ネットワークの履歴を確認中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "네트워크 기록 확인 중"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ağ geçmişi kontrol ediliyor"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Đang kiểm tra lịch sử mạng"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在核对网络历史记录"
+          }
+        }
+      }
+    },
+    "Entendo que agora só há uma fonte de cotação independente e que o preço pode estar manipulado." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "أفهم أنه لا يتوفر الآن سوى مصدر مستقل واحد لعروض الأسعار وأن السعر قد يكون متلاعبًا به."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ich verstehe, dass gerade nur eine unabhängige Angebotsquelle verfügbar ist und der Preis manipuliert sein kann."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I understand that only one independent quote source is available right now and that the price may be manipulated."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entiendo que ahora solo hay una fuente de cotización independiente y que el precio puede estar manipulado."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Je comprends qu’une seule source de cotation indépendante est disponible pour le moment et que le prix peut être manipulé."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "मैं समझता हूं कि अभी सिर्फ़ एक स्वतंत्र कोट स्रोत उपलब्ध है और कीमत में हेरफेर हो सकता है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saya mengerti bahwa saat ini hanya ada satu sumber kuotasi independen dan harganya mungkin dimanipulasi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在利用できる独立した見積もり元は 1 つだけで、価格が操作されている可能性があることを理解しました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금은 독립된 견적 출처가 하나뿐이며 가격이 조작되었을 수 있음을 이해합니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Şu an yalnızca bir bağımsız teklif kaynağı olduğunu ve fiyatın manipüle edilmiş olabileceğini anlıyorum."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tôi hiểu rằng hiện chỉ có một nguồn báo giá độc lập và giá có thể đã bị thao túng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我了解目前只有一个独立的报价来源，且价格可能被操纵。"
+          }
+        }
+      }
+    },
+    "Escolha a rede. Fora da lista verificada, a moeda entra pelo contrato que o CoinGecko ou o CoinPaprika listam: antes da troca, a carteira lê nome, símbolo e casas na própria rede e mostra o contrato inteiro." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "اختر الشبكة. خارج القائمة الموثّقة، تدخل العملة عبر العقد الذي تُدرجه CoinGecko أو CoinPaprika: قبل المبادلة، تقرأ المحفظة الاسم والرمز والخانات العشرية على الشبكة نفسها وتعرض العقد كاملًا."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle das Netzwerk. Außerhalb der verifizierten Liste kommt der Coin über den Vertrag, den CoinGecko oder CoinPaprika listen: Vor dem Tausch liest die Wallet Name, Symbol und Dezimalstellen im Netzwerk selbst und zeigt den ganzen Vertrag."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose the network. Outside the verified list, the coin comes in through the contract that CoinGecko or CoinPaprika list: before the swap, the wallet reads the name, symbol and decimals on the network itself and shows the whole contract."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elige la red. Fuera de la lista verificada, la moneda entra por el contrato que listan CoinGecko o CoinPaprika: antes del intercambio, la billetera lee el nombre, el símbolo y los decimales en la propia red y muestra el contrato completo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisissez le réseau. Hors de la liste vérifiée, la monnaie entre par le contrat que listent CoinGecko ou CoinPaprika : avant l’échange, le portefeuille lit le nom, le symbole et les décimales sur le réseau lui-même et affiche le contrat entier."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "नेटवर्क चुनें. सत्यापित सूची से बाहर, कॉइन उस कॉन्ट्रैक्ट से आता है जिसे CoinGecko या CoinPaprika सूचीबद्ध करते हैं: स्वैप से पहले, वॉलेट नेटवर्क पर ही नाम, सिंबल और डेसिमल पढ़ता है और पूरा कॉन्ट्रैक्ट दिखाता है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pilih jaringan. Di luar daftar terverifikasi, koin masuk lewat kontrak yang dicantumkan CoinGecko atau CoinPaprika: sebelum tukar, dompet membaca nama, simbol, dan desimal di jaringan itu sendiri dan menampilkan kontrak lengkapnya."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ネットワークを選んでください。検証済みリスト外のコインは、CoinGecko または CoinPaprika が掲載している契約から追加されます。スワップの前に、ウォレットがそのネットワーク上で名前、シンボル、小数桁を読み取り、契約全体を表示します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "네트워크를 선택하세요. 검증된 목록 밖의 코인은 CoinGecko 또는 CoinPaprika가 등록한 컨트랙트로 추가됩니다. 스왑 전에 지갑이 해당 네트워크에서 이름, 심볼, 소수 자릿수를 읽고 컨트랙트 전체를 보여 줍니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ağı seç. Doğrulanmış listenin dışındaki coin, CoinGecko veya CoinPaprika'nın listelediği sözleşmeyle eklenir: takastan önce cüzdan adı, sembolü ve ondalıkları ağın kendisinde okur ve sözleşmenin tamamını gösterir."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chọn mạng. Ngoài danh sách đã xác minh, coin được thêm qua hợp đồng mà CoinGecko hoặc CoinPaprika liệt kê: trước khi hoán đổi, ví đọc tên, ký hiệu và số thập phân trên chính mạng đó và hiển thị toàn bộ hợp đồng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择网络。不在已验证列表中的币种，通过 CoinGecko 或 CoinPaprika 列出的合约加入：兑换之前，钱包会在该网络上读取名称、符号和小数位，并显示完整合约。"
+          }
+        }
+      }
+    },
+    "Esta carteira tem passphrase. O envelope leva só as palavras, que abrem a carteira de base. Não use aqui o nome da carteira com passphrase." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لهذه المحفظة passphrase. يحمل المغلف الكلمات فقط، وهي تفتح المحفظة الأساسية. لا تستخدم هنا اسم المحفظة ذات الـ passphrase."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Wallet hat eine Passphrase. Der Umschlag enthält nur die Wörter, und die öffnen die Basis-Wallet. Verwende hier nicht den Namen der Wallet mit Passphrase."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This wallet has a passphrase. The envelope carries only the words, which open the base wallet. Don't use the passphrase wallet's name here."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta billetera tiene passphrase. El sobre lleva solo las palabras, que abren la billetera base. No uses aquí el nombre de la billetera con passphrase."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce portefeuille a une passphrase. L’enveloppe ne contient que les mots, qui ouvrent le portefeuille de base. N’utilisez pas ici le nom du portefeuille avec passphrase."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस वॉलेट में पासफ़्रेज़ है. लिफ़ाफ़े में सिर्फ़ शब्द जाते हैं, जो बेस वॉलेट खोलते हैं. यहाँ पासफ़्रेज़ वाले वॉलेट का नाम इस्तेमाल न करें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dompet ini memakai passphrase. Amplop hanya membawa kata-katanya, yang membuka dompet dasar. Jangan pakai nama dompet ber-passphrase di sini."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このウォレットにはパスフレーズがあります。エンベロープに入るのは単語だけで、それで開くのはベースのウォレットです。ここにパスフレーズ付きウォレットの名前を使わないでください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 지갑에는 패스프레이즈가 있습니다. 봉투에는 단어만 들어가며, 그 단어로는 기본 지갑이 열립니다. 여기에 패스프레이즈 지갑의 이름을 쓰지 마세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu cüzdanın passphrase'i var. Zarf yalnızca kelimeleri taşır, bunlar da temel cüzdanı açar. Burada passphrase'li cüzdanın adını kullanmayın."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ví này có passphrase. Phong bì chỉ mang các từ, và chúng mở ví gốc. Đừng dùng tên của ví có passphrase ở đây."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此钱包设有 passphrase。信封里只有助记词，它们打开的是基础钱包。不要在这里使用带 passphrase 钱包的名称。"
+          }
+        }
+      }
+    },
+    "Esta moeda não está no CoinGecko. Fora da lista verificada, a troca só compra o contrato que o CoinGecko confirma." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "هذه العملة ليست على CoinGecko. خارج القائمة الموثّقة، لا تشتري المبادلة إلا العقد الذي تؤكده CoinGecko."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Coin ist nicht auf CoinGecko. Außerhalb der verifizierten Liste kauft der Tausch nur den Vertrag, den CoinGecko bestätigt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This coin isn't on CoinGecko. Outside the verified list, the swap only buys the contract CoinGecko confirms."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta moneda no está en CoinGecko. Fuera de la lista verificada, el intercambio solo compra el contrato que CoinGecko confirma."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette monnaie n’est pas sur CoinGecko. Hors de la liste vérifiée, l’échange n’achète que le contrat que CoinGecko confirme."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यह कॉइन CoinGecko पर नहीं है. सत्यापित सूची से बाहर, स्वैप सिर्फ़ वही कॉन्ट्रैक्ट खरीदता है जिसकी CoinGecko पुष्टि करता है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koin ini tidak ada di CoinGecko. Di luar daftar terverifikasi, tukar hanya membeli kontrak yang dikonfirmasi CoinGecko."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このコインは CoinGecko にありません。検証済みリスト外では、スワップは CoinGecko が確認した契約しか購入しません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 코인은 CoinGecko에 없습니다. 검증된 목록 밖에서는 CoinGecko가 확인한 컨트랙트만 스왑으로 살 수 있습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu coin CoinGecko'da yok. Doğrulanmış listenin dışında takas yalnızca CoinGecko'nun doğruladığı sözleşmeyi satın alır."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coin này không có trên CoinGecko. Ngoài danh sách đã xác minh, hoán đổi chỉ mua hợp đồng mà CoinGecko xác nhận."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个币种不在 CoinGecko 上。不在已验证列表中的币种，兑换只购买 CoinGecko 确认的合约。"
+          }
+        }
+      }
+    },
+    "Esta ordem precisa de uma confirmação na %@ antes. Leva alguns segundos. Não feche o app até terminar." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يحتاج هذا الأمر أولًا إلى تأكيد على %@. يستغرق ذلك بضع ثوانٍ. لا تغلق التطبيق حتى ينتهي."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Order braucht zuerst eine Bestätigung auf %@. Das dauert ein paar Sekunden. Schließe die App nicht, bevor es fertig ist."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This order needs a confirmation on %@ first. It takes a few seconds. Don't close the app until it's done."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta orden necesita antes una confirmación en %@. Tarda unos segundos. No cierres la app hasta que termine."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet ordre a d’abord besoin d’une confirmation sur %@. Cela prend quelques secondes. Ne fermez pas l’app avant la fin."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस ऑर्डर को पहले %@ पर एक पुष्टि चाहिए. इसमें कुछ सेकंड लगते हैं. पूरा होने तक ऐप बंद न करें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order ini butuh konfirmasi di %@ dulu. Hanya beberapa detik. Jangan tutup aplikasi sampai selesai."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この注文には、先に %@ での確認が必要です。数秒かかります。完了するまでアプリを閉じないでください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 주문은 먼저 %@에서 확인이 필요합니다. 몇 초 걸립니다. 끝날 때까지 앱을 닫지 마세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu emir önce %@ üzerinde bir onay gerektiriyor. Birkaç saniye sürer. Bitene kadar uygulamayı kapatma."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lệnh này cần một xác nhận trên %@ trước. Chỉ mất vài giây. Đừng đóng ứng dụng cho đến khi xong."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这笔订单需要先在 %@ 上确认一次，只需几秒。完成前请不要关闭应用。"
+          }
+        }
+      }
+    },
+    "Esta ordem precisa de uma confirmação na Ethereum antes. Leva uns 15 a 30 segundos. Não feche o app até terminar." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "يحتاج هذا الأمر أولًا إلى تأكيد على Ethereum. يستغرق ذلك نحو 15 إلى 30 ثانية. لا تغلق التطبيق حتى ينتهي."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Order braucht zuerst eine Bestätigung auf Ethereum. Das dauert etwa 15 bis 30 Sekunden. Schließe die App nicht, bevor es fertig ist."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This order needs a confirmation on Ethereum first. It takes about 15 to 30 seconds. Don't close the app until it's done."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta orden necesita antes una confirmación en Ethereum. Tarda unos 15 a 30 segundos. No cierres la app hasta que termine."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cet ordre a d’abord besoin d’une confirmation sur Ethereum. Cela prend environ 15 à 30 secondes. Ne fermez pas l’app avant la fin."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस ऑर्डर को पहले Ethereum पर एक पुष्टि चाहिए. इसमें लगभग 15 से 30 सेकंड लगते हैं. पूरा होने तक ऐप बंद न करें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order ini butuh konfirmasi di Ethereum dulu. Sekitar 15 sampai 30 detik. Jangan tutup aplikasi sampai selesai."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この注文には、先に Ethereum での確認が必要です。15〜30 秒ほどかかります。完了するまでアプリを閉じないでください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 주문은 먼저 Ethereum에서 확인이 필요합니다. 약 15~30초가 걸립니다. 끝날 때까지 앱을 닫지 마세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu emir önce Ethereum'da bir onay gerektiriyor. Yaklaşık 15 ila 30 saniye sürer. Bitene kadar uygulamayı kapatma."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lệnh này cần một xác nhận trên Ethereum trước. Mất khoảng 15 đến 30 giây. Đừng đóng ứng dụng cho đến khi xong."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这笔订单需要先在 Ethereum 上确认一次，大约需要 15 到 30 秒。完成前请不要关闭应用。"
+          }
+        }
+      }
+    },
+    "Esta versão do app não consegue conferir a passphrase desta carteira, e ela não assina aqui. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "هذا الإصدار من التطبيق لا يستطيع التحقق من الـ passphrase الخاصة بهذه المحفظة، فلا توقّع هنا. الكلمات مع الـ passphrase ما زالت تفتح المحفظة في أي محفظة BIP-39."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Version der App kann die Passphrase dieser Wallet nicht prüfen, und sie signiert hier nicht. Die Wörter mit der Passphrase öffnen die Wallet weiterhin in jeder BIP-39-Wallet."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This version of the app can't verify this wallet's passphrase, so it doesn't sign here. The words with the passphrase still open the wallet in any BIP-39 wallet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta versión de la app no puede verificar la passphrase de esta billetera, y no firma aquí. Las palabras con la passphrase siguen abriendo la billetera en cualquier billetera BIP-39."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette version de l’app ne peut pas vérifier la passphrase de ce portefeuille, et il ne signe pas ici. Les mots avec la passphrase ouvrent toujours le portefeuille dans n’importe quel portefeuille BIP-39."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ऐप का यह वर्शन इस वॉलेट का पासफ़्रेज़ जाँच नहीं सकता, और यह यहाँ साइन नहीं करता. पासफ़्रेज़ के साथ शब्द किसी भी BIP-39 वॉलेट में इस वॉलेट को खोलते रहते हैं."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versi aplikasi ini tidak bisa memeriksa passphrase dompet ini, dan dompet ini tidak menandatangani di sini. Kata-kata beserta passphrase tetap membuka dompet ini di dompet BIP-39 mana pun."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このバージョンのアプリはこのウォレットのパスフレーズを確認できず、ここでは署名しません。単語とパスフレーズがあれば、どの BIP-39 ウォレットでも引き続きこのウォレットを開けます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 버전의 앱은 이 지갑의 패스프레이즈를 확인할 수 없어 여기서 서명하지 않습니다. 단어와 패스프레이즈로는 어떤 BIP-39 지갑에서도 이 지갑을 계속 열 수 있습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uygulamanın bu sürümü bu cüzdanın passphrase'ini doğrulayamıyor ve cüzdan burada imzalamıyor. Kelimeler passphrase ile birlikte cüzdanı herhangi bir BIP-39 cüzdanında açmaya devam eder."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phiên bản ứng dụng này không kiểm tra được passphrase của ví này, nên ví không ký ở đây. Các từ cùng passphrase vẫn mở được ví trong bất kỳ ví BIP-39 nào."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本的应用无法验证此钱包的 passphrase，因此不会在这里签名。助记词加 passphrase 仍可在任何 BIP-39 钱包中打开此钱包。"
+          }
+        }
+      }
+    },
+    "Nos próximos %lld minutos, %@ não pede a passphrase. Até lá ela fica só na memória do app, e sai apagada no fim do tempo, ao sair do app ou ao travar. O %@ ou o PIN continuam." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "خلال الـ %lld دقيقة القادمة، لن تطلب %@ عبارة passphrase. حتى ذلك الحين تبقى في ذاكرة التطبيق فقط، وتُمحى عند انتهاء الوقت أو مغادرة التطبيق أو قفله. يبقى %@ أو رمز PIN مطلوبًا."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In den nächsten %lld Minuten fragt %@ nicht nach der Passphrase. Bis dahin bleibt sie nur im Speicher der App und wird gelöscht, wenn die Zeit abläuft, wenn du die App verlässt oder sie sperrst. %@ oder die PIN gelten weiter."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For the next %lld minutes, %@ won't ask for the passphrase. Until then it stays only in the app's memory, and it's erased when the time runs out, when you leave the app or when it locks. %@ or the PIN still apply."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Durante los próximos %lld minutos, %@ no pedirá la passphrase. Hasta entonces queda solo en la memoria de la app, y se borra al terminar el tiempo, al salir de la app o al bloquearla. %@ o el PIN siguen valiendo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pendant les %lld prochaines minutes, %@ ne demandera pas la passphrase. D’ici là, elle reste uniquement dans la mémoire de l’app, et elle est effacée à la fin du délai, quand vous quittez l’app ou quand elle se verrouille. %@ ou le PIN restent demandés."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "अगले %lld मिनट तक %@ पासफ़्रेज़ नहीं मांगेगा. तब तक यह सिर्फ़ ऐप की मेमोरी में रहता है, और समय ख़त्म होने पर, ऐप से बाहर जाने पर या लॉक करने पर मिटा दिया जाता है. %@ या PIN लागू रहते हैं."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selama %lld menit ke depan, %@ tidak akan meminta passphrase. Sampai saat itu passphrase hanya ada di memori aplikasi, dan dihapus saat waktunya habis, saat Anda keluar dari aplikasi, atau saat aplikasi dikunci. %@ atau PIN tetap berlaku."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今後 %lld 分間、%@ はパスフレーズを求めません。それまでパスフレーズはアプリのメモリだけにあり、時間が終わったとき、アプリを離れたとき、またはロックしたときに消去されます。%@ または PIN は引き続き必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앞으로 %lld분 동안 %@은(는) 패스프레이즈를 묻지 않습니다. 그동안 패스프레이즈는 앱 메모리에만 있으며, 시간이 끝나거나 앱을 나가거나 잠그면 지워집니다. %@ 또는 PIN은 계속 필요합니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sonraki %lld dakika boyunca %@ passphrase istemeyecek. O zamana kadar yalnızca uygulamanın belleğinde kalır; süre dolduğunda, uygulamadan çıktığında veya kilitlendiğinde silinir. %@ veya PIN geçerliliğini korur."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trong %lld phút tới, %@ sẽ không yêu cầu passphrase. Cho đến lúc đó, passphrase chỉ nằm trong bộ nhớ của ứng dụng và bị xóa khi hết thời gian, khi bạn rời ứng dụng hoặc khi khóa. %@ hoặc PIN vẫn được yêu cầu."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在接下来的 %lld 分钟内，%@ 不会要求 passphrase。在此期间它只保存在应用内存中，时间结束、离开应用或锁定时都会被清除。%@ 或 PIN 仍然需要。"
+          }
+        }
+      }
+    },
+    "Nº %lld no mercado" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "رقم %lld في السوق"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nr. %lld am Markt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#%lld by market cap"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "N.º %lld en el mercado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nº %lld du marché"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "बाज़ार में #%lld"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Peringkat %lld di pasar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時価総額 %lld 位"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시가총액 %lld위"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Piyasada %lld."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hạng %lld thị trường"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "市值第 %lld"
+          }
+        }
+      }
+    },
+    "Não confere com a passphrase do envelope. Escreva igual ao que você anotou: maiúscula, acento e espaço contam." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا تطابق الـ passphrase الموجودة في المغلف. اكتبها تمامًا كما دوّنتها: الأحرف الكبيرة والتشكيل والمسافات كلها تُحتسب."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sie stimmt nicht mit der Passphrase des Umschlags überein. Schreib sie genau so, wie du sie notiert hast: Großbuchstaben, Akzente und Leerzeichen zählen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "It doesn't match the envelope's passphrase. Type it exactly as you wrote it down: capitals, accents and spaces count."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No coincide con la passphrase del sobre. Escríbela igual a como la anotaste: mayúsculas, acentos y espacios cuentan."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elle ne correspond pas à la passphrase de l’enveloppe. Écrivez-la exactement comme vous l’avez notée : majuscules, accents et espaces comptent."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यह लिफ़ाफ़े के पासफ़्रेज़ से मेल नहीं खाता. ठीक वैसे ही लिखें जैसे आपने लिखकर रखा है: बड़े अक्षर, मात्राएँ और स्पेस मायने रखते हैं."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak cocok dengan passphrase amplop. Tulis persis seperti yang Anda catat: huruf besar, aksen, dan spasi berpengaruh."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エンベロープのパスフレーズと一致しません。書き留めたとおりに入力してください。大文字、アクセント、スペースも区別されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "봉투의 패스프레이즈와 일치하지 않습니다. 적어 둔 그대로 입력하세요. 대문자, 악센트, 공백도 구분됩니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zarfın passphrase'iyle eşleşmiyor. Not ettiğin gibi yaz: büyük harf, aksan ve boşluk önemlidir."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không khớp với passphrase của phong bì. Hãy viết đúng như bạn đã ghi: chữ hoa, dấu và khoảng trắng đều tính."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与信封中的 passphrase 不一致。请按你记下的原样输入：大小写、重音和空格都算。"
           }
         }
       }
@@ -69776,82 +71144,6 @@
         }
       }
     },
-    "Deixar de pedir a passphrase em %@" : {
-      "localizations" : {
-        "ar" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "التوقف عن طلب الـ passphrase في %@"
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Passphrase in %@ nicht mehr abfragen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stop asking for the passphrase in %@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dejar de pedir la passphrase en %@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ne plus demander la passphrase pour %@"
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ में पासफ़्रेज़ माँगना बंद करें"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Berhenti meminta passphrase di %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ でパスフレーズを求めないようにする"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@에서 패스프레이즈 묻지 않기"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ için passphrase sormayı bırak"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Không hỏi passphrase trong %@ nữa"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在 %@ 中不再要求 passphrase"
-          }
-        }
-      }
-    },
     "Deixe ligados, nos Ajustes do iPhone, \"Exigir atenção para o %@\" e a Proteção de Aparelho Roubado, com o atraso de segurança em Sempre." : {
       "localizations" : {
         "ar" : {
@@ -85356,82 +86648,6 @@
         }
       }
     },
-    "Envios, trocas e pontes desta carteira pedem a passphrase antes do %@ ou do PIN." : {
-      "localizations" : {
-        "ar" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "عمليات الإرسال والمبادلة والجسور من هذه المحفظة تطلب عبارة passphrase قبل %@ أو رمز PIN."
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Senden, Tauschen und Bridges aus diesem Wallet fragen vor %@ oder der PIN nach der Passphrase."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sends, swaps and bridges from this wallet ask for the passphrase before %@ or the PIN."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Los envíos, intercambios y puentes de esta billetera piden la passphrase antes de %@ o el PIN."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Les envois, échanges et ponts de ce portefeuille demandent la passphrase avant %@ ou le PIN."
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "इस वॉलेट से भेजने, स्वैप और ब्रिज के लिए %@ या PIN से पहले पासफ़्रेज़ मांगा जाता है."
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pengiriman, penukaran, dan jembatan dari dompet ini meminta passphrase sebelum %@ atau PIN."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このウォレットからの送金、スワップ、ブリッジでは、%@ または PIN の前にパスフレーズが必要です。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 지갑의 보내기, 스왑, 브리지는 %@ 또는 PIN 전에 패스프레이즈를 요구합니다."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bu cüzdandan gönderimler, takaslar ve köprüler, %@ veya PIN'den önce passphrase ister."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gửi, hoán đổi và cầu nối từ ví này đều yêu cầu passphrase trước %@ hoặc PIN."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此钱包的发送、兑换和跨链在 %@ 或 PIN 之前都需要 passphrase。"
-          }
-        }
-      }
-    },
     "Equilíbrio: passa na maioria das trocas sem deixar espaço grande para robôs." : {
       "localizations" : {
         "ar" : {
@@ -99470,82 +100686,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此笔转账需要合并的币过多，无法放入一笔交易。请发送较小的金额。"
-          }
-        }
-      }
-    },
-    "Este envio liga as duas carteiras na blockchain: quem tiver as palavras vê a ligação com a carteira com passphrase." : {
-      "localizations" : {
-        "ar" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "هذا الإرسال يربط المحفظتين على البلوكشين: من لديه الكلمات يرى الصلة بالمحفظة ذات passphrase."
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diese Sendung verbindet die beiden Wallets auf der Blockchain: Wer die Wörter hat, sieht die Verbindung zum Wallet mit Passphrase."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This send links the two wallets on the blockchain: anyone with the words can see the link to the wallet with passphrase."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este envío une las dos billeteras en la blockchain: quien tenga las palabras ve el vínculo con la billetera con passphrase."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cet envoi relie les deux portefeuilles sur la blockchain : quiconque a les mots voit le lien avec le portefeuille avec passphrase."
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "यह भेजना ब्लॉकचेन पर दोनों वॉलेट को जोड़ देता है: जिसके पास शब्द हैं, वह पासफ़्रेज़ वाले वॉलेट से जुड़ाव देख सकता है."
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pengiriman ini menghubungkan kedua dompet di blockchain: siapa pun yang punya kata-katanya bisa melihat hubungannya dengan dompet ber-passphrase."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "この送金で 2 つのウォレットがブロックチェーン上で結びつきます。単語を持つ人には、パスフレーズ付きウォレットとのつながりが見えます。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 송금은 블록체인에서 두 지갑을 연결합니다. 단어를 가진 사람은 패스프레이즈 지갑과의 연결을 볼 수 있습니다."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bu gönderim iki cüzdanı blokzincirde birbirine bağlar: kelimelere sahip olan herkes passphrase'li cüzdanla bağlantıyı görebilir."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lần gửi này liên kết hai ví trên blockchain: ai có các từ sẽ thấy mối liên hệ với ví có passphrase."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这次发送会在区块链上把两个钱包联系起来：拿到单词的人能看到与含 passphrase 钱包的关联。"
           }
         }
       }
@@ -131185,82 +132325,6 @@
         }
       }
     },
-    "Nos próximos %lld minutos, %@ não pede a passphrase para mover saldo. O %@ ou o PIN continuam. Travar o app encerra." : {
-      "localizations" : {
-        "ar" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "خلال الـ %lld دقيقة القادمة، لن تطلب %@ عبارة passphrase لنقل الرصيد. يبقى %@ أو رمز PIN مطلوبًا. قفل التطبيق ينهي ذلك."
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In den nächsten %lld Minuten fragt %@ nicht nach der Passphrase, um Guthaben zu bewegen. %@ oder die PIN gelten weiter. Das Sperren der App beendet das."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "For the next %lld minutes, %@ won't ask for the passphrase to move funds. %@ or the PIN still apply. Locking the app ends it."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Durante los próximos %lld minutos, %@ no pedirá la passphrase para mover saldo. %@ o el PIN siguen valiendo. Bloquear la app lo termina."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pendant les %lld prochaines minutes, %@ ne demandera pas la passphrase pour déplacer des fonds. %@ ou le PIN restent demandés. Verrouiller l’app y met fin."
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "अगले %lld मिनट तक %@ बैलेंस भेजने के लिए पासफ़्रेज़ नहीं मांगेगा. %@ या PIN लागू रहते हैं. ऐप लॉक करने से यह ख़त्म हो जाता है."
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Selama %lld menit ke depan, %@ tidak akan meminta passphrase untuk memindahkan saldo. %@ atau PIN tetap berlaku. Mengunci aplikasi mengakhirinya."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "今後 %lld 分間、%@ は残高を動かすときにパスフレーズを求めません。%@ または PIN は引き続き必要です。アプリをロックすると終了します。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "앞으로 %lld분 동안 %@은(는) 잔액을 옮길 때 패스프레이즈를 묻지 않습니다. %@ 또는 PIN은 계속 필요합니다. 앱을 잠그면 끝납니다."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sonraki %lld dakika boyunca %@, bakiye taşımak için passphrase istemeyecek. %@ veya PIN geçerliliğini korur. Uygulamayı kilitlemek bunu sonlandırır."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Trong %lld phút tới, %@ sẽ không yêu cầu passphrase để chuyển số dư. %@ hoặc PIN vẫn được yêu cầu. Khóa ứng dụng sẽ kết thúc việc này."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在接下来的 %lld 分钟内，%@ 转出余额时不会要求 passphrase。%@ 或 PIN 仍然需要。锁定应用会结束这段时间。"
-          }
-        }
-      }
-    },
     "Notificações desligadas" : {
       "localizations" : {
         "ar" : {
@@ -138705,6 +139769,310 @@
         }
       }
     },
+    "Não há carteira com palavras neste iPhone para conferir. Adicione a carteira antes de escolher Bloquear as carteiras." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا توجد على هذا الـ iPhone محفظة بكلمات للتحقق منها. أضف المحفظة قبل اختيار قفل المحافظ."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf diesem iPhone gibt es keine Wallet mit Wörtern zum Prüfen. Füge die Wallet hinzu, bevor du Wallets sperren wählst."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There's no wallet with words on this iPhone to check. Add the wallet before choosing Lock the wallets."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay ninguna billetera con palabras en este iPhone para verificar. Agrega la billetera antes de elegir Bloquear las billeteras."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il n’y a aucun portefeuille avec des mots sur cet iPhone à vérifier. Ajoutez le portefeuille avant de choisir Bloquer les portefeuilles."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस iPhone पर जाँचने के लिए शब्दों वाला कोई वॉलेट नहीं है. वॉलेट लॉक करें चुनने से पहले वॉलेट जोड़ें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada dompet dengan kata-kata di iPhone ini untuk diperiksa. Tambahkan dompet sebelum memilih Kunci dompet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この iPhone には確認する単語付きのウォレットがありません。ウォレットをロックするを選ぶ前に、ウォレットを追加してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 iPhone에는 확인할 단어가 있는 지갑이 없습니다. 지갑 잠그기를 선택하기 전에 지갑을 추가하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu iPhone'da kontrol edilecek kelimeli bir cüzdan yok. Cüzdanları kilitle'yi seçmeden önce cüzdanı ekle."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không có ví nào có cụm từ trên iPhone này để kiểm tra. Hãy thêm ví trước khi chọn Khóa các ví."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 iPhone 上没有带助记词的钱包可供核对。请先添加钱包，再选择锁定钱包。"
+          }
+        }
+      }
+    },
+    "Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Marque que entende o risco para trocar." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا يوجد مصدر ثانٍ مستقل لعروض الأسعار ولا سعر مرجعي للسوق للمقارنة. ضع علامة لتأكيد أنك تفهم المخاطرة لإتمام المبادلة."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Es gibt keine zweite unabhängige Angebotsquelle und keinen Referenzpreis des Marktes zum Vergleich. Bestätige mit dem Häkchen, dass du das Risiko verstehst, um zu tauschen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There's no second independent quote source or market reference price to compare. Check the box confirming you understand the risk to swap."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay una segunda fuente de cotización independiente ni precio de referencia del mercado para comparar. Marca que entiendes el riesgo para intercambiar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il n’y a ni seconde source de cotation indépendante ni prix de référence du marché pour comparer. Cochez la case indiquant que vous comprenez le risque pour échanger."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "तुलना के लिए न कोई दूसरा स्वतंत्र कोट स्रोत है, न मार्केट की रेफ़रेंस कीमत. स्वैप करने के लिए बॉक्स पर टिक करके पुष्टि करें कि आप जोखिम समझते हैं."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada sumber kuotasi independen kedua maupun harga referensi pasar untuk dibandingkan. Centang bahwa Anda memahami risikonya untuk menukar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "比較できる独立した 2 つ目の見積もり元も、市場の参考価格もありません。スワップするには、リスクを理解したことをチェックしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비교할 두 번째 독립 견적 출처도, 시장 기준 가격도 없습니다. 스왑하려면 위험을 이해했다고 체크하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karşılaştırmak için ikinci bir bağımsız teklif kaynağı da piyasa referans fiyatı da yok. Takas etmek için riski anladığını işaretle."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không có nguồn báo giá độc lập thứ hai cũng như giá tham chiếu thị trường để so sánh. Hãy đánh dấu rằng bạn hiểu rủi ro để hoán đổi."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有第二个独立的报价来源，也没有市场参考价格可供比较。请勾选确认您了解风险后再兑换。"
+          }
+        }
+      }
+    },
+    "Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Um preço manipulado não seria percebido pela carteira." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا يوجد مصدر ثانٍ مستقل لعروض الأسعار ولا سعر مرجعي للسوق للمقارنة. لن تلاحظ المحفظة السعر المتلاعب به."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Es gibt keine zweite unabhängige Angebotsquelle und keinen Referenzpreis des Marktes zum Vergleich. Das Wallet würde einen manipulierten Preis nicht bemerken."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There's no second independent quote source or market reference price to compare. The wallet wouldn't notice a manipulated price."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay una segunda fuente de cotización independiente ni precio de referencia del mercado para comparar. La billetera no notaría un precio manipulado."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il n’y a ni seconde source de cotation indépendante ni prix de référence du marché pour comparer. Le portefeuille ne remarquerait pas un prix manipulé."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "तुलना के लिए न कोई दूसरा स्वतंत्र कोट स्रोत है, न मार्केट की रेफ़रेंस कीमत. वॉलेट हेरफेर की गई कीमत को पहचान नहीं पाएगा."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada sumber kuotasi independen kedua maupun harga referensi pasar untuk dibandingkan. Dompet tidak akan menyadari harga yang dimanipulasi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "比較できる独立した 2 つ目の見積もり元も、市場の参考価格もありません。価格が操作されていても、ウォレットは気づけません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비교할 두 번째 독립 견적 출처도, 시장 기준 가격도 없습니다. 가격이 조작되어도 지갑은 알아차릴 수 없습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karşılaştırmak için ikinci bir bağımsız teklif kaynağı da piyasa referans fiyatı da yok. Cüzdan, manipüle edilmiş bir fiyatı fark etmez."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không có nguồn báo giá độc lập thứ hai cũng như giá tham chiếu thị trường để so sánh. Ví sẽ không nhận ra một mức giá bị thao túng."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有第二个独立的报价来源，也没有市场参考价格可供比较。钱包无法察觉被操纵的价格。"
+          }
+        }
+      }
+    },
+    "Não há uma segunda fonte de cotação independente nem preço de referência do mercado: o preço desta troca não foi comparado com nenhum outro." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا يوجد مصدر ثانٍ مستقل لعروض الأسعار ولا سعر مرجعي للسوق: لم تتم مقارنة سعر هذه المبادلة بأي سعر آخر."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Es gibt keine zweite unabhängige Angebotsquelle und keinen Referenzpreis des Marktes: Der Preis dieses Tauschs wurde mit keinem anderen verglichen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There's no second independent quote source or market reference price: this swap's price wasn't compared with any other."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay una segunda fuente de cotización independiente ni precio de referencia del mercado: el precio de este intercambio no se comparó con ningún otro."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il n’y a ni seconde source de cotation indépendante ni prix de référence du marché : le prix de cet échange n’a été comparé à aucun autre."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "न कोई दूसरा स्वतंत्र कोट स्रोत है, न मार्केट की रेफ़रेंस कीमत: इस स्वैप की कीमत की तुलना किसी और से नहीं हुई."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada sumber kuotasi independen kedua maupun harga referensi pasar: harga penukaran ini tidak dibandingkan dengan harga lain."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "独立した 2 つ目の見積もり元も、市場の参考価格もありません。このスワップの価格は他と比較されていません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "두 번째 독립 견적 출처도, 시장 기준 가격도 없습니다. 이 스왑의 가격은 다른 가격과 비교되지 않았습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "İkinci bir bağımsız teklif kaynağı da piyasa referans fiyatı da yok: bu takasın fiyatı başka hiçbir fiyatla karşılaştırılmadı."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không có nguồn báo giá độc lập thứ hai cũng như giá tham chiếu thị trường: giá của lần hoán đổi này chưa được so sánh với giá nào khác."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有第二个独立的报价来源，也没有市场参考价格：此次兑换的价格未与任何其他价格比较。"
+          }
+        }
+      }
+    },
     "Não ouvi nada. Toque em falar e diga a frase perto do iPhone." : {
       "localizations" : {
         "ar" : {
@@ -142800,6 +144168,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "CoinGecko 暂时没有响应。只显示已验证的币种。"
+          }
+        }
+      }
+    },
+    "O CoinGecko publicou um aviso sobre %@ (ataque, migração ou golpe). Confira as notícias da moeda antes de comprar." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "نشرت CoinGecko تحذيرًا بشأن %@ (هجوم أو ترحيل أو احتيال). اطّلع على أخبار العملة قبل الشراء."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoinGecko hat eine Warnung zu %@ veröffentlicht (Angriff, Migration oder Betrug). Prüfe die Neuigkeiten zum Coin, bevor du kaufst."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoinGecko published a warning about %@ (attack, migration or scam). Check the coin's news before buying."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoinGecko publicó un aviso sobre %@ (ataque, migración o estafa). Revisa las noticias de la moneda antes de comprar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoinGecko a publié un avertissement sur %@ (attaque, migration ou arnaque). Consultez l’actualité de la monnaie avant d’acheter."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoinGecko ने %@ के बारे में चेतावनी जारी की है (हमला, माइग्रेशन या स्कैम). खरीदने से पहले कॉइन की खबरें देखें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoinGecko menerbitkan peringatan tentang %@ (serangan, migrasi, atau penipuan). Periksa berita koin ini sebelum membeli."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoinGecko が %@ に関する警告（攻撃、移行、詐欺）を公開しています。購入する前に、このコインのニュースを確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoinGecko가 %@에 대한 경고(공격, 마이그레이션 또는 사기)를 게시했습니다. 구매하기 전에 이 코인의 소식을 확인하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoinGecko %@ hakkında bir uyarı yayımladı (saldırı, geçiş veya dolandırıcılık). Satın almadan önce coin'in haberlerini kontrol et."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoinGecko đã công bố cảnh báo về %@ (tấn công, chuyển đổi hợp đồng hoặc lừa đảo). Hãy xem tin tức về coin này trước khi mua."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoinGecko 发布了关于 %@ 的警告（攻击、迁移或诈骗）。购买前请先查看该币种的新闻。"
           }
         }
       }
@@ -148687,78 +150131,78 @@
         }
       }
     },
-    "O envelope de %@ leva a passphrase junto. Digite a passphrase para seguir; depois vem a confirmação de sempre." : {
+    "O envelope de %@ leva a passphrase da carteira, e este app não a guarda: ela vai ser pedida a cada envio. Digite a passphrase que você anotou para importar." : {
       "localizations" : {
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "مغلف %@ يتضمن الـ passphrase. اكتب الـ passphrase للمتابعة؛ ثم يأتي التأكيد المعتاد."
+            "value" : "مغلف %@ يتضمن الـ passphrase الخاصة بالمحفظة، وهذا التطبيق لا يحفظها: ستُطلب في كل إرسال. اكتب الـ passphrase التي دوّنتها للاستيراد."
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Der Umschlag von %@ enthält die Passphrase. Gib die Passphrase ein, um fortzufahren; danach kommt die gewohnte Bestätigung."
+            "value" : "Der Umschlag von %@ enthält die Passphrase der Wallet, und diese App speichert sie nicht: Sie wird bei jedem Senden abgefragt. Gib die Passphrase ein, die du notiert hast, um zu importieren."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The envelope for %@ includes the passphrase. Type the passphrase to continue; then the usual confirmation."
+            "value" : "The envelope for %@ includes the wallet's passphrase, and this app doesn't store it: it will be asked for on every send. Type the passphrase you wrote down to import."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El sobre de %@ incluye la passphrase. Escribe la passphrase para continuar; después viene la confirmación de siempre."
+            "value" : "El sobre de %@ incluye la passphrase de la billetera, y esta app no la guarda: se pedirá en cada envío. Escribe la passphrase que anotaste para importar."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "L’enveloppe de %@ contient la passphrase. Saisissez la passphrase pour continuer ; ensuite vient la confirmation habituelle."
+            "value" : "L’enveloppe de %@ contient la passphrase du portefeuille, et cette app ne la garde pas : elle sera demandée à chaque envoi. Saisissez la passphrase que vous avez notée pour importer."
           }
         },
         "hi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ के लिफ़ाफ़े में पासफ़्रेज़ भी है. आगे बढ़ने के लिए पासफ़्रेज़ लिखें; उसके बाद हमेशा वाली पुष्टि होगी."
+            "value" : "%@ के लिफ़ाफ़े में वॉलेट का पासफ़्रेज़ है, और यह ऐप उसे सेव नहीं करता: हर भेजने पर यह मांगा जाएगा. इम्पोर्ट करने के लिए वह पासफ़्रेज़ लिखें जो आपने लिखकर रखा है."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Amplop %@ menyertakan passphrase. Ketik passphrase untuk melanjutkan; setelah itu konfirmasi seperti biasa."
+            "value" : "Amplop %@ menyertakan passphrase dompet, dan aplikasi ini tidak menyimpannya: passphrase akan diminta setiap kali mengirim. Ketik passphrase yang Anda catat untuk mengimpor."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ のエンベロープにはパスフレーズが含まれています。続けるにはパスフレーズを入力してください。その後、いつもの確認があります。"
+            "value" : "%@ のエンベロープにはウォレットのパスフレーズが含まれていますが、このアプリはそれを保存しません。送金のたびに求められます。インポートするには、書き留めたパスフレーズを入力してください。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@의 봉투에는 패스프레이즈가 함께 들어 있습니다. 계속하려면 패스프레이즈를 입력하세요. 그다음 평소의 확인 단계가 이어집니다."
+            "value" : "%@의 봉투에는 지갑의 패스프레이즈가 들어 있지만, 이 앱은 그것을 저장하지 않습니다. 보낼 때마다 묻습니다. 가져오려면 적어 둔 패스프레이즈를 입력하세요."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ zarfı passphrase'i de içeriyor. Devam etmek için passphrase'i yaz; ardından her zamanki onay gelir."
+            "value" : "%@ zarfı cüzdanın passphrase'ini içeriyor ve bu uygulama onu saklamaz: her gönderimde sorulacak. İçe aktarmak için not ettiğin passphrase'i yaz."
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Phong bì của %@ có kèm passphrase. Nhập passphrase để tiếp tục; sau đó là bước xác nhận như thường lệ."
+            "value" : "Phong bì của %@ có kèm passphrase của ví, và ứng dụng này không lưu nó: passphrase sẽ được hỏi mỗi lần gửi. Hãy nhập passphrase bạn đã ghi lại để nhập ví."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ 的信封包含 passphrase。输入 passphrase 以继续；之后是常规确认。"
+            "value" : "%@ 的信封包含钱包的 passphrase，而本应用不会保存它：每次发送都会要求输入。请输入你记下的 passphrase 以导入。"
           }
         }
       }
@@ -151119,6 +152563,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最大金额会在账户中预留 %@ 作为缓冲：实际收取的手续费可能略高于预估。"
+          }
+        }
+      }
+    },
+    "O mínimo garantido caiu desde o seu aceite. Atualize a cotação e marque de novo." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "انخفض الحد الأدنى المضمون منذ موافقتك. حدّث عرض السعر وضع العلامة مرة أخرى."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das garantierte Minimum ist seit deiner Bestätigung gesunken. Aktualisiere das Angebot und setze das Häkchen erneut."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The minimum received dropped since you accepted. Refresh the quote and check the box again."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El mínimo garantizado bajó desde tu aceptación. Actualiza la cotización y marca de nuevo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le minimum garanti a baissé depuis votre accord. Actualisez la cotation et cochez à nouveau."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "आपकी स्वीकृति के बाद से न्यूनतम प्राप्ति घट गई है. कोट रीफ़्रेश करें और फिर से टिक करें."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jumlah minimum yang dijamin turun sejak Anda menyetujui. Perbarui kuotasi dan centang lagi."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同意した後に最低受取額が下がりました。見積もりを更新して、もう一度チェックしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "동의한 뒤 최소 수령액이 낮아졌습니다. 견적을 새로 고치고 다시 체크하세요."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Onayından bu yana garanti edilen minimum düştü. Teklifi yenile ve yeniden işaretle."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mức tối thiểu được đảm bảo đã giảm kể từ khi bạn chấp nhận. Hãy làm mới báo giá và đánh dấu lại."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自您确认后，最低到账已下降。请刷新报价并重新勾选。"
           }
         }
       }
@@ -162654,6 +164174,82 @@
         }
       }
     },
+    "Para cancelar a ordem de %@, digite a passphrase. Depois vem o %@ ou o PIN, como sempre." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لإلغاء أمر %@، اكتب الـ passphrase. وبعدها %@ أو رمز PIN كالمعتاد."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Um die Order von %@ zu stornieren, gib die Passphrase ein. Danach kommt wie immer %@ oder die PIN."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To cancel the order from %@, type the passphrase. Then comes %@ or the PIN, as always."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Para cancelar la orden de %@, escribe la passphrase. Después viene %@ o el PIN, como siempre."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pour annuler l’ordre de %@, saisissez la passphrase. Ensuite vient %@ ou le PIN, comme toujours."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ का ऑर्डर रद्द करने के लिए पासफ़्रेज़ लिखें. उसके बाद हमेशा की तरह %@ या PIN."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untuk membatalkan order dari %@, ketik passphrase. Setelah itu %@ atau PIN, seperti biasa."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ の注文をキャンセルするには、パスフレーズを入力してください。そのあと、いつもどおり %@ か PIN です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 주문을 취소하려면 패스프레이즈를 입력하세요. 그다음 평소처럼 %@ 또는 PIN을 거칩니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ emrini iptal etmek için passphrase'i yaz. Ardından her zamanki gibi %@ veya PIN gelir."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Để hủy lệnh của %@, hãy nhập passphrase. Sau đó là %@ hoặc PIN, như mọi khi."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要取消 %@ 的订单，请输入 passphrase。之后照常进行 %@ 或 PIN。"
+          }
+        }
+      }
+    },
     "Para conferir com o iPhone bloqueado, os endereços públicos das suas carteiras e o último saldo visto de cada moeda ficam num arquivo à parte, que abre depois do primeiro desbloqueio do iPhone, fora dos dados cifrados da carteira. Quem extrair os dados de um iPhone nesse estado lê esses endereços. Nenhuma chave, frase ou nome de carteira entra nele." : {
       "localizations" : {
         "ar" : {
@@ -162883,82 +164479,6 @@
         }
       }
     },
-    "Para deixar de pedir a passphrase nos envios de %@, digite a passphrase. Depois vem o PIN." : {
-      "localizations" : {
-        "ar" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "للتوقف عن طلب الـ passphrase عند الإرسال من %@، اكتب الـ passphrase. ثم رمز PIN."
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Damit beim Senden aus %@ nicht mehr nach der Passphrase gefragt wird, gib die Passphrase ein. Danach die PIN."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "To stop asking for the passphrase on sends from %@, type the passphrase. Then the PIN."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Para dejar de pedir la passphrase en los envíos de %@, escribe la passphrase. Después, el PIN."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pour ne plus demander la passphrase lors des envois de %@, saisissez la passphrase. Ensuite, le PIN."
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ से भेजते समय पासफ़्रेज़ माँगना बंद करने के लिए, पासफ़्रेज़ लिखें. फिर PIN."
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agar passphrase tidak diminta lagi saat mengirim dari %@, ketik passphrase. Lalu PIN."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ からの送金でパスフレーズを求めないようにするには、パスフレーズを入力してください。その後、PIN を入力します。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@에서 보낼 때 패스프레이즈를 묻지 않게 하려면 패스프레이즈를 입력하세요. 그다음 PIN을 입력합니다."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ gönderimlerinde passphrase sorulmasın diye passphrase'i yaz. Ardından PIN."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Để không hỏi passphrase khi gửi từ %@ nữa, hãy nhập passphrase. Sau đó là mã PIN."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要在从 %@ 发送时不再要求 passphrase，请输入 passphrase。然后输入 PIN。"
-          }
-        }
-      }
-    },
     "Para enviar %@, cancele a ordem antes. O que ela não vendeu volta a ficar livre na carteira assim que a rede confirmar." : {
       "localizations" : {
         "ar" : {
@@ -163183,6 +164703,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 Tron 上发送 USDT 需要持有 TRX：每笔转账都会燃烧 TRX 来支付网络能量。Escalibur 不会替你支付这笔费用。请向此账户转入 TRX 后重试。"
+          }
+        }
+      }
+    },
+    "Para lacrar as palavras de %@, digite a passphrase. Ela não vai no envelope: guarde-a à parte. Depois vem a confirmação de sempre." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لختم كلمات %@، اكتب الـ passphrase. لا تدخل في المغلف: احفظها بشكل منفصل. بعدها يأتي التأكيد المعتاد."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Um die Wörter von %@ zu versiegeln, gib die Passphrase ein. Sie kommt nicht in den Umschlag: bewahre sie getrennt auf. Danach kommt die gewohnte Bestätigung."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To seal the words of %@, type the passphrase. It doesn't go in the envelope: keep it separately. Then the usual confirmation."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Para sellar las palabras de %@, escribe la passphrase. No va en el sobre: guárdala aparte. Después viene la confirmación de siempre."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pour sceller les mots de %@, saisissez la passphrase. Elle ne va pas dans l’enveloppe : gardez-la à part. Ensuite vient la confirmation habituelle."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ के शब्द सील करने के लिए पासफ़्रेज़ लिखें. यह लिफ़ाफ़े में नहीं जाता: इसे अलग रखें. उसके बाद हमेशा वाली पुष्टि होगी."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untuk menyegel kata-kata %@, ketik passphrase. Passphrase tidak masuk ke amplop: simpan terpisah. Setelah itu konfirmasi seperti biasa."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ の単語を封印するには、パスフレーズを入力してください。パスフレーズはエンベロープに入りません。別に保管してください。その後、いつもの確認があります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 단어를 봉인하려면 패스프레이즈를 입력하세요. 패스프레이즈는 봉투에 들어가지 않으니 따로 보관하세요. 그다음 평소의 확인 단계가 이어집니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kelimelerini mühürlemek için passphrase'i yaz. Passphrase zarfa girmez: ayrı sakla. Ardından her zamanki onay gelir."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Để niêm phong các từ của %@, hãy nhập passphrase. Passphrase không nằm trong phong bì: hãy cất riêng. Sau đó là bước xác nhận như thường lệ."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要封存 %@ 的助记词，请输入 passphrase。它不会放进信封：请另外保管。之后是常规确认。"
           }
         }
       }
@@ -165773,82 +167369,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "向 CoW 发送已签署的请求，无需网络费"
-          }
-        }
-      }
-    },
-    "Pedir a passphrase para enviar" : {
-      "localizations" : {
-        "ar" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "طلب الـ passphrase للإرسال"
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zum Senden nach der Passphrase fragen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ask for the passphrase to send"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pedir la passphrase para enviar"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Demander la passphrase pour envoyer"
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "भेजने के लिए पासफ़्रेज़ माँगें"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Minta passphrase untuk mengirim"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "送金時にパスフレーズを求める"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "보낼 때 패스프레이즈 묻기"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Göndermek için passphrase iste"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hỏi passphrase khi gửi"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "发送时要求 passphrase"
           }
         }
       }
@@ -173157,6 +174677,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "拥有这些单词的人就拥有资产"
+          }
+        }
+      }
+    },
+    "Quem tiver só as palavras vê este envio e o saldo da carteira com passphrase, sem poder movê-lo." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "من يملك الكلمات فقط يرى هذا الإرسال ورصيد المحفظة ذات عبارة المرور، دون أن يستطيع نقله."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wer nur die Wörter hat, sieht diese Sendung und das Guthaben der Wallet mit Passphrase, ohne es bewegen zu können."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anyone with just the words sees this send and the passphrase wallet's balance, without being able to move it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quien tenga solo las palabras ve este envío y el saldo de la billetera con passphrase, sin poder moverlo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quiconque n’a que les mots voit cet envoi et le solde du portefeuille avec passphrase, sans pouvoir le déplacer."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "जिसके पास सिर्फ़ शब्द हैं, वह यह भेजना और पासफ़्रेज़ वाले वॉलेट का बैलेंस देख सकता है, पर उसे हिला नहीं सकता."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Siapa pun yang hanya punya kata-katanya bisa melihat kiriman ini dan saldo dompet dengan passphrase, tanpa bisa memindahkannya."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "単語だけを知っている人にも、この送金とパスフレーズ付きウォレットの残高が見えます。ただし動かすことはできません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단어만 아는 사람도 이 송금과 패스프레이즈 지갑의 잔액을 볼 수 있지만, 옮길 수는 없습니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yalnızca kelimeleri bilen biri bu gönderimi ve passphrase'li cüzdanın bakiyesini görür, ama taşıyamaz."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ai chỉ có các từ sẽ thấy lần gửi này và số dư của ví có passphrase, nhưng không thể chuyển nó đi."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有助记词的人能看到这笔发送和带 passphrase 钱包的余额，但无法转走。"
           }
         }
       }
@@ -183936,6 +185532,82 @@
         }
       }
     },
+    "Sem a passphrase, esta carteira não envia neste app. Ela está dentro deste envelope: se você não a anotou, o decifrador público da Escalibur (github.com/Escalibur-Wallet/escalibur-wallet, arquivo tools/referencia/decifrar.py) mostra a passphrase num computador sem internet." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "بدون الـ passphrase لا ترسل هذه المحفظة في هذا التطبيق. الـ passphrase موجودة داخل هذا المغلف: إذا لم تدوّنها، فإن أداة فك التشفير العامة من Escalibur (github.com/Escalibur-Wallet/escalibur-wallet, tools/referencia/decifrar.py) تعرضها على حاسوب غير متصل بالإنترنت."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ohne die Passphrase kann diese Wallet in dieser App nicht senden. Sie steckt in diesem Umschlag: Wenn du sie nicht notiert hast, zeigt der öffentliche Entschlüsseler von Escalibur (github.com/Escalibur-Wallet/escalibur-wallet, tools/referencia/decifrar.py) die Passphrase auf einem Computer ohne Internet an."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Without the passphrase, this wallet can't send in this app. It's inside this envelope: if you didn't write it down, Escalibur's public decryptor (github.com/Escalibur-Wallet/escalibur-wallet, tools/referencia/decifrar.py) shows the passphrase on a computer with no internet."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin la passphrase, esta billetera no envía en esta app. Está dentro de este sobre: si no la anotaste, el descifrador público de Escalibur (github.com/Escalibur-Wallet/escalibur-wallet, tools/referencia/decifrar.py) muestra la passphrase en una computadora sin internet."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sans la passphrase, ce portefeuille ne peut pas envoyer dans cette app. Elle se trouve dans cette enveloppe : si vous ne l’avez pas notée, le déchiffreur public d’Escalibur (github.com/Escalibur-Wallet/escalibur-wallet, tools/referencia/decifrar.py) affiche la passphrase sur un ordinateur sans internet."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "पासफ़्रेज़ के बिना यह वॉलेट इस ऐप में भेज नहीं सकता. पासफ़्रेज़ इसी लिफ़ाफ़े के अंदर है: अगर आपने उसे नहीं लिखा, तो Escalibur का सार्वजनिक डिक्रिप्टर (github.com/Escalibur-Wallet/escalibur-wallet, tools/referencia/decifrar.py) बिना इंटरनेट वाले कंप्यूटर पर पासफ़्रेज़ दिखाता है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanpa passphrase, dompet ini tidak bisa mengirim di aplikasi ini. Passphrase ada di dalam amplop ini: jika Anda tidak mencatatnya, pendekripsi publik Escalibur (github.com/Escalibur-Wallet/escalibur-wallet, tools/referencia/decifrar.py) menampilkan passphrase di komputer tanpa internet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パスフレーズがないと、このウォレットはこのアプリで送金できません。パスフレーズはこのエンベロープの中にあります。書き留めていない場合は、Escalibur の公開復号ツール（github.com/Escalibur-Wallet/escalibur-wallet, tools/referencia/decifrar.py）が、インターネットにつながっていないコンピューターでパスフレーズを表示します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "패스프레이즈가 없으면 이 지갑은 이 앱에서 보낼 수 없습니다. 패스프레이즈는 이 봉투 안에 있습니다. 적어 두지 않았다면 Escalibur 공개 복호화 도구(github.com/Escalibur-Wallet/escalibur-wallet, tools/referencia/decifrar.py)가 인터넷이 연결되지 않은 컴퓨터에서 패스프레이즈를 보여 줍니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passphrase olmadan bu cüzdan bu uygulamada gönderim yapamaz. Passphrase bu zarfın içinde: not etmediyseniz, Escalibur'un herkese açık şifre çözücüsü (github.com/Escalibur-Wallet/escalibur-wallet, tools/referencia/decifrar.py) passphrase'i internete bağlı olmayan bir bilgisayarda gösterir."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không có passphrase, ví này không gửi được trong ứng dụng này. Passphrase nằm trong phong bì này: nếu bạn chưa ghi lại, công cụ giải mã công khai của Escalibur (github.com/Escalibur-Wallet/escalibur-wallet, tools/referencia/decifrar.py) sẽ hiện passphrase trên một máy tính không có internet."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有 passphrase，此钱包无法在本应用中发送。passphrase 就在这个信封里：如果你没有记下，Escalibur 的公开解密工具（github.com/Escalibur-Wallet/escalibur-wallet, tools/referencia/decifrar.py）会在一台不联网的电脑上显示它。"
+          }
+        }
+      }
+    },
     "Sem a passphrase, ninguém recupera" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -185899,6 +187571,82 @@
         }
       }
     },
+    "Sem posição no mercado" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "بلا ترتيب في السوق"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ohne Marktrang"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No market rank"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin posición en el mercado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sans rang sur le marché"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "बाज़ार में कोई रैंक नहीं"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanpa peringkat pasar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時価総額の順位なし"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시가총액 순위 없음"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Piyasa sıralaması yok"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Không có hạng thị trường"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无市值排名"
+          }
+        }
+      }
+    },
     "Sem previsão, ditado nem palavra aprendida no dicionário do aparelho. E as palavras nunca saem do iPhone." : {
       "localizations" : {
         "ar" : {
@@ -186123,82 +187871,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "目前没有可供比较的市场价格。继续前请核对数字。"
-          }
-        }
-      }
-    },
-    "Sem preço de referência do mercado agora, a troca precisa de pelo menos duas cotações para comparar, e só uma respondeu. Tente de novo em instantes." : {
-      "localizations" : {
-        "ar" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "في غياب سعر مرجعي للسوق الآن، تحتاج المبادلة إلى عرضي سعر على الأقل للمقارنة، ولم يستجب سوى واحد. حاول مجددًا بعد قليل."
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ohne Referenzpreis des Marktes braucht der Tausch gerade mindestens zwei Angebote zum Vergleich, und nur eines hat geantwortet. Versuche es gleich noch einmal."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Without a market reference price right now, the swap needs at least two quotes to compare, and only one responded. Try again in a moment."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sin precio de referencia del mercado ahora, el intercambio necesita al menos dos cotizaciones para comparar, y solo respondió una. Inténtalo de nuevo en unos instantes."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sans prix de référence du marché pour le moment, l’échange a besoin d’au moins deux cotations à comparer, et une seule a répondu. Réessayez dans un instant."
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "अभी मार्केट की रेफ़रेंस कीमत के बिना, स्वैप को तुलना के लिए कम से कम दो कोट चाहिए, और सिर्फ़ एक ने जवाब दिया. थोड़ी देर में फिर से कोशिश करें."
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tanpa harga referensi pasar saat ini, penukaran memerlukan minimal dua kuotasi untuk dibandingkan, dan hanya satu yang merespons. Coba lagi sebentar lagi."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "現在市場の参考価格がないため、スワップには比較用の見積もりが 2 件以上必要ですが、応答したのは 1 件だけでした。しばらくしてからもう一度お試しください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "지금 시장 기준 가격이 없어, 스왑에는 비교할 견적이 최소 두 개 필요한데 하나만 응답했습니다. 잠시 후 다시 시도하세요."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Şu an piyasa referans fiyatı olmadığından takasın karşılaştırma için en az iki teklife ihtiyacı var ve yalnızca biri yanıt verdi. Birazdan tekrar dene."
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hiện không có giá tham chiếu thị trường, nên hoán đổi cần ít nhất hai báo giá để so sánh, nhưng chỉ có một báo giá phản hồi. Hãy thử lại sau giây lát."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "目前没有市场参考价格，兑换至少需要两个报价进行比较，但只有一个有响应。请稍后重试。"
           }
         }
       }

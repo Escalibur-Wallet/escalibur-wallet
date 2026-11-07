@@ -33,6 +33,38 @@ struct EnvelopeTests {
         }
     }
 
+    @Test("Qualquer byte do cabecalho trocado, ou os compartimentos fora de lugar, nao abre")
+    func tamperedHeader() throws {
+        let data = try Envelope.seal(
+            phrase: BIP39.canonical(Self.phrase), label: "Principal",
+            password: Self.secure(Self.strong), parameters: Self.fast
+        )
+        // UUID, m (o byte baixo), t (o byte baixo), p, sal, vinculo, reservado, chave do vinculo, nuvem e o ultimo
+        // reservado: cada um entra no AAD das duas camadas ou muda a propria chave (auditoria do envelope de 06/11/2026).
+        // Recusa igual a senha errada: adulterar e errar a senha continuam indistinguiveis (rodada 3).
+        for offset in [8, 28, 32, 34, 51, 52, 117, 119] {
+            var forged = data
+            forged[offset] ^= 0x01
+            #expect(throws: Envelope.Failure.cannotOpen, "byte \(offset)") { try Envelope.open(forged, password: Self.secure(Self.strong)) }
+        }
+        // p = 0 nao e envelope; o vinculo ao aparelho tem recusa propria, antes de qualquer derivacao.
+        var noLanes = data
+        noLanes[33] ^= 0x01
+        #expect(throws: Envelope.Failure.notAnEnvelope) { try Envelope.open(noLanes, password: Self.secure(Self.strong)) }
+        var bound = data
+        bound[50] ^= 0x01
+        #expect(throws: Envelope.Failure.boundToDevice) { try Envelope.open(bound, password: Self.secure(Self.strong)) }
+        // Os quatro compartimentos girados uma posicao: o que a senha abre muda de lugar, e a posicao esta no AAD.
+        let header = data.prefix(VaultFormat.headerLength)
+        let slots = (0..<VaultFormat.slotCount).map { index in
+            data[(VaultFormat.headerLength + index * VaultFormat.slotLength)..<(VaultFormat.headerLength + (index + 1) * VaultFormat.slotLength)]
+        }
+        var rotated = Data(header)
+        for index in 0..<VaultFormat.slotCount { rotated += slots[(index + 1) % VaultFormat.slotCount] }
+        #expect(rotated.count == data.count)
+        #expect(throws: Envelope.Failure.cannotOpen) { try Envelope.open(rotated, password: Self.secure(Self.strong)) }
+    }
+
     /// Seis palavras da lista: 66 bits, acima do piso de lacre.
     static let strong = "crane violin orbit maple harbor tunnel"
 

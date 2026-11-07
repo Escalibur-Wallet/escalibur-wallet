@@ -90,6 +90,10 @@ fun FluxoDeRevelar(carteira: Carteira, copia: Boolean, aoFechar: () -> Unit) {
 
     fun abrir() {
         erro = null
+        if (carteira.semConferencia) {
+            erro = t("Esta versão do app não consegue conferir a passphrase desta carteira, e ela não assina aqui. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39.")
+            return
+        }
         escopo.launch {
             var passphrase: PedidoDePassphrase.Resposta? = null
             if (carteira.pedePassphrase) {
@@ -98,10 +102,11 @@ fun FluxoDeRevelar(carteira: Carteira, copia: Boolean, aoFechar: () -> Unit) {
             }
             abrindo = true
             try {
-                val segredo = passphrase?.bytes
+                // A passphrase vai para o nucleo antes do PIN, e a daqui sai zerada ja (05/11/2026).
+                passphrase?.let { Api.comSegredo("passphrase.entregar", JSONObject(), it.bytes) }
+                if (passphrase != null && !app.escalibur.wallet.ui.Ciclo.primeiroPlano) return@launch
                 val aberto = Autorizacao.tentando(t("Ver a senha de %@", carteira.nome), Autorizacao.Presenca.pinEBiometria) { credencial ->
-                    val partes = if (segredo != null) credencial.partes(segredo.copyOf()) else credencial.partes()
-                    Api.comSegredo("carteira.revelar", JSONObject().put("id", carteira.id).put("credencial", credencial.json()), *partes)
+                    Api.comSegredo("carteira.revelar", JSONObject().put("id", carteira.id).put("credencial", credencial.json()), *credencial.partes())
                 } ?: return@launch
                 palavras = aberto.getInt("palavras")
                 comPassphrase = aberto.getBoolean("passphrase")
@@ -114,6 +119,7 @@ fun FluxoDeRevelar(carteira: Carteira, copia: Boolean, aoFechar: () -> Unit) {
                 }
             } finally {
                 passphrase?.bytes?.fill(0)
+                if (passphrase != null) runCatching { app.escalibur.wallet.nucleo.Nucleo.chamar("passphrase.descartar", "{}") }
                 abrindo = false
             }
         }
@@ -182,7 +188,7 @@ private fun AvisoAntesDasPalavras(erro: String?, abrindo: Boolean, aoAbrir: () -
 @Composable
 private fun ConferirPassphrase(carteira: Carteira, comRascunho: Boolean, aoTerminar: () -> Unit) {
     val escopo = rememberCoroutineScope()
-    val campo = remember { Segredo() }
+    val campo = remember { Segredo(limpaAoSair = true) }
     var revelar by remember { mutableStateOf(false) }
     var trabalhando by remember { mutableStateOf(false) }
     var mensagem by remember { mutableStateOf<String?>(null) }
@@ -190,6 +196,10 @@ private fun ConferirPassphrase(carteira: Carteira, comRascunho: Boolean, aoTermi
 
     fun conferir() {
         mensagem = null
+        if (carteira.semConferencia) {
+            mensagem = t("Esta versão do app não consegue conferir a passphrase desta carteira, e ela não assina aqui. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39.")
+            return
+        }
         trabalhando = true
         escopo.launch {
             try {

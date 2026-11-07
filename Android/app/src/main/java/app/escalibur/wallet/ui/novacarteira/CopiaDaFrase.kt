@@ -89,7 +89,7 @@ fun DeclaracoesDeCiente(declaracoes: List<String>, cientes: SnapshotStateList<In
 
 /**
  * Antes de copiar a frase (o `CopyPhraseSheet` do iOS): o que pode dar errado, tres "estou ciente" e so entao o botao. A copia
- * sai marcada como sensivel e some em 1 minuto.
+ * sai marcada como sensivel e some em cerca de 1 minuto (o alarme do Android e inexato).
  */
 @Composable
 fun FolhaDaCopia(aoCopiar: () -> Unit, aoFechar: () -> Unit) {
@@ -104,7 +104,7 @@ fun FolhaDaCopia(aoCopiar: () -> Unit, aoFechar: () -> Unit) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 Box(Modifier.fillMaxWidth().padding(top = Espaco.xl), contentAlignment = Alignment.Center) { ContagemDaCopia() }
                 Text(t("Copiar a senha da carteira?"), style = estilo(Tipo.titulo), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.md))
-                Text(t("A cópia some sozinha em 1 minuto, e o Android não mostra o que ela tem na prévia. Anotar no papel continua sendo o mais seguro."),
+                Text(t("A cópia some sozinha em cerca de 1 minuto. Do Android 13 em diante, a prévia não mostra o que ela tem; antes dele, o teclado pode guardar a cópia. Anotar no papel continua sendo o mais seguro."),
                      style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
                 Text(t("Estou ciente que:"), style = estilo(Tipo.linha), color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.lg))
                 DeclaracoesDeCiente(declaracoes, cientes)

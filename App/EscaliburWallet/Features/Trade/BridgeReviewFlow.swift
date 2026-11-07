@@ -264,44 +264,18 @@ struct BridgeReviewFlow: View {
             error = SigningSelfTest.Failure().errorDescription
             return
         }
-        // Carteira com passphrase: a passphrase antes do Face ID ou do PIN, conferida dentro
-        // do assinador (pedido do dono, 16/10/2026).
-        var typedPassphrase: SecureBytes?
-        if PassphraseGate.needed(session.metadata.wallets.first { $0.id == plan.walletID }),
-           let wallet = session.metadata.wallets.first(where: { $0.id == plan.walletID }) {
-            guard let typed = await PassphraseGate.shared.ask(wallet) else { return }
-            typedPassphrase = typed
-        }
-        defer { typedPassphrase?.wipe() }
-        let checkPassphrase = typedPassphrase
-        // A tentativa conta antes de o cofre conferir; com muitas erradas, espera.
-        if checkPassphrase != nil, let wait = PassphraseGate.shared.begin(session, wallet: plan.walletID) {
+        // Carteira com passphrase: a passphrase antes do Face ID ou do PIN, conferida dentro do assinador. Ela nunca fica
+        // salva e sai zerada logo depois de assinar (pedido do dono, 05/11/2026; ver `PassphraseGate.sign`).
+        let signed: [SignedTransaction]
+        switch await PassphraseGate.shared.sign(plan, session: session, auth: auth, reason: plan.review.title) {
+        case .signed(let result):
+            signed = result
+        case .cancelled:
+            return
+        case .waiting(let wait):
             self.error = wait
             return
-        }
-        let signed: [SignedTransaction]
-        do {
-            guard let result = try await auth.perform(session, reason: plan.review.title, { rk in
-                try Signer.sign(plan, rootKey: rk, vault: KeyServices.wallets, passphrase: checkPassphrase)
-            }) else {
-                if checkPassphrase != nil { PassphraseGate.shared.refund(session, wallet: plan.walletID) }
-                return
-            }
-            signed = result
-            // A passphrase confere (o assinador assinou): a conta zera, e o buffer sai ja.
-            if checkPassphrase != nil {
-                PassphraseGate.shared.passed(session, wallet: plan.walletID)
-                PassphraseGate.shared.confirmGrace(plan.walletID)
-            }
-            checkPassphrase?.wipe()
-        } catch {
-            checkPassphrase?.wipe()
-            if (error as? Signer.Failure) == .passphraseMismatch {
-                PassphraseGate.shared.failed(session, wallet: plan.walletID)
-            } else if checkPassphrase != nil {
-                // Parou antes da passphrase (PIN errado, cofre): nada foi conferido, a tentativa volta.
-                PassphraseGate.shared.refund(session, wallet: plan.walletID)
-            }
+        case .failed(let error):
             self.error = (error as? Signer.Failure) == .passphraseMismatch ? PassphraseGate.mismatchMessage
                 : AuthCoordinator.refusalMessage(error) ?? (error as? LocalizedError)?.errorDescription ?? String(localized: "A ponte não saiu. Nada foi debitado.")
             stage = .review

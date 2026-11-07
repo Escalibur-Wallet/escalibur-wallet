@@ -14,7 +14,6 @@ struct RevealFlow: View {
     let onClose: () -> Void
 
     @State private var draft: PhraseDraft?
-    @State private var passphrase: SecureBytes?
     @State private var confirming = false
     @State private var working = false
     @State private var error: String?
@@ -29,7 +28,7 @@ struct RevealFlow: View {
                     ConfirmWordsView(draft: draft, onBack: { confirming = false }) { confirmed() }
                 } else if let draft {
                     // So as palavras: a passphrase nunca aparece, nem na carteira que tem uma (pedido do
-                    // dono, 01/11/2026). Ela fica na memoria so para conferir o que o dono digita.
+                    // dono, 01/11/2026), e nem esta no cofre (05/11/2026).
                     RecordWordsView(draft: draft, walletName: purpose == .reveal ? wallet.name : nil) {
                         if purpose == .backup { confirming = true } else { finish() }
                     }
@@ -55,8 +54,8 @@ struct RevealFlow: View {
         .interactiveDismissDisabled()
         .guardedAgainstCapture()
         .fullScreenCover(isPresented: $confirmingPassphrase) {
-            if let passphrase {
-                ConfirmPassphraseView(wallet: wallet, expected: passphrase) {
+            if let draft {
+                ConfirmPassphraseView(wallet: wallet, words: draft) {
                     confirmingPassphrase = false
                     finish()
                 }
@@ -137,10 +136,16 @@ struct RevealFlow: View {
             // A espera do A1 antes da frase de voz: nada de pedir a voz para ouvir "espere".
             try AuthCoordinator.checkPINAndBiometry()
             guard await VoiceGate.shared.confirm(.reveal, session: session) else { return }
-            // Na carteira que pede a passphrase, ela so aparece depois de digitada e conferida
-            // no cofre: sem isso, quem tem o PIN e o rosto lia a passphrase aqui (revisao de
-            // seguranca de 16/10/2026).
+            // Na carteira com passphrase, as palavras so aparecem depois de a passphrase digitada
+            // conferir: sem a carteira de base neste iPhone, quem tem o PIN e o rosto levaria as
+            // palavras daqui e testaria passphrases fora do aparelho (revisao de seguranca de
+            // 16/10/2026). Ela confere pelo fingerprint da raiz e sai zerada no fim.
             let current = session.metadata.wallets.first { $0.id == id } ?? wallet
+            if PassphraseGate.unverified(current) {
+                self.error = PassphraseGate.unverifiedMessage
+                return
+            }
+            let fingerprint = current.fingerprint.flatMap(Hex.decode)
             var typed: SecureBytes?
             if PassphraseGate.asks(current) {
                 guard let given = await PassphraseGate.shared.ask(current, reason: String(localized: "Para ver as palavras de \(current.name), digite a passphrase. Depois vem a confirmação de sempre.")) else { return }
@@ -154,25 +159,20 @@ struct RevealFlow: View {
             }
             defer { typed?.wipe() }
             let check = typed
-            let result: (SecureBytes, SecureBytes?)? = try await auth.perform(session, reason: String(localized: "Ver a senha de \(wallet.name)"), presence: .pinAndBiometry) { rk in
+            let result: SecureBytes? = try await auth.perform(session, reason: String(localized: "Ver a senha de \(wallet.name)"), presence: .pinAndBiometry) { rk in
                 let secret = try KeyServices.wallets.open(walletID: id, rk: rk)
                 defer { secret.wipe() }
-                if let check, !PassphraseGate.matches(secret.passphrase, check) { throw Signer.Failure.passphraseMismatch }
-                var pass: SecureBytes?
-                if secret.passphrase.count > 0 {
-                    let copy = SecureBytes(capacity: secret.passphrase.count)
-                    secret.passphrase.withUnsafeBytes { copy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
-                    pass = copy
+                if let check, try PassphraseProof.check(secret, typed: check, fingerprint: fingerprint, cardanoPublicKey: nil) == .mismatch {
+                    throw Signer.Failure.passphraseMismatch
                 }
-                return (try secret.phrase(), pass)
+                return try secret.phrase()
             }
-            guard let (phrase, pass) = result else {
+            guard let phrase = result else {
                 if check != nil { PassphraseGate.shared.refund(session, wallet: id) }
                 return
             }
             if check != nil { PassphraseGate.shared.passed(session, wallet: id) }
             let words = phrase.withUnsafeBytes { raw in raw.filter { $0 == 0x20 }.count + 1 }
-            passphrase = pass
             draft = PhraseDraft(phrase: phrase, wordCount: words)
         } catch {
             if (error as? Signer.Failure) == .passphraseMismatch {
@@ -190,7 +190,7 @@ struct RevealFlow: View {
         var updated = session.metadata.wallets.first { $0.id == wallet.id } ?? wallet
         updated.backupConfirmedAt = .now
         session.update(updated)
-        if updated.hasPassphrase, updated.passphraseConfirmedAt == nil, passphrase != nil {
+        if updated.hasPassphrase, updated.passphraseConfirmedAt == nil, draft != nil {
             confirmingPassphrase = true
         } else {
             finish()
@@ -205,8 +205,6 @@ struct RevealFlow: View {
         }
         draft?.wipe()
         draft = nil
-        passphrase?.wipe()
-        passphrase = nil
         onClose()
     }
 }

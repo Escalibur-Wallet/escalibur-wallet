@@ -69,6 +69,9 @@ extension BoringSSLAEAD {
         deinit {
             withUnsafeMutablePointer(to: &self.context) { contextPointer in
                 CCryptoBoringSSL_EVP_AEAD_CTX_cleanup(contextPointer)
+                // Remendo da Escalibur (06/11/2026, ver swift-crypto.lock): o cleanup do AES-GCM e do ChaCha20-Poly1305 nao
+                // zera nada, e a chave (crua no ChaCha, expandida no AES) ficava no heap liberado, que o Android nao zera.
+                CCryptoBoringSSL_OPENSSL_cleanse(contextPointer, MemoryLayout<EVP_AEAD_CTX>.size)
             }
         }
     }

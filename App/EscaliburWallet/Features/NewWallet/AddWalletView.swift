@@ -10,6 +10,8 @@ struct AddWalletView: View {
     @State private var path: [Route] = []
     @State private var creating = false
     @State private var openingEnvelope = false
+    /// Super Security em "Bloquear as carteiras": criar e importar recusam antes das palavras; so observar continua.
+    @State private var wordsBlocked = false
 
     /// Importar passa antes pela tela de seguranca e responsabilidade.
     enum Route: Hashable { case responsibility, deviceCheck, importPhrase, watch }
@@ -29,13 +31,19 @@ struct AddWalletView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, Space.gutter)
                 .padding(.top, Space.sm)
+                if wordsBlocked {
+                    Banner(kind: .caution, title: WalletError.lockPolicyMessage)
+                        .padding(.horizontal, Space.gutter).padding(.top, Space.md)
+                }
                 VStack(spacing: 0) {
                     row(String(localized: "Importar com a senha da carteira"), String(localized: "Você já tem 12 ou 24 palavras de outra carteira."), "text.word.spacing") {
                         path.append(.responsibility)
                     }
+                    .disabled(wordsBlocked)
                     row(String(localized: "Importar de um envelope Escalibur"), String(localized: "O arquivo .esclbr e a senha do envelope."), "envelope") {
                         openingEnvelope = true
                     }
+                    .disabled(wordsBlocked)
                     row(String(localized: "Só observar um endereço"), String(localized: "Acompanhe um saldo sem poder enviar."), "eye") {
                         path.append(.watch)
                     }
@@ -43,10 +51,11 @@ struct AddWalletView: View {
                 .padding(.top, Space.md)
                 Spacer(minLength: 0)
                 ActionFooter {
-                    PrimaryButton(title: String(localized: "Criar carteira nova")) { creating = true }
+                    PrimaryButton(title: String(localized: "Criar carteira nova"), enabled: !wordsBlocked) { creating = true }
                 }
             }
             .background(Palette.void.ignoresSafeArea())
+            .task { wordsBlocked = session.addingWordsBlocked }
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .responsibility:

@@ -4,7 +4,8 @@ import Security
 #endif
 
 /// Quanto vale a senha de um envelope: quantos chutes um atacante gasta ate acerta-la,
-/// contado sobre os bytes, sem a senha virar `String`.
+/// contado sobre os bytes. Excecao: com um caractere fora do ASCII, a forma NFKC passa por
+/// `String` (`KeyDerivation.normalized`), uma vez por medida.
 ///
 /// **O modelo e o do zxcvbn** (Dropbox, e o zxcvbn-ts): o atacante nao testa letra por
 /// letra, ele testa listas. A senha e quebrada nos pedacos mais baratos para ele, e o
@@ -40,16 +41,96 @@ public enum PasswordStrength {
         case weak(bits: Double)
     }
 
-    public static func verdict(_ password: SecureBytes) -> Verdict {
-        guard scalarCount(password) >= minimumLength else { return .tooShort }
-        let value = bits(password)
-        let onlyDigits = password.withUnsafeBytes { raw in raw.allSatisfy { (0x30...0x39).contains($0) } }
-        if value >= minimumBits { return .strong }
-        return onlyDigits ? .digitsOnly(bits: value) : .weak(bits: value)
+    /// A medida inteira, com uma normalizacao so: quem precisa de mais de um numero chama esta.
+    public struct Measure {
+        public let scalars: Int
+        public let bits: Double
+        public let verdict: Verdict
+        /// So digitos, de qualquer escrita: o aviso de PIN, sem medir de novo.
+        public let digitsOnly: Bool
     }
 
-    /// Caracteres, contados como escalares Unicode (o primeiro byte de cada um em UTF-8).
+    /// Mede as duas formas, a digitada e a que vai ao Argon2 (NFKC, `KeyDerivation.normalized`), e fica com a menor: quem
+    /// ataca enumera qualquer uma delas. So a digitada dava "Forte" a "password12345678" em largura cheia; so a NFKC dava
+    /// "Forte" a um caractere que se expande numa frase comum (U+FDFA, os quadrados do japones). Auditoria do envelope de
+    /// 06/11/2026, rodadas 2 e 3.
+    public static func measure(_ password: SecureBytes) -> Measure {
+        let normalized = KeyDerivation.normalized(password)
+        defer { if normalized !== password { normalized.wipe() } }
+        let same = normalized === password
+        let scalars = same ? scalarCountOf(password) : min(scalarCountOf(password), scalarCountOf(normalized))
+        let rawBits = password.withUnsafeBytes { bits(bytes: $0) }
+        var value = same ? rawBits : min(rawBits, normalized.withUnsafeBytes { bits(bytes: $0) })
+        // Uma terceira forma: os digitos de outras escritas (arabe, persa, devanagari) em ASCII, que o NFKC nao dobra.
+        // "١٢٣٤ ٥٦٧٨" e "1234 5678" para quem ataca (rodada 4 da auditoria do envelope).
+        let digits = same ? nil : asciiDigits(normalized)
+        defer { digits?.wipe() }
+        if let digits { value = min(value, digits.withUnsafeBytes { bits(bytes: $0) }) }
+        let onlyDigits = (digits ?? normalized).withUnsafeBytes { raw in raw.allSatisfy { (0x30...0x39).contains($0) } }
+        let verdict: Verdict
+        if scalars < minimumLength {
+            verdict = .tooShort
+        } else if value >= minimumBits {
+            verdict = .strong
+        } else {
+            verdict = onlyDigits ? .digitsOnly(bits: value) : .weak(bits: value)
+        }
+        return Measure(scalars: scalars, bits: value, verdict: verdict, digitsOnly: onlyDigits && password.count > 0)
+    }
+
+    public static func verdict(_ password: SecureBytes) -> Verdict { measure(password).verdict }
+
+    /// So digitos, de qualquer escrita, sem a medida inteira: o aviso de PIN da tela.
+    public static func isDigitsOnly(_ password: SecureBytes) -> Bool {
+        guard password.count > 0 else { return false }
+        // Um byte ASCII que nao e digito decide sem normalizar: o NFKC nao muda o ASCII.
+        if password.withUnsafeBytes({ raw in raw.contains { $0 < 0x80 && !(0x30...0x39).contains($0) } }) { return false }
+        let normalized = KeyDerivation.normalized(password)
+        defer { if normalized !== password { normalized.wipe() } }
+        let digits = normalized === password ? nil : asciiDigits(normalized)
+        defer { digits?.wipe() }
+        return (digits ?? normalized).withUnsafeBytes { raw in raw.allSatisfy { (0x30...0x39).contains($0) } }
+    }
+
+    /// Os digitos decimais fora do ASCII trocados pelos ASCII, escalar a escalar, sem `String`. Nil quando nao ha nenhum.
+    static func asciiDigits(_ text: SecureBytes) -> SecureBytes? {
+        let out = SecureBytes(capacity: max(text.count, 1))
+        var changed = false, valid = true
+        text.withUnsafeBytes { raw in
+            var bytes = raw.makeIterator()
+            var parser = Unicode.UTF8.ForwardParser()
+            while true {
+                switch parser.parseScalar(from: &bytes) {
+                case .valid(let encoded):
+                    let scalar = Unicode.UTF8.decode(encoded)
+                    if scalar.value >= 0x80, scalar.properties.numericType == .decimal,
+                       let number = scalar.properties.numericValue, (0...9).contains(number) {
+                        out.append(0x30 + UInt8(number))
+                        changed = true
+                    } else {
+                        for byte in encoded { out.append(byte) }
+                    }
+                case .emptyInput:
+                    return
+                case .error:
+                    valid = false
+                    return
+                }
+            }
+        }
+        if changed && valid { return out }
+        out.wipe()
+        return nil
+    }
+
+    /// Caracteres, contados como escalares Unicode (o primeiro byte de cada um em UTF-8), o menor das duas formas.
     public static func scalarCount(_ password: SecureBytes) -> Int {
+        let normalized = KeyDerivation.normalized(password)
+        defer { if normalized !== password { normalized.wipe() } }
+        return normalized === password ? scalarCountOf(password) : min(scalarCountOf(password), scalarCountOf(normalized))
+    }
+
+    static func scalarCountOf(_ password: SecureBytes) -> Int {
         password.withUnsafeBytes { raw in raw.reduce(0) { $0 + ($1 & 0xC0 == 0x80 ? 0 : 1) } }
     }
 
@@ -57,9 +138,7 @@ public enum PasswordStrength {
     public static func suggestionBits(count: Int = 6) -> Double { Double(count) * 11 }
 
     /// log2 do numero de chutes.
-    public static func bits(_ password: SecureBytes) -> Double {
-        password.withUnsafeBytes { bits(bytes: $0) }
-    }
+    public static func bits(_ password: SecureBytes) -> Double { measure(password).bits }
 
     /// Carrega as listas antes de a primeira tecla precisar delas.
     public static func preload() { _ = Dictionaries.ranks }
@@ -84,27 +163,104 @@ public enum PasswordStrength {
     final class Estimator {
         let original: [UInt8]
         let folded: [UInt8]
-        private var segments: [Int: Double] = [:]
-        private var patterns: [Int: Double?] = [:]
+        /// Os custos ja medidos, em arrays planos do tamanho certo (NaN: nao medido; infinito: nao e padrao), zerados ao
+        /// sair. Um Dictionary deixava no heap, sem zerar, o log2 da posicao de cada palavra nas listas publicas, e as
+        /// tabelas velhas a cada crescimento (rodada 4 da auditoria do envelope de 06/11/2026).
+        private var segments: [Double]
+        private var patterns: [Double]
+        static let segmentWidth = 25
+        static let patternWidth = 97
+
+        /// O custo de cada byte tentado por forca bruta. Um simbolo ASCII que ja apareceu antes custa 0: e o separador
+        /// que quem ataca fixa na mascara ("casa-azul-gato", "a_b_c"), e nao uma escolha nova a cada vez (auditoria do
+        /// envelope de 06/11/2026).
+        private(set) var cost: [Double]
+        /// O fim de um separador entre letras (um digito so, ou de 2 a 4 caracteres que se repetem): juntar os pedacos em
+        /// volta dele nao custa o bit de juncao.
+        private(set) var separator: [Bool]
 
         init(original: [UInt8], folded: [UInt8]) {
             self.original = original
             self.folded = folded
+            segments = [Double](repeating: .nan, count: max(original.count, 1) * Self.segmentWidth)
+            patterns = [Double](repeating: .nan, count: max(original.count, 1) * Self.patternWidth)
+            // Os simbolos ja vistos numa mascara de 128 bits, sem Set: nada da senha fica em memoria que nao se zera. Um digito
+            // entre duas letras ("Casa1Azul1Gato") tambem e separador da mascara (rodada 3 da auditoria do envelope).
+            var seenLow: UInt64 = 0, seenHigh: UInt64 = 0
+            var separators = [Bool](repeating: false, count: original.count)
+            var costs = [Double](repeating: 0, count: original.count)
+            for index in original.indices {
+                let byte = original[index]
+                let digit = (0x30...0x39).contains(byte)
+                let between = index > 0 && index + 1 < original.count
+                    && PasswordStrength.isLetter(original[index - 1]) && PasswordStrength.isLetter(original[index + 1])
+                let symbol = byte < 0x80 && !PasswordStrength.isLetter(byte) && byte != 0x20 && (!digit || between)
+                separators[index] = digit && between
+                guard symbol else {
+                    costs[index] = PasswordStrength.bruteBits(byte)
+                    continue
+                }
+                let bit: UInt64 = 1 << UInt64(byte & 63)
+                let seen = byte < 64 ? seenLow & bit != 0 : seenHigh & bit != 0
+                if byte < 64 { seenLow |= bit } else { seenHigh |= bit }
+                costs[index] = seen ? 0 : PasswordStrength.bruteBits(byte)
+            }
+            // O separador de 2 a 4 caracteres entre letras que ja apareceu antes ("Gato12Casa12", "gato#1casa#1") sai de
+            // graca na repeticao, como o de um caractere (rodada 4). Comparado no proprio array, sem copia.
+            // Com espaco dentro tambem (" 26 ", " - "): o espaco ja e de graca, e o que ele cerca se repete igual.
+            func separatorByte(_ byte: UInt8) -> Bool { byte >= 0x20 && byte < 0x7F && !PasswordStrength.isLetter(byte) }
+            var index = 1
+            while index < original.count {
+                guard PasswordStrength.isLetter(original[index - 1]), separatorByte(original[index]) else {
+                    index += 1
+                    continue
+                }
+                var end = index
+                while end < original.count, separatorByte(original[end]) { end += 1 }
+                let width = end - index
+                if width >= 2, width <= 4, end < original.count, PasswordStrength.isLetter(original[end]) {
+                    var earlier = 1, repeated = false
+                    while !repeated, earlier + width < index {
+                        repeated = PasswordStrength.isLetter(original[earlier - 1]) && PasswordStrength.isLetter(original[earlier + width])
+                            && original[earlier..<(earlier + width)].elementsEqual(original[index..<end])
+                        earlier += 1
+                    }
+                    if repeated {
+                        for position in index..<end { costs[position] = 0 }
+                        separators[end - 1] = true
+                    }
+                }
+                index = end
+            }
+            cost = costs
+            separator = separators
+        }
+
+        /// A mascara de classes por posicao e os custos guardados sao pistas da senha para quem ler o heap: zerados ao sair.
+        deinit {
+            cost.withUnsafeMutableBytes { if let base = $0.baseAddress { memset_s(base, $0.count, 0, $0.count) } }
+            separator.withUnsafeMutableBytes { if let base = $0.baseAddress { memset_s(base, $0.count, 0, $0.count) } }
+            segments.withUnsafeMutableBytes { if let base = $0.baseAddress { memset_s(base, $0.count, 0, $0.count) } }
+            patterns.withUnsafeMutableBytes { if let base = $0.baseAddress { memset_s(base, $0.count, 0, $0.count) } }
         }
 
         func segment(_ from: Int, _ to: Int) -> Double {
-            let key = from << 16 | to
-            if let known = segments[key] { return known }
+            let width = to - from
+            guard width > 0, width < Self.segmentWidth else { return PasswordStrength.segmentBits(self, from, to) }
+            let slot = from * Self.segmentWidth + width
+            if !segments[slot].isNaN { return segments[slot] }
             let value = PasswordStrength.segmentBits(self, from, to)
-            segments[key] = value
+            segments[slot] = value
             return value
         }
 
         func pattern(_ start: Int, _ end: Int) -> Double? {
-            let key = start << 16 | end
-            if let known = patterns[key] { return known }
+            let width = end - start
+            guard width > 0, width < Self.patternWidth else { return PasswordStrength.patternBits(self, start, end) }
+            let slot = start * Self.patternWidth + width
+            if !patterns[slot].isNaN { return patterns[slot].isInfinite ? nil : patterns[slot] }
             let value = PasswordStrength.patternBits(self, start, end)
-            patterns[key] = value
+            patterns[slot] = value ?? .infinity
             return value
         }
     }
@@ -116,9 +272,12 @@ public enum PasswordStrength {
         guard to > from else { return 0 }
         // Forca bruta acumulada: brute[j] - brute[i] e o custo de i..<j caractere a caractere.
         var brute = [Double](repeating: 0, count: to - from + 1)
-        for index in from..<to { brute[index - from + 1] = brute[index - from] + bruteBits(original[index]) }
+        // A forca bruta acumulada e a mascara de classes somada: zerada ao sair, como o melhor custo (rodada 4).
+        defer { brute.withUnsafeMutableBytes { if let base = $0.baseAddress { memset_s(base, $0.count, 0, $0.count) } } }
+        for index in from..<to { brute[index - from + 1] = brute[index - from] + estimator.cost[index] }
         // best[j]: o menor custo para os bytes de `from` ate `from + j`.
         var best = [Double](repeating: .infinity, count: to - from + 1)
+        defer { best.withUnsafeMutableBytes { if let base = $0.baseAddress { memset_s(base, $0.count, 0, $0.count) } } }
         best[0] = 0
         for end in (from + 1)...to {
             for start in from..<end {
@@ -127,7 +286,8 @@ public enum PasswordStrength {
                 var cost = bruteCost
                 if let pattern = estimator.pattern(start, end) {
                     // Juntar pedacos de tipos diferentes custa 1 bit a mais ao atacante.
-                    cost = min(bruteCost, pattern + (start > from && !isSeparator(original[start - 1]) ? 1 : 0))
+                    let joined = start > from && !isSeparator(original[start - 1]) && !estimator.separator[start - 1]
+                    cost = min(bruteCost, pattern + (joined ? 1 : 0))
                 }
                 best[end - from] = min(best[end - from], best[start - from] + cost)
             }
@@ -153,8 +313,50 @@ public enum PasswordStrength {
             var plain = token.map { leet[$0] ?? $0 }
             defer { wipe(&plain) }
             if plain != token, let rank = Dictionaries.ranks[plain] {
-                let swapped = zip(token, plain).filter { $0 != $1 }.count
+                let swapped = zip(token, plain).reduce(0) { $0 + ($1.0 != $1.1 ? 1 : 0) }
                 keep(log2(Double(max(rank, 1))) + uppercaseBits(original, start, end) + Double(max(swapped, 1)))
+            }
+            // A palavra de tras para frente: a regra de inversao e das primeiras que quem ataca roda.
+            // Por escalar, e nao por byte: "oãçaroc" e "coração" de tras para frente (rodada 3).
+            var reversed = [UInt8]()
+            reversed.reserveCapacity(token.count)
+            var cut = token.count
+            for index in stride(from: token.count - 1, through: 0, by: -1) where token[index] & 0xC0 != 0x80 {
+                reversed.append(contentsOf: token[index..<cut])
+                cut = index
+            }
+            defer { wipe(&reversed) }
+            if reversed != token, let rank = Dictionaries.ranks[reversed] {
+                keep(log2(Double(max(rank, 1))) + uppercaseBits(original, start, end) + 1)
+            }
+        }
+        // Uma palavra de outra lingua, um nome proprio ou um trecho em outro alfabeto, que as listas nao tem: quem ataca
+        // escolhe a lingua do dono e usa a lista dela, da ordem de 10^5 palavras. Um trecho so de letras, de 6 a 64 bytes,
+        // custa no maximo isso, e nao as letras uma a uma (auditoria do envelope de 06/11/2026, rodadas 2 e 3): tres
+        // palavras pedem o "sim", quatro passam. Letras sorteadas tambem caem aqui: o medidor erra para o lado do "sim".
+        // Com letras trocadas por digito ou simbolo ("Kuehlschr4nk"), a mesma palavra mais 1 bit por troca (rodada 3).
+        // A partir de 4 bytes: com o teto da lista, 5 letras custavam mais que 6 (rodada 4).
+        if length >= 4, length <= 64,
+           (start..<end).allSatisfy({ original[$0] >= 0x80 || isLetter(leet[folded[$0]] ?? folded[$0]) }) {
+            var swapped = 0
+            var kinds: UInt64 = 0, targets: UInt32 = 0
+            for index in start..<end {
+                guard let letter = leet[folded[index]] else { continue }
+                swapped += 1
+                kinds |= 1 << UInt64(folded[index] & 63)
+                targets |= 1 << UInt32(letter - 0x61)
+            }
+            // Troca solta: no maximo uma a cada cinco letras, 1 bit cada. Mais que isso e trecho sorteado com simbolos.
+            if swapped * 5 <= length {
+                keep(log2(1e5) + uppercaseBits(original, start, end) + Double(swapped))
+            }
+            // Troca como regra, como o hashcat aplica ("e" vira "3" na palavra inteira): 1 bit por tipo de troca, quando
+            // nenhuma letra trocada ficou sem trocar no trecho, e so de 8 bytes para cima (rodada 4).
+            let consistent = !(start..<end).contains { index in
+                (0x61...0x7A).contains(folded[index]) && targets & (1 << UInt32(folded[index] - 0x61)) != 0
+            }
+            if length >= 8, swapped > 0, consistent {
+                keep(log2(1e5) + uppercaseBits(original, start, end) + Double(kinds.nonzeroBitCount))
             }
         }
         // Repeticao de um pedaco (com a ultima repeticao podendo perder o separador final).
@@ -188,8 +390,11 @@ public enum PasswordStrength {
         }
         // Linha do teclado.
         if length >= 4 {
-            let slice = Array(folded[start..<end])
-            if keyboardRows.contains(where: { $0.contains(slice) }) { keep(log2(Double(length) * 50)) }
+            let slice = folded[start..<end]
+            let onRow = keyboardRows.contains { row in
+                row.count >= length && (0...(row.count - length)).contains { row[$0..<($0 + length)].elementsEqual(slice) }
+            }
+            if onRow { keep(log2(Double(length) * 50)) }
         }
         return found
     }
@@ -300,8 +505,18 @@ public enum PasswordStrength {
         return short < 50 ? 2000 + short : 1900 + short
     }
 
-    static let keyboardRows: [[UInt8]] = ["qwertyuiop", "asdfghjkl", "zxcvbnm", "1qaz2wsx3edc", "qazwsxedc", "poiuytrewq", "lkjhgfdsa"]
-        .map { Array($0.utf8) }
+    /// As linhas e diagonais do teclado do computador, com e sem Shift, e a pagina de numeros e simbolos do celular, onde esta
+    /// senha e digitada (iPhone e Gboard), nos dois sentidos: "!@#$%^&*()_+", "-/:;()$&@" e "+_)(*&^%$#@!" sao caminhadas de
+    /// lista de vazamento (rodada 5 da auditoria do envelope).
+    static let keyboardRows: [[UInt8]] = {
+        let rows = [
+            "`1234567890-=", "~!@#$%^&*()_+", "1!2@3#4$5%6^7&8*9(0)-_=+",
+            "qwertyuiop[]\\", "qwertyuiop{}|", "asdfghjkl;'", "asdfghjkl:\"", "zxcvbnm,./", "zxcvbnm<>?", "qazwsxedc",
+            "1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik,9ol.0p;/", "!qaz@wsx#edc$rfv%tgb^yhn&ujm*ik<(ol>)p:?",
+            "-/:;()$&@\"", ".,?!'", "[]{}#%^*+=", "_\\|~<>", "@#$_&-+()/", "*\"':;!?",
+        ]
+        return rows.flatMap { [Array($0.utf8), Array($0.utf8.reversed())] }
+    }()
 
     /// As listas: a menor posicao de cada palavra entre todas, e as palavras BIP-39 de
     /// todos os idiomas com no maximo 2048.
@@ -342,7 +557,7 @@ public enum PasswordStrength {
 
     // MARK: Sugestao e reuso da frase
 
-    private static func isLetter(_ byte: UInt8) -> Bool {
+    static func isLetter(_ byte: UInt8) -> Bool {
         (0x41...0x5A).contains(byte) || (0x61...0x7A).contains(byte)
     }
 
@@ -404,24 +619,65 @@ public enum PasswordStrength {
     /// A senha usa duas ou mais palavras da propria frase? Quem achar o papel da
     /// frase teria meio caminho andado.
     public static func reusesPhrase(_ password: SecureBytes, phrase: SecureBytes) -> Bool {
-        func tokens(_ secret: SecureBytes) -> [[UInt8]] {
+        // As duas na forma da frase (NFKD canonica): em largura cheia, "ａｂａｎｄｏｎ" e "abandon"; uma palavra com acento ou
+        // de outro alfabeto continua uma palavra so. A frase se corta so no espaco, a forma canonica; a senha, em qualquer
+        // byte ASCII que nao e letra (rodada 4 da auditoria do envelope). Cada palavra num array do tamanho certo, que
+        // nunca realoca, e nada de Set: ele seguraria copias que o wipe nao alcanca.
+        func tokens(_ secret: SecureBytes, onlySpace: Bool) -> [[UInt8]] {
             secret.withUnsafeBytes { raw in
                 var out: [[UInt8]] = []
-                var token = [UInt8]()
-                for byte in raw {
-                    if isLetter(byte) { token.append((0x41...0x5A).contains(byte) ? byte + 0x20 : byte) } else if !token.isEmpty { out.append(token); token = [] }
+                out.reserveCapacity(raw.count / 2 + 1)
+                var start = 0, index = 0
+                func close(_ end: Int) {
+                    guard end > start else { return }
+                    var token = [UInt8]()
+                    token.reserveCapacity(end - start)
+                    for byte in raw[start..<end] { token.append((0x41...0x5A).contains(byte) ? byte + 0x20 : byte) }
+                    out.append(token)
                 }
-                if !token.isEmpty { out.append(token) }
+                // Escalar a escalar: fora do ASCII, corta no que nao e letra nem marca (travessao, ponto do meio, emoji,
+                // a virgula ideografica), como cortava antes (rodada 5 da auditoria do envelope).
+                while index < raw.count {
+                    let lead = raw[index]
+                    let next = min(index + (lead < 0x80 ? 1 : lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : 2), raw.count)
+                    let cut: Bool
+                    if onlySpace {
+                        cut = lead == 0x20
+                    } else if lead < 0x80 {
+                        cut = !isLetter(lead)
+                    } else {
+                        var bytes = UnsafeRawBufferPointer(rebasing: raw[index..<next]).makeIterator()
+                        var parser = Unicode.UTF8.ForwardParser()
+                        if case .valid(let encoded) = parser.parseScalar(from: &bytes) {
+                            let properties = Unicode.UTF8.decode(encoded).properties
+                            switch properties.generalCategory {
+                            case .nonspacingMark, .spacingMark, .enclosingMark: cut = false
+                            default: cut = !properties.isAlphabetic
+                            }
+                        } else {
+                            cut = true
+                        }
+                    }
+                    if cut {
+                        close(index)
+                        start = next
+                    }
+                    index = next
+                }
+                close(raw.count)
                 return out
             }
         }
-        var typed = tokens(password)
-        var words = tokens(phrase)
+        let typedForm = BIP39.nfkd(password)
+        defer { typedForm.wipe() }
+        var typed = tokens(typedForm, onlySpace: false)
+        var words = tokens(phrase, onlySpace: true)
         defer {
             for index in typed.indices { wipe(&typed[index]) }
             for index in words.indices { wipe(&words[index]) }
         }
-        let set = Set(words)
-        return typed.filter { set.contains($0) }.count >= 2
+        var reused = 0
+        for token in typed where words.contains(where: { $0 == token }) { reused += 1 }
+        return reused >= 2
     }
 }

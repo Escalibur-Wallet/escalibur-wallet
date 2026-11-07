@@ -93,6 +93,7 @@ import app.escalibur.wallet.ui.comp.Aceite
 import app.escalibur.wallet.ui.comp.Esqueleto
 import app.escalibur.wallet.ui.comp.Icone
 import app.escalibur.wallet.ui.comp.Icones
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import app.escalibur.wallet.ui.comp.LogoDaMoeda
@@ -470,6 +471,22 @@ internal fun LinhasDaCotacao(controle: ControleDaTroca, r: RetratoDaTroca, cotac
             "bloqueado" -> Text(t("Esta troca perderia %@%% para o impacto no preço. Divida em ordens menores ou use uma ordem limite.", Formato.agrupado(impacto, 0)),
                                 style = estilo(Tipo.nota), color = Paleta.baixa)
         }
+        // So uma fonte de cotacao e sem preco de referencia: o aviso e a caixa do aceite, como no iOS (pedido do dono,
+        // 05/11/2026). O aceite leva o minimo desenhado, e na cotacao de um pedido que ja mudou a caixa nao muda.
+        if (cotacao.semComparacao) {
+            Text(t("Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Um preço manipulado não seria percebido pela carteira."),
+                 style = estilo(Tipo.nota), color = Paleta.cautela)
+            Aceite(r.semComparacaoAceita, t("Entendo que agora só há uma fonte de cotação independente e que o preço pode estar manipulado."),
+                   habilitado = cotacao.atual) {
+                mudar(JSONObject().put("aceitarSemComparacao", it).put("garantidoVisto", cotacao.garantido).put("entradaVista", cotacao.entrada))
+            }
+            // O botao apaga sozinho quando o aceite cai: o TalkBack ouve por que, como o VoiceOver no iOS.
+            val mudou = t("A cotação mudou. Confira e marque de novo.")
+            val vista = LocalView.current
+            @Suppress("DEPRECATION")
+            LaunchedEffect(r.semComparacaoCaiu) { if (r.semComparacaoCaiu) vista.announceForAccessibility(mudou) }
+            if (r.semComparacaoCaiu) Text(mudou, style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+        }
         Row(Modifier.clickable { detalhes = !detalhes }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(t("Detalhes"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
@@ -572,16 +589,21 @@ internal fun Folha(titulo: String, aoFechar: () -> Unit, conteudo: @Composable (
     }
 }
 
-/** A escolha do token. Vendendo, so o que a carteira tem nesta rede; as verificadas primeiro. */
+/**
+ * A escolha do token. Vendendo, so o que a carteira tem nesta rede; as verificadas primeiro. Com `aoComprarDaBusca`
+ * (comprando, na troca de agora), qualquer moeda pela busca de Receber, que recebe a rede e o ativo escolhidos.
+ */
 @Composable
-internal fun FolhaDeTokens(controle: ControleDaTroca, vende: Boolean, r: RetratoDaTroca, aoFechar: () -> Unit, aoEscolher: (String) -> Unit) {
+internal fun FolhaDeTokens(controle: ControleDaTroca, vende: Boolean, r: RetratoDaTroca, aoFechar: () -> Unit,
+                           aoComprarDaBusca: ((String, String) -> Unit)? = null, aoEscolher: (String) -> Unit) {
     var opcoes by remember { mutableStateOf<List<OpcaoDeToken>?>(null) }
     var busca by remember { mutableStateOf("") }
     // Sobe a cada moeda adicionada pelo contrato: a lista le de novo e ja traz a nova.
     var adicionadas by remember { mutableIntStateOf(0) }
     LaunchedEffect(adicionadas) { opcoes = controle.opcoes(vende) }
+    val catalogo = remember { BuscaDaTroca() }
     Folha(t("Escolher token"), aoFechar) { fechar ->
-        CampoDeBusca(busca, t("Buscar por nome"), Modifier.padding(horizontal = Espaco.margem)) { busca = it }
+        CampoDeBusca(busca, if (aoComprarDaBusca != null) t("Buscar qualquer moeda") else t("Buscar por nome"), Modifier.padding(horizontal = Espaco.margem)) { busca = it }
         val termo = busca.trim()
         val todas = opcoes ?: emptyList()
         val lista = todas.filter { termo.isEmpty() || it.ativo.simbolo.contains(termo, true) || it.ativo.nome.contains(termo, true) }
@@ -589,6 +611,11 @@ internal fun FolhaDeTokens(controle: ControleDaTroca, vende: Boolean, r: Retrato
         val fora = lista.filter { it.fora && !it.outraRede }
         // As moedas que a carteira tem nas outras redes (pedido do dono, 02/11/2026): escolher muda a rede la em cima.
         val outras = lista.filter { it.outraRede }
+        // Comprando na troca de agora: a busca de todas as moedas sai sozinha quando nada daqui combina, e com o toque quando
+        // combina. O nome de uma moeda que a carteira ja tem nao sai do celular a cada letra (revisao de 06/11/2026).
+        val buscandoFora = aoComprarDaBusca != null && opcoes != null && termo.length >= 2 &&
+            (lista.isEmpty() || catalogo.ampliada == termo.lowercase())
+        AcompanharBusca(catalogo, termo, buscandoFora)
         LazyColumn(Modifier.fillMaxWidth().heightIn(min = 320.dp).padding(top = Espaco.xs, bottom = Espaco.md)) {
             if (opcoes == null) item {
                 Box(Modifier.fillMaxWidth().padding(Espaco.lg), contentAlignment = Alignment.Center) { Girando(Paleta.tintaSuave, 20.dp) }
@@ -602,6 +629,29 @@ internal fun FolhaDeTokens(controle: ControleDaTroca, vende: Boolean, r: Retrato
             if (outras.isNotEmpty()) {
                 item { Secao(t("Suas moedas em outras redes")) }
                 items(outras, key = { "outra-" + it.ativo.id }) { opcao -> LinhaDoToken(opcao) { fechar { aoEscolher(opcao.ativo.id) } } }
+            }
+            // Qualquer moeda, como em Receber (pedido do dono, 06/11/2026): a rede dela e escolhida depois, e a moeda nova
+            // passa antes pelo Adicionar moeda.
+            if (aoComprarDaBusca != null && buscandoFora) {
+                secaoDaBusca(catalogo, termo, lista.mapNotNull { it.ativo.coingecko }.toSet(), lista.isEmpty()) { achado ->
+                    Navegacao.folha {
+                        RedesDaTroca(achado, r.vende?.id) { rede, id ->
+                            Navegacao.fechar()
+                            fechar { aoComprarDaBusca(rede, id) }
+                        }
+                    }
+                }
+            } else if (aoComprarDaBusca != null && opcoes != null && termo.length >= 2) item {
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = Altura.linha).clickable { catalogo.ampliada = termo.lowercase() }.padding(horizontal = Espaco.margem),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
+                ) {
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
+                        Icone(Icones.busca, Paleta.tinta, tamanho = 15.dp)
+                    }
+                    Text(t("Buscar “%@” em todas as moedas", termo), style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 2,
+                         modifier = Modifier.weight(1f))
+                }
             }
             if (vende && opcoes != null && lista.isEmpty()) item {
                 val rede = r.rede?.nome ?: ""

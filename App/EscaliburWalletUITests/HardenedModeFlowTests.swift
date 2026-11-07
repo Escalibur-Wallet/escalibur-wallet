@@ -156,11 +156,13 @@ final class HardenedModeFlowTests: XCTestCase {
         app.launch()
         enableDefault(app, prefix: "h")
 
-        // Reabrir: o PIN, e o rosto depois dele.
+        // Reabrir: o rosto primeiro (02/11/2026), aprovado de fora, e o PIN depois. O rosto pode ja ter confirmado quando a
+        // tela aparece.
         app.terminate()
         app.launchArguments = []
         app.launch()
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Super Security'")).firstMatch.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Super Security' OR label CONTAINS 'Agora o PIN'"))
+            .firstMatch.waitForExistence(timeout: 20))
         shot("h4-bloqueio", app)
         type(pin: pin, in: app)
         XCTAssertTrue(app.staticTexts["Saldo total"].waitForExistence(timeout: 60))

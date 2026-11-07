@@ -37,7 +37,6 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.OAEPParameterSpec
 import javax.crypto.spec.PSource
-import javax.crypto.spec.SecretKeySpec
 
 /**
  * O chaveiro e o Secure Enclave do Android: o Keystore, para o cofre do nucleo em Swift (o mesmo
@@ -335,50 +334,25 @@ object Cofre {
         try { keyStore.deleteEntry(alias(slot)) } catch (e: Exception) {}
     }
 
-    /** [status] e, com OK, o embrulho. */
+    // ---- Embrulho (KeyWrapper) ----
+    //
+    // Nos slots de biometria e do PIN, so o que o Keystore faz passa por aqui: a RSA que abre a chave AES do
+    // embrulho (depois da biometria) e o HMAC da senha do PIN. O AES-GCM e o HKDF sao feitos no nucleo
+    // (Kit/Sources/Android/EscaliburAndroid/Cofre.swift), sobre buffers que ele zera, e a chave raiz nunca entra
+    // no Java: aqui, o SecretKeySpec e a Conscrypt guardavam copias dela e das chaves do embrulho no heap
+    // (auditoria das chaves de 06/11/2026). O que o Keystore devolve sai pelo [status][segredo], que o nucleo
+    // copia e zera no lugar. Os formatos gravados nao mudaram.
+
+    /** [status] e, com OK, o embrulho. So o slot do aparelho: o AES-GCM e do Keystore, no hardware. */
     @JvmStatic
     fun embrulhar(slot: String, segredo: ByteArray, senha: ByteArray?): ByteArray = try {
-        when {
-            usaSenha(slot) != (senha != null) -> byteArrayOf(FALHA.toByte())
-            usaBiometria(slot) -> {
-                val publica = keyStore.getCertificate(alias(slot))?.publicKey ?: throw SemChave()
-                // Hibrido: uma chave AES nova por embrulho, cifrada pela RSA; o segredo, pela AES.
-                val chave = ByteArray(32).also { aleatorio.nextBytes(it) }
-                try {
-                    val rsa = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
-                    rsa.init(Cipher.ENCRYPT_MODE, publica, oaep)
-                    val chaveCifrada = rsa.doFinal(chave)
-                    val aes = Cipher.getInstance("AES/GCM/NoPadding")
-                    val iv = ByteArray(12).also { aleatorio.nextBytes(it) }
-                    aes.init(Cipher.ENCRYPT_MODE, SecretKeySpec(chave, "AES"), GCMParameterSpec(128, iv))
-                    aes.updateAAD(aadDoEmbrulho(slot, null))
-                    byteArrayOf(OK.toByte(), VERSAO) + inteiro(chaveCifrada.size) + chaveCifrada + iv + aes.doFinal(segredo)
-                } finally {
-                    chave.fill(0)
-                }
-            }
-            usaSenha(slot) -> {
-                val sal = ByteArray(16).also { aleatorio.nextBytes(it) }
-                val chave = chaveDoPin(slot, senha!!, sal)
-                try {
-                    val aes = Cipher.getInstance("AES/GCM/NoPadding")
-                    val iv = ByteArray(12).also { aleatorio.nextBytes(it) }
-                    aes.init(Cipher.ENCRYPT_MODE, SecretKeySpec(chave, "AES"), GCMParameterSpec(128, iv))
-                    aes.updateAAD(aadDoEmbrulho(slot, null) + VERSAO_DO_PIN)
-                    byteArrayOf(OK.toByte(), VERSAO_DO_PIN) + sal + iv + aes.doFinal(segredo)
-                } finally {
-                    chave.fill(0)
-                }
-            }
-            else -> {
-                val chave = keyStore.getKey(alias(slot), null) as? SecretKey ?: throw SemChave()
-                val aes = Cipher.getInstance("AES/GCM/NoPadding")
-                aes.init(Cipher.ENCRYPT_MODE, chave)
-                aes.updateAAD(aadDoEmbrulho(slot, null))
-                val cifrado = aes.doFinal(segredo)
-                byteArrayOf(OK.toByte(), VERSAO) + aes.iv + cifrado
-            }
-        }
+        if (usaBiometria(slot) || usaSenha(slot) || senha != null) throw Recusa(FALHA)
+        val chave = keyStore.getKey(alias(slot), null) as? SecretKey ?: throw SemChave()
+        val aes = Cipher.getInstance("AES/GCM/NoPadding")
+        aes.init(Cipher.ENCRYPT_MODE, chave)
+        aes.updateAAD(aadDoEmbrulho(slot, null))
+        val cifrado = aes.doFinal(segredo)
+        byteArrayOf(OK.toByte(), VERSAO) + aes.iv + cifrado
     } catch (e: SemChave) {
         byteArrayOf(SEM_CHAVE.toByte())
     } catch (e: Exception) {
@@ -388,11 +362,22 @@ object Cofre {
         senha?.fill(0)
     }
 
-    /** [status] e, com OK, o segredo. Nos slots de biometria, `motivo` e o texto da biometria; sem
-     * motivo, nenhuma interface (e recusa). */
+    /** [status] e, com OK, o segredo. So o slot do aparelho e o formato 1 dos slots do PIN (cofres de teste do
+     * emulador, a senha so no AAD): os dois sao AES-GCM do Keystore, no hardware. */
     @JvmStatic
     fun desembrulhar(slot: String, blob: ByteArray, senha: ByteArray?, motivo: String?): ByteArray = try {
-        val claro = abrir(slot, blob, senha, motivo)
+        if (usaBiometria(slot) || usaSenha(slot) != (senha != null)) throw Recusa(FALHA)
+        if (!aparelhoComBloqueio()) throw Recusa(INDISPONIVEL)
+        if (blob.size < 1 + 12 + 16 || blob[0] != VERSAO) throw Recusa(FALHA)
+        val chave = keyStore.getKey(alias(slot), null) as? SecretKey ?: throw Recusa(SEM_CHAVE)
+        val aes = Cipher.getInstance("AES/GCM/NoPadding")
+        aes.init(Cipher.DECRYPT_MODE, chave, GCMParameterSpec(128, blob, 1, 12))
+        aadDoEmbrulho(slot, senha).let { aad -> try { aes.updateAAD(aad) } finally { aad.fill(0) } }
+        val claro = try {
+            aes.doFinal(blob, 13, blob.size - 13)
+        } catch (e: AEADBadTagException) {
+            throw Recusa(if (usaSenha(slot)) SENHA else FALHA)
+        }
         try { byteArrayOf(OK.toByte()) + claro } finally { claro.fill(0) }
     } catch (e: Recusa) {
         byteArrayOf(e.codigo.toByte())
@@ -404,58 +389,102 @@ object Cofre {
         senha?.fill(0)
     }
 
-    /**
-     * Abre `blob` pela biometria e, na mesma autenticacao, a vigia do modo reforcado. Devolve
-     * [status][vigia][tamanho do segredo em 4 bytes][segredo][conteudo da vigia]; vigia 0 abriu,
-     * 1 a chave nao existe mais, 2 nao se sabe.
-     */
+    /** [status] e, com OK, a chave publica RSA (X.509) do slot de biometria: o nucleo embrulha com ela, sem pedir nada. */
     @JvmStatic
-    fun desembrulharVigiando(slot: String, blob: ByteArray, motivo: String, slotVigia: String, vigia: ByteArray): ByteArray = try {
-        val claro = abrir(slot, blob, null, motivo)
-        try {
-            val (estado, conteudo) = abrirVigia(slotVigia, vigia)
-            try {
-                // Um array so, do tamanho certo: somar com `+` criava arrays intermediarios com o miolo,
-                // que ninguem zerava (revisao de seguranca do Android de 26/10/2026).
-                val saida = ByteArray(2 + 4 + claro.size + conteudo.size)
-                saida[0] = OK.toByte()
-                saida[1] = estado.toByte()
-                inteiro(claro.size).copyInto(saida, 2)
-                claro.copyInto(saida, 6)
-                conteudo.copyInto(saida, 6 + claro.size)
-                saida
-            } finally {
-                conteudo.fill(0)
-            }
-        } finally {
-            claro.fill(0)
-        }
+    fun publica(slot: String): ByteArray = try {
+        if (!usaBiometria(slot)) throw Recusa(FALHA)
+        val publica = keyStore.getCertificate(alias(slot))?.publicKey ?: throw SemChave()
+        byteArrayOf(OK.toByte()) + publica.encoded
+    } catch (e: Recusa) {
+        byteArrayOf(e.codigo.toByte())
+    } catch (e: SemChave) {
+        byteArrayOf(SEM_CHAVE.toByte())
+    } catch (e: Exception) {
+        byteArrayOf(FALHA.toByte())
+    }
+
+    /** [status] e, com OK, a chave AES de um embrulho de biometria, que a RSA do slot abriu depois da
+     * biometria. Sem `motivo`, nenhuma interface (e recusa). */
+    @JvmStatic
+    fun abrirChave(slot: String, chaveCifrada: ByteArray, motivo: String?): ByteArray = try {
+        val chave = decifrarComBiometria(slot, chaveCifrada, motivo)
+        try { byteArrayOf(OK.toByte()) + chave } finally { chave.fill(0) }
     } catch (e: Recusa) {
         byteArrayOf(e.codigo.toByte())
     } catch (e: Exception) {
         byteArrayOf(FALHA.toByte())
     }
 
-    private fun abrir(slot: String, blob: ByteArray, senha: ByteArray?, motivo: String?): ByteArray {
-        if (usaSenha(slot) != (senha != null)) throw Recusa(FALHA)
-        if (!aparelhoComBloqueio()) throw Recusa(INDISPONIVEL)
-        if (usaSenha(slot) && blob.firstOrNull() == VERSAO_DO_PIN) return abrirPeloPin(slot, blob, senha!!)
-        if (blob.isEmpty() || blob[0] != VERSAO) throw Recusa(FALHA)
-        if (!usaBiometria(slot)) {
-            val chave = keyStore.getKey(alias(slot), null) as? SecretKey ?: throw Recusa(SEM_CHAVE)
-            if (blob.size < 1 + 12 + 16) throw Recusa(FALHA)
-            val aes = Cipher.getInstance("AES/GCM/NoPadding")
-            aes.init(Cipher.DECRYPT_MODE, chave, GCMParameterSpec(128, blob, 1, 12))
-            aadDoEmbrulho(slot, senha).let { aad -> try { aes.updateAAD(aad) } finally { aad.fill(0) } }
-            return try {
-                aes.doFinal(blob, 13, blob.size - 13)
-            } catch (e: AEADBadTagException) {
-                throw Recusa(if (usaSenha(slot)) SENHA else FALHA)
+    /**
+     * Abre a chave do embrulho pela biometria e, na mesma autenticacao, a da vigia do modo reforcado.
+     * Devolve [status][vigia][chave 32][chave da vigia 32, so se abriu]; vigia 0 abriu, 1 a chave nao
+     * existe mais, 2 nao se sabe. Sem a chave cifrada da vigia (o nucleo nao leu o embrulho dela), 2.
+     */
+    @JvmStatic
+    fun abrirChaveVigiando(slot: String, chaveCifrada: ByteArray, motivo: String, slotVigia: String, chaveCifradaDaVigia: ByteArray?): ByteArray = try {
+        val chave = decifrarComBiometria(slot, chaveCifrada, motivo)
+        try {
+            val (estado, daVigia) = decifrarVigia(slotVigia, chaveCifradaDaVigia)
+            try {
+                // Um array so, do tamanho certo: somar com `+` criava arrays intermediarios com as chaves.
+                val saida = ByteArray(2 + chave.size + daVigia.size)
+                saida[0] = OK.toByte()
+                saida[1] = estado.toByte()
+                chave.copyInto(saida, 2)
+                daVigia.copyInto(saida, 2 + chave.size)
+                saida
+            } finally {
+                daVigia.fill(0)
             }
+        } finally {
+            chave.fill(0)
         }
+    } catch (e: Recusa) {
+        byteArrayOf(e.codigo.toByte())
+    } catch (e: Exception) {
+        byteArrayOf(FALHA.toByte())
+    } finally {
+        chaveCifradaDaVigia?.fill(0)
+    }
+
+    /**
+     * [status] e, com OK, a semente do embrulho do PIN: a senha passa pela chave HMAC do slot, que nunca sai
+     * do hardware. O nucleo estende com o sal do embrulho (HKDF-SHA256): quem copia o arquivo, ou le a
+     * memoria do Keystore, so testa PINs neste aparelho, um de cada vez. `abrindo` pede o bloqueio de tela,
+     * como o desembrulho sempre pediu.
+     */
+    @JvmStatic
+    fun semente(slot: String, senha: ByteArray, abrindo: Boolean): ByteArray = try {
+        if (!usaSenha(slot)) throw Recusa(FALHA)
+        if (abrindo && !aparelhoComBloqueio()) throw Recusa(INDISPONIVEL)
+        val hmac = keyStore.getKey(alias(slot), null) as? SecretKey ?: throw SemChave()
+        // A chave do slot ainda e a AES do formato 1: este embrulho nao e dela. Pelo algoritmo, e nao
+        // pela excecao: o celular bloqueado tambem lanca InvalidKeyException.
+        if (!hmac.algorithm.equals("HmacSHA256", ignoreCase = true)) throw SemChave()
+        val entrada = "escalibur-wallet/android/v2/pin\u0000$slot\u0000".toByteArray() + senha
+        val semente = try {
+            Mac.getInstance("HmacSHA256").run { init(hmac); doFinal(entrada) }
+        } catch (e: android.security.keystore.UserNotAuthenticatedException) {
+            throw Recusa(BLOQUEADO)
+        } finally {
+            entrada.fill(0)
+        }
+        try { byteArrayOf(OK.toByte()) + semente } finally { semente.fill(0) }
+    } catch (e: Recusa) {
+        byteArrayOf(e.codigo.toByte())
+    } catch (e: SemChave) {
+        byteArrayOf(SEM_CHAVE.toByte())
+    } catch (e: Exception) {
+        byteArrayOf(FALHA.toByte())
+    } finally {
+        senha.fill(0)
+    }
+
+    private fun decifrarComBiometria(slot: String, chaveCifrada: ByteArray, motivo: String?): ByteArray {
+        if (!usaBiometria(slot)) throw Recusa(FALHA)
+        if (!aparelhoComBloqueio()) throw Recusa(INDISPONIVEL)
         if (motivo == null) throw Recusa(CANCELADO)
         val privada = keyStore.getKey(alias(slot), null) as? PrivateKey ?: throw Recusa(SEM_CHAVE)
-        val partes = partesHibridas(blob) ?: throw Recusa(FALHA)
         val rsa = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
         // A chave que aceita a biometria recente (`kand.bio`, a unica de "Bloquear as carteiras"):
         // a biometria vem antes, sem objeto de cifra, e a cifra abre dentro da janela dela. Com o
@@ -470,12 +499,7 @@ object Cofre {
             } catch (e: Exception) {
                 throw Recusa(FALHA)
             }
-            val chave = try { rsa.doFinal(partes.first) } catch (e: Exception) { throw Recusa(FALHA) }
-            try {
-                return abrirHibrido(slot, chave, partes.second)
-            } finally {
-                chave.fill(0)
-            }
+            return try { rsa.doFinal(chaveCifrada) } catch (e: Exception) { throw Recusa(FALHA) }
         }
         try {
             rsa.init(Cipher.DECRYPT_MODE, privada, oaep)
@@ -484,90 +508,24 @@ object Cofre {
             throw Recusa(SEM_CHAVE)
         }
         val autenticada = biometria(rsa, motivo) ?: throw Recusa(FALHA)
-        val chave = try { autenticada.doFinal(partes.first) } catch (e: Exception) { throw Recusa(FALHA) }
-        try {
-            return abrirHibrido(slot, chave, partes.second)
-        } finally {
-            chave.fill(0)
-        }
+        return try { autenticada.doFinal(chaveCifrada) } catch (e: Exception) { throw Recusa(FALHA) }
     }
 
     /** A vigia, sem interface: a autenticacao que acabou de abrir a outra camada vale para ela
      * por alguns segundos (a chave da vigia aceita a biometria recente, ver `gerarRsa`). */
-    private fun abrirVigia(slot: String, blob: ByteArray): Pair<Int, ByteArray> {
+    private fun decifrarVigia(slot: String, chaveCifrada: ByteArray?): Pair<Int, ByteArray> {
         if (!keyStore.containsAlias(alias(slot))) return 1 to ByteArray(0)
         return try {
             val privada = keyStore.getKey(alias(slot), null) as? PrivateKey ?: return 1 to ByteArray(0)
-            val partes = partesHibridas(blob) ?: return 2 to ByteArray(0)
+            if (chaveCifrada == null || chaveCifrada.isEmpty()) return 2 to ByteArray(0)
             val rsa = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
             rsa.init(Cipher.DECRYPT_MODE, privada, oaep)
-            val chave = rsa.doFinal(partes.first)
-            try { 0 to abrirHibrido(slot, chave, partes.second) } finally { chave.fill(0) }
+            0 to rsa.doFinal(chaveCifrada)
         } catch (e: KeyPermanentlyInvalidatedException) {
             keyStore.deleteEntry(alias(slot))
             1 to ByteArray(0)
         } catch (e: Exception) {
             2 to ByteArray(0)
-        }
-    }
-
-    private fun partesHibridas(blob: ByteArray): Pair<ByteArray, ByteArray>? {
-        if (blob.size < 1 + 4 + 12 + 16) return null
-        val tamanho = ByteBuffer.wrap(blob, 1, 4).int
-        if (tamanho <= 0 || 5 + tamanho > blob.size) return null
-        return blob.copyOfRange(5, 5 + tamanho) to blob.copyOfRange(5 + tamanho, blob.size)
-    }
-
-    private fun abrirHibrido(slot: String, chave: ByteArray, resto: ByteArray): ByteArray {
-        if (resto.size < 12 + 16) throw Recusa(FALHA)
-        val aes = Cipher.getInstance("AES/GCM/NoPadding")
-        aes.init(Cipher.DECRYPT_MODE, SecretKeySpec(chave, "AES"), GCMParameterSpec(128, resto, 0, 12))
-        aes.updateAAD(aadDoEmbrulho(slot, null))
-        return try { aes.doFinal(resto, 12, resto.size - 12) } catch (e: AEADBadTagException) { throw Recusa(FALHA) }
-    }
-
-    /** Formato 2: [2][sal 16][iv 12][cifrado + tag]. Senha errada da outra chave AES, e a tag recusa. */
-    private fun abrirPeloPin(slot: String, blob: ByteArray, senha: ByteArray): ByteArray {
-        if (blob.size < 1 + 16 + 12 + 16) throw Recusa(FALHA)
-        val chave = chaveDoPin(slot, senha, blob.copyOfRange(1, 17))
-        try {
-            val aes = Cipher.getInstance("AES/GCM/NoPadding")
-            aes.init(Cipher.DECRYPT_MODE, SecretKeySpec(chave, "AES"), GCMParameterSpec(128, blob, 17, 12))
-            aes.updateAAD(aadDoEmbrulho(slot, null) + VERSAO_DO_PIN)
-            return try { aes.doFinal(blob, 29, blob.size - 29) } catch (e: AEADBadTagException) { throw Recusa(SENHA) }
-        } finally {
-            chave.fill(0)
-        }
-    }
-
-    /**
-     * A chave AES de um embrulho do PIN: a senha passa pela chave HMAC do slot, que nunca sai do
-     * hardware, e o resultado e estendido com o sal deste embrulho (HKDF-SHA256). Quem copia o
-     * arquivo, ou le a memoria do Keystore, so testa PINs neste aparelho, um de cada vez.
-     */
-    private fun chaveDoPin(slot: String, senha: ByteArray, sal: ByteArray): ByteArray {
-        val hmac = keyStore.getKey(alias(slot), null) as? SecretKey ?: throw SemChave()
-        // A chave do slot ainda e a AES do formato 1: este embrulho nao e dela. Pelo algoritmo, e nao
-        // pela excecao: o celular bloqueado tambem lanca InvalidKeyException.
-        if (!hmac.algorithm.equals("HmacSHA256", ignoreCase = true)) throw SemChave()
-        val entrada = "escalibur-wallet/android/v2/pin\u0000$slot\u0000".toByteArray() + senha
-        val semente = try {
-            Mac.getInstance("HmacSHA256").run { init(hmac); doFinal(entrada) }
-        } catch (e: android.security.keystore.UserNotAuthenticatedException) {
-            throw Recusa(BLOQUEADO)
-        } finally {
-            entrada.fill(0)
-        }
-        try {
-            val extraida = Mac.getInstance("HmacSHA256").run { init(SecretKeySpec(sal, "HmacSHA256")); doFinal(semente) }
-            try {
-                val info = "escalibur-wallet/android/v2/embrulho\u0000$slot".toByteArray() + 1
-                return Mac.getInstance("HmacSHA256").run { init(SecretKeySpec(extraida, "HmacSHA256")); doFinal(info) }
-            } finally {
-                extraida.fill(0)
-            }
-        } finally {
-            semente.fill(0)
         }
     }
 
