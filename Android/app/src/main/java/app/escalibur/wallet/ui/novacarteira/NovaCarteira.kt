@@ -10,7 +10,8 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.animation.core.VectorConverter
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
@@ -728,12 +729,21 @@ private fun ChapaDeTodas(palavras: Int, mostradas: Map<Int, List<CharArray>>, es
     Box(
         Modifier.fillMaxWidth().padding(vertical = Espaco.md)
             .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragEnd = { escopo.launch { dedo.animateTo(Offset.Zero, spring(dampingRatio = 0.6f, stiffness = 158f)) } },
-                    onDragCancel = { escopo.launch { dedo.animateTo(Offset.Zero, spring(dampingRatio = 0.6f, stiffness = 158f)) } },
-                ) { _, arraste ->
-                    val alvo = dedo.value + Offset(arraste.x.toDp().value, arraste.y.toDp().value)
-                    escopo.launch { dedo.snapTo(Offset(alvo.x.coerceIn(-70f, 70f), alvo.y.coerceIn(-70f, 70f))) }
+                // Le o dedo sem consumir, como o simultaneousGesture do iOS: a coluna continua rolando. O detectDragGestures
+                // engolia a rolagem, e em tela pequena com fonte grande as ultimas palavras ficavam fora da tela sem jeito
+                // de chegar nelas (foto de 07/11/2026, 360 dp e fonte 1,3).
+                awaitEachGesture {
+                    val toque = awaitFirstDown(requireUnconsumed = false)
+                    var onde = toque.position
+                    while (true) {
+                        val mudanca = awaitPointerEvent().changes.firstOrNull { it.id == toque.id } ?: break
+                        if (!mudanca.pressed) break
+                        val arraste = mudanca.position - onde
+                        onde = mudanca.position
+                        val alvo = dedo.value + Offset(arraste.x.toDp().value, arraste.y.toDp().value)
+                        escopo.launch { dedo.snapTo(Offset(alvo.x.coerceIn(-70f, 70f), alvo.y.coerceIn(-70f, 70f))) }
+                    }
+                    escopo.launch { dedo.animateTo(Offset.Zero, spring(dampingRatio = 0.6f, stiffness = 158f)) }
                 }
             }
             .graphicsLayer {

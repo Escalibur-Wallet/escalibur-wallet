@@ -17,10 +17,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -80,22 +82,24 @@ fun AdicionarCarteira(primeira: Boolean, aoTerminar: () -> Unit) {
     if (!primeira) BackHandler(onBack = aoTerminar)
     Box(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding()) {
         Column(Modifier.fillMaxSize()) {
-            OrbitaDaCarteira(260.dp, Modifier.fillMaxWidth().padding(top = Espaco.xs))
-            Column(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem).padding(top = Espaco.sm), horizontalAlignment = Alignment.CenterHorizontally,
-                   verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
-                Text(if (primeira) t("Sua primeira carteira") else t("Adicionar carteira"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
-                Text(t("Uma frase, um endereço em cada rede. As chaves ficam só neste celular."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
+            // Rola em tela pequena com fonte grande (foto de 07/11/2026, 360 dp e fonte 1,3), com o botao sempre embaixo.
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                OrbitaDaCarteira(260.dp, Modifier.fillMaxWidth().padding(top = Espaco.xs))
+                Column(Modifier.fillMaxWidth().padding(horizontal = Espaco.margem).padding(top = Espaco.sm), horizontalAlignment = Alignment.CenterHorizontally,
+                       verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
+                    Text(if (primeira) t("Sua primeira carteira") else t("Adicionar carteira"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
+                    Text(t("Uma frase, um endereço em cada rede. As chaves ficam só neste celular."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
+                }
+                if (bloqueado == true) {
+                    app.escalibur.wallet.ui.comp.Faixa(app.escalibur.wallet.ui.comp.TipoDeFaixa.cautela, t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova."),
+                        Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md))
+                }
+                Column(Modifier.padding(top = Espaco.md)) {
+                    LinhaDeOrigem(t("Importar com a senha da carteira"), t("Você já tem 12 ou 24 palavras de outra carteira."), Icones.palavras, ligada = bloqueado == false) { rota = "importar" }
+                    LinhaDeOrigem(t("Importar de um envelope Escalibur"), t("O arquivo .esclbr e a senha do envelope."), Icones.envelope, ligada = bloqueado == false) { rota = "envelope" }
+                    LinhaDeOrigem(t("Só observar um endereço"), t("Acompanhe um saldo sem poder enviar."), Icones.olho) { rota = "observar" }
+                }
             }
-            if (bloqueado == true) {
-                app.escalibur.wallet.ui.comp.Faixa(app.escalibur.wallet.ui.comp.TipoDeFaixa.cautela, t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova."),
-                    Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md))
-            }
-            Column(Modifier.padding(top = Espaco.md)) {
-                LinhaDeOrigem(t("Importar com a senha da carteira"), t("Você já tem 12 ou 24 palavras de outra carteira."), Icones.palavras, ligada = bloqueado == false) { rota = "importar" }
-                LinhaDeOrigem(t("Importar de um envelope Escalibur"), t("O arquivo .esclbr e a senha do envelope."), Icones.envelope, ligada = bloqueado == false) { rota = "envelope" }
-                LinhaDeOrigem(t("Só observar um endereço"), t("Acompanhe um saldo sem poder enviar."), Icones.olho) { rota = "observar" }
-            }
-            Spacer(Modifier.weight(1f))
             Rodape { BotaoPrimario(t("Criar carteira nova"), ligado = bloqueado == false) { rota = "criar" } }
         }
         if (!primeira) BotaoDeCanto(Icones.fechar, t("Fechar"), Modifier.padding(start = Espaco.xs), acao = aoTerminar)
@@ -105,7 +109,8 @@ fun AdicionarCarteira(primeira: Boolean, aoTerminar: () -> Unit) {
 @Composable
 private fun LinhaDeOrigem(titulo: String, subtitulo: String, icone: ImageVector, ligada: Boolean = true, acao: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().alpha(if (ligada) 1f else 0.4f).clickable(enabled = ligada, onClick = acao).height(72.dp).padding(horizontal = Espaco.margem),
+        Modifier.fillMaxWidth().alpha(if (ligada) 1f else 0.4f).clickable(enabled = ligada, onClick = acao).heightIn(min = 72.dp)
+            .padding(horizontal = Espaco.margem, vertical = Espaco.xs),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
     ) {
         Box(Modifier.size(40.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) { Icone(icone, Color.White, tamanho = 18.dp) }
