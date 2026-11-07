@@ -230,6 +230,7 @@ kSecUseDataProtectionKeychain
 kSecValueData
 LAErrorDomain
 log2
+memcmp
 memcpy
 memset
 memset_s
