@@ -15,7 +15,7 @@ do dono com o advogado.
   que diz o que acontece com um e-mail para o suporte.
 - **Site no GitHub Pages**, gerado do repositório por `tools/gerar-site.py`. Com o repositório
   privado (18/10/2026), sai por `tools/publicar-site.sh --enviar` para o repositório público
-  `Escalibur-Wallet/escalibur-wallet.github.io`, na raiz (desde 19/10/2026, na org da Escalibur), com cópia no endereço antigo `tmzzjr.github.io/escalibur-wallet/` para os builds 7 a 9; o
+  `Escalibur-Wallet/escalibur-wallet.github.io`, na raiz (desde 19/10/2026, na org da Escalibur; a cópia no endereço antigo `tmzzjr.github.io/escalibur-wallet/` saiu do publicador em 07/11/2026); o
   `.github/workflows/site.yml` volta a publicar quando o repositório for público de novo:
   - Marketing: https://escalibur-wallet.github.io/
   - Suporte: https://escalibur-wallet.github.io/suporte/

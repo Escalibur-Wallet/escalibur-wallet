@@ -18,6 +18,12 @@ const PRECOS = "/precos.json";
 const PAPRIKA = "https://api.coinpaprika.com/v1";
 const CACHE_VIVO = 60;      // segundos no cache da Cloudflare, com o preco ao vivo
 const CACHE_RETRATO = 30;   // com o retrato, para tentar de novo logo
+// Dois anos, os subdominios e o pedido de entrar na lista de pre-carregamento dos navegadores (a inscricao em
+// hstspreload.org e um passo do dono).
+const HSTS = "max-age=63072000; includeSubDomains; preload";
+// A mesma CSP da meta das paginas, mais frame-ancestors.
+const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; font-src 'self'; " +
+  "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const CACHE_NAVEGADOR = 20; // no navegador
 
 export default {
@@ -29,7 +35,8 @@ export default {
     if ((url.hostname !== DOMINIO || url.protocol !== "https:") && !local) {
       url.hostname = DOMINIO;
       url.protocol = "https:";
-      return Response.redirect(url.toString(), 301);
+      // O HSTS tambem no redirecionamento: o www em https passa a valer so em https (revisao final de 07/11/2026).
+      return new Response(null, { status: 301, headers: { Location: url.toString(), "Strict-Transport-Security": HSTS } });
     }
     let resposta;
     let status;
@@ -47,7 +54,12 @@ export default {
     const cabecalhos = new Headers(resposta.headers);
     const guardar = url.pathname === PRECOS || status !== 200 ? null : cacheDe(url);
     if (guardar) cabecalhos.set("Cache-Control", guardar);
-    cabecalhos.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    cabecalhos.set("Strict-Transport-Security", HSTS);
+    // A CSP das paginas (a meta de cada uma, tools/gerador_site/paginas.py) tambem no cabecalho, com frame-ancestors, que
+    // a meta nao aceita; e a janela isolada de quem a abre (revisao final de 07/11/2026).
+    // So nas paginas: numa imagem (o SVG do selo da loja pinta com style), a CSP podia apagar o desenho.
+    if ((cabecalhos.get("Content-Type") || "").startsWith("text/html")) cabecalhos.set("Content-Security-Policy", CSP);
+    cabecalhos.set("Cross-Origin-Opener-Policy", "same-origin");
     cabecalhos.set("X-Content-Type-Options", "nosniff");
     cabecalhos.set("X-Frame-Options", "DENY");
     cabecalhos.set("Referrer-Policy", "strict-origin-when-cross-origin");

@@ -4420,20 +4420,6 @@
   "vi": "Đây có vẻ là phần đầu các từ của một ví, nên việc tìm kiếm không rời khỏi điện thoại. Các từ chỉ được gõ khi nhập ví.",
   "ar": "يبدو هذا كبداية كلمات محفظة، لذا لم يغادر البحث الهاتف. تُكتب الكلمات فقط عند استيراد محفظة."
  },
- "Salvar neste celular": {
-  "en": "Save on this phone",
-  "es": "Guardar en este teléfono",
-  "fr": "Enregistrer sur ce téléphone",
-  "de": "Auf diesem Handy speichern",
-  "hi": "इस फ़ोन पर सेव करें",
-  "id": "Simpan di ponsel ini",
-  "ja": "このスマートフォンに保存",
-  "ko": "이 휴대폰에 저장",
-  "tr": "Bu telefona kaydet",
-  "zh-Hans": "保存到这部手机",
-  "vi": "Lưu trên điện thoại này",
-  "ar": "حفظ على هذا الهاتف"
- },
  "A cópia some sozinha em cerca de 1 minuto. Do Android 13 em diante, a prévia não mostra o que ela tem; antes dele, o teclado pode guardar a cópia. Anotar no papel continua sendo o mais seguro.": {
   "en": "The copy disappears on its own in about 1 minute. From Android 13 on, the preview doesn’t show what it holds; before that, the keyboard may keep the copy. Writing on paper is still the safest.",
   "es": "La copia desaparece sola en cerca de 1 minuto. Desde Android 13, la vista previa no muestra lo que contiene; antes, el teclado puede guardar la copia. Anotarlo en papel sigue siendo lo más seguro.",
@@ -4658,20 +4644,6 @@
   "vi": "Đã sao chép các từ. Chúng sẽ biến mất sau khoảng 1 phút.",
   "ar": "تم نسخ الكلمات. ستختفي بعد دقيقة واحدة تقريبًا."
  },
- "Neste celular o PIN precisa ter 6 dígitos: ele não tem o chip de segurança separado (StrongBox).": {
-  "en": "On this phone the PIN must have 6 digits: it doesn't have the separate security chip (StrongBox).",
-  "es": "En este celular el PIN debe tener 6 dígitos: no tiene el chip de seguridad separado (StrongBox).",
-  "fr": "Sur ce téléphone, le PIN doit avoir 6 chiffres : il n’a pas la puce de sécurité séparée (StrongBox).",
-  "de": "Auf diesem Handy muss die PIN 6 Ziffern haben: Es hat keinen separaten Sicherheitschip (StrongBox).",
-  "hi": "इस फ़ोन पर PIN में 6 अंक होने चाहिए: इसमें अलग सुरक्षा चिप (StrongBox) नहीं है.",
-  "id": "Di ponsel ini PIN harus 6 digit: ponsel ini tidak punya chip keamanan terpisah (StrongBox).",
-  "ja": "このスマートフォンでは PIN は 6 桁が必要です。独立したセキュリティチップ（StrongBox）がありません。",
-  "ko": "이 휴대폰에서는 PIN이 6자리여야 합니다. 별도의 보안 칩(StrongBox)이 없습니다.",
-  "tr": "Bu telefonda PIN 6 haneli olmalı: ayrı güvenlik çipi (StrongBox) yok.",
-  "zh-Hans": "在这部手机上，PIN 必须是 6 位：它没有独立的安全芯片（StrongBox）。",
-  "vi": "Trên điện thoại này, mã PIN phải có 6 chữ số: máy không có chip bảo mật riêng (StrongBox).",
-  "ar": "على هذا الهاتف يجب أن يتكون رمز PIN من 6 أرقام: فهو لا يحتوي على شريحة الأمان المنفصلة (StrongBox)."
- },
  "A Escalibur liberou a versão %@ na Google Play. Atualize para continuar com as correções mais recentes.": {
   "en": "Escalibur released version %@ on Google Play. Update to keep the latest fixes.",
   "es": "Escalibur publicó la versión %@ en Google Play. Actualiza para seguir con las correcciones más recientes.",
@@ -4699,5 +4671,33 @@
   "vi": "Escalibur đã phát hành phiên bản %@ trên Google Play. Bản cập nhật này là bắt buộc: hãy cập nhật để tiếp tục dùng ứng dụng.",
   "zh-Hans": "Escalibur 已在 Google Play 发布 %@ 版本。此更新为必须更新：请更新以继续使用本应用。",
   "ar": "أصدرت Escalibur الإصدار %@ على Google Play. هذا التحديث إلزامي: حدّث التطبيق لتواصل استخدامه."
+ },
+ "Neste celular o PIN precisa ter 6 dígitos.": {
+  "en": "On this phone the PIN must have 6 digits.",
+  "es": "En este celular el PIN debe tener 6 dígitos.",
+  "fr": "Sur ce téléphone, le PIN doit avoir 6 chiffres.",
+  "de": "Auf diesem Handy muss die PIN 6 Ziffern haben.",
+  "hi": "इस फ़ोन पर PIN में 6 अंक होने चाहिए.",
+  "id": "Di ponsel ini PIN harus 6 digit.",
+  "ja": "このスマートフォンでは PIN は 6 桁が必要です。",
+  "ko": "이 휴대폰에서는 PIN이 6자리여야 합니다.",
+  "tr": "Bu telefonda PIN 6 haneli olmalı.",
+  "zh-Hans": "在这部手机上，PIN 必须是 6 位。",
+  "vi": "Trên điện thoại này, mã PIN phải có 6 chữ số.",
+  "ar": "على هذا الهاتف يجب أن يتكون رمز PIN من 6 أرقام."
+ },
+ "Recomendamos trocar o PIN para 6 dígitos em Segurança: neste celular, o de 4 dígitos é bem mais fácil de quebrar para quem consegue acesso total ao aparelho.": {
+  "en": "We recommend changing the PIN to 6 digits in Security: on this phone, a 4-digit PIN is much easier to break for someone who gets full access to the device.",
+  "es": "Te recomendamos cambiar el PIN a 6 dígitos en Seguridad: en este celular, el de 4 dígitos es mucho más fácil de romper para quien consiga acceso total al aparato.",
+  "fr": "Nous vous recommandons de passer le PIN à 6 chiffres dans Sécurité : sur ce téléphone, un PIN à 4 chiffres est bien plus facile à casser pour qui obtient un accès complet à l’appareil.",
+  "de": "Wir empfehlen, die PIN unter Sicherheit auf 6 Ziffern zu ändern: Auf diesem Handy ist eine 4-stellige PIN für jemanden mit vollem Zugriff auf das Gerät viel leichter zu knacken.",
+  "hi": "हम सुरक्षा में PIN को 6 अंकों का करने की सलाह देते हैं: इस फ़ोन पर 4 अंकों का PIN उस व्यक्ति के लिए तोड़ना बहुत आसान है जिसे डिवाइस का पूरा एक्सेस मिल जाए.",
+  "id": "Kami sarankan mengganti PIN menjadi 6 digit di Keamanan: di ponsel ini, PIN 4 digit jauh lebih mudah dibobol oleh orang yang mendapat akses penuh ke perangkat.",
+  "ja": "セキュリティで PIN を 6 桁に変更することをおすすめします。このスマートフォンでは、端末に完全にアクセスできる人にとって、4 桁の PIN はずっと破られやすくなります。",
+  "ko": "보안에서 PIN을 6자리로 바꾸는 것을 권장합니다. 이 휴대폰에서는 기기에 완전히 접근할 수 있는 사람에게 4자리 PIN이 훨씬 쉽게 뚫립니다.",
+  "tr": "PIN'i Güvenlik bölümünden 6 haneye çevirmenizi öneririz: bu telefonda 4 haneli PIN, cihaza tam erişim elde eden biri için çok daha kolay kırılır.",
+  "vi": "Chúng tôi khuyên bạn đổi mã PIN thành 6 chữ số trong Bảo mật: trên điện thoại này, mã PIN 4 chữ số dễ bị phá hơn nhiều với người có toàn quyền truy cập thiết bị.",
+  "zh-Hans": "建议在“安全”中把 PIN 改为 6 位：在这部手机上，对能完全访问设备的人来说，4 位 PIN 容易破解得多。",
+  "ar": "ننصح بتغيير رمز PIN إلى 6 أرقام من الأمان: على هذا الهاتف، يسهل كثيرًا كسر الرمز المكوّن من 4 أرقام على من يحصل على وصول كامل إلى الجهاز."
  }
 }

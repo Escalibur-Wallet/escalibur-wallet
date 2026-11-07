@@ -1073,6 +1073,13 @@ else
     else
         ok "todas as paginas do site com Content Security Policy, sem script em linha e sem nada carregado de outro site"
     fi
+    # A CSP do cabecalho do Worker e a da meta mais frame-ancestors: com as duas diferentes, o navegador aplica as duas e a
+    # pagina quebra calada (revisao final de 07/11/2026).
+    csp_meta=$(python3 -I -c 'import re, sys; t = open(sys.argv[1], encoding="utf-8").read(); m = re.search(r"^CSP = \((.*?)\)$", t, re.S | re.M); print("".join(re.findall(r"\"([^\"]*)\"", m.group(1))) if m else "")' tools/gerador_site/paginas.py)
+    csp_worker=$(python3 -I -c 'import re, sys; t = open(sys.argv[1], encoding="utf-8").read(); m = re.search(r"^const CSP = (.*?);$", t, re.S | re.M); print("".join(re.findall(r"\"([^\"]*)\"", m.group(1))) if m else "")' tools/site-cloudflare/worker.js)
+    [ -n "$csp_meta" ] && [ "$csp_worker" = "$csp_meta; frame-ancestors 'none'" ] \
+        && ok "a CSP do Worker e a das paginas, mais frame-ancestors" \
+        || aviso "a CSP do Worker (tools/site-cloudflare/worker.js) nao e a das paginas (paginas.py) mais frame-ancestors"
     # Codigo citado nas paginas de auditoria sai como entidade HTML: o que sobra e texto.
     achados=$(echo "$paginas_site" | xargs grep -lE '—|–' 2>/dev/null)
     [ -n "$achados" ] && { aviso "travessao nas paginas do site"; echo "$achados"; } || ok "nenhum travessao nas paginas do site"
@@ -1110,11 +1117,11 @@ fi
 
 secao "android"
 AND=Android/app/src/main
-# A politica do Android: todo host do hosts.lock, menos os da conferencia de atualizacao da App
-# Store, que o Android nao faz.
+# A politica do Android: todo host do hosts.lock, menos a consulta da App Store, que o Android nao faz
+# (a lista de versoes do github.io ele le desde 07/11/2026, para a tela de atualizar).
 faltando=""
 for host in $(sed 's|https://||' hosts.lock); do
-    case "$host" in itunes.apple.com|escalibur-wallet.github.io) continue ;; esac
+    case "$host" in itunes.apple.com) continue ;; esac
     for politica in privacidade.md privacidade-en.md; do
         codigo "$AND/assets/legal/$politica" | grep -qF "\`$host\`" 2>/dev/null || faltando="$faltando $host($politica)"
     done

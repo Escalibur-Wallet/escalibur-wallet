@@ -747,13 +747,18 @@ public enum PasswordStrength {
     /// posicoes na lista inglesa: quem mostra monta o texto, quem lacra monta os bytes.
     public static func suggestionIndices(avoiding phrase: SecureBytes?, count: Int = 6) throws -> [Int] {
         let list = try WordlistStore.shared.wordlist(for: .english)
-        var avoid = Set<Int>()
+        // As posicoes das palavras da frase num vetor de tamanho fixo, zerado ao sair, e cada palavra procurada pelos bytes,
+        // sem String: sem ordem, essas posicoes acham a frase em minutos contra o endereco publico, e um Set as deixava no
+        // heap ao crescer e ao ser solto (revisao final de 07/11/2026).
+        var avoid = [Bool](repeating: false, count: 2048)
+        defer { avoid.withUnsafeMutableBytes { if let base = $0.baseAddress { memset_s(base, $0.count, 0, $0.count) } } }
         if let phrase {
             phrase.withUnsafeBytes { raw in
                 var token = [UInt8]()
+                token.reserveCapacity(64)
                 defer { wipe(&token) }
                 func close() {
-                    if !token.isEmpty, let position = list.position(of: String(decoding: token, as: UTF8.self)) { avoid.insert(Int(position)) }
+                    if !token.isEmpty, let position = list.position(nfkd: token) { avoid[Int(position)] = true }
                     wipe(&token)
                     token.removeAll(keepingCapacity: true)
                 }
@@ -764,13 +769,17 @@ public enum PasswordStrength {
                 close()
             }
         }
+        // A senha sorteada: com o arquivo do envelope, abre a seed. Sem realocar no meio (copias soltas no heap), e o
+        // sorteio zerado; quem recebe guarda e zera as posicoes.
         var chosen: [Int] = []
+        chosen.reserveCapacity(count)
+        var bytes = [UInt8](repeating: 0, count: 2)
+        defer { wipe(&bytes) }
         while chosen.count < count {
-            var bytes = [UInt8](repeating: 0, count: 2)
             guard SecRandomCopyBytes(kSecRandomDefault, 2, &bytes) == errSecSuccess else { throw CryptoError.randomnessUnavailable }
             // 2048 divide 65536: pegar 11 bits de 16 nao tem vies.
             let index = (Int(bytes[0]) << 8 | Int(bytes[1])) & 0x7FF
-            if !avoid.contains(index), !chosen.contains(index) { chosen.append(index) }
+            if !avoid[index], !chosen.contains(index) { chosen.append(index) }
         }
         return chosen
     }

@@ -121,7 +121,17 @@ enum Envelopes {
     /// sorteada em String, somada ao arquivo do envelope, abre a seed).
     static func sugerir() throws {
         let novos = try PasswordStrength.suggestionIndices(avoiding: trava.withLock { frase })
-        trava.withLock { indices = novos }
+        trava.withLock {
+            zerarIndices()
+            indices = novos
+        }
+    }
+
+    /// As posicoes da senha sorteada zeradas no lugar antes de soltar: com o arquivo do envelope, elas abrem a seed
+    /// (revisao final de 07/11/2026). Chamado com a trava.
+    private static func zerarIndices() {
+        indices.withUnsafeMutableBytes { if let base = $0.baseAddress { memset_s(base, $0.count, 0, $0.count) } }
+        indices = []
     }
 
     /// As palavras sorteadas, separadas por um espaco, direto no destino (o ByteBuffer do Kotlin). Quantos bytes, ou -1.
@@ -351,7 +361,7 @@ enum Envelopes {
             frase = nil
             passphrase = nil
             senha = nil
-            indices = []
+            zerarIndices()
             sorteada = false
             aceitouRisco = false
             carteira = nil

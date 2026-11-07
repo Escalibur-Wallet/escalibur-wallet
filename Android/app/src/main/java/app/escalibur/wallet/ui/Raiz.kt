@@ -49,6 +49,9 @@ object Ciclo {
         private set
     var primeiroPlano by mutableStateOf(true)
         private set
+    /** Sobe a cada ida ao fundo: a volta que esperou o nucleo enquanto o app saiu de novo nao vale (revisao final de
+     * 07/11/2026). As duas pontas rodam na thread principal. */
+    private var saidas = 0
 
     /**
      * Na hora, sem corrotina: a da Activity era cancelada quando ela morria logo depois, e a volta nao
@@ -56,6 +59,7 @@ object Ciclo {
      */
     fun foiParaSegundoPlano() {
         primeiroPlano = false
+        saidas++
         // A copia da passphrase da folga sai ja, ate na ida ao seletor, que nao trava; e a folha da passphrase e a do PIN
         // fecham, com o que estava digitado zerado: a operacao que esperava por elas para (05/11/2026).
         app.escalibur.wallet.ui.enviar.PedidoDePassphrase.cancelar()
@@ -63,6 +67,7 @@ object Ciclo {
         app.escalibur.wallet.ui.comp.Segredo.limparTodos()
         app.escalibur.wallet.ui.pin.EntradaDoPin.limparTodas()
         app.escalibur.wallet.ui.importar.EntradaDaFrase.limparTodas()
+        app.escalibur.wallet.nucleo.PalavrasNaTela.zerarTodas()
         runCatching { Nucleo.chamar("passphrase.encerrarFolgas", "{}") }
         // A biometria que estava na tela cai antes de o nucleo descartar o rosto (auditoria de 03/11/2026).
         app.escalibur.wallet.nucleo.Cofre.cancelarBiometria()
@@ -83,6 +88,7 @@ object Ciclo {
 
     /** O nucleo decide se trava antes de a tela voltar: ate a resposta, a capa cobre tudo. */
     suspend fun voltou() {
+        val ida = saidas
         val seletor = seletorDesde
         seletorDesde = null
         // Mais que 10 minutos fora pelo seletor: trava como qualquer saida.
@@ -90,6 +96,17 @@ object Ciclo {
             runCatching { App.aplicar(Api.objeto("sessao.travar")) }
         }
         runCatching { App.aplicar(Api.objeto("sessao.primeiroPlano")) }
+        // O app saiu de novo enquanto o nucleo respondia: a volta nao vale, e a proxima (onStart) refaz. Senao, a leitura das
+        // palavras volta a valer aqui tambem (um aviso de tela apagada atrasado pode ter travado depois do onStart): a
+        // conferencia e a liberacao rodam juntas na thread principal, sem espera entre elas (revisao final de 07/11/2026).
+        if (saidas != ida) {
+            // O "segundo plano" do onStop vai na hora e este "primeiro plano" vai pela thread de IO: o nucleo pode ter
+            // recebido os dois fora de ordem e apagado a hora da saida, e a proxima volta nao travaria. De novo, com o app no
+            // fundo (fora a ida ao seletor, que nao conta como saida). Repetir e seguro.
+            if (seletorDesde == null) runCatching { Nucleo.chamar("sessao.segundoPlano", "{}") }
+            return
+        }
+        app.escalibur.wallet.nucleo.PalavrasNaTela.liberar()
         primeiroPlano = true
         vinda++
     }
@@ -101,6 +118,9 @@ object Ciclo {
         app.escalibur.wallet.ui.comp.Segredo.limparTodos()
         app.escalibur.wallet.ui.pin.EntradaDoPin.limparTodas()
         app.escalibur.wallet.ui.importar.EntradaDaFrase.limparTodas()
+        app.escalibur.wallet.nucleo.PalavrasNaTela.zerarTodas()
+        // O aviso de tela apagada que chega atrasado, com o app ja de volta na frente, nao deixa a leitura travada.
+        if (primeiroPlano) app.escalibur.wallet.nucleo.PalavrasNaTela.liberar()
         // Sempre: um destravar em andamento (o Kotlin ainda nao sabe que abriu) para pela epoca do nucleo.
         runCatching { App.aplicar(Api.objeto("sessao.travar")) }
     }

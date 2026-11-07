@@ -157,7 +157,9 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
          */
         fun hardware(contexto: Context): Checagem {
             val armazem = runCatching { KeyStore.getInstance("AndroidKeyStore").apply { load(null) } }.getOrNull()
-            val seguras = listOf("app.escalibur.wallet.cofre", "app.escalibur.wallet.kpin").all { alias ->
+            // As chaves do PIN de todos os modos: no Super Security a `kpin` sai e o PIN fica na `kand.pin.a` ou na `.b`.
+            val chavesDoPin = listOf("kpin", "kpin.novo", "kand.pin.a", "kand.pin.b").map { "app.escalibur.wallet.$it" }
+            val seguras = (listOf("app.escalibur.wallet.cofre") + chavesDoPin).all { alias ->
                 runCatching {
                     val chave = armazem!!.getKey(alias, null) as? SecretKey ?: return@runCatching true
                     val info = SecretKeyFactory.getInstance(chave.algorithm, "AndroidKeyStore").getKeySpec(chave, KeyInfo::class.java) as KeyInfo
@@ -168,9 +170,23 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
                     }
                 }.getOrDefault(false)
             }
-            return if (seguras) Checagem("hardware", t("Chave guardada no hardware"), Resultado.Passou)
-            else Checagem("hardware", t("Chave guardada no hardware"),
+            if (!seguras) return Checagem("hardware", t("Chave guardada no hardware"),
                 Resultado.Cautela(t("Este celular guarda a chave do cofre em software, sem o chip de segurança.")))
+            // PIN de 4 digitos com a chave do PIN fora do StrongBox, criado antes da regra dos 6 digitos de 07/11/2026: com
+            // root no aparelho destravado, cai em cerca de um minuto. So uma recomendacao, com o estado do aparelho (decisao
+            // do dono, 07/11/2026). Pelo nivel das chaves do PIN que existem, todas no StrongBox, no Android 12 em diante; antes,
+            // pela sonda que o nucleo ja rodou ao abrir (sem gerar chave nesta thread). Nenhuma chave, ou sem resposta: fora.
+            val pinNoChip = runCatching {
+                val chaves = chavesDoPin.mapNotNull { armazem!!.getKey(it, null) as? SecretKey }
+                if (chaves.isEmpty()) false
+                else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) chaves.all { chave ->
+                    val info = SecretKeyFactory.getInstance(chave.algorithm, "AndroidKeyStore").getKeySpec(chave, KeyInfo::class.java) as KeyInfo
+                    info.securityLevel == KeyProperties.SECURITY_LEVEL_STRONGBOX
+                } else app.escalibur.wallet.nucleo.Cofre.strongBoxConhecido() == 1
+            }.getOrDefault(false)
+            return if (4 in app.escalibur.wallet.ui.App.estado.pinDigitos && !pinNoChip) Checagem("hardware", t("Chave guardada no hardware"),
+                Resultado.Cautela(t("Recomendamos trocar o PIN para 6 dígitos em Segurança: neste celular, o de 4 dígitos é bem mais fácil de quebrar para quem consegue acesso total ao aparelho.")))
+            else Checagem("hardware", t("Chave guardada no hardware"), Resultado.Passou)
         }
 
         /**

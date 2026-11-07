@@ -157,8 +157,8 @@ THE SOFTWARE.
 ### zxcvbn-ts dictionaries (password strength meter)
 
 - Where: `Kit/Sources/EscaliburCore/Resources/Forca`, locked in `forca.lock`. The `LEIA-ME.txt` there says which list came from which package.
-- Origin: the npm packages `@zxcvbn-ts/language-common` 4.1.3, `@zxcvbn-ts/language-pt-br` 4.1.1 and `@zxcvbn-ts/language-en` 4.1.1 (https://github.com/zxcvbn-ts/zxcvbn).
-- License: MIT, from the `LICENSE.txt` of those packages, the same file as the project's `LICENSE.txt` (SHA-256 `c376f457b9569b2a88506f78fe420511a3ca3be5819b69dda405b988b784735f`).
+- Origin: the npm packages of the zxcvbn-ts project (https://github.com/zxcvbn-ts/zxcvbn): `@zxcvbn-ts/language-common` 4.1.3, `@zxcvbn-ts/language-pt-br` 4.1.1, `@zxcvbn-ts/language-en` 4.1.1, `@zxcvbn-ts/language-de` 4.1.1, `@zxcvbn-ts/language-es-es` 4.1.2, `@zxcvbn-ts/language-fr` 4.1.2, `@zxcvbn-ts/language-id` 4.1.1, `@zxcvbn-ts/language-ja` 4.1.1, `@zxcvbn-ts/language-ar` 4.2.0, `@zxcvbn-ts/language-tr` 4.1.1, `@zxcvbn-ts/language-ko` 4.3.0 and `@zxcvbn-ts/language-zh` 4.1.1. `frases.txt` in the same folder is ours, not from zxcvbn-ts.
+- License: MIT, the zxcvbn-ts project's `LICENSE.txt` (SHA-256 `c376f457b9569b2a88506f78fe420511a3ca3be5819b69dda405b988b784735f`, the same file shipped in each of these packages, checked on 07/11/2026).
 
 ```
 Copyright (c) 2012-2016 Dan Wheeler and Dropbox, Inc.

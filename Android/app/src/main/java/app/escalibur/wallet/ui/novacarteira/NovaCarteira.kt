@@ -312,7 +312,8 @@ private fun EscolherPalavras(palavras: Int, aoCancelar: () -> Unit, aoEscolher: 
 private fun PalavraSorteada(palavras: Int, aoAnotar: () -> Unit) {
     val leitor = remember { PalavrasNaTela() }
     var palavra by remember { mutableStateOf<CharArray?>(null) }
-    LaunchedEffect(palavras) {
+    // De novo na volta do segundo plano: na ida, a palavra foi zerada (PalavrasNaTela.zerarTodas).
+    LaunchedEffect(palavras, app.escalibur.wallet.ui.Ciclo.vinda) {
         palavra = runCatching { leitor.ler(palavras - 1, palavras)?.firstOrNull() }.getOrNull()
     }
     DisposableEffect(Unit) { onDispose { palavra = null; leitor.zerar() } }
@@ -652,6 +653,9 @@ fun GravarPalavras(palavras: Int, nomeDaCarteira: String?, aoTerminar: () -> Uni
                 try {
                     val frase = runCatching { copia.ler(0, palavras) }.getOrNull()
                     if (frase == null || frase.size != palavras) return@launch
+                    // O app saiu da frente no meio da leitura e as palavras foram zeradas: nada vai para a area de
+                    // transferencia, e o aviso de copiadas nao aparece (revisao final de 07/11/2026).
+                    if (!app.escalibur.wallet.ui.Ciclo.primeiroPlano || frase.any { palavra -> palavra.isEmpty() || palavra.any { it == '\u0000' } }) return@launch
                     // Juntas num CharArray so (o CharBuffer e uma janela sobre ele), zerado aqui mesmo se a copia falhar. A
                     // area de transferencia transforma em String ao passar para o sistema (TextUtils.writeToParcel), dentro
                     // do app e no sistema: e o preco da copia, que o dono escolhe (so do Android 13 em diante).

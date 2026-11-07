@@ -464,17 +464,28 @@ struct SealEnvelopeFlow: View {
             if let sealed {
                 // A folha do iPhone com o fim: a data de "lacrado" so quando o arquivo saiu (salvo ou enviado), e nao no lacre
                 // (auditoria do envelope de 06/11/2026). O `ShareLink` nao diz se o arquivo saiu.
+                // Com a senha muito fraca, so salvar o arquivo, sem a folha de compartilhar (Gmail, WhatsApp, Drive): o aviso diz
+                // "nunca na nuvem nem por e-mail" (revisao final de 07/11/2026).
                 Button { sharing = true } label: {
-                    Text("Salvar ou enviar o arquivo").typeStyle(.action)
+                    Text(weakSealed ? String(localized: "Salvar neste celular") : String(localized: "Salvar ou enviar o arquivo")).typeStyle(.action)
                         .frame(maxWidth: .infinity).frame(height: Height.primary)
                 }
                 .buttonStyle(PrimaryStyle())
                 .sheet(isPresented: $sharing) {
-                    ActivitySheet(items: [sealed.url]) { completed in
-                        sharing = false
-                        if completed { markDelivered() }
+                    Group {
+                        if weakSealed {
+                            ExportPicker(url: sealed.url) { saved in
+                                sharing = false
+                                if saved { markDelivered() }
+                            }
+                        } else {
+                            ActivitySheet(items: [sealed.url]) { completed in
+                                sharing = false
+                                if completed { markDelivered() }
+                            }
+                            .presentationDetents([.medium, .large])
+                        }
                     }
-                    .presentationDetents([.medium, .large])
                     .ignoresSafeArea()
                 }
             } else {
@@ -875,16 +886,42 @@ struct EnvelopeScrollingStep<Content: View, Footer: View>: View {
     }
 }
 
-/// A folha de compartilhar do iPhone, que diz no fim se o arquivo saiu.
+/// A folha de compartilhar do iPhone, que diz no fim se o arquivo saiu. Sem "Copiar" (a area de transferencia geral, sem
+/// prazo nem `localOnly`, que a Area de Transferencia Universal leva ao Mac, e que nao guarda o envelope em lugar nenhum),
+/// sem imprimir e sem contato ou lista de leitura (revisao final de 07/11/2026).
 private struct ActivitySheet: UIViewControllerRepresentable {
     let items: [Any]
     let finished: (Bool) -> Void
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
         let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        controller.completionWithItemsHandler = { _, completed, _, _ in finished(completed) }
+        controller.excludedActivityTypes = [.copyToPasteboard, .print, .assignToContact, .addToReadingList]
+        controller.completionWithItemsHandler = { type, completed, _, _ in finished(completed && type != .copyToPasteboard) }
         return controller
     }
 
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
+/// Salvar uma copia do arquivo pelo Arquivos, sem a folha de compartilhar: com a senha muito fraca. Diz no fim se salvou.
+private struct ExportPicker: UIViewControllerRepresentable {
+    let url: URL
+    let finished: (Bool) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(finished: finished) }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let finished: (Bool) -> Void
+        init(finished: @escaping (Bool) -> Void) { self.finished = finished }
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { finished(!urls.isEmpty) }
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finished(false) }
+    }
 }

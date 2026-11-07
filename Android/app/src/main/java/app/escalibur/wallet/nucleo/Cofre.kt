@@ -320,8 +320,10 @@ object Cofre {
                 val alias = PREFIXO + "sonda.strongbox"
                 keyStore.deleteEntry(alias)
                 val gerador = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_HMAC_SHA256, "AndroidKeyStore")
+                // A mesma configuracao da chave do PIN (`gerarHmac`): um StrongBox que recusasse um item dela passaria aqui e
+                // falharia no primeiro cadastro (revisao final de 07/11/2026).
                 gerador.init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
-                    .setKeySize(256).setDigests(KeyProperties.DIGEST_SHA256).setIsStrongBoxBacked(true).build())
+                    .setKeySize(256).setDigests(KeyProperties.DIGEST_SHA256).setUnlockedDeviceRequired(true).setIsStrongBoxBacked(true).build())
                 val chave = gerador.generateKey()
                 val noChip = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                     val info = javax.crypto.SecretKeyFactory.getInstance(chave.algorithm, "AndroidKeyStore")

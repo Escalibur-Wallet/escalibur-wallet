@@ -38,17 +38,18 @@ public enum Ed25519 {
         #else
         guard hedged else { return try sign(message, seed: seed) }
         guard seed.count == 32 else { throw Failure.invalidSeed }
-        var expanded = [UInt8](repeating: 0, count: 64)
-        defer { expanded.resetBytes() }
-        seed.withUnsafeBytes { raw in
-            _ = CCryptoBoringSSL_SHA512(raw.bindMemory(to: UInt8.self).baseAddress, raw.count, &expanded)
-        }
-        expanded[0] &= 248
-        expanded[31] &= 127
-        expanded[31] |= 64
+        // A chave estendida nasce direto na regiao travada, sem passar por um [UInt8] do heap (revisao final de 07/11/2026).
         let key = SecureBytes(capacity: 64)
         defer { key.wipe() }
-        key.replaceAll(with: expanded)
+        seed.withUnsafeBytes { raw in
+            key.fill(count: 64) { destino in
+                let bytes = destino.assumingMemoryBound(to: UInt8.self)
+                _ = CCryptoBoringSSL_SHA512(raw.bindMemory(to: UInt8.self).baseAddress, raw.count, bytes)
+                bytes[0] &= 248
+                bytes[31] &= 127
+                bytes[31] |= 64
+            }
+        }
         return try signExtended(message, extendedKey: key, hedged: true)
         #endif
     }

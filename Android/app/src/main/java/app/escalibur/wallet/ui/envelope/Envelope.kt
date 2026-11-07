@@ -194,6 +194,11 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
         sugestao = novas
         if (antigas.isNotEmpty()) escopo.launch { delay(1_000); antigas.forEach { it.fill('\u0000') } }
     }
+    // Na volta do segundo plano: as palavras na tela foram zeradas na ida (PalavrasNaTela.zerarTodas), e o sorteio continua
+    // no nucleo ate o travar. Le de novo so no passo em que elas aparecem; a volta para "criar" ja le (voltarParaCriar).
+    LaunchedEffect(app.escalibur.wallet.ui.Ciclo.vinda) {
+        if (passo == "criar" && sugestao.isNotEmpty()) leitorDaSugestao.lerSugestao()?.takeIf { it.isNotEmpty() }?.let { mostrarSugestao(it) }
+    }
     var propria by remember { mutableStateOf(false) }
     val senha = remember { Segredo() }
     val repeticao = remember { Segredo() }
@@ -691,8 +696,14 @@ private fun ColumnScope.LacreEmCena(
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
             Column(Modifier.fillMaxWidth().alpha(f)) {
                 // A folha de compartilhar do Android, como o `ShareLink` do iOS; ela nao tem o "salvar em Arquivos", que fica embaixo.
-                BotaoPrimario(t("Salvar ou enviar o arquivo"), ligado = feito, acao = aoEnviar)
-                BotaoTerciario(t("Salvar neste celular"), Modifier.fillMaxWidth(), acao = aoSalvar)
+                // Com a senha muito fraca, so salvar, sem a folha (Gmail, WhatsApp, Drive): o aviso diz "nunca na nuvem nem
+                // por e-mail" (revisao final de 07/11/2026).
+                if (fraca) {
+                    BotaoPrimario(t("Salvar neste celular"), ligado = feito, acao = aoSalvar)
+                } else {
+                    BotaoPrimario(t("Salvar ou enviar o arquivo"), ligado = feito, acao = aoEnviar)
+                    BotaoTerciario(t("Salvar neste celular"), Modifier.fillMaxWidth(), acao = aoSalvar)
+                }
                 Text(t("Para abrir: Ajustes, Abrir um envelope, neste ou em outro celular com o app."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
                      textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.sm))
             }

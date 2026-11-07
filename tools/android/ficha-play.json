@@ -30,8 +30,8 @@
     }
   },
   "notasDaVersao": {
-    "en-US": "The passphrase is no longer stored on the phone: it is asked for every send, swap, bridge and order cancel. The Android vault is better protected in memory, sending checks the destination more carefully, and the envelope password meter is stricter. Swap can search any coin, and watch-only wallets now show their history.",
-    "pt-BR": "A passphrase não fica mais guardada no celular: ela é pedida a cada envio, troca, ponte e cancelamento de ordem. O cofre do Android ficou mais protegido na memória, o envio confere o destino com mais cuidado e o medidor de senha do envelope ficou mais rigoroso. No Swap dá para buscar qualquer moeda, e a carteira de observação agora mostra o histórico."
+    "en-US": "The passphrase is no longer stored on the phone: it is requested to send, swap, bridge and cancel orders, with the option not to ask again for a while. The Android vault is better protected in memory, sending checks the destination more carefully, and the envelope password meter is stricter. Swap can search any coin, and watch-only wallets now show their history.",
+    "pt-BR": "A passphrase não fica mais guardada no celular: ela é pedida para enviar, trocar, usar a ponte e cancelar ordem, com a opção de não pedir de novo por um tempo. O cofre do Android ficou mais protegido na memória, o envio confere o destino com mais cuidado e o medidor de senha do envelope ficou mais rigoroso. No Swap dá para buscar qualquer moeda, e a carteira de observação agora mostra o histórico."
   },
   "icone": "build/loja-android/grafico/icone-512-lima.png"
 }

@@ -44,7 +44,7 @@
 <p class="mercado-moeda">US$</p>
 </div>
 {{precos}}
-<p class="apoio mercado-fonte">Preços do <a href="https://www.coingecko.com/">CoinGecko</a> e, na reserva, do <a href="https://coinpaprika.com/">CoinPaprika</a>, buscados do nosso lado: o seu navegador só fala com este site. O app não usa este servidor.</p>
+<p class="apoio mercado-fonte">Preços do <a href="https://www.coingecko.com/">CoinGecko</a> e, na reserva, do <a href="https://coinpaprika.com/">CoinPaprika</a>, buscados do nosso lado: o seu navegador busca os preços só neste site. O app não usa este servidor.</p>
 </div>
 </div>
 </div>
@@ -151,7 +151,7 @@
 <div class="chaves-palco">
 <div class="wrap chaves-grade">
 <ol class="chaves-passos" aria-label="Do PIN até a assinatura">
-<li><button type="button" class="chaves-passo ativo" data-passo="0" aria-pressed="true"><b>Seu PIN</b><span>Seis dígitos que não ficam gravados em lugar nenhum, nem como verificador.</span></button></li>
+<li><button type="button" class="chaves-passo ativo" data-passo="0" aria-pressed="true"><b>Seu PIN</b><span>Quatro ou seis dígitos que não ficam gravados em lugar nenhum, nem como verificador.</span></button></li>
 <li><button type="button" class="chaves-passo" data-passo="1" aria-pressed="false"><b>Argon2id com 256 MiB</b><span>Cada tentativa custa memória e tempo, de propósito: adivinhar fica caro.</span></button></li>
 <li><button type="button" class="chaves-passo" data-passo="2" aria-pressed="false"><b>Chip de segurança</b><span>O Secure Enclave, no iPhone: a chave do PIN só abre dentro dele, uma tentativa de cada vez.</span></button></li>
 <li><button type="button" class="chaves-passo" data-passo="3" aria-pressed="false"><b>Cofre aberto só para você</b><span>A chave raiz destranca só a chave da carteira que vai assinar, e mais nenhuma.</span></button></li>
@@ -193,7 +193,7 @@
 <article class="bento-ladrilho bento-envelope" aria-labelledby="t-envelope" id="envelope" data-revelar>
 <div class="bento-texto">
 <h3 id="t-envelope">Envelope Escalibur</h3>
-<p>A senha da carteira num arquivo <code>.esclbr</code>, trancado com outra senha que só você conhece. Argon2id e ChaCha20-Poly1305, em formato aberto. Nem a Escalibur abre.</p>
+<p>A senha da carteira num arquivo <code>.esclbr</code>, trancado com outra senha que só você conhece. Argon2id e ChaCha20-Poly1305, em formato aberto. Nem a Escalibur abre. A passphrase não vai no envelope: se a carteira tem uma, anote à parte.</p>
 </div>
 {{aparelho envelope | Criptografar a senha da carteira, no app em inglês: as palavras viram pixels, entram no envelope e o cadeado tranca}}
 </article>
@@ -229,7 +229,7 @@
 </div>
 <div class="bento-texto">
 <h3 id="t-captura">Fora do print e da gravação</h3>
-<p>As palavras saem em branco na captura de tela, na gravação e no espelhamento. Na tela, você vê normal.</p>
+<p>As palavras saem em branco na captura de tela, na gravação e no espelhamento de tela (AirPlay). Na tela, você vê normal.</p>
 </div>
 </article>
 
@@ -317,9 +317,9 @@
 <div class="perguntas-lista" data-revelar>
 <details class="pergunta"><summary>Quem guarda as minhas palavras?</summary><p>Só você. As palavras nascem no seu celular e ficam cifradas nele, presas ao chip de segurança e ao seu PIN. A Escalibur não tem servidor nem cópia, e não tem como ver, mover ou recuperar o seu saldo. Anote as palavras e guarde longe do celular.</p></details>
 <details class="pergunta"><summary>Alguém da Escalibur vai pedir as minhas palavras?</summary><p>Nunca. Ninguém da Escalibur pede as palavras da carteira, nem para ajudar. Quem pede quer o seu saldo.</p></details>
-<details class="pergunta"><summary>Perdi o celular. E agora?</summary><p>O saldo continua nas redes, não no aparelho. Com as palavras, ou com o envelope Escalibur e a senha dele, você abre a mesma carteira em outro celular. As palavras também abrem o saldo em outros apps que seguem o padrão: <a href="{{base}}redes/#outro-app">veja quais, rede por rede</a>.</p></details>
+<details class="pergunta"><summary>Perdi o celular. E agora?</summary><p>O saldo continua nas redes, não no aparelho. Com as palavras, ou com o envelope Escalibur e a senha dele, você abre a mesma carteira em outro celular. Se a carteira tem passphrase, anote a passphrase à parte: o envelope leva só as palavras, e sem ela a carteira com passphrase não abre em celular nenhum. As palavras também abrem o saldo em outros apps que seguem o padrão: <a href="{{base}}redes/#outro-app">veja quais, rede por rede</a>.</p></details>
 <details class="pergunta"><summary>Quanto a Escalibur cobra?</summary><p>Nada em envio, troca, ordem limite e ponte. Você paga só a taxa da rede e o spread do protocolo, e vê os dois antes de assinar.</p></details>
-<details class="pergunta"><summary>Preciso criar conta?</summary><p>Não. Sem e-mail, sem telefone e sem cadastro. Você cria ou importa a carteira no próprio celular e define um PIN de seis dígitos.</p></details>
+<details class="pergunta"><summary>Preciso criar conta?</summary><p>Não. Sem e-mail, sem telefone e sem cadastro. Você cria ou importa a carteira no próprio celular e define um PIN de quatro ou seis dígitos.</p></details>
 <details class="pergunta"><summary>Quais redes e moedas?</summary><p>{{n_redes}} redes, entre elas Bitcoin, Ethereum, Solana, XRP Ledger, Stellar, Tron e TON, e {{n_tokens}} tokens conferidos um a um. A lista completa, gerada do código, está em <a href="{{base}}redes/">Redes e moedas</a>.</p></details>
 <details class="pergunta"><summary>Funciona no Android?</summary><p>Sim. A Escalibur Wallet é para iPhone e Android, com as mesmas telas. No Android, as chaves da carteira ficam presas ao cofre de hardware do aparelho e ao seu PIN. {{situacao_loja}}</p></details>
 <details class="pergunta"><summary>Por que eu confiaria?</summary><p>Você não precisa confiar: dá para conferir. O código que guarda chaves, assina e fala com as redes é público, e a <a href="{{base}}auditoria/">auditoria</a> mostra as verificações, os servidores e os arquivos que guardam as chaves, linha a linha.</p></details>

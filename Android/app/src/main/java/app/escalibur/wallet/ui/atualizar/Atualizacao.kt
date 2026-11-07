@@ -159,9 +159,12 @@ object Atualizacao {
      * obrigatoria ganha a saida do mesmo jeito.
      */
     fun atualizar(contexto: Context) {
-        // Antes de abrir: com a Play na frente, o sistema pode fechar o app, e a saida tem de estar guardada.
-        tentou = true
-        runCatching { arquivoDaTentativa(contexto).writeText("${BuildConfig.VERSION_CODE} ${System.currentTimeMillis()}") }
+        // Antes de abrir: com a Play na frente, o sistema pode fechar o app, e a saida tem de estar guardada. So na
+        // obrigatoria: na comum, o toque guardado daria a saida a uma obrigatoria que viesse depois, sem tentativa nela.
+        if (obrigatoria) {
+            tentou = true
+            runCatching { arquivoDaTentativa(contexto).writeText("${BuildConfig.VERSION_CODE} ${System.currentTimeMillis()}") }
+        }
         if (demonstracao) return
         val playDoSistema = runCatching {
             contexto.packageManager.getApplicationInfo("com.android.vending", 0).flags and ApplicationInfo.FLAG_SYSTEM != 0

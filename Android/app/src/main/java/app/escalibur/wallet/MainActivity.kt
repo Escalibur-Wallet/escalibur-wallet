@@ -115,6 +115,10 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         // Antes de qualquer quadro: um servico ligado enquanto o app estava fora fecha a carteira ja.
         app.escalibur.wallet.ui.Acessibilidade.conferir(this)
+        // A tela na frente: as palavras voltam a poder ser lidas, tambem na primeira vinda. O processo pode ter nascido sem
+        // tela (a conferencia de hora em hora, a volta depois de reiniciar) e a tela apagada ter travado a leitura antes de
+        // haver Activity (revisao final de 07/11/2026).
+        app.escalibur.wallet.nucleo.PalavrasNaTela.liberar()
         if (primeiraVindaDoProcesso) {
             primeiraVindaDoProcesso = false
         } else {

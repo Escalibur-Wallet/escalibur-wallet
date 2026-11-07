@@ -254,8 +254,9 @@ final class UpdateGuard {
                 refreshLock()
                 return
             }
-            // Antes de abrir: com a loja na frente, o sistema pode fechar o app, e a saida tem de estar guardada.
-            markTried()
+            // Antes de abrir: com a loja na frente, o sistema pode fechar o app, e a saida tem de estar guardada. So na
+            // obrigatoria: na comum, o toque guardado daria a saida a uma obrigatoria que viesse depois, sem tentativa nela.
+            if mandatory { markTried() }
             _ = await UIApplication.shared.open(Self.storeURL)
             // Quem atualiza nao volta para este processo: quem volta, ou nao viu a loja abrir, nao conseguiu.
             refreshLock()

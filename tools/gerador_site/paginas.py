@@ -1084,7 +1084,7 @@ git checkout {e(ref[:12])}</code><span>O mesmo commit desta página.</span></li>
 
 <section class="bloco titulos-centro" aria-labelledby="t-verificacoes"><div class="wrap">
 <h2 id="t-verificacoes">{ctx["n_verificacoes"]} verificações</h2>
-<p class="lead intro">O <code>tools/verificar.sh</code> confere no código o que o app promete em texto. Cada linha abaixo é uma afirmação que o script prova a cada mudança, no CI, e para o merge se falhar. Cada uma leva à linha onde mora.</p>
+<p class="lead intro">O <code>tools/verificar.sh</code> confere no código o que o app promete em texto. Cada linha abaixo é uma afirmação que o script prova no CI, a cada push. Cada uma leva à linha onde mora.</p>
 <div class="mosaico">{"".join(grupos)}</div>
 </div></section>
 
@@ -1334,8 +1334,7 @@ def pagina_novidades(ctx, base):
 
 
 def pagina_404(ctx):
-    # O 404 e a unica pagina com caminho absoluto: a raiz no site da org; na copia do
-    # endereco antigo (tmzzjr.github.io/escalibur-wallet, para os builds 7 a 9), a pasta.
+    # O 404 e a unica pagina com caminho absoluto: a raiz do site (SITE_BASE).
     base = os.environ.get("SITE_BASE", "/")
     corpo = f"""<header class="cabeca-pagina"><div class="wrap estreito">
 <p class="sobretitulo">Erro 404</p>
@@ -1427,7 +1426,7 @@ def pagina_suporte(ctx, base, itens, email, inline):
 <select name="rede" class="campo"><option>Não sei</option>{redes}</select>
 </fieldset>
 <fieldset class="passo"><legend><span class="passo-numero">2</span>O que aconteceu?</legend>
-<textarea name="detalhes" class="campo" rows="6" placeholder="O que você fez, o que esperava e o que apareceu na tela."></textarea>
+<textarea name="detalhes" class="campo" rows="6" spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false" placeholder="O que você fez, o que esperava e o que apareceu na tela."></textarea>
 <p class="alerta-frase" id="alerta-frase" hidden><b>Isto parece a senha da carteira.</b> Apague as palavras antes de mandar. Ninguém da Escalibur precisa delas, nem para ajudar.</p>
 <label class="campo-rotulo" id="campo-transacao" hidden>ID da transação, se tiver<input name="transacao" class="campo" autocomplete="off" spellcheck="false" placeholder="Copie na Atividade, no detalhe do envio"></label>
 </fieldset>

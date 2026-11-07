@@ -313,17 +313,18 @@ def copiar_estaticos(saida):
 
 
 def palavras_bip39(saida):
-    """As listas BIP-39 em ingles e em portugues, para a pagina de suporte avisar de uma
-    frase colada no chamado, como o app faz. So nessa pagina, num arquivo proprio."""
+    """As listas BIP-39 de alfabeto latino (as mesmas do app: ingles, portugues, espanhol,
+    frances, italiano e tcheco; o site.js tira os acentos antes de comparar), para a pagina de
+    suporte avisar de uma frase colada no chamado. So nessa pagina, num arquivo proprio."""
     pasta = RAIZ / "Kit/Sources/EscaliburCore/Resources/Wordlists"
     palavras = []
-    for idioma in ("english", "portuguese"):
+    for idioma in ("english", "portuguese", "spanish", "french", "italian", "czech"):
         caminho = pasta / f"{idioma}.txt"
         if caminho.is_file():
             palavras += [p.strip() for p in caminho.read_text(encoding="utf-8").split() if p.strip()]
     texto = " ".join(sorted(set(palavras)))
     (saida / "palavras-bip39.js").write_text(
-        "// As palavras BIP-39 (ingles e portugues): o suporte avisa de uma frase colada no chamado.\n"
+        "// As palavras BIP-39 de alfabeto latino: o suporte avisa de uma frase colada no chamado.\n"
         f'window.PALAVRAS_BIP39 = "{texto}".split(" ");\n', encoding="utf-8")
 
 

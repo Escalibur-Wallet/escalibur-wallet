@@ -25,7 +25,7 @@
     "EscaliburWallet.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings": "1217e88c0f6d47ddc1282863891735f7ecb21fef803b2834ac186fa9b6d597e0",
     "EscaliburWallet.xcodeproj/xcshareddata/xcschemes/EscaliburWallet.xcscheme": "93c098486d5212db927725bc95a4a5f0d1ea7571d19829e266d88eaa59998656",
     "tools/versoes/versoes.swift": "8f96937b55202db0826121da448e903f81311db02ff9df9828c7d91ee8a649a7",
-    "tools/verificar.sh": "bde7f772f3a52e930479d5cbe3e703f7d69fd1414991f6c8a30b2a69e20055dd",
+    "tools/verificar.sh": "80ce9cb96977ab8e0a3733b515babe7c03f0771d063882bb05363311445f594b",
     "tools/codigo.py": "8b9177f894858956c6b888669f6a76b52f24736b8759e5ea1d4085b99252e0dd",
     ".xcode-version": "8fdab257cb1a860a6416eadf25c0ae8ddf3af194de2b8e8003c9e974a8f33644",
     ".github/workflows/verificar.yml": "e3e79a8ef2b84f82fca907945f4ea2834254663f37b82ff8d6d484595a23aed9",
