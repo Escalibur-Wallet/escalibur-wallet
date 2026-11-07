@@ -58,6 +58,13 @@ enum Nucleo {
             return try json(Estado.agora())
         case "versao":
             return try json(Versao(nucleo: "1.0.0", redes: Chain.all.count))
+        case "atualizacao.conferir":
+            // Sem o build do Android, nenhuma conclusao: um 0 faria qualquer build liberado mais novo, e a obrigatoria valeria.
+            guard let versao = pedido["versao"]?.stringValue, let build = Int(pedido["build"]?.stringValue ?? ""), build >= 1000 else {
+                return try json(Atualizacao.Resposta(estado: "sem-resposta", versao: nil))
+            }
+            let sdk = pedido["sdk"]?.doubleValue.flatMap { Int(exactly: $0) }
+            return try json(esperar { await Atualizacao.conferir(versao: versao, build: build, sdk: sdk) })
         case "redes":
             return try json(Chain.all.map(RedeResumo.init))
 

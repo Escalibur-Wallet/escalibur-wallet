@@ -4671,5 +4671,33 @@
   "zh-Hans": "在这部手机上，PIN 必须是 6 位：它没有独立的安全芯片（StrongBox）。",
   "vi": "Trên điện thoại này, mã PIN phải có 6 chữ số: máy không có chip bảo mật riêng (StrongBox).",
   "ar": "على هذا الهاتف يجب أن يتكون رمز PIN من 6 أرقام: فهو لا يحتوي على شريحة الأمان المنفصلة (StrongBox)."
+ },
+ "A Escalibur liberou a versão %@ na Google Play. Atualize para continuar com as correções mais recentes.": {
+  "en": "Escalibur released version %@ on Google Play. Update to keep the latest fixes.",
+  "es": "Escalibur publicó la versión %@ en Google Play. Actualiza para seguir con las correcciones más recientes.",
+  "fr": "Escalibur a publié la version %@ sur Google Play. Mettez à jour pour profiter des dernières corrections.",
+  "de": "Escalibur hat Version %@ im Google Play Store freigegeben. Aktualisiere, um die neuesten Korrekturen zu erhalten.",
+  "hi": "Escalibur ने वर्शन %@ Google Play पर जारी किया है. नए सुधारों के लिए अपडेट करें.",
+  "id": "Escalibur telah merilis versi %@ di Google Play. Perbarui untuk mendapat perbaikan terbaru.",
+  "ja": "Escalibur がバージョン %@ を Google Play で公開しました。最新の修正を受け取るためにアップデートしてください。",
+  "ko": "Escalibur가 Google Play에 %@ 버전을 출시했습니다. 최신 수정 사항을 받으려면 업데이트하세요.",
+  "tr": "Escalibur, %@ sürümünü Google Play'de yayınladı. En son düzeltmeler için güncelleyin.",
+  "vi": "Escalibur đã phát hành phiên bản %@ trên Google Play. Hãy cập nhật để có các bản sửa mới nhất.",
+  "zh-Hans": "Escalibur 已在 Google Play 发布 %@ 版本。请更新以获取最新修复。",
+  "ar": "أصدرت Escalibur الإصدار %@ على Google Play. حدّث التطبيق لتحصل على أحدث الإصلاحات."
+ },
+ "A Escalibur liberou a versão %@ na Google Play. Esta atualização é obrigatória: atualize para continuar usando o app.": {
+  "en": "Escalibur released version %@ on Google Play. This update is required: update to keep using the app.",
+  "es": "Escalibur publicó la versión %@ en Google Play. Esta actualización es obligatoria: actualiza para seguir usando la app.",
+  "fr": "Escalibur a publié la version %@ sur Google Play. Cette mise à jour est obligatoire : mettez à jour pour continuer à utiliser l’app.",
+  "de": "Escalibur hat Version %@ im Google Play Store freigegeben. Dieses Update ist Pflicht: Aktualisiere, um die App weiter zu nutzen.",
+  "hi": "Escalibur ने वर्शन %@ Google Play पर जारी किया है. यह अपडेट ज़रूरी है: ऐप इस्तेमाल करते रहने के लिए अपडेट करें.",
+  "id": "Escalibur telah merilis versi %@ di Google Play. Pembaruan ini wajib: perbarui untuk terus memakai aplikasi.",
+  "ja": "Escalibur がバージョン %@ を Google Play で公開しました。このアップデートは必須です。アプリを使い続けるにはアップデートしてください。",
+  "ko": "Escalibur가 Google Play에 %@ 버전을 출시했습니다. 이 업데이트는 필수입니다. 앱을 계속 사용하려면 업데이트하세요.",
+  "tr": "Escalibur, %@ sürümünü Google Play'de yayınladı. Bu güncelleme zorunlu: uygulamayı kullanmaya devam etmek için güncelleyin.",
+  "vi": "Escalibur đã phát hành phiên bản %@ trên Google Play. Bản cập nhật này là bắt buộc: hãy cập nhật để tiếp tục dùng ứng dụng.",
+  "zh-Hans": "Escalibur 已在 Google Play 发布 %@ 版本。此更新为必须更新：请更新以继续使用本应用。",
+  "ar": "أصدرت Escalibur الإصدار %@ على Google Play. هذا التحديث إلزامي: حدّث التطبيق لتواصل استخدامه."
  }
 }

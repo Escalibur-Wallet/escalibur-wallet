@@ -9,19 +9,24 @@ play-publisher. A chave fica em ~/.escalibur/android/play-api.json, fora do repo
                                                                 # com fracao (ex.: 0.05), lancamento gradual para essa parte
   python3 tools/android/play.py ampliar <versionCode> <fracao|completo>   # sobe a fracao do lancamento gradual, ou completa
   python3 tools/android/play.py pausar <versionCode>                       # pausa o lancamento gradual
+  python3 tools/android/play.py completo <versionCode>                     # sai 0 so com o lancamento em 100% na producao
 
 Cada mudanca na Play passa por uma "edicao": abrir, mudar, e so o commit publica. Sem commit,
 nada muda na loja. Enquanto o app nunca foi publicado, a Play so aceita versao em rascunho: quem
 lanca e o dono, na Play Console. Depois de publicado (28/10/2026), a versao vai direto para producao
 com `producao`: o commit manda para a revisao do Google, e a aprovacao publica para todos.
 """
-import io, json, os, sys, time, urllib.error, urllib.parse, urllib.request
+import hashlib, io, json, os, sys, time, urllib.error, urllib.parse, urllib.request
 
 import jwt
 from PIL import Image
 
 PACOTE = "app.escalibur.wallet"
 CHAVE = os.path.expanduser("~/.escalibur/android/play-api.json")
+# O SHA-256 de cada AAB que este Mac enviou, por versionCode: o versoes.swift liberar-android so libera o build cujo pacote
+# na Play e o que saiu daqui (revisao dos 3 agentes de 07/11/2026). Um versionCode enviado antes por outro nao entra aqui:
+# o envio do dono falha como repetido, e isso e incidente.
+ENVIADOS = os.path.expanduser("~/.escalibur/android/enviados.json")
 API = f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/{PACOTE}"
 ENVIO = f"https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/{PACOTE}"
 RAIZ = os.path.normpath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -100,16 +105,43 @@ def ficha():
     print("ficha publicada na Play | idioma padrao:", dados["idiomaPadrao"])
 
 
+def enviar_aab(edicao, aab, t):
+    """Envia o AAB e confere que a Play guardou o mesmo arquivo (o SHA-256 dela e o do arquivo). Devolve o versionCode e o digesto."""
+    dados = open(aab, "rb").read()
+    digesto = hashlib.sha256(dados).hexdigest()
+    pacote = pedir("POST", f"/edits/{edicao}/bundles?uploadType=media", dados, t, base=ENVIO, tipo="application/octet-stream")
+    if pacote.get("sha256") != digesto:
+        pedir("DELETE", f"/edits/{edicao}", t=t)
+        sys.exit(f"a Play guardou outro arquivo (SHA-256 {pacote.get('sha256')}, o AAB e {digesto}): nada foi publicado")
+    return pacote["versionCode"], digesto
+
+
+def anotar_envio(versao, digesto):
+    """Antes do commit (o digesto ja foi conferido com a Play): um envio que nao chegou ao commit anotado nao faz mal, porque
+    o versoes.swift confere a Play; um commit sem anotacao viraria incidente falso. Troca o arquivo de uma vez, 0600."""
+    try:
+        enviados = json.load(open(ENVIADOS)) if os.path.exists(ENVIADOS) else {}
+    except ValueError:
+        sys.exit(f"{ENVIADOS} ilegivel: confira o arquivo antes de enviar (nada foi publicado)")
+    enviados[str(versao)] = digesto
+    temporario = ENVIADOS + ".novo"
+    with os.fdopen(os.open(temporario, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as arquivo:
+        json.dump(enviados, arquivo, indent=1, sort_keys=True)
+        arquivo.flush()
+        os.fsync(arquivo.fileno())
+    os.replace(temporario, ENVIADOS)
+
+
 def subir():
     aab = sys.argv[2] if len(sys.argv) > 2 else sys.exit("falta o caminho do AAB")
     notas = json.load(open(os.path.join(RAIZ, "tools/android/ficha-play.json")))["notasDaVersao"]
     t = token()
     edicao = pedir("POST", "/edits", {}, t)["id"]
-    versao = pedir("POST", f"/edits/{edicao}/bundles?uploadType=media", open(aab, "rb").read(), t,
-                   base=ENVIO, tipo="application/octet-stream")["versionCode"]
+    versao, digesto = enviar_aab(edicao, aab, t)
     pedir("PUT", f"/edits/{edicao}/tracks/internal", {"track": "internal", "releases": [{
         "name": "1.0.0", "versionCodes": [str(versao)], "status": "draft",
         "releaseNotes": [{"language": l, "text": texto} for l, texto in notas.items()]}]}, t)
+    anotar_envio(versao, digesto)
     pedir("POST", f"/edits/{edicao}:commit", {}, t)
     print(f"AAB {versao} no teste interno, como rascunho")
 
@@ -120,8 +152,7 @@ def producao():
     notas = json.load(open(os.path.join(RAIZ, "tools/android/ficha-play.json")))["notasDaVersao"]
     t = token()
     edicao = pedir("POST", "/edits", {}, t)["id"]
-    versao = pedir("POST", f"/edits/{edicao}/bundles?uploadType=media", open(aab, "rb").read(), t,
-                   base=ENVIO, tipo="application/octet-stream")["versionCode"]
+    versao, digesto = enviar_aab(edicao, aab, t)
     fracao = float(sys.argv[4]) if len(sys.argv) > 4 else None
     if fracao is not None and not 0 < fracao < 1:
         sys.exit("a fracao do lancamento gradual vai de 0 a 1, sem os dois (ex.: 0.05)")
@@ -130,6 +161,7 @@ def producao():
     # Gradual: so essa parte dos usuarios recebe, e da para pausar se aparecer problema (07/11/2026).
     lancamento.update({"status": "inProgress", "userFraction": fracao} if fracao is not None else {"status": "completed"})
     pedir("PUT", f"/edits/{edicao}/tracks/production", {"track": "production", "releases": [lancamento]}, t)
+    anotar_envio(versao, digesto)
     pedir("POST", f"/edits/{edicao}:commit", {}, t)
     parte = f", lancamento gradual para {fracao:.0%}" if fracao is not None else ""
     print(f"AAB {versao} ({nome}) em producao{parte}, enviado para revisao")
@@ -169,5 +201,19 @@ def pausar():
     mudar_lancamento(versao, lambda alvo: alvo.__setitem__("status", "halted"))
 
 
+def completo():
+    """So le: o versoes.swift liberar-android libera o build so com o lancamento dele em 100% na producao."""
+    versao = sys.argv[2] if len(sys.argv) > 2 else sys.exit("falta o versionCode")
+    t = token()
+    edicao = pedir("POST", "/edits", {}, t)["id"]
+    faixa = pedir("GET", f"/edits/{edicao}/tracks/production", None, t)
+    pedir("DELETE", f"/edits/{edicao}", t=t)
+    alvo = next((r for r in faixa.get("releases", []) if str(versao) in r.get("versionCodes", [])), None)
+    if alvo is None:
+        sys.exit(f"o {versao} nao esta na faixa de producao")
+    print(f"{versao}: {alvo.get('status')}" + (f" para {alvo['userFraction']:.0%}" if alvo.get("userFraction") else ""))
+    sys.exit(0 if alvo.get("status") == "completed" and not alvo.get("userFraction") and not alvo.get("countryTargeting") else 1)
+
+
 if __name__ == "__main__":
-    {"conferir": conferir, "ficha": ficha, "subir": subir, "producao": producao, "ampliar": ampliar, "pausar": pausar}.get(sys.argv[1] if len(sys.argv) > 1 else "", lambda: sys.exit(__doc__))()
+    {"conferir": conferir, "ficha": ficha, "subir": subir, "producao": producao, "ampliar": ampliar, "pausar": pausar, "completo": completo}.get(sys.argv[1] if len(sys.argv) > 1 else "", lambda: sys.exit(__doc__))()

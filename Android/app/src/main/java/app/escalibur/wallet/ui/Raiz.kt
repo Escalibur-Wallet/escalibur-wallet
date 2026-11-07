@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import app.escalibur.wallet.BuildConfig
 import app.escalibur.wallet.nucleo.Api
@@ -153,9 +154,15 @@ fun Raiz() {
     // Um app de fora lendo a tela: so esta tela, e nada da carteira montado por baixo.
     Acessibilidade.suspeitos.takeIf { it.isNotEmpty() }?.let { TelaDeAcessibilidade(it); return }
     if (pronto) app.escalibur.wallet.ui.avisos.ConferenciaAberta()
+    // A versao desatualizada: ao abrir e a cada volta para a frente (no maximo a cada 6 horas).
+    LaunchedEffect(pronto, Ciclo.vinda) { if (pronto) app.escalibur.wallet.ui.atualizar.Atualizacao.conferir(contexto) }
     Box(Modifier.fillMaxSize().background(Paleta.vazio)) {
         if (pronto) {
-            Crossfade(App.estado.fase, animationSpec = tween(150), label = "fase") { fase ->
+            // Com a tela de atualizar na frente, a carteira por baixo sai da arvore do leitor de tela: o TalkBack nao navega
+            // nem ativa o que a tela cobre.
+            val coberta = app.escalibur.wallet.ui.atualizar.Atualizacao.naTela
+            Crossfade(App.estado.fase, Modifier.then(if (coberta) Modifier.clearAndSetSemantics {} else Modifier),
+                      animationSpec = tween(150), label = "fase") { fase ->
                 when (fase) {
                     "onboarding" -> FluxoDeAbertura(aparelhoComBloqueio)
                     "locked" -> {
@@ -170,6 +177,8 @@ fun Raiz() {
         // Entre a volta ao primeiro plano e a resposta do nucleo (que pode travar), nada da carteira
         // aparece, nem por um quadro.
         if (!Ciclo.primeiroPlano && App.estado.fase == "unlocked") Box(Modifier.fillMaxSize().background(Paleta.vazio))
+        // Acima da carteira e abaixo do pedido de PIN e de passphrase: um pedido aberto quando a tela chega termina por cima.
+        if (pronto) app.escalibur.wallet.ui.atualizar.TelaDeAtualizar()
         CapaDaAbertura(pronto)
         app.escalibur.wallet.ui.enviar.PedidoDePassphrase.pedido?.let { app.escalibur.wallet.ui.enviar.FolhaDaPassphrase(it) }
         Autorizacao.pedido?.let { FolhaDePin(it) }

@@ -11,6 +11,7 @@ enum Preferences {
     private static let receiptOfferKey = "recebimento.oferta.vista"
     private static let updateAlarmKey = "versao.alarme"
     private static let releaseIssuedKey = "versao.lista.emitida"
+    private static let updateTriedKey = "versao.tentou"
 
     /// Este app ja rodou nesta instalacao? Ver `KeyServices.firstLaunchCleanup`.
     static var installMarked: Bool {
@@ -51,5 +52,12 @@ enum Preferences {
     static var releaseIssued: Date? {
         get { UserDefaults.standard.object(forKey: releaseIssuedKey) as? Date }
         set { UserDefaults.standard.set(newValue, forKey: releaseIssuedKey) }
+    }
+
+    /// Quando o dono tocou "Atualizar agora" na tela obrigatoria, e em qual build instalado ("19|<segundos>"): a saida da
+    /// tela vale 24 horas, mesmo que o sistema feche o app com a loja na frente. Nada da carteira. Ver `UpdateGuard`.
+    static var updateTried: String? {
+        get { UserDefaults.standard.string(forKey: updateTriedKey) }
+        set { UserDefaults.standard.set(newValue, forKey: updateTriedKey) }
     }
 }

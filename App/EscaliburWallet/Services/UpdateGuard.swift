@@ -43,6 +43,25 @@ final class UpdateGuard {
 
     init() {
         verdict = Self.stored()
+        triedUpdate = Self.triedRecently()
+    }
+
+    /// O build instalado, para a tentativa guardada valer so nele.
+    private static var installedBuild: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0" }
+
+    /// "Atualizar agora" tocado neste build nas ultimas 24 horas: a saida da obrigatoria continua depois de o sistema fechar o
+    /// app com a loja na frente (revisao dos 3 agentes de 07/11/2026). Ela so libera o deslizar que o toque ja liberaria.
+    private static func triedRecently() -> Bool {
+        guard let saved = Preferences.updateTried else { return false }
+        let parts = saved.split(separator: "|").map(String.init)
+        guard parts.count == 2, parts[0] == installedBuild, let seconds = Double(parts[1]) else { return false }
+        let age = Date().timeIntervalSince1970 - seconds
+        return age >= 0 && age < 24 * 3600
+    }
+
+    private func markTried() {
+        triedUpdate = true
+        Preferences.updateTried = "\(Self.installedBuild)|\(Int(Date().timeIntervalSince1970))"
     }
 
     func check() async {
@@ -231,13 +250,14 @@ final class UpdateGuard {
             updateUnchecked = !same && (result.verdict == .unknown || stale)
             guard same, alarm == nil else {
                 // A loja nao abriu e a obrigatoria continua (outra versao na conferencia nova): a saida aparece do mesmo jeito.
-                if mandatory { triedUpdate = true }
+                if mandatory { markTried() }
                 refreshLock()
                 return
             }
+            // Antes de abrir: com a loja na frente, o sistema pode fechar o app, e a saida tem de estar guardada.
+            markTried()
             _ = await UIApplication.shared.open(Self.storeURL)
             // Quem atualiza nao volta para este processo: quem volta, ou nao viu a loja abrir, nao conseguiu.
-            triedUpdate = true
             refreshLock()
         }
     }

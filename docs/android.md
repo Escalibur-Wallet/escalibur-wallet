@@ -37,7 +37,7 @@ O tipo de build `conferencia` é o release minificado pelo R8, com outro id (`ap
 ## O que é diferente do iOS
 
 - Sem confirmação por voz e sem widget.
-- O alarme de atualização não confirmada (docs/seguranca.md §8.6) é só do iOS: a Google Play não tem consulta pública da versão mais nova.
+- O alarme de atualização não confirmada (docs/seguranca.md §8.6) é só do iOS: a Google Play não tem consulta pública da versão mais nova. A tela "Esta versão está desatualizada" e a obrigatória existem desde 07/11/2026, lendo só a lista assinada: o build que o dono liberou nela com o lançamento em 100% na Play (`versoes.swift liberar-android`).
 - Os builds do Android são numerados de 1001 em diante (`versionCode`), para nunca repetir um build do iOS na lista assinada.
 
 ## Release

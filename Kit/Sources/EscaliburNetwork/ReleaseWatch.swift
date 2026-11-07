@@ -100,4 +100,36 @@ public enum ReleaseWatch {
               now.timeIntervalSince(date) >= requiredDelay else { return (.confirmed(store), issued) }
         return (.required(store), issued)
     }
+
+    /// No Android, a liberacao vale so a partir do segundo dia depois do dia dela: a lista guarda o dia, sem a hora, e a Play
+    /// leva horas para oferecer o build em todos os aparelhos. Fica entre 24 e 48 horas depois de liberar.
+    static let androidRequiredDelay: TimeInterval = 2 * 24 * 3600
+
+    /// O Android (pedido do dono, 07/11/2026): a Google Play nao tem consulta publica da versao mais nova, entao o app le so a
+    /// lista assinada do site e o build que o dono liberou nela (`ReleaseManifest.Android`). Sem a loja nao ha alarme: nao da
+    /// para saber se ha na Play um build fora da lista. Lista sumida, ilegivel ou com assinatura que nao confere fica sem
+    /// resposta (`.unknown`), e uma lista mais antiga que a ja vista, `.stale`, como no iPhone. O texto do veredito e o nome da
+    /// versao, com o build quando o nome e o mesmo da instalada ("1.0.1 (1012)").
+    public static func checkAndroid(
+        installedVersion: String, installedBuild: Int, sdk: Int?, issuedFloor: Date? = nil, now: Date = Date(), client: HTTPClient = .shared,
+        app: String = "app.escalibur.wallet", keys: [String: P256.Signing.PublicKey] = ReleaseKeys.trusted, threshold: Int = ReleaseKeys.threshold
+    ) async -> (verdict: Verdict, issued: Date?) {
+        guard let data = try? await client.get(manifestURL),
+              let manifest = try? ReleaseManifest.verified(data, app: app, keys: keys, threshold: threshold) else { return (.unknown, nil) }
+        guard let issued = issued(manifest), issuedFloor.map({ issued >= $0 }) ?? true else { return (.stale(installedVersion), nil) }
+        // Um build liberado que a propria lista nao autoriza nao empurra ninguem.
+        guard let android = manifest.android, android.build > installedBuild, let name = manifest.version(ofBuild: android.build) else {
+            return (.upToDate, issued)
+        }
+        // Aparelho abaixo do minimo do build: a Play nao oferece nada a ele, e a tela voltaria a cada abertura.
+        if let sdk, let minimum = android.minimumSDK, sdk < minimum { return (.upToDate, issued) }
+        let shown = name == installedVersion ? "\(name) (\(android.build))" : name
+        // Obrigatoria so quando o build liberado tira a pessoa da tela (ele mesmo fora da regra), instalavel neste aparelho (o
+        // SDK dele e o minimo do build legiveis) e liberado ha pelo menos um dia. Faltando qualquer um, fica a tela comum.
+        guard let below = android.mandatoryBelow, installedBuild < below, android.build >= below,
+              let sdk, let minimum = android.minimumSDK, sdk >= minimum,
+              let day = ISO8601DateFormatter().date(from: android.released + "T00:00:00Z"),
+              now.timeIntervalSince(day) >= androidRequiredDelay else { return (.confirmed(shown), issued) }
+        return (.required(shown), issued)
+    }
 }

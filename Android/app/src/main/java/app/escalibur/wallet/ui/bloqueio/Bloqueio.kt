@@ -135,6 +135,8 @@ fun TelaDeBloqueio(vinda: Int) {
     LaunchedEffect(vinda) {
         atraso = App.estado.atraso
         rostoConfirmado = false
+        // Com a atualizacao obrigatoria na tela, a biometria automatica nao abre por cima dela.
+        if (app.escalibur.wallet.ui.atualizar.Atualizacao.cobrindo) return@LaunchedEffect
         if (App.estado.reforcado) confirmarRosto()
         else if (App.estado.biometriaLigada && !App.estado.pedePINDepoisDeReiniciar) tentarBiometria()
     }

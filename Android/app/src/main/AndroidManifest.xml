@@ -17,8 +17,10 @@
 
     <!-- A checagem de root pergunta ao sistema se um gerenciador de root esta instalado. Do Android 11 em
          diante so os pacotes declarados aqui sao visiveis; sem isto a resposta e sempre "nao existe"
-         (auditoria Android de 31/10/2026, AA-03). Nenhum outro pacote e consultado. -->
+         (auditoria Android de 31/10/2026, AA-03). A Play, para o "Atualizar agora" abrir so a Play que vem
+         com o sistema (Atualizacao.kt). Nenhum outro pacote e consultado. -->
     <queries>
+        <package android:name="com.android.vending" />
         <package android:name="com.topjohnwu.magisk" />
         <package android:name="eu.chainfire.supersu" />
         <package android:name="me.weishu.kernelsu" />

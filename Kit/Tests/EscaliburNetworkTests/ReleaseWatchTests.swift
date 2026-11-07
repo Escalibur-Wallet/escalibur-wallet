@@ -153,6 +153,83 @@ struct ReleaseWatchTests {
         ReleaseWatchStub.set([:])
         #expect(await Self.checar("1.0.0") == .unknown)
     }
+
+    /// A lista com a liberacao do Android (`android`, em JSON) e as versoes 1.0.1 (builds 18, 1010 e 1011) e 1.0.2 (20 e 1012).
+    static func listaAndroid(_ android: String?, emitido: String = "2026-11-05T12:00:00Z", chave: P256.Signing.PrivateKey = chave) throws -> (Int, Data) {
+        let campo = android.map { #""android":\#($0),"# } ?? ""
+        let texto = #"{\#(campo)"app":"app.escalibur.wallet","emitido":"\#(emitido)","formato":1,"versoes":[{"builds":["18","1010","1011"],"#
+            + #""publicada":"2026-10-25","versao":"1.0.1"},{"builds":["20","1012"],"publicada":"2026-11-08","versao":"1.0.2"}]}"#
+        let assinatura = try chave.signature(for: Data(texto.utf8)).rawRepresentation.base64EncodedString()
+        return (200, try JSONSerialization.data(withJSONObject: ["manifesto": texto, "assinaturas": [["chave": "a", "p256": assinatura]]]))
+    }
+
+    static func checarAndroid(_ build: Int, versao: String = "1.0.1", sdk: Int? = 34, piso: String? = nil) async -> ReleaseWatch.Verdict {
+        await ReleaseWatch.checkAndroid(installedVersion: versao, installedBuild: build, sdk: sdk,
+                                        issuedFloor: piso.flatMap { ISO8601DateFormatter().date(from: $0) }, now: agora, client: client,
+                                        keys: ["a": chave.publicKey], threshold: 1).verdict
+    }
+
+    @Test("Android: build liberado mais novo que o instalado, desatualizada; o mesmo ou mais antigo, em dia")
+    func androidLiberado() async throws {
+        ReleaseWatchStub.set(["escalibur-wallet.github.io": try Self.listaAndroid(#"{"build":"1012","liberada":"2026-11-08","sdk":30}"#)])
+        #expect(await Self.checarAndroid(1011) == .confirmed("1.0.2"))
+        #expect(await Self.checarAndroid(1012, versao: "1.0.2") == .upToDate)
+        // O mesmo nome de versao em builds diferentes: o build vai junto.
+        ReleaseWatchStub.set(["escalibur-wallet.github.io": try Self.listaAndroid(#"{"build":"1011","liberada":"2026-11-08","sdk":30}"#)])
+        #expect(await Self.checarAndroid(1010) == .confirmed("1.0.1 (1011)"))
+        #expect(await Self.checarAndroid(1012, versao: "1.0.2") == .upToDate)
+        // Sem liberacao do Android (so a do iPhone, por exemplo): nada.
+        ReleaseWatchStub.set(["escalibur-wallet.github.io": try Self.listaAndroid(nil)])
+        #expect(await Self.checarAndroid(1010) == .upToDate)
+    }
+
+    @Test("Android: build fora da lista, do iPhone ou de outro tipo, nenhuma liberacao")
+    func androidLiberacaoInvalida() async throws {
+        for android in [#"{"build":"1013","liberada":"2026-11-08","sdk":30}"#, #"{"build":"20","liberada":"2026-11-08","sdk":30}"#,
+                        #"{"build":1012,"liberada":"2026-11-08","sdk":30}"#, #"{"build":"1012"}"#, #""1012""#] {
+            ReleaseWatchStub.set(["escalibur-wallet.github.io": try Self.listaAndroid(android)])
+            #expect(await Self.checarAndroid(1011) == .upToDate)
+        }
+    }
+
+    @Test("Android: obrigatoria so com o build liberado fora da regra, SDK que instala e um dia depois de liberar")
+    func androidObrigatoria() async throws {
+        let regra = #"{"build":"1012","liberada":"2026-11-08","minimo":"1012","sdk":30}"#
+        ReleaseWatchStub.set(["escalibur-wallet.github.io": try Self.listaAndroid(regra)])
+        #expect(await Self.checarAndroid(1011) == .required("1.0.2"))
+        #expect(await Self.checarAndroid(1010) == .required("1.0.2"))
+        // Aparelho abaixo do minimo do build: nada, a Play nao oferece o build a ele. SDK desconhecido: a tela comum.
+        #expect(await Self.checarAndroid(1011, sdk: 29) == .upToDate)
+        #expect(await Self.checarAndroid(1011, sdk: nil) == .confirmed("1.0.2"))
+        // Liberado ha menos de um dia inteiro, sem o minimo do SDK, ou com a regra pegando o proprio build liberado.
+        for android in [#"{"build":"1012","liberada":"2026-11-09","minimo":"1012","sdk":30}"#, #"{"build":"1012","liberada":"2026-11-08","minimo":"1012"}"#,
+                        #"{"build":"1012","liberada":"2026-11-08","minimo":"1013","sdk":30}"#, #"{"build":"1012","liberada":"ontem","minimo":"1012","sdk":30}"#,
+                        #"{"build":"1012","liberada":"2026-11-08","minimo":1012,"sdk":30}"#] {
+            ReleaseWatchStub.set(["escalibur-wallet.github.io": try Self.listaAndroid(android)])
+            #expect(await Self.checarAndroid(1011) == .confirmed("1.0.2"))
+        }
+        // A regra pega outro build, nao o instalado.
+        ReleaseWatchStub.set(["escalibur-wallet.github.io": try Self.listaAndroid(#"{"build":"1012","liberada":"2026-11-08","minimo":"1011","sdk":30}"#)])
+        #expect(await Self.checarAndroid(1011) == .confirmed("1.0.2"))
+        #expect(await Self.checarAndroid(1010) == .required("1.0.2"))
+    }
+
+    @Test("Android: lista sumida, mexida ou fora do ar, sem resposta e sem alarme; mais antiga que a ja vista, velha")
+    func androidSemResposta() async throws {
+        ReleaseWatchStub.set(["escalibur-wallet.github.io": (404, Data())])
+        #expect(await Self.checarAndroid(1011) == .unknown)
+        ReleaseWatchStub.set(["escalibur-wallet.github.io": try Self.listaAndroid(#"{"build":"1012","liberada":"2026-11-08","sdk":30}"#,
+                                                                                 chave: P256.Signing.PrivateKey())])
+        #expect(await Self.checarAndroid(1011) == .unknown)
+        ReleaseWatchStub.set(["escalibur-wallet.github.io": (503, Data())])
+        #expect(await Self.checarAndroid(1011) == .unknown)
+        ReleaseWatchStub.set([:])
+        #expect(await Self.checarAndroid(1011) == .unknown)
+        // Uma lista assinada mais antiga, servida de novo: nao empurra e nao traz de volta a obrigacao.
+        ReleaseWatchStub.set(["escalibur-wallet.github.io": try Self.listaAndroid(#"{"build":"1012","liberada":"2026-11-08","minimo":"1012","sdk":30}"#)])
+        #expect(await Self.checarAndroid(1011, piso: "2026-11-06T00:00:00Z") == .stale("1.0.1"))
+        #expect(await Self.checarAndroid(1011, piso: "2026-11-05T12:00:00Z") == .required("1.0.2"))
+    }
 }
 
 enum ReleaseManifestFixture {

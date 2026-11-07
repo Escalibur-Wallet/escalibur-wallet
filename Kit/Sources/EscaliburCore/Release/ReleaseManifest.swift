@@ -69,10 +69,47 @@ public struct ReleaseManifest: Sendable, Equatable {
         }
     }
 
+    /// O build do Android liberado na tela de atualizar (pedido do dono, 07/11/2026). A Google Play nao tem consulta publica
+    /// da versao mais nova: o app Android so le esta lista. O dono assina `versoes.swift liberar-android <build> <id>` com o
+    /// lancamento do build em 100% na producao da Play, que a ferramenta confere pela API da Play. Na Play, builds diferentes
+    /// tem o mesmo nome de versao (1010 e 1011 sao a 1.0.1): aqui vale o build, o `versionCode`. Campo opcional do formato 1:
+    /// o iPhone e os builds de antes nao leem. Um valor de outro tipo vale como sem liberacao, e nunca como lista mexida.
+    public struct Android: Sendable, Equatable, Decodable {
+        public let build: Int
+        /// O dia da liberacao.
+        public let released: String
+        /// O `minSdk` do build liberado: a tela obrigatoria nao vale em aparelho que nao instala.
+        public let minimumSDK: Int?
+        /// Os builds abaixo deste perdem o "Vou atualizar depois" (`versoes.swift obrigatoria-android`).
+        public let mandatoryBelow: Int?
+
+        enum CodingKeys: String, CodingKey { case build, released = "liberada", minimumSDK = "sdk", mandatoryBelow = "minimo" }
+
+        public init(build: Int, released: String, minimumSDK: Int?, mandatoryBelow: Int?) {
+            self.build = build
+            self.released = released
+            self.minimumSDK = minimumSDK
+            self.mandatoryBelow = mandatoryBelow
+        }
+
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            // Os builds do Android comecam em 1001 (docs/android.md): um numero do iPhone aqui e erro de quem assinou.
+            guard let build = Int(try values.decode(String.self, forKey: .build)), build >= 1000 else {
+                throw DecodingError.dataCorruptedError(forKey: .build, in: values, debugDescription: "build do Android")
+            }
+            self.build = build
+            released = try values.decode(String.self, forKey: .released)
+            minimumSDK = (try? values.decodeIfPresent(Int.self, forKey: .minimumSDK)) ?? nil
+            mandatoryBelow = ((try? values.decodeIfPresent(String.self, forKey: .mandatoryBelow)) ?? nil).flatMap { Int($0) }
+        }
+    }
+
     public let app: String
     public let issuedAt: String
     public let versions: [Version]
     public let mandatory: Mandatory?
+    public let android: Android?
     /// As chaves que assinaram de verdade.
     public let signedBy: Set<String>
 
@@ -99,8 +136,9 @@ public struct ReleaseManifest: Sendable, Equatable {
         let emitido: String
         let versoes: [Version]
         let obrigatoria: Mandatory?
+        let android: Android?
 
-        enum CodingKeys: String, CodingKey { case formato, app, emitido, versoes, obrigatoria }
+        enum CodingKeys: String, CodingKey { case formato, app, emitido, versoes, obrigatoria, android }
 
         init(from decoder: Decoder) throws {
             let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -109,6 +147,7 @@ public struct ReleaseManifest: Sendable, Equatable {
             emitido = try values.decode(String.self, forKey: .emitido)
             versoes = try values.decode([Version].self, forKey: .versoes)
             obrigatoria = (try? values.decodeIfPresent(Mandatory.self, forKey: .obrigatoria))
+            android = (try? values.decodeIfPresent(Android.self, forKey: .android)) ?? nil
         }
     }
 
@@ -131,11 +170,17 @@ public struct ReleaseManifest: Sendable, Equatable {
         guard let body = try? JSONDecoder().decode(Body.self, from: signed) else { throw Failure.malformed }
         guard body.formato == 1 else { throw Failure.unknownFormat }
         guard body.app == app else { throw Failure.wrongApp }
-        return ReleaseManifest(app: body.app, issuedAt: body.emitido, versions: body.versoes, mandatory: body.obrigatoria, signedBy: valid)
+        return ReleaseManifest(app: body.app, issuedAt: body.emitido, versions: body.versoes, mandatory: body.obrigatoria,
+                               android: body.android, signedBy: valid)
     }
 
     public func authorizes(version: String) -> Bool {
         versions.contains { $0.version == version }
+    }
+
+    /// A versao da lista que autoriza o `build`, se alguma autoriza.
+    public func version(ofBuild build: Int) -> String? {
+        versions.first { $0.builds.contains(String(build)) }?.version
     }
 
     /// A versao esta na lista e o dono a liberou depois de a Apple publicar o build dele.

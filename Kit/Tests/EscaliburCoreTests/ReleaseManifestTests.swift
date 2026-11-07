@@ -110,6 +110,28 @@ struct ReleaseManifestTests {
         #expect(lista.authorizes(version: "1.0.1") && lista.authorizes(version: "1.0.2"))
     }
 
+    @Test("Android: o build liberado, o dia, o SDK e a regra; de outro tipo, sem liberacao ou sem regra")
+    func android() throws {
+        let chave = P256.Signing.PrivateKey()
+        func lista(_ android: String) throws -> ReleaseManifest {
+            let texto = Self.manifesto(["1.0.0"]).replacingOccurrences(of: #"{"app""#, with: #"{"android":\#(android),"app""#)
+            return try ReleaseManifest.verified(try Self.arquivo(texto, assinantes: [("a", chave)]), app: Self.app, keys: ["a": chave.publicKey], threshold: 1)
+        }
+        #expect(try lista(#"{"build":"1012","liberada":"2026-11-08","minimo":"1011","sdk":30}"#).android
+                == ReleaseManifest.Android(build: 1012, released: "2026-11-08", minimumSDK: 30, mandatoryBelow: 1011))
+        #expect(try lista(#"{"build":"1012","liberada":"2026-11-08"}"#).android
+                == ReleaseManifest.Android(build: 1012, released: "2026-11-08", minimumSDK: nil, mandatoryBelow: nil))
+        #expect(try lista(#"{"build":"1012","liberada":"2026-11-08","minimo":1011,"sdk":"30"}"#).android
+                == ReleaseManifest.Android(build: 1012, released: "2026-11-08", minimumSDK: nil, mandatoryBelow: nil))
+        // Build do iPhone, de outro tipo, sem o dia, ou o campo de outro tipo: a lista vale, sem liberacao do Android.
+        for android in [#"{"build":"19","liberada":"2026-11-08"}"#, #"{"build":1012,"liberada":"2026-11-08"}"#, #"{"build":"1012"}"#, #""1012""#, "[]"] {
+            let manifesto = try lista(android)
+            #expect(manifesto.android == nil && manifesto.authorizes(version: "1.0.0"))
+        }
+        #expect(try lista("null").version(ofBuild: 7) == "1.0.0")
+        #expect(try lista("null").version(ofBuild: 1012) == nil)
+    }
+
     @Test("Versao mais nova, numero a numero")
     func comparacao() {
         #expect(ReleaseManifest.isNewer("1.0.10", than: "1.0.9"))

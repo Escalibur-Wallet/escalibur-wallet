@@ -16,6 +16,14 @@
 //       a atualizacao obrigatoria: quem esta abaixo de <minima>, ou numa das <versoes> (separadas
 //       por virgula), perde o "Vou atualizar depois" no app. "-" nos dois tira a obrigacao. Assina
 //       de novo (pede o Touch ID)
+//   swift tools/versoes/versoes.swift liberar-android <build|-> <id>
+//       o Android: depois de o lancamento do build chegar a 100% na producao da Play (a ferramenta
+//       confere pela API da Play, com a conta de servico do tools/android/play.py, e que o pacote na
+//       Play e o que este Mac enviou), marca o build como o liberado, e so entao a tela de atualizar
+//       do app Android empurra para ele. "-" tira a liberacao (incidente). Assina de novo (pede o Touch ID)
+//   swift tools/versoes/versoes.swift obrigatoria-android <build|-> <id>
+//       a atualizacao obrigatoria do Android: os builds abaixo de <build> perdem o "Vou atualizar
+//       depois". "-" tira. Assina de novo (pede o Touch ID)
 //   swift tools/versoes/versoes.swift conferir
 //       confere as assinaturas de site/versoes.json contra as chaves e o limiar de
 //       ReleaseKeys.swift, e que a lista do app tem o mesmo texto
@@ -59,7 +67,11 @@ struct Assinatura: Codable { let chave: String; let p256: String }
 struct Versao: Codable { let versao: String; var builds: [String]; let publicada: String; var liberada: String? }
 /// Opcional no formato 1: sem obrigacao, a chave nem aparece, e o texto assinado fica como o de antes.
 struct Obrigatoria: Codable { var minima: String?; var versoes: [String]? }
-struct Manifesto: Codable { let formato: Int; let app: String; var emitido: String; var obrigatoria: Obrigatoria?; var versoes: [Versao] }
+/// O build do Android liberado (`ReleaseManifest.Android`), opcional como a obrigacao: o dia, o minSdk dele e a regra.
+struct Android: Codable { var build: String; var liberada: String; var sdk: Int?; var minimo: String? }
+struct Manifesto: Codable {
+    let formato: Int; let app: String; var emitido: String; var obrigatoria: Obrigatoria?; var android: Android?; var versoes: [Versao]
+}
 
 func ler() -> (Envelope, Manifesto)? {
     guard let dados = try? Data(contentsOf: arquivo) else { return nil }
@@ -135,10 +147,14 @@ func regra(_ obrigatoria: Obrigatoria) -> String {
 }
 
 func resumo(_ manifesto: Manifesto) -> String {
-    let versoes = manifesto.versoes.map { "\($0.versao) (\($0.builds.joined(separator: ", ")))\($0.liberada.map { " liberada em \($0)" } ?? "")" }
+    var versoes = manifesto.versoes.map { "\($0.versao) (\($0.builds.joined(separator: ", ")))\($0.liberada.map { " liberada em \($0)" } ?? "")" }
         .joined(separator: "; ")
-    guard let obrigatoria = manifesto.obrigatoria else { return versoes }
-    return versoes + "; atualizacao obrigatoria para: " + regra(obrigatoria)
+    if let obrigatoria = manifesto.obrigatoria { versoes += "; atualizacao obrigatoria para: " + regra(obrigatoria) }
+    if let android = manifesto.android {
+        versoes += "; Android: build \(android.build) liberado em \(android.liberada)\(android.sdk.map { ", Android \($0)+ (SDK)" } ?? "")"
+            + (android.minimo.map { ", obrigatoria abaixo do build \($0)" } ?? "")
+    }
+    return versoes
 }
 
 /// "1.0.10" depois de "1.0.9", como `ReleaseManifest.isNewer` no app.
@@ -205,6 +221,122 @@ func horaDaApple() -> Date? {
     }.resume()
     espera.wait()
     return hora
+}
+
+/// Um pedido HTTPS, esperando a resposta: o status e o corpo.
+func pedir(_ metodo: String, _ endereco: String, corpo: Data? = nil, tipo: String = "application/json", token: String? = nil) -> (Int, Data) {
+    guard let url = URL(string: endereco) else { return (0, Data()) }
+    var pedido = URLRequest(url: url)
+    pedido.httpMethod = metodo
+    pedido.httpBody = corpo
+    pedido.setValue(tipo, forHTTPHeaderField: "Content-Type")
+    if let token { pedido.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
+    let espera = DispatchSemaphore(value: 0)
+    var resposta = (0, Data())
+    URLSession(configuration: .ephemeral).dataTask(with: pedido) { dados, http, _ in
+        resposta = ((http as? HTTPURLResponse)?.statusCode ?? 0, dados ?? Data())
+        espera.signal()
+    }.resume()
+    espera.wait()
+    return resposta
+}
+
+/// A chave RSA (PKCS#1) de dentro do PKCS#8 da conta de servico: SEQUENCE { INTEGER, AlgorithmIdentifier, OCTET STRING }.
+func pkcs1(doPKCS8 der: Data) -> Data? {
+    let b = [UInt8](der)
+    var i = 0
+    func elemento(_ etiqueta: UInt8) -> Range<Int>? {
+        guard i + 1 < b.count, b[i] == etiqueta else { return nil }
+        i += 1
+        var tamanho = Int(b[i])
+        i += 1
+        if tamanho >= 0x80 {
+            let bytes = tamanho & 0x7f
+            guard (1...3).contains(bytes), i + bytes <= b.count else { return nil }
+            tamanho = b[i..<(i + bytes)].reduce(0) { $0 << 8 | Int($1) }
+            i += bytes
+        }
+        guard i + tamanho <= b.count else { return nil }
+        return i..<(i + tamanho)
+    }
+    guard elemento(0x30) != nil, let versao = elemento(0x02) else { return nil }
+    i = versao.upperBound
+    guard let algoritmo = elemento(0x30) else { return nil }
+    i = algoritmo.upperBound
+    return elemento(0x04).map { Data(b[$0]) }
+}
+
+/// O build na Play, so lendo (abre uma edicao, le a faixa e os pacotes e descarta a edicao), com a conta de servico do
+/// tools/android/play.py. Recusa, dizendo por que: o lancamento fora de 100% (fracao ou paises), o pacote na Play que nao e o
+/// que este Mac enviou (`~/.escalibur/android/enviados.json`, gravado pelo play.py no envio) e um versionCode mais novo na
+/// Play fora dos autorizados (revisao dos 3 agentes de 07/11/2026). Aqui em Swift, e nao chamando o play.py: o Python de um
+/// processo filho roda com `-I`, que deixa de fora o PyJWT instalado na pasta do usuario. A chave nunca e impressa.
+func conferirNaPlay(_ build: String, autorizados: Set<String>) {
+    let arquivo = pasta.appendingPathComponent("android/play-api.json")
+    guard let dados = try? Data(contentsOf: arquivo), let conta = try? JSONSerialization.jsonObject(with: dados) as? [String: Any],
+          let email = conta["client_email"] as? String, let pem = conta["private_key"] as? String,
+          let idDaChave = conta["private_key_id"] as? String, let enderecoDoToken = conta["token_uri"] as? String else {
+        sair("sem a conta de servico da Play em \(arquivo.path)")
+    }
+    let base64 = pem.split(separator: "\n").filter { !$0.hasPrefix("-----") }.joined()
+    let atributos = [kSecAttrKeyType: kSecAttrKeyTypeRSA, kSecAttrKeyClass: kSecAttrKeyClassPrivate] as CFDictionary
+    guard let der = Data(base64Encoded: base64), let rsa = pkcs1(doPKCS8: der),
+          let chave = SecKeyCreateWithData(rsa as CFData, atributos, nil) else { sair("a chave da conta de servico da Play nao le") }
+    func base64url(_ dados: Data) -> String {
+        dados.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+    }
+    let agora = Int(Date().timeIntervalSince1970)
+    let cabecalho = try! JSONSerialization.data(withJSONObject: ["alg": "RS256", "typ": "JWT", "kid": idDaChave])
+    let afirmacao = try! JSONSerialization.data(withJSONObject: ["iss": email, "scope": "https://www.googleapis.com/auth/androidpublisher",
+                                                                "aud": enderecoDoToken, "iat": agora, "exp": agora + 3600])
+    let assinado = base64url(cabecalho) + "." + base64url(afirmacao)
+    guard let assinatura = SecKeyCreateSignature(chave, .rsaSignatureMessagePKCS1v15SHA256, Data(assinado.utf8) as CFData, nil) as Data? else {
+        sair("nao assinou o pedido de acesso a Play")
+    }
+    let (_, resposta) = pedir("POST", enderecoDoToken, corpo: Data("grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=\(assinado).\(base64url(assinatura))".utf8),
+                              tipo: "application/x-www-form-urlencoded")
+    guard let token = (try? JSONSerialization.jsonObject(with: resposta) as? [String: Any])?["access_token"] as? String else {
+        sair("a Play nao deu acesso a conta de servico")
+    }
+    let api = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/\(app)"
+    guard let edicao = (try? JSONSerialization.jsonObject(with: pedir("POST", api + "/edits", corpo: Data("{}".utf8), token: token).1) as? [String: Any])?["id"] as? String else {
+        sair("a Play nao abriu a edicao")
+    }
+    let faixa = try? JSONSerialization.jsonObject(with: pedir("GET", api + "/edits/\(edicao)/tracks/production", token: token).1) as? [String: Any]
+    let pacotes = try? JSONSerialization.jsonObject(with: pedir("GET", api + "/edits/\(edicao)/bundles", token: token).1) as? [String: Any]
+    _ = pedir("DELETE", api + "/edits/\(edicao)", token: token)
+    let lancamentos = faixa?["releases"] as? [[String: Any]] ?? []
+    guard let lancamento = lancamentos.first(where: { ($0["versionCodes"] as? [String])?.contains(build) == true }) else {
+        sair("o \(build) nao esta na faixa de producao da Play")
+    }
+    let estado = lancamento["status"] as? String ?? "?"
+    let fracao = lancamento["userFraction"] as? Double
+    print("Play, producao: \(build) \(estado)\(fracao.map { " para \(Int($0 * 100))%" } ?? "")")
+    // So este build no lancamento: um codigo a mais nele seria um pacote que a lista nao confere aqui.
+    guard estado == "completed", fracao == nil, lancamento["countryTargeting"] == nil, (lancamento["versionCodes"] as? [String]) == [build] else {
+        sair("o build \(build) nao esta em 100% na producao da Play (fracao ou paises): libere depois de completar o lancamento")
+    }
+    // O pacote na Play e o que este Mac enviou: um build de terceiro com o mesmo numero (enviado antes do dono) nao passa.
+    guard let lista = pacotes?["bundles"] as? [[String: Any]], !lista.isEmpty else { sair("a Play nao mostrou os pacotes") }
+    func codigo(_ pacote: [String: Any]) -> Int? { (pacote["versionCode"] as? Int) ?? (pacote["versionCode"] as? String).flatMap { Int($0) } }
+    let enviados = (try? Data(contentsOf: pasta.appendingPathComponent("android/enviados.json")))
+        .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: String] } ?? [:]
+    guard let nosso = enviados[build] else {
+        sair("este Mac nao enviou o build \(build) (sem ele em ~/.escalibur/android/enviados.json): se o envio falhou como repetido, e incidente")
+    }
+    guard let naPlay = lista.first(where: { codigo($0) == Int(build) })?["sha256"] as? String, naPlay == nosso else {
+        sair("o pacote do build \(build) na Play nao e o que este Mac enviou: e incidente, nao libere")
+    }
+    // Um pacote mais novo na Play que nao saiu deste Mac: os numeros sao autorizados antes de o binario existir, entao estar
+    // na lista nao basta (revisao dos 3 agentes de 07/11/2026, segunda rodada). Fora da lista tambem conta.
+    let estranhos = lista.filter { pacote in
+        guard let numero = codigo(pacote), numero > Int(build)! else { return false }
+        guard let digesto = pacote["sha256"] as? String else { return true }
+        return enviados[String(numero)] != digesto || !autorizados.contains(String(numero))
+    }.compactMap(codigo)
+    guard estranhos.isEmpty else {
+        sair("a Play tem build mais novo que nao saiu deste Mac (\(estranhos.map(String.init).joined(separator: ", "))): e incidente, nao libere")
+    }
 }
 
 /// Assina o manifesto com a chave <id> deste Mac (pede o Touch ID, com o motivo) e grava as duas listas. O app ignora a
@@ -354,6 +486,69 @@ case "liberar":
     manifesto.emitido = agora()
     assinar(manifesto, anterior: emitidaAntes, id: id, motivo: "liberar a versão \(versao) (\(build)) na tela de atualizar", chaves, limiar)
 
+case "liberar-android":
+    // O Android le so esta lista: a Google Play nao tem consulta publica da versao mais nova (pedido do dono, 07/11/2026). O
+    // build entra so com o lancamento em 100% na producao: em lancamento gradual, quem esta fora da fracao veria a tela e
+    // nenhuma atualizacao na Play. O pacote do build na Play tem de ser o que este Mac enviou: a chave de upload fica so aqui,
+    // mas quem e dono da conta da Play Console pode pedir ao Google outra chave de upload, e quem pode lancar promove um AAB ja
+    // enviado sem chave nenhuma.
+    guard argumentos.count == 3 else { sair("uso: liberar-android <build|-> <id>") }
+    let (build, id) = (argumentos[1], argumentos[2])
+    let (chaves, limiar) = confiadas()
+    guard var manifesto = conferida(chaves, limiar) else { sair("sem site/versoes.json") }
+    // "-": tira a liberacao (o Google recusou o build, o lancamento foi pausado, ou ha na Play um build que nao e do dono). O
+    // app volta a "em dia", e o piso impede a lista anterior de voltar.
+    if build == "-" {
+        guard manifesto.android != nil else { sair("nenhum build do Android liberado") }
+        manifesto.android = nil
+        let emitidaAntes = manifesto.emitido
+        manifesto.emitido = agora()
+        assinar(manifesto, anterior: emitidaAntes, id: id, motivo: "tirar a liberação do Android", chaves, limiar)
+        exit(0)
+    }
+    guard let numero = Int(build), numero >= 1000 else { sair("o build \(build) nao e do Android (os do Android comecam em 1000)") }
+    guard let versao = manifesto.versoes.first(where: { $0.builds.contains(build) })?.versao else {
+        sair("o build \(build) nao esta autorizado na lista: rode autorizar antes")
+    }
+    if let anterior = manifesto.android, let liberado = Int(anterior.build), numero <= liberado {
+        sair("o build \(liberado) ja esta liberado: libere so um build mais novo")
+    }
+    conferirNaPlay(build, autorizados: Set(manifesto.versoes.flatMap(\.builds)))
+    // O minSdk do build, do Gradle deste commit: o app nao obriga a atualizar um aparelho que nao instala.
+    let gradle = (try? String(contentsOf: raiz.appendingPathComponent("Android/app/build.gradle.kts"), encoding: .utf8)) ?? ""
+    guard let sdk = try! NSRegularExpression(pattern: #"minSdk = (\d+)"#).firstMatch(in: gradle, range: NSRange(gradle.startIndex..., in: gradle))
+        .flatMap({ Range($0.range(at: 1), in: gradle) }).flatMap({ Int(gradle[$0]) }) else { sair("minSdk ilegivel em Android/app/build.gradle.kts") }
+    // A API diz "completed" desde o envio, ainda na revisao do Google: so a Play Console mostra que o build ja esta no ar.
+    print("a Play mostra o \(build) (\(versao)) em 100% na producao, com o pacote que este Mac enviou.")
+    print("Na Play Console, confira que o \(build) ja saiu da revisao do Google e esta disponivel. Digite \(build) para confirmar:")
+    guard readLine()?.trimmingCharacters(in: .whitespaces) == build else { sair("nao confirmado: nada foi assinado") }
+    manifesto.android = Android(build: build, liberada: String(agora().prefix(10)), sdk: sdk, minimo: manifesto.android?.minimo)
+    let emitidaAntes = manifesto.emitido
+    manifesto.emitido = agora()
+    assinar(manifesto, anterior: emitidaAntes, id: id, motivo: "liberar o build \(build) do Android na tela de atualizar", chaves, limiar)
+
+case "obrigatoria-android":
+    // Os builds abaixo de <build> perdem o "Vou atualizar depois". A saida e o build liberado: a regra nunca pega ele.
+    guard argumentos.count == 3 else { sair("uso: obrigatoria-android <build|-> <id>") }
+    let (build, id) = (argumentos[1], argumentos[2])
+    let (chaves, limiar) = confiadas()
+    guard var manifesto = conferida(chaves, limiar) else { sair("sem site/versoes.json") }
+    guard var android = manifesto.android else { sair("nenhum build do Android liberado: a tela obrigatoria nao teria saida (rode liberar-android antes)") }
+    if build == "-" {
+        android.minimo = nil
+    } else {
+        guard let numero = Int(build), numero >= 1000 else { sair("o build \(build) nao e do Android (os do Android comecam em 1000)") }
+        guard let liberado = Int(android.build), numero <= liberado else {
+            sair("a regra pegaria o \(android.build), o liberado: ninguem sairia da tela")
+        }
+        android.minimo = build
+    }
+    manifesto.android = android
+    let emitidaAntes = manifesto.emitido
+    manifesto.emitido = agora()
+    let motivo = android.minimo.map { "assinar a atualização obrigatória do Android abaixo do build \($0)" } ?? "tirar a atualização obrigatória do Android"
+    assinar(manifesto, anterior: emitidaAntes, id: id, motivo: motivo, chaves, limiar)
+
 case "conferir":
     guard let (envelope, manifesto) = ler() else { sair("sem site/versoes.json") }
     let (chaves, limiar) = confiadas()
@@ -397,5 +592,5 @@ case "conferir-app":
     print("o app \(versao) (\(build)) leva a lista assinada que o autoriza")
 
 default:
-    sair("comandos: criar-chave <id> | autorizar <versao> <build> <id> | liberar <versao> <build> <id> | obrigatoria <minima|-> <versoes|-> <id> | conferir | copiar | conferir-app <app>")
+    sair("comandos: criar-chave <id> | autorizar <versao> <build> <id> | liberar <versao> <build> <id> | obrigatoria <minima|-> <versoes|-> <id> | liberar-android <build|-> <id> | obrigatoria-android <build|-> <id> | conferir | copiar | conferir-app <app>")
 }

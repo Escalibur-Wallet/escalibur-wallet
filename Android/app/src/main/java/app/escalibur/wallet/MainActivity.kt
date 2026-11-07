@@ -75,6 +75,8 @@ class MainActivity : ComponentActivity() {
             // Uma tela aberta direto depois de destrancar (adb, `--es tela enviar-eth`), para conferir
             // as etapas no emulador com a carteira de teste, que nao tem saldo.
             Navegacao.telaDeDepuracao = intent.getStringExtra("tela")
+            // A tela de versao desatualizada sem uma versao de verdade na lista (`--es versao expirada|obrigatoria|tentou`).
+            intent.getStringExtra("versao")?.let { app.escalibur.wallet.ui.atualizar.Atualizacao.demonstrar(it) }
         }
     }
 
@@ -84,6 +86,7 @@ class MainActivity : ComponentActivity() {
         // O `referrer` le o intent da Activity: o novo, e nao o da abertura.
         setIntent(intent)
         if (BuildConfig.DEBUG) intent.getStringExtra("tela")?.let { Navegacao.telaDeDepuracao = it }
+        if (BuildConfig.DEBUG) intent.getStringExtra("versao")?.let { app.escalibur.wallet.ui.atualizar.Atualizacao.demonstrar(it) }
         Vigia.receber(this, intent)
         EnvelopeRecebido.receber(intent, origemDoIntent())
     }
