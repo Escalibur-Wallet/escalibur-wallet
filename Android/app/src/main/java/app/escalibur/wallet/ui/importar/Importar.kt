@@ -88,6 +88,7 @@ import app.escalibur.wallet.ui.comp.Rodape
 import app.escalibur.wallet.ui.comp.Segmentado
 import app.escalibur.wallet.ui.comp.SeloDaRede
 import app.escalibur.wallet.ui.comp.SugestoesDePalavra
+import app.escalibur.wallet.ui.ajustes.DigitarPassphrase
 import app.escalibur.wallet.ui.ajustes.FolhaDoSafeKeyboard
 import app.escalibur.wallet.ui.comp.PalavraPeloCelular
 import app.escalibur.wallet.ui.comp.TecladoDePalavras
@@ -111,8 +112,13 @@ import app.escalibur.wallet.ui.tema.Raio
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.Executors
 import org.json.JSONObject
 import java.text.Normalizer
 
@@ -120,10 +126,13 @@ import java.text.Normalizer
  * As palavras em digitacao, uma por posicao, cada uma em bytes que o app zera (o PhraseEntry do
  * iOS). Na tela, cada palavra fechada aparece em pontos; segurar mostra.
  */
-class EntradaDaFrase(quantas: Int = 12, limpaAoSair: Boolean = false) {
+class EntradaDaFrase(quantas: Int = 12, limpaAoSair: Boolean = false, zeraAoTravar: Boolean = false) {
     private var posicoes: MutableList<ByteArray?> = MutableList(quantas) { null }
 
-    init { if (limpaAoSair) synchronized(vivas) { vivas.add(this) } }
+    init {
+        if (limpaAoSair) synchronized(vivas) { vivas.add(this) }
+        if (zeraAoTravar) synchronized(ateTravar) { ateTravar.add(this) }
+    }
 
     var quantidade by mutableIntStateOf(quantas)
         private set
@@ -212,6 +221,24 @@ class EntradaDaFrase(quantas: Int = 12, limpaAoSair: Boolean = false) {
             todas.forEach { it.zerar() }
         }
 
+        /** Com o interruptor da passphrase, a frase montada depois do PIN de presenca: zerada ao travar. A ida ao fundo fica,
+         * como na previa, para comparar enderecos noutro app (revisao de seguranca, 08/11/2026). */
+        private val frasesAteTravar: MutableSet<ByteArray> = java.util.Collections.newSetFromMap(java.util.WeakHashMap())
+
+        fun lembrarAteTravar(frase: ByteArray) {
+            synchronized(frasesAteTravar) { frasesAteTravar.add(frase) }
+        }
+
+        /** As grades de criar e importar: ir ao fundo nao as zera (a previa manda comparar noutro app), travar sim, na hora do
+         * aviso de tela apagada. O onDispose so viria na volta, com a composicao parada; e na volta a tela de bloqueio tira o
+         * fluxo da arvore, entao nada zerado chega a ser gravado (o didLock do iOS, revisao dos 3 agentes, 08/11/2026). */
+        private val ateTravar: MutableSet<EntradaDaFrase> = java.util.Collections.newSetFromMap(java.util.WeakHashMap())
+
+        fun zerarAoTravar() {
+            synchronized(frasesAteTravar) { frasesAteTravar.toList() }.forEach { it.fill(0) }
+            synchronized(ateTravar) { ateTravar.toList() }.forEach { it.zerar() }
+        }
+
         val TAMANHOS = listOf(12, 15, 18, 21, 24)
     }
 }
@@ -221,16 +248,28 @@ class EntradaDaFrase(quantas: Int = 12, limpaAoSair: Boolean = false) {
 @Composable
 fun FluxoDeImportar(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
     var etapa by remember { mutableStateOf("aceite") }
-    val entrada = remember { EntradaDaFrase() }
-    val passphrase = remember { Segredo() }
-    val repeticao = remember { Segredo() }
+    val entrada = remember { EntradaDaFrase(zeraAoTravar = true) }
+    val passphrase = remember { Segredo(zeraAoTravar = true) }
+    val repeticao = remember { Segredo(zeraAoTravar = true) }
     var usaPassphrase by remember { mutableStateOf(false) }
     var previa by remember { mutableStateOf<JSONObject?>(null) }
+    /** O nome da carteira com passphrase, como o nucleo daria a carteira das palavras, com "com passphrase". */
+    var nomeSimples by remember { mutableStateOf("") }
+    /** Com o interruptor, depois do PIN: a frase montada, e a grade zerada. Voltar ate as palavras pede digitar de novo, sem
+     * elas a mostra na grade (revisao de seguranca, 08/11/2026). */
+    var palavras by remember { mutableStateOf<ByteArray?>(null) }
+    fun esquecerPalavras() {
+        palavras?.fill(0)
+        palavras = null
+    }
     DisposableEffect(Unit) {
         onDispose {
+            esquecerPalavras()
             entrada.zerar()
             passphrase.clearText()
             repeticao.clearText()
+            // A rodada do dia segura pela previa com a passphrase depois volta quando o fluxo fecha (rodada 8 da auditoria 8).
+            FilaDoSilencio.soltarRodada()
         }
     }
     Box(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
@@ -250,11 +289,43 @@ fun FluxoDeImportar(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
                 }
             }
             "frase" -> TelaDaFrase(entrada, passphrase, repeticao, usaPassphrase, { usaPassphrase = it }, aoCancelar) { conferida ->
+                val quantas = App.estado.carteiras.size
+                nomeSimples = if (quantas == 0) t("Carteira principal") else t("Carteira %lld", quantas + 1)
                 previa = conferida
                 etapa = "previa"
             }
             "previa" -> previa?.let { dados ->
-                PreviaDaImportacao(dados, entrada, if (usaPassphrase) passphrase else null, aoVoltar = { etapa = "frase" }, aoGuardar = aoTerminar)
+                // Com o interruptor, o PIN so confirma que e o dono, e a tela da passphrase abre com as palavras na memoria.
+                PreviaDaImportacao(dados, entrada, passphraseDepois = usaPassphrase, aoVoltar = { esquecerPalavras(); etapa = "frase" }) {
+                    if (usaPassphrase) {
+                        if (palavras == null) {
+                            val frase = entrada.frase()
+                            EntradaDaFrase.lembrarAteTravar(frase)
+                            palavras = frase
+                            entrada.zerar()
+                        }
+                        etapa = "passphrase"
+                    } else aoTerminar()
+                }
+            }
+            // A mesma tela da passphrase dos Ajustes. O voltar leva a conferencia, com as palavras ainda na memoria; so a carteira
+            // com passphrase e gravada, numa vez so, e a das palavras nunca vai ao cofre (revisao dos 3 agentes, 08/11/2026).
+            "passphrase" -> previa?.let { dados ->
+                // As palavras ja aqui (a digital e os enderecos da previa): o nome da carteira delas, como pelos Ajustes.
+                val enderecos = dados.getJSONArray("enderecos").objetos().map { it.getString("rede") to it.getString("endereco") }
+                val conhecida = App.estado.carteiras.firstOrNull { carteira ->
+                    !carteira.observacao && !carteira.temPassphrase && carteira.digital?.equals(dados.optString("digital"), ignoreCase = true) == true &&
+                        enderecos.isNotEmpty() && enderecos.all { it in carteira.contas }
+                }
+                Column(Modifier.fillMaxSize().acimaDoTeclado()) {
+                    DigitarPassphrase(null, aoVoltar = { etapa = "previa" }, nomeSugerido = t("%@ com passphrase", conhecida?.nome ?: nomeSimples),
+                                      abrirCom = { credencial, segredo, nome ->
+                        // Sem as palavras (a tela saiu), vai vazio, e o nucleo recusa sem gravar nada.
+                        Api.comSegredo("carteira.importarComPassphrase", JSONObject().put("credencial", credencial.json()).put("palavras", entrada.quantidade)
+                                           .put("nome", nome).put("digital", dados.optString("digital")),
+                                       *credencial.partes(palavras?.copyOf() ?: ByteArray(0), segredo))
+                    }) { aoTerminar() }
+                }
             }
         }
     }
@@ -281,6 +352,8 @@ internal fun TelaDaFrase(
     var trabalhando by remember { mutableStateOf(false) }
     var confirmarLimpar by remember { mutableStateOf(false) }
     var mostrar by remember { mutableStateOf(false) }
+    /** A passphrase digitada nesta tela: so conferindo a copia de uma carteira que tem uma. */
+    val digitaAqui = usaPassphrase && conferindo != null
     var maisTamanhos by remember { mutableStateOf(false) }
     var outroTamanho by remember { mutableIntStateOf(12) }
     val revisao = entrada.revisao
@@ -296,13 +369,22 @@ internal fun TelaDaFrase(
     val reforcado = App.estado.reforcado
     // O teclado do celular so com nenhum servico de fora ligado, mesmo que a escolha tenha sido feita antes.
     val celularLiberado = peloCelular && !acessibilidadeDeFora
-    val proprio = (App.estado.tecladoProprio || conferindo != null || App.estado.carteiras.isEmpty()) && (!celularLiberado || reforcado)
+    // O teclado padrao de outro app nunca recebe a frase: com ele, o Safe Keyboard fica, mesmo desligado nos Ajustes ou com o
+    // "Usar o do celular" escolhido antes (auditoria 8, 14/11/2026). Lido a cada desenho: o padrao muda nos Ajustes do celular.
+    val tecladoDeOutroApp = app.escalibur.wallet.ui.comp.TecladoSeguro.tecladoDeTerceiros(contexto)
+    val proprio = (App.estado.tecladoProprio || conferindo != null || App.estado.carteiras.isEmpty() || tecladoDeOutroApp) &&
+        (!celularLiberado || reforcado || tecladoDeOutroApp)
     val celular = remember { TecladoDoCelular() }
 
     // Sem internet enquanto as palavras estao na tela: a conferencia e toda local.
     DisposableEffect(Unit) {
-        escopo.launch { runCatching { Api.objeto("rede.silencio", JSONObject().put("ligar", true)) } }
-        onDispose { CoroutineScope(Dispatchers.IO).launch { runCatching { Api.objeto("rede.silencio", JSONObject().put("ligar", false)) } } }
+        FilaDoSilencio.pedir(true)
+        // A rodada do dia que desistiu no silencio volta ao sair, em todo modo (a conferencia do Super Security, as palavras
+        // escolhidas), como no iOS; a previa segura respeita (rodada 9 da auditoria 8).
+        onDispose {
+            FilaDoSilencio.pedir(false)
+            FilaDoSilencio.agendarRodada()
+        }
     }
     // Os idiomas das palavras ja fechadas, fora a posicao em digitacao: as sugestoes seguem eles.
     // Escolhendo, so a lista em ingles: a frase gerada e so em ingles.
@@ -382,7 +464,7 @@ internal fun TelaDaFrase(
 
     fun importar() {
         mensagem = null
-        if (usaPassphrase) {
+        if (digitaAqui) {
             val a = passphrase.bytes()
             val b = repeticao.bytes()
             val iguais = a.isNotEmpty() && java.security.MessageDigest.isEqual(a, b)
@@ -401,10 +483,10 @@ internal fun TelaDaFrase(
                     "valida" -> {
                         if (aoConferirCopia != null) {
                             // Conferindo uma copia: a frase vai para quem pediu, sem enderecos nem carteira nova.
-                            mensagem = aoConferirCopia(entrada.frase(), if (usaPassphrase) passphrase.bytes() else null)
+                            mensagem = aoConferirCopia(entrada.frase(), if (digitaAqui) passphrase.bytes() else null)
                         } else {
-                            val partes = if (usaPassphrase) arrayOf(entrada.frase(), passphrase.bytes()) else arrayOf(entrada.frase())
-                            aoConferir(Api.comSegredo("carteira.previa", JSONObject(), *partes))
+                            // So as palavras: com o interruptor ligado, a passphrase vem depois de guardar.
+                            aoConferir(Api.comSegredo("carteira.previa", JSONObject(), entrada.frase()))
                         }
                     }
                     "tamanho" -> mensagem = t("Faltam palavras: %lld de %lld.", validacao.optInt("contagem"), entrada.quantidade)
@@ -518,7 +600,13 @@ internal fun TelaDaFrase(
                 Text(t("Esta carteira usa passphrase"), style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
                 Interruptor(usaPassphrase, aoMudarPassphrase, cor = Paleta.acento)
             }
-            AnimatedVisibility(usaPassphrase) {
+            // O interruptor so liga: a passphrase vem depois do PIN, na tela dela (pedido do dono, 08/11/2026).
+            AnimatedVisibility(usaPassphrase && escolhendo == null && conferindo == null) {
+                Text(t("Depois de conferir os endereços, você digita a passphrase numa tela só dela."),
+                     style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs))
+            }
+            // Os campos so na conferencia de uma copia, que confere a passphrase junto.
+            AnimatedVisibility(digitaAqui) {
                 Column(verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                     Text(t("Com a passphrase errada, a carteira abre vazia e sem aviso nenhum. Por isso ela é digitada duas vezes. Segure o dedo num campo para conferir as duas."),
                          style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs))
@@ -587,8 +675,13 @@ internal fun TelaDaFrase(
             t("Usar o do celular"), destrutiva = false,
             aoConfirmar = {
                 confirmarCelular = false
-                // Um servico de fora ligado depois do aviso aberto: a escolha nao vale.
-                peloCelular = !app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isNotEmpty()
+                // O teclado padrao e de outro app: a frase nao vai para ele, e o aviso diz como trocar (auditoria 8).
+                if (app.escalibur.wallet.ui.comp.TecladoSeguro.tecladoDeTerceiros(contexto)) {
+                    app.escalibur.wallet.ui.comp.TecladoSeguro.avisarTecladoDeTerceiros()
+                } else {
+                    // Um servico de fora ligado depois do aviso aberto: a escolha nao vale.
+                    peloCelular = !app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isNotEmpty()
+                }
             },
             aoCancelar = { confirmarCelular = false },
         )
@@ -740,16 +833,23 @@ private fun Garantia(icone: ImageVector, titulo: String, detalhe: String) {
  * digital, quem controla a conta na Tron e o aceite de que quem deu as palavras controla a carteira.
  */
 @Composable
-private fun PreviaDaImportacao(dados: JSONObject, entrada: EntradaDaFrase, passphrase: Segredo?, aoVoltar: () -> Unit, aoGuardar: () -> Unit) {
-    ConferenciaDaImportacao(dados, comPassphrase = passphrase != null, doEnvelope = false, aoVoltar = aoVoltar,
-                            aoGuardar = { entrada.zerar(); aoGuardar() }) { tronOutraChave ->
-        Autorizacao.tentando(t("Guardar a carteira importada neste celular")) { credencial ->
-            // A digital da previa que o dono conferiu: o nucleo so grava a mesma carteira (05/11/2026).
-            val corpo = JSONObject().put("credencial", credencial.json()).put("palavras", entrada.quantidade).put("tronOutraChave", tronOutraChave)
-                .apply { dados.optString("digital").ifEmpty { null }?.let { put("digital", it) } }
-            val partes = if (passphrase != null) credencial.partes(entrada.frase(), passphrase.bytes()) else credencial.partes(entrada.frase())
-            Api.comSegredo("carteira.importar", corpo, *partes)
-        } != null
+private fun PreviaDaImportacao(dados: JSONObject, entrada: EntradaDaFrase, passphraseDepois: Boolean, aoVoltar: () -> Unit, aoGuardar: () -> Unit) {
+    // Com a passphrase depois, as palavras ficam na memoria para a tela da passphrase: zeram ao sair da importacao.
+    ConferenciaDaImportacao(dados, comPassphrase = false, passphraseDepois = passphraseDepois, doEnvelope = false, aoVoltar = aoVoltar,
+                            aoGuardar = { if (!passphraseDepois) entrada.zerar(); aoGuardar() }) { tronOutraChave ->
+        if (passphraseDepois) {
+            // O PIN so confirma que e o dono (pedido do dono, 08/11/2026): nada vai ao cofre aqui.
+            Autorizacao.tentando(t("Importar com a senha da carteira")) { credencial ->
+                Api.comSegredo("sessao.confirmar", JSONObject().put("credencial", credencial.json()), *credencial.partes())
+            } != null
+        } else {
+            Autorizacao.tentando(t("Guardar a carteira importada neste celular")) { credencial ->
+                // A digital da previa que o dono conferiu: o nucleo so grava a mesma carteira (05/11/2026).
+                val corpo = JSONObject().put("credencial", credencial.json()).put("palavras", entrada.quantidade).put("tronOutraChave", tronOutraChave)
+                    .apply { dados.optString("digital").ifEmpty { null }?.let { put("digital", it) } }
+                Api.comSegredo("carteira.importar", corpo, *credencial.partes(entrada.frase()))
+            } != null
+        }
     }
 }
 
@@ -761,11 +861,14 @@ private fun PreviaDaImportacao(dados: JSONObject, entrada: EntradaDaFrase, passp
 @Composable
 internal fun ConferenciaDaImportacao(
     dados: JSONObject, comPassphrase: Boolean, doEnvelope: Boolean, aoVoltar: () -> Unit, aoGuardar: () -> Unit,
-    guardar: suspend (tronOutraChave: Boolean) -> Boolean,
+    passphraseDepois: Boolean = false, guardar: suspend (tronOutraChave: Boolean) -> Boolean,
 ) {
     val escopo = rememberCoroutineScope()
     var aceito by remember { mutableStateOf(false) }
     var tronOutraChave by remember { mutableStateOf(false) }
+    // A conta EVM com contrato instalado por delegacao (EIP-7702) numa das redes da previa, como o `evmForeign` do iOS
+    // (auditoria 8, 14/11/2026): a rede e o aviso. O nucleo guarda o achado e ele nasce como marca ao gravar (rodada 4).
+    var evmAviso by remember { mutableStateOf<Pair<String, String>?>(null) }
     var guardando by remember { mutableStateOf(false) }
     var mensagem by remember { mutableStateOf<String?>(null) }
     // A recusa aparece no fim da lista, abaixo dos enderecos: a tela desce ate ela.
@@ -775,8 +878,29 @@ internal fun ConferenciaDaImportacao(
         val tron = dados.opcional("tron") ?: return@LaunchedEffect
         // A tela das palavras saiu: o silencio da rede termina antes de perguntar a Tron (a saida
         // dela fecha o silencio em paralelo, e a pergunta chegava a ser recusada).
-        runCatching { Api.objeto("rede.silencio", JSONObject().put("ligar", false)) }
-        tronOutraChave = runCatching { Api.objeto("carteira.tron", JSONObject().put("endereco", tron)).getBoolean("outraChave") }.getOrDefault(false)
+        FilaDoSilencio.desligarAgora()
+        // Com a passphrase depois, a carteira das palavras nao e guardada, e a Tron conferida e a da carteira com passphrase,
+        // quando ela abre: consultar as duas juntas ligaria uma a outra para quem ve a rede (revisao, 08/11/2026).
+        if (passphraseDepois) return@LaunchedEffect
+        tronOutraChave = runCatching { Api.objeto("carteira.tron", JSONObject().put("endereco", tron).put("oculta", comPassphrase)).getBoolean("outraChave") }.getOrDefault(false)
+    }
+    LaunchedEffect(Unit) {
+        // A mesma regra da Tron: nada com a passphrase depois, e sem rede, nada a dizer.
+        if (passphraseDepois) return@LaunchedEffect
+        val evm = dados.getJSONArray("enderecos").objetos().firstOrNull { it.getString("rede") == "ethereum" }?.getString("endereco")
+            ?: return@LaunchedEffect
+        FilaDoSilencio.desligarAgora()
+        val resposta = runCatching { Api.objeto("carteira.evm", JSONObject().put("endereco", evm).put("oculta", comPassphrase)) }.getOrNull() ?: return@LaunchedEffect
+        val aviso = resposta.opcional("aviso") ?: return@LaunchedEffect
+        evmAviso = (resposta.opcional("rede") ?: "") to aviso
+    }
+    // A previa fechou: a rodada do dia da escolhida, pausada por ela, volta (rodada 5 da auditoria 8), como no iOS.
+    // Com a passphrase depois, a com passphrase vai abrir: a rodada da base nao volta agora (rodada 6).
+    // Com a passphrase depois, a rodada fica segura ate o fluxo de importar fechar: a base nao sai junto da com passphrase que
+    // abre logo depois (rodada 8), como no iOS. Pela fila, na ordem do silencio.
+    DisposableEffect(Unit) {
+        if (passphraseDepois) FilaDoSilencio.segurarRodada()
+        onDispose { if (!passphraseDepois) FilaDoSilencio.soltarRodada() }
     }
     BackHandler(onBack = aoVoltar)
     Column(Modifier.fillMaxSize()) {
@@ -785,6 +909,7 @@ internal fun ConferenciaDaImportacao(
             Text(t("Confira antes de guardar"), style = estilo(Tipo.titulo), color = Paleta.tinta)
             Text(
                 if (comPassphrase) t("Se esta carteira já recebeu antes, estes endereços são os que você conhece. Se não baterem, a frase ou a passphrase está diferente, e o que abriria aqui é outra carteira, vazia.")
+                else if (passphraseDepois) t("Estes são os endereços das palavras sozinhas, sem a passphrase. Se você só usa a carteira com passphrase, eles podem nunca ter recebido nada. Esta importação guarda só a carteira com passphrase: você digita a passphrase na próxima tela.")
                 else t("Se esta carteira já recebeu antes, estes endereços são os que você conhece. Se não baterem, alguma palavra está diferente, e o que abriria aqui é outra carteira, vazia."),
                 style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm),
             )
@@ -801,19 +926,25 @@ internal fun ConferenciaDaImportacao(
                 Column(verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
                     Text(t("Impressão digital da carteira"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
                     Text(dados.getString("digital"), style = estilo(Tipo.linha), color = Paleta.tinta)
-                    Text(t("A mesma que carteiras de hardware mostram para esta frase."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+                    Text(if (passphraseDepois) t("A desta frase sem a passphrase. Com a passphrase, a impressão digital é outra.")
+                         else t("A mesma que carteiras de hardware mostram para esta frase."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
                 }
             }
             if (tronOutraChave) {
                 Faixa(TipoDeFaixa.falha, t("Na Tron, esta conta é controlada por outra chave"), Modifier.padding(top = Espaco.lg),
                       mensagem = t("É o golpe da frase com saldo: o que entrar nela, quem controla a outra chave leva. Não deposite nada nesta carteira."))
             }
+            evmAviso?.let { (rede, aviso) -> Faixa(TipoDeFaixa.falha, rede, Modifier.padding(top = Espaco.lg), mensagem = aviso) }
             mensagem?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
         }
         Rodape {
             Aceite(aceito, if (doEnvelope) t("Entendo que quem me mandou este envelope e a senha dele controla esta carteira e pode levar o que entrar nela. Só deposito aqui se o envelope for meu.")
                            else t("Entendo que quem me deu estas palavras controla esta carteira e pode levar o que entrar nela. Só deposito aqui se as palavras forem só minhas.")) { aceito = it }
-            BotaoPrimario(t("Guardar esta carteira"), Modifier.padding(top = Espaco.sm), ligado = aceito, carregando = guardando) {
+            // Com a passphrase depois, nada e guardado aqui: o PIN e a tela da passphrase vem a seguir.
+            BotaoPrimario(if (passphraseDepois) t("Continuar") else t("Guardar esta carteira"), Modifier.padding(top = Espaco.sm), ligado = aceito,
+                          carregando = guardando) {
+                // Um toque so: o segundo abria outro pedido de PIN por cima do primeiro (revisao, 08/11/2026).
+                if (guardando) return@BotaoPrimario
                 guardando = true
                 mensagem = null
                 escopo.launch {
@@ -850,7 +981,7 @@ fun ObservarEndereco(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
         val resposta = runCatching { Api.objeto("carteira.reconhecer", JSONObject().put("endereco", endereco)) }.getOrNull()
         if (resposta?.optBoolean("frase") == true) {
             endereco = ""
-            erro = t("Este código traz as palavras de uma senha de carteira, não um endereço. Quem tem essas palavras tem o saldo: não mostre a ninguém.")
+            erro = resposta.opcional("aviso") ?: t("Este código traz as palavras de uma senha de carteira, não um endereço. Quem tem essas palavras tem o saldo: não mostre a ninguém.")
             return@LaunchedEffect
         }
         reconhecida = resposta?.optJSONObject("reconhecida")
@@ -873,7 +1004,15 @@ fun ObservarEndereco(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
                 Box(Modifier.weight(1f)) {
                     if (endereco.isEmpty()) Text(t("Cole ou digite o endereço"), style = estilo(Tipo.corpo), color = Paleta.tintaMorta)
                     BasicTextField(
-                        endereco, { endereco = it.take(512); erro = null }, maxLines = 4,
+                        endereco, { novo ->
+                            // Colado pelo menu do sistema: com um segredo, a area de transferencia esvazia tambem.
+                            if (novo.length > endereco.length + 1) {
+                                val gerente = contexto.getSystemService(ClipboardManager::class.java)
+                                escopo.launch { app.escalibur.wallet.ui.enviar.limparSeSegredo(gerente, novo, null) }
+                            }
+                            endereco = novo.take(512)
+                            erro = null
+                        }, maxLines = 4,
                         textStyle = estilo(Tipo.mono).copy(color = Paleta.tinta), cursorBrush = SolidColor(Paleta.acento),
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = KeyboardType.Ascii),
                         modifier = Modifier.fillMaxWidth(),
@@ -884,6 +1023,8 @@ fun ObservarEndereco(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
                         Modifier.height(32.dp).clip(CircleShape).background(Paleta.controle).clickable {
                             val gerente = contexto.getSystemService(ClipboardManager::class.java)
                             endereco = runCatching { gerente.primaryClip?.getItemAt(0)?.text?.toString() }.getOrNull().orEmpty().trim().take(512)
+                            val colado = endereco
+                            if (colado.isNotEmpty()) escopo.launch { app.escalibur.wallet.ui.enviar.limparSeSegredo(gerente, colado, null) }
                         }.padding(horizontal = Espaco.sm),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
@@ -957,5 +1098,43 @@ fun ObservarEndereco(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+/**
+ * Ligar e desligar o silencio da rede, e segurar e soltar a rodada do dia, numa fila so, na ordem em que a tela pediu: o desligar,
+ * num escopo proprio, podia chegar antes do ligar, e a rede ficava em silencio ate travar; com a rodada 7, toda conferencia espera
+ * o silencio acabar (rodada 8 da auditoria 8). Uma linha so de execucao e a trava: quem pediu antes pega a trava antes. Fora das
+ * telas: o pedido do onDispose chega ao nucleo mesmo com a tela ja fora.
+ */
+private object FilaDoSilencio {
+    private val trava = Mutex()
+    private val escopo = CoroutineScope(SupervisorJob() + Executors.newSingleThreadExecutor().asCoroutineDispatcher())
+
+    private fun pedido(metodo: String, corpo: JSONObject = JSONObject()) =
+        escopo.async { trava.withLock { runCatching { Api.objeto(metodo, corpo) } } }
+
+    fun pedir(ligar: Boolean) {
+        pedido("rede.silencio", JSONObject().put("ligar", ligar))
+    }
+
+    /** Desliga e espera: a consulta da previa vem logo depois. */
+    suspend fun desligarAgora() {
+        pedido("rede.silencio", JSONObject().put("ligar", false)).await()
+    }
+
+    /** A previa com a passphrase depois segura a rodada do dia ate o fluxo de importar fechar (rodada 8). */
+    fun segurarRodada() {
+        pedido("conferencias.segurar")
+    }
+
+    /** A rodada do dia, se for a hora e nada a segurar (a previa aberta respeita). */
+    fun agendarRodada() {
+        pedido("conferencias.agendar")
+    }
+
+    /** A previa ou o fluxo de importar fechou: a rodada do dia volta. */
+    fun soltarRodada() {
+        pedido("conferencias.retomar")
     }
 }

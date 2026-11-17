@@ -43,6 +43,25 @@ struct EndpointsFamilyTests {
         #expect(shared.isEmpty, "na frente de mais de uma familia: \(shared)")
     }
 
+    /// Operadores de verdade, e nao enderecos (revisao dos tres agentes de 15/11/2026): as dataseeds da BNB Chain (bnbchain.org,
+    /// defibit.io e ninicoin.io, a mesma NodeReal atras) contavam como tres, e a BNB Chain sozinha escondia a delegacao 7702.
+    @Test("Toda EVM com tres operadores na leitura e dois na simulacao, e as dataseeds da BNB Chain como um so")
+    func distinctOperators() {
+        let reads = Endpoints.evm.merging(Endpoints.evmContingency) { $0 + $1 }
+        for (chain, providers) in reads {
+            #expect(Set(providers.map(\.operatorName)).count >= 3, "\(chain): \(providers.map(\.operatorName))")
+        }
+        // A lista vazia e a rede sem simulacao (a troca nao abre la).
+        for (chain, providers) in Endpoints.tradeSimulation where !providers.isEmpty {
+            #expect(Set(providers.map(\.operatorName)).count >= 2, "\(chain): \(providers.map(\.operatorName))")
+        }
+        let dataseeds = (reads["bnb"] ?? []) + (Endpoints.tradeSimulation["bnb"] ?? [])
+        for provider in dataseeds where ["bnbchain.org", "defibit.io", "ninicoin.io"].contains(where: { provider.baseURL.host?.hasSuffix($0) == true }) {
+            #expect(provider.operatorName == "bnbchain", "\(provider.baseURL.host ?? "")")
+        }
+        #expect(!(reads.values.joined().contains { $0.baseURL.host == "1rpc.io" }))
+    }
+
     @Test("A Litecoin reparte entre o litecoinspace e a Bitcore, e a Dogecoin fica com a Atomic")
     func utxoLeaders() {
         let leaders = Self.leaders()

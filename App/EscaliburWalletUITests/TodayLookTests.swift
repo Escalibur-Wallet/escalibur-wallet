@@ -87,6 +87,12 @@ final class TodayLookTests: XCTestCase {
         let rows = app.buttons.matching(NSPredicate(format: "label IN %@", ["Quem tem as palavras tem o saldo", "A Escalibur nunca pede as palavras", "Devo ver as palavras sozinho, longe de câmeras"]))
         for index in 0..<rows.count { rows.element(boundBy: index).tap() }
         app.tapWhenEnabled(app.buttons["Ver as palavras"])
+        // A checagem do aparelho vem antes do PIN (pedido do dono, 15/11/2026): desliza ate o fim.
+        let slider = app.descendants(matching: .any)["deslizar-digitar"].firstMatch
+        XCTAssertTrue(slider.waitForExistence(timeout: 30), "a checagem do aparelho nao apareceu")
+        sleep(1)
+        slider.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5))
+            .press(forDuration: 0.2, thenDragTo: slider.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)), withVelocity: .fast, thenHoldForDuration: 0.3)
         for digit in "111111" {
             let key = app.buttons.matching(identifier: "tecla-\(digit)").firstMatch
             XCTAssertTrue(key.waitForExistence(timeout: 10))

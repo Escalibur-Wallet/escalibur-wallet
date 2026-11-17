@@ -130,9 +130,7 @@ struct ConfirmPassphraseView: View {
         // Gravada fora de NFKD por uma versao anterior: a copia nao traz a conta da Cardano de
         // volta (revisao do modo reforcado, N1).
         if result == .legacy {
-            var marked = session.metadata.wallets.first { $0.id == id } ?? wallet
-            marked.legacyCardanoPassphrase = true
-            session.update(marked)
+            session.update(id) { $0.legacyCardanoPassphrase = true }
             message = HardenedEnableFlow.legacyPassphraseMessage(wallet.name)
             return
         }
@@ -141,9 +139,7 @@ struct ConfirmPassphraseView: View {
             message = String(localized: "Não confere com a passphrase desta carteira. Confira o que você anotou, letra por letra.")
             return
         }
-        var updated = session.metadata.wallets.first { $0.id == wallet.id } ?? wallet
-        updated.passphraseConfirmedAt = .now
-        session.update(updated)
+        session.update(wallet.id) { $0.passphraseConfirmedAt = .now }
         close()
     }
 

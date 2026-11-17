@@ -92,12 +92,37 @@ struct NEARAccountTests {
         #expect(Address.guessChain("HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk") == .solana)
     }
 
-    @Test("Envenenamento: conta implicita parecida e pega; nome curto nao tem pontas para comparar")
-    func poisoning() {
+    @Test("Envenenamento: conta implicita parecida e pega; nome curto tambem, com uma letra trocada ou outro registro")
+    func poisoning() throws {
         let lookalike = "917b" + String(repeating: "0", count: 56) + "860d"
         #expect(AddressPoisoning.lookalike(lookalike, among: [Self.implicit], chain: .near) == Self.implicit)
-        #expect(AddressPoisoning.lookalike("alicf.near", among: ["alice.near"], chain: .near) == nil)
         #expect(AddressPoisoning.lookalike(Self.implicit, among: [Self.implicit], chain: .near) == nil)
+        // Nome curto: antes ficava fora de toda comparacao (revisao dos 3 agentes, 08/11/2026).
+        #expect(AddressPoisoning.lookalike("alicf.near", among: ["alice.near"], chain: .near) == "alice.near")
+        #expect(AddressPoisoning.lookalike("b0b.near", among: ["bob.near"], chain: .near) == "bob.near")
+        #expect(AddressPoisoning.lookalike("bob.tg", among: ["bob.near"], chain: .near) == "bob.near")
+        #expect(AddressPoisoning.lookalike("alice-bnak.near", among: ["alice-bank.near"], chain: .near) == "alice-bank.near")
+        #expect(AddressPoisoning.lookalike("bob.near", among: ["bob.near"], chain: .near) == nil)
+        #expect(AddressPoisoning.lookalike("carol.near", among: ["bob.near"], chain: .near) == nil)
+        // O nome curto inteiro no comeco do outro, nos dois sentidos: esticado ou com algo a mais no fim. O custo e digitar o nome
+        // inteiro tambem em "bobcat.near" depois de "bob.near"; entre nomes longos, a regra de sempre.
+        #expect(AddressPoisoning.lookalike("alice.nearx.near", among: ["alice.near"], chain: .near) == "alice.near")
+        #expect(AddressPoisoning.lookalike("alice.near", among: ["alice.nearx.near"], chain: .near) == "alice.nearx.near")
+        #expect(AddressPoisoning.lookalike("bob.near.tg", among: ["bob.near"], chain: .near) == "bob.near")
+        #expect(AddressPoisoning.lookalike("alice01.near", among: ["alice.near"], chain: .near) == "alice.near")
+        #expect(AddressPoisoning.lookalike("alice-pay.near", among: ["alice.near"], chain: .near) == "alice.near")
+        #expect(AddressPoisoning.lookalike("bob-x.near", among: ["bob.near"], chain: .near) == "bob.near")
+        #expect(AddressPoisoning.lookalike("bobcat.near", among: ["bob.near"], chain: .near) == "bob.near")
+        #expect(AddressPoisoning.lookalike("x-alice.near", among: ["alice.near"], chain: .near) == nil)
+        #expect(AddressPoisoning.lookalike("alexis-exchange.near", among: ["alexander-wallet.near"], chain: .near) == nil)
+        #expect(AddressPoisoning.lookalike("alice01.near", among: ["alice.near"], chain: .near, forHiding: true) == nil)
+        // Na Atividade, que esconde o recebimento, as regras dos nomes curtos ficam de fora: "alexa.near" com valor nao some.
+        #expect(AddressPoisoning.lookalike("alexa.near", among: ["alex.near"], chain: .near) == "alex.near")
+        #expect(AddressPoisoning.lookalike("alexa.near", among: ["alex.near"], chain: .near, forHiding: true) == nil)
+        #expect(AddressPoisoning.lookalike("bob.tg", among: ["bob.near"], chain: .near, forHiding: true) == nil)
+        // O desafio do parecido pede o nome colado inteiro: nome curto ficava sem trecho, e o Continuar travava.
+        let segment = try #require(AddressPoisoning.differingSegment("b0b.near", from: "bob.near", chain: .near))
+        #expect(AddressPoisoning.coversAll(segment, of: "b0b.near"))
     }
 
     @Test("Rede registrada: familia, curva, caminho, casas e explorador")

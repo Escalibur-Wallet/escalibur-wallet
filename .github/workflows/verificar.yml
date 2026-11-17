@@ -29,6 +29,8 @@ jobs:
 
       - name: Xcode do .xcode-version
         run: |
+          # O portao confere a arvore do commit do run, e nao a de outra ref (rodada 9 da auditoria 8).
+          [ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ] || { echo "::error::checkout fora do commit do run"; exit 1; }
           versao=$(sed 's/^Xcode //' .xcode-version)
           sudo xcode-select -s "/Applications/Xcode_${versao}.app"
           xcodebuild -version

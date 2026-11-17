@@ -358,8 +358,8 @@ enum AvisoDeRecebimento {
         for carteira in metadata.wallets where !carteira.isWatchOnly && !carteira.hasPassphrase && carteira.hasBackup {
             for conta in carteira.accounts {
                 guard let rede = Chain.all.first(where: { $0.id == conta.chainID }), !desligadas.contains(rede.id) else { continue }
-                // A conta da Tron com outra chave no controle nao recebe por caminho nenhum.
-                if rede.family == .tron, carteira.tronForeignControl == true { continue }
+                // A conta com outra chave no controle (a da Tron, e a das outras redes desde a auditoria 8) nao recebe por caminho nenhum.
+                guard carteira.recebe(on: rede) else { continue }
                 let enderecos = enderecosDoAviso(conta, rede: rede, uso: carteira.utxoUsage[rede.id])
                 guard vistas.insert("\(rede.id)|\(conta.address)").inserted else { continue }
                 saida.append(.init(chainID: rede.id, addresses: enderecos, owner: dono(rede, conta.address)))
@@ -408,18 +408,45 @@ enum AvisoDeRecebimento {
 
     /// As contas de agora, do app destravado. Conta que saiu leva junto o saldo visto.
     static func acompanhar(contas todas: [ReceiptWatchFile.Account]) {
-        var atual = arquivo()
-        // Sal que nao saiu (sorteio falhou ao ligar): sorteia de novo agora.
-        if atual.enabled, atual.salt == nil, let sal = try? SecureRandom.uint64() { atual = mudar { $0.salt = sal } }
-        let contas = atual.admitted(todas)
-        guard atual.enabled, atual.accounts != contas else { return }
-        let manter = Set(contas.map { "\($0.chainID)|\($0.key)" })
-        let enderecos = Set(contas.flatMap { conta in conta.addresses.map { "\(conta.chainID)|\($0)" } })
-        mudar { arquivo in
-            arquivo.accounts = contas
-            arquivo.seen = arquivo.seen.filter { chave, _ in manter.contains(chave.split(separator: "|").prefix(2).joined(separator: "|")) }
-            arquivo.addressSeen = arquivo.addressSeen?.filter { enderecos.contains($0.key) }
+        // Ler e gravar sob a mesma trava, e so com o arquivo de pe e ligado: um desligar ou um apagar tudo no meio deixava o
+        // arquivo recriado com os enderecos dentro (rodada 16 da auditoria 8), como o actor do iPhone.
+        Vigias.trava.withLock {
+            guard var atual = Vigias.ler(ReceiptWatchFile.self, nome), atual.enabled else { return }
+            var mudou = false
+            // Sal que nao saiu (sorteio falhou ao ligar): sorteia de novo agora.
+            if atual.salt == nil, let sal = try? SecureRandom.uint64() { atual.salt = sal; mudou = true }
+            let contas = atual.admitted(todas)
+            if atual.accounts != contas {
+                atual.accounts = contas
+                podar(&atual)
+                mudou = true
+            }
+            if mudou { Vigias.gravar(atual, nome) }
         }
+    }
+
+    /// Tira so as contas desta carteira, lido e gravado sob a trava: regravar a lista inteira de uma foto de antes da biometria
+    /// perdia a marca ou a troca da TON que outra carteira gravou no meio (rodada 16 da auditoria 8). Pelo dono (o resumo da rede
+    /// e do primeiro endereco, sem sal) e pelo endereco.
+    static func esquecer(_ carteira: WalletMeta) {
+        let donos = Set(carteira.accounts.compactMap { conta in Chain.find(conta.chainID).map { dono($0, conta.address) } })
+        let enderecos = Set(carteira.accounts.map(\.address))
+        Vigias.trava.withLock {
+            guard var atual = Vigias.ler(ReceiptWatchFile.self, nome), atual.enabled else { return }
+            let antes = atual.accounts
+            atual.accounts.removeAll { donos.contains($0.key) || !enderecos.isDisjoint(with: $0.addresses) }
+            guard atual.accounts != antes else { return }
+            podar(&atual)
+            Vigias.gravar(atual, nome)
+        }
+    }
+
+    /// O saldo visto so das contas que ficaram.
+    private static func podar(_ arquivo: inout ReceiptWatchFile) {
+        let manter = Set(arquivo.accounts.map { "\($0.chainID)|\($0.key)" })
+        let vivos = Set(arquivo.accounts.flatMap { conta in conta.addresses.map { "\(conta.chainID)|\($0)" } })
+        arquivo.seen = arquivo.seen.filter { chave, _ in manter.contains(chave.split(separator: "|").prefix(2).joined(separator: "|")) }
+        arquivo.addressSeen = arquivo.addressSeen?.filter { vivos.contains($0.key) }
     }
 
     /// Le o saldo de cada conta, compara com o ultimo visto e diz o que subiu. Token fora da lista
@@ -459,15 +486,21 @@ enum AvisoDeRecebimento {
         }
 
         var eventos: [ReceiptEvent] = []
-        let depois = mudar { valor in
-            guard valor.enabled else { return }
+        // So com o arquivo de pe e ligado: desligado ou apagado durante a rede, nada e recriado (rodada 16 da auditoria 8).
+        let depois = Vigias.trava.withLock { () -> ReceiptWatchFile? in
+            guard var valor = Vigias.ler(ReceiptWatchFile.self, nome), valor.enabled else { return nil }
             eventos = comparar(saldos, visto: &valor.seen)
             for (conta, saldo) in saldos {
                 for (endereco, quantia) in saldo.perAddress ?? [:] { valor.addressSeen = (valor.addressSeen ?? [:]).merging(["\(conta.chainID)|\(endereco)": quantia]) { $1 } }
             }
+            // So o que e das contas que ficaram no arquivo: a carteira removida durante a leitura da rede voltava com o visto e os
+            // enderecos UTXO dela (rodada 17 da auditoria 8), como no iOS.
+            podar(&valor)
             valor.lastCheck = agora
+            Vigias.gravar(valor, nome)
+            return valor
         }
-        guard !eventos.isEmpty, depois.enabled else { return [] }
+        guard let depois, !eventos.isEmpty, depois.enabled else { return [] }
         guard depois.showDetails else {
             return [Aviso(id: "recebimento.discreto", canal: "recebimentos", tipo: "discreto")]
         }

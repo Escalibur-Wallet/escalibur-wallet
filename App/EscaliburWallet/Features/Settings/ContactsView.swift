@@ -79,10 +79,13 @@ struct ContactsView: View {
             }
             Spacer(minLength: Space.xs)
             Menu {
-                Button {
-                    Pasteboard.copyAddress(contact.address)
-                    toasts.show(String(localized: "Endereço copiado."))
-                } label: { Label("Copiar endereço", systemImage: "doc.on.doc") }
+                // Nunca o endereco de uma conta deste iPhone com outra chave no controle (revisao dos tres agentes de 15/11/2026).
+                if chain.map({ session.markedOwner(of: contact.address, on: $0) == nil }) ?? true {
+                    Button {
+                        Pasteboard.copyAddress(contact.address)
+                        toasts.show(String(localized: "Endereço copiado."))
+                    } label: { Label("Copiar endereço", systemImage: "doc.on.doc") }
+                }
                 Button(role: .destructive) { removing = contact } label: { Label("Apagar", systemImage: "trash") }
             } label: {
                 Image(systemName: "ellipsis")
@@ -107,10 +110,15 @@ struct AddContactSheet: View {
     @State private var name = ""
     @State private var address = ""
     @State private var tag = ""
+    @State private var tagNotice: String?
     @State private var chain: Chain = .bitcoin
     @State private var scanning = false
     /// O trecho do endereco digitado pelo dono olhando a fonte (auditoria 4, C7-07).
     @State private var check = ""
+    /// Nome da NEAR: o texto cujo desafio ja nasceu, no toque do Salvar ou na entrada inteira, como no Continuar do envio
+    /// (revisao dos 3 agentes, 09/11/2026).
+    @State private var nearArmedFor: String?
+    @State private var wholeNameMiss = false
     @State private var qrProblem: String?
     /// A rede que o QR lido disse: trocar a rede depois nao leva o endereco junto, nem a
     /// sugestao de outra rede aparece para ele (revisao dos baixos, B1).
@@ -120,13 +128,15 @@ struct AddContactSheet: View {
     /// revisao do B-6). Ao vivo, ele esconderia o campo do memo no primeiro algarismo.
     @State private var memoConflict: AddressPoisoning.SameAccount?
     @State private var memoCheck = ""
+    @State private var memoFocused = false
 
     private var trimmed: String { address.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var validation: Result<Address.Destination, Address.Problem> { Address.validate(trimmed, for: chain) }
     private var isValid: Bool { (try? validation.get()) != nil }
     /// O endereco colado parece de outra rede: o app sugere, nao troca sozinho.
     private var suggestion: Chain? {
-        guard linkReading?.chainID == nil, !trimmed.isEmpty, !isValid, let guess = Address.guessChain(trimmed), guess.id != chain.id else { return nil }
+        guard linkReading?.chainID == nil, !trimmed.isEmpty, !isValid, let guess = Address.guessChain(trimmed), guess.id != chain.id,
+              case .success = Address.validate(trimmed, for: guess) else { return nil }
         return guess
     }
 
@@ -205,7 +215,7 @@ struct AddContactSheet: View {
     /// endereco como foi colado (a forma que esta na fonte, nao a normalizada): o meio, ou
     /// o fim do ID num M.
     private var segment: AddressPoisoning.Segment? {
-        guard let destination else { return nil }
+        guard let destination, !nearPending else { return nil }
         if let lookalike { return AddressPoisoning.differingSegment(destination.address, from: lookalike, chain: chain) }
         return AddressPoisoning.blindSegment(trimmed, chain: chain)
     }
@@ -214,12 +224,30 @@ struct AddContactSheet: View {
     /// o colado quando nao ha.
     private var checkedText: String { lookalike == nil ? trimmed : (destination?.address ?? trimmed) }
 
+    /// Nome da NEAR valido no campo, com o desafio ainda por nascer: digitando, cada comeco ja e conta valida, e o desafio nascia
+    /// no segundo caractere. O Salvar o faz nascer.
+    private var nearPending: Bool {
+        destination != nil && AddressPoisoning.wholeNEARName(trimmed, chain: chain) != nil && nearArmedFor != trimmed
+    }
+
+    /// O nome da NEAR que entrou inteiro na rede errada (a sugestao da NEAR na tela): o campo fica escondido ate a troca, como com
+    /// o desafio na tela. A vista, o dono lia o nome trocado pelo tempo que quisesse e o digitava de memoria (revisao dos 3
+    /// agentes, 09/11/2026).
+    private var wholeEntryHidden: Bool {
+        // Tambem o endereco que vale noutra rede, com ou sem sugestao (a Sui, a Aptos, a implicita da NEAR): a rede do contato e
+        // livre, e depois da troca o desafio pede um trecho que estava a vista.
+        !trimmed.isEmpty && nearArmedFor == trimmed && destination == nil
+            && (suggestion != nil || AddressPoisoning.looksLikeNEARName(trimmed) || AddressPoisoning.validElsewhere(trimmed, than: chain))
+    }
+
+    /// O desafio e o nome inteiro: conferido no toque do Salvar, e nao ao vivo.
+    private var wholeNameOnScreen: Bool { segment.map { AddressPoisoning.coversAll($0, of: checkedText) } ?? false }
+
     private var checked: Bool {
-        guard let destination else { return false }
+        guard let destination, !nearPending else { return false }
         if otherID != nil { return AddressPoisoning.muxedIDConfirmed(check, address: destination.address) }
         guard let segment else { return lookalike == nil }
-        let typed = check.trimmingCharacters(in: .whitespaces).lowercased()
-        return typed.count == segment.length && typed == segment.text(in: checkedText).lowercased()
+        return AddressPoisoning.answers(check, segment: segment, of: checkedText, chain: chain)
     }
 
     var body: some View {
@@ -232,6 +260,7 @@ struct AddContactSheet: View {
                                 ForEach(Array(recentSent.enumerated()), id: \.offset) { _, item in
                                     Button {
                                         chain = item.chain
+                                        armNEAR(item.address, chain: item.chain)
                                         address = item.address
                                     } label: {
                                         HStack(spacing: Space.sm) {
@@ -271,8 +300,9 @@ struct AddContactSheet: View {
                     }
                     labeled(String(localized: "Endereço")) {
                         VStack(alignment: .leading, spacing: Space.xs) {
-                            if challengeOnScreen {
+                            if challengeOnScreen || wholeEntryHidden {
                                 HiddenAddressField(fill: Palette.rail, buttonFill: Palette.control, identifier: "contato-editar-endereco") {
+                                    nearArmedFor = nil
                                     address = ""
                                     tag = ""
                                 }
@@ -284,10 +314,15 @@ struct AddContactSheet: View {
                                         .lineLimit(1...3)
                                     AppPasteButton { pasted in
                                         let text = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
-                                        if PhraseGuard.looksLikePhrase(text) {
+                                        // A mesma regra do Android para a area de transferencia.
+                                        if PrivateKeyGuard.clipboardHasSecret(text, on: chain) { Pasteboard.clearSecret() }
+                                        if let message = PhraseGuard.secretMessage(text, on: chain) {
+                                            nearArmedFor = nil
+                                            linkReading = nil
                                             address = ""
-                                            qrProblem = PhraseGuard.message
+                                            qrProblem = message
                                         } else {
+                                            armNEAR(text, chain: chain)
                                             address = text
                                         }
                                     }
@@ -316,7 +351,7 @@ struct AddContactSheet: View {
                                 }
                                 .buttonStyle(.plain)
                             } else if !trimmed.isEmpty, case .failure(let problem) = validation {
-                                Text(SendStages.message(problem, chain: chain)).typeStyle(.note).foregroundStyle(Palette.down)
+                                Text(problemMessage(problem)).typeStyle(.note).foregroundStyle(Palette.down)
                                     .fixedSize(horizontal: false, vertical: true)
                             } else if isValid {
                                 Label("Endereço válido na \(chain.name)", systemImage: "checkmark.circle.fill")
@@ -347,6 +382,19 @@ struct AddContactSheet: View {
                                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                                     .padding(.horizontal, Space.md).frame(height: Height.field)
                                     .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.rail))
+                                    // A frase ou a chave na tag sai na hora: salva, ela iria a rede em cada envio (revisao dos 3
+                                    // agentes, 09/11/2026).
+                                    .onChange(of: tag) { _, new in
+                                        if PhraseGuard.tagHasSecret(new) {
+                                            tag = ""
+                                            tagNotice = PhraseGuard.tagMessage
+                                        } else if !new.isEmpty {
+                                            tagNotice = nil
+                                        }
+                                    }
+                                if let tagNotice {
+                                    Text(tagNotice).typeStyle(.note).foregroundStyle(Palette.down).fixedSize(horizontal: false, vertical: true)
+                                }
                             }
                         }
                         if let memoConflict {
@@ -359,15 +407,32 @@ struct AddContactSheet: View {
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom) {
                 ActionFooter {
-                    PrimaryButton(title: String(localized: "Salvar"), enabled: !name.trimmingCharacters(in: .whitespaces).isEmpty && isValid && checked && memoConfirmed) {
-                        Task { await save() }
+                    PrimaryButton(title: String(localized: "Salvar"),
+                                  enabled: !name.trimmingCharacters(in: .whitespaces).isEmpty && isValid
+                                  && (checked || nearPending || (wholeNameOnScreen && !check.isEmpty)) && memoConfirmed) {
+                        Task { await saveTapped() }
                     }
                 }
             }
             .background(Palette.body.ignoresSafeArea())
             .navigationTitle("Salvar endereço")
             .navigationBarTitleDisplayMode(.inline)
-            .onChange(of: trimmed) { _, new in
+            .onChange(of: check) { _, _ in wholeNameMiss = false }
+            .onChange(of: trimmed) { old, new in
+                // Colado pelo menu do sistema: com um segredo, a area de transferencia esvazia tambem.
+                if new.count > old.count + 1, PrivateKeyGuard.clipboardHasSecret(new, on: chain) { Pasteboard.clearSecret() }
+                // A frase colada ou digitada no campo sai dele na hora, como no envio (revisao dos 3 agentes, 09/11/2026).
+                if let message = PhraseGuard.secretMessage(new, on: chain) {
+                    // A frase tambem nao fica na marca do nome da NEAR (digitada palavra a palavra, ela arma), nem na leitura do QR.
+                    nearArmedFor = nil
+                    linkReading = nil
+                    address = ""
+                    qrProblem = message
+                    return
+                }
+                // O endereco que entra inteiro (o Colar do menu do campo): o desafio do nome nasce na hora. So a digitacao, letra
+                // a letra, espera o Salvar.
+                if AddressPoisoning.enteredWhole(from: old, to: new) { armNEAR(new, chain: chain) }
                 check = ""
                 memoConflict = nil
                 if !new.isEmpty { qrProblem = nil }
@@ -376,6 +441,15 @@ struct AddContactSheet: View {
             .onChange(of: chain) { _, new in
                 check = ""
                 memoConflict = nil
+                // O que era endereco na rede de antes (0x mais 64 hexadecimais na Sui) e chave na nova (a EVM): sai do campo, como
+                // no Android.
+                if let message = PhraseGuard.secretMessage(trimmed, on: new) {
+                    nearArmedFor = nil
+                    linkReading = nil
+                    address = ""
+                    qrProblem = message
+                    return
+                }
                 // O endereco que veio de um QR de outra rede nao fica para a rede nova.
                 if let reading = linkReading, let problem = PaymentURI.networkProblem(reading, chain: new) {
                     address = ""
@@ -394,6 +468,7 @@ struct AddContactSheet: View {
                         qrProblem = problem
                         linkReading = nil
                     } else {
+                        armNEAR(reading.address, chain: chain)
                         address = reading.address
                         if let linkTag = reading.tag, !linkTag.isEmpty { tag = linkTag }
                         qrProblem = nil
@@ -409,28 +484,35 @@ struct AddContactSheet: View {
 
     @ViewBuilder
     private func sourceCheck(_ destination: Address.Destination, _ segment: AddressPoisoning.Segment) -> some View {
+        // Na NEAR com nome, o nome inteiro, com o registro, como no envio (revisao dos 3 agentes, 08/11/2026).
+        let wholeName = AddressPoisoning.coversAll(segment, of: lookalike == nil ? trimmed : destination.address)
         VStack(alignment: .leading, spacing: Space.sm) {
             if let lookalike {
-                Banner(kind: .caution, title: String(localized: "Endereço parecido com um que você já usou"),
-                       message: String(localized: "As pontas são iguais, o meio é diferente. Confira na fonte antes de salvar."))
-                MarkedAddress(label: String(localized: "Você colou"), address: destination.address, segment: segment)
+                Banner(kind: .caution,
+                       title: wholeName ? String(localized: "Nome parecido com um que você já usou") : String(localized: "Endereço parecido com um que você já usou"),
+                       message: wholeName ? String(localized: "Golpistas registram por centavos nomes assim. Confira na fonte antes de salvar.")
+                                          : String(localized: "As pontas são iguais, o meio é diferente. Confira na fonte antes de salvar."))
+                // O nome colado escondido, como no desafio escondido: a vista, quem copiasse da tela passava (revisao dos 3 agentes,
+                // 09/11/2026). O conhecido fica a vista.
+                MarkedAddress(label: String(localized: "Você colou"), address: destination.address, segment: segment, masked: wholeName)
                 MarkedAddress(label: KnownAddress.label(lookalike, chain: chain, session: session), address: lookalike,
                               segment: AddressPoisoning.differingSegment(lookalike, from: destination.address, chain: chain))
             } else {
                 MarkedAddress(label: String(localized: "Confira com a fonte"), address: trimmed, segment: segment, masked: true)
             }
-            Text(lookalike == nil
+            Text(wholeName
+                 ? String(localized: "Olhando onde você copiou o endereço, digite o nome inteiro da conta, com o final (como .near). Um programa no computador pode trocar o endereço na hora de copiar.")
+                 : lookalike == nil
                  ? String(localized: "Olhando onde você copiou o endereço, digite os 6 caracteres escondidos. Um programa no computador pode trocar o endereço na hora de copiar.")
                  : String(localized: "Olhando onde você copiou o endereço, digite os 6 caracteres marcados. Um programa no computador pode trocar o endereço na hora de copiar."))
                 .typeStyle(.note).foregroundStyle(Palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
-            TextField("", text: $check, prompt: Text(lookalike == nil ? String(localized: "6 escondidos") : String(localized: "6 marcados")).foregroundColor(Palette.inkDead))
-                .font(TypeStyle.mono.font).foregroundStyle(Palette.ink)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-                .padding(Space.sm)
-                .background(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous).fill(Palette.rail))
-                .frame(maxWidth: 180, alignment: .leading)
-                .accessibilityIdentifier("contato-conferir-trecho")
+            if AddressPoisoning.caseMatters(checkedText, chain: chain) { CaseNote() }
+            // Acima do campo: abaixo, o teclado e o Salvar o cobriam.
+            if wholeNameMiss { WholeNameMiss() }
+            // As caixas do envio, que so aceitam um caractere por vez: colar a area de transferencia nao responde o desafio.
+            CharacterBoxes(text: $check, count: segment.length, limit: wholeName ? AddressPoisoning.wholeNameLimit : nil,
+                           identifier: "contato-conferir-trecho")
         }
     }
 
@@ -445,13 +527,13 @@ struct AddContactSheet: View {
             Text(String(localized: "Para seguir, digite o memo que quem vai receber mostra, lendo onde você o copiou."))
                 .typeStyle(.note).foregroundStyle(Palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
-            TextField("", text: $memoCheck, prompt: Text(String(localized: "Memo")).foregroundColor(Palette.inkDead))
-                .font(TypeStyle.mono.font).foregroundStyle(Palette.ink)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            // Um caractere por vez e sem Colar: o memo colado pode ter sido trocado, e colar de novo respondia (revisao dos 3 agentes,
+            // 08/11/2026). Ate 20, o maior ID.
+            ChallengeTextField(text: $memoCheck, isFocused: $memoFocused, limit: 20, identifier: "contato-conferir-memo",
+                               placeholder: String(localized: "Memo"), fontSize: 16, weight: .medium)
                 .padding(Space.sm)
                 .background(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous).fill(Palette.rail))
                 .frame(maxWidth: 220, alignment: .leading)
-                .accessibilityIdentifier("contato-conferir-memo")
         }
     }
 
@@ -465,8 +547,43 @@ struct AddContactSheet: View {
     /// Um endereco salvo vira endereco de confianca: aparece como atalho no envio e entra
     /// na conferencia de endereco parecido. Por isso gravar pede Face ID ou PIN, como
     /// qualquer operacao que muda para onde o dinheiro pode ir.
+    /// O endereco entrou inteiro (colar, QR, recentes): o desafio do nome da NEAR nasce na hora. Adiar ate o Salvar deixava o nome
+    /// trocado a vista no campo (revisao dos 3 agentes, 09/11/2026).
+    private func armNEAR(_ text: String, chain: Chain) {
+        // So o texto, sem a rede: colado na Bitcoin e trocado para a NEAR pela sugestao, o nome voltava a vista.
+        nearArmedFor = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Um nome (com ponto) noutra rede: o aviso diz que e um nome, e nao manda copiar de novo (revisao dos 3 agentes, 09/11/2026).
+    private func problemMessage(_ problem: Address.Problem) -> String {
+        if case .malformed = problem, AddressPoisoning.nameNotAddress(trimmed, on: chain) {
+            return String(localized: "Este é um nome, não um endereço. Cole o endereço da rede \(chain.name).")
+        }
+        return SendStages.message(problem, chain: chain)
+    }
+
+    /// O Salvar. Nome da NEAR: o desafio nasce aqui, e o nome inteiro e conferido aqui. O `save` confere tudo de novo.
+    private func saveTapped() async {
+        if nearPending {
+            nearArmedFor = trimmed
+            return
+        }
+        if wholeNameOnScreen, !checked {
+            // Sem nada digitado, nada a dizer: alarme falso ensina a ignorar o verdadeiro.
+            wholeNameMiss = !check.isEmpty
+            return
+        }
+        await save()
+    }
+
     private func save() async {
         guard case .success(let destination) = validation, checked, memoConfirmed else { return }
+        // A tag com uma frase ou uma chave nunca e salva: iria a rede em cada envio (como no Android, revisao dos 3 agentes).
+        guard !PhraseGuard.tagHasSecret(tag) else {
+            tag = ""
+            tagNotice = PhraseGuard.tagMessage
+            return
+        }
         // O memo que bate com outra conta conhecida: antes de salvar, o dono o confere na
         // fonte, com o campo do memo escondido.
         if memoConflict == nil, let conflict = memoOtherID {
@@ -510,10 +627,8 @@ struct ManageAssetsView: View {
                             Toggle(isOn: Binding(
                                 get: { !wallet.hiddenAssetIDs.contains(row.id) },
                                 set: { visible in
-                                    var updated = wallet
-                                    if visible { updated.hiddenAssetIDs.remove(row.id) } else { updated.hiddenAssetIDs.insert(row.id) }
-                                    session.update(updated)
-                                    portfolio.show(updated, session: session, force: true)
+                                    let updated = session.update(wallet.id) { if visible { _ = $0.hiddenAssetIDs.remove(row.id) } else { _ = $0.hiddenAssetIDs.insert(row.id) } }
+                                    portfolio.show(updated ?? wallet, session: session, force: true)
                                 }
                             )) {
                                 HStack(spacing: Space.sm) {
@@ -543,10 +658,8 @@ struct ManageAssetsView: View {
                             Toggle(isOn: Binding(
                                 get: { !wallet.hiddenAssetIDs.contains(token.id) },
                                 set: { visible in
-                                    var updated = wallet
-                                    if visible { updated.hiddenAssetIDs.remove(token.id) } else { updated.hiddenAssetIDs.insert(token.id) }
-                                    session.update(updated)
-                                    portfolio.show(updated, session: session, force: true)
+                                    let updated = session.update(wallet.id) { if visible { _ = $0.hiddenAssetIDs.remove(token.id) } else { _ = $0.hiddenAssetIDs.insert(token.id) } }
+                                    portfolio.show(updated ?? wallet, session: session, force: true)
                                 }
                             )) {
                                 HStack(spacing: Space.sm) {

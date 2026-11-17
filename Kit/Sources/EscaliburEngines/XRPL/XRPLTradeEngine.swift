@@ -66,7 +66,8 @@ struct XRPLTradeEngine: TradeEngine {
                     kitText("O livro de ofertas de \(request.sell.symbol) por \(request.buy.symbol) não cobre este valor agora. Tente um valor menor.")
                 )
             }
-            try MarketReference.requireSane(await market, expected: fill.out)
+            let marketReference = await market
+            try MarketReference.requireSane(marketReference, expected: fill.out)
             let minimum = TradeMath.minimumOut(fill.out, slippageBasisPoints: request.slippageBasisPoints)
             guard !minimum.isZero else { throw SendEngineError.message(kitText("Com esta tolerância o mínimo a receber seria zero.")) }
             return TradeQuote(
@@ -80,7 +81,9 @@ struct XRPLTradeEngine: TradeEngine {
                 providerFeeNote: kitText("Sem taxa de provedor: a troca acontece no livro de ofertas do XRP Ledger. O emissor do token pode cobrar taxa de transferência."),
                 legs: [.init(provider: Self.provider, fraction: 1, amountIn: request.amountIn, expectedOut: fill.out)],
                 alternatives: [], providersCompared: 1, needsApproval: false,
-                expiresAt: Date().addingTimeInterval(TradeMath.quoteLifetime)
+                expiresAt: Date().addingTimeInterval(TradeMath.quoteLifetime),
+                // Sem preco de referencia: a caixa de aceite do dono (checagem final de 16/11/2026, M3).
+                unanchored: marketReference.oracleOut == nil
             )
         } catch {
             throw XRPLEngineSupport.translate(error)
@@ -95,6 +98,11 @@ struct XRPLTradeEngine: TradeEngine {
         let (sell, buy) = try sides(request.chain, request.sell, request.buy)
         try TradeMath.requireSlippage(request.slippageBasisPoints)
         try TradeMath.requireCurrent(quote, for: request)
+        // Sem preco de referencia, a troca so vira plano com o aceite do dono, como na EVM (checagem final de
+        // 16/11/2026, M3): as duas fontes daqui saem do mesmo tipo de servidor, que uma autoridade coagida forja juntas.
+        guard !quote.unanchored || request.acceptsUnanchored else {
+            throw SendEngineError.message(kitText("Não há preço de referência do mercado para comparar. Marque que entende o risco para trocar."))
+        }
         try XRPLEngineSupport.owner(request.account)
         // O mercado de agora, de novo: a cotacao pode ter passado pela sanidade e o preco
         // andado ate o dono tocar em revisar.
@@ -102,10 +110,11 @@ struct XRPLTradeEngine: TradeEngine {
             await MarketReference.reference(amountIn: request.amountIn, sell: request.sell, buy: request.buy, oracle: prices),
             expected: quote.expectedOut
         )
-        return try await offerPlan(
+        let plan = try await offerPlan(
             walletID: request.walletID, account: request.account, sell: sell, buy: buy, give: request.amountIn, receive: quote.minimumOut,
             expiration: Date().addingTimeInterval(Self.swapExpiration), timeInForce: .fillOrKill
         )
+        return quote.unanchored ? plan.addingWarnings([.uncomparedPrice]) : plan
     }
 
     /// Oferta que fica no livro: entrega `amountIn`, recebe no minimo `minimumOut`

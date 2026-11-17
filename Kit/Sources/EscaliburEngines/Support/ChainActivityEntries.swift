@@ -14,7 +14,7 @@ import Foundation
 enum ActivityScreening {
     static func imitatesKnown(_ counterparty: String?, known: [String], chain: Chain) -> Bool {
         guard let counterparty else { return false }
-        return AddressPoisoning.lookalike(counterparty, among: known, chain: chain) != nil
+        return AddressPoisoning.lookalike(counterparty, among: known, chain: chain, forHiding: true) != nil
     }
 }
 

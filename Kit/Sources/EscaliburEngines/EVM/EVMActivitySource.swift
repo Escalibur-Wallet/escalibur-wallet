@@ -95,7 +95,7 @@ enum EVMActivityScreen {
             known.contains { Address.sameRecipient($0, counterparty, chain: chain) }
         } ?? false
         if !fromKnown, item.amount < dustLimit(item.asset) { return true }
-        if let counterparty = item.counterparty, AddressPoisoning.lookalike(counterparty, among: known, chain: chain) != nil {
+        if let counterparty = item.counterparty, AddressPoisoning.lookalike(counterparty, among: known, chain: chain, forHiding: true) != nil {
             return true
         }
         return false

@@ -43,8 +43,9 @@ public struct UTXOReader: Sendable {
         guard chain.family == .utxo else { throw ChainReaderError.unsupportedAccount }
         self.chain = chain
         self.provesInclusion = (chain == .bitcoin || chain == .litecoin) && providers == nil
-        self.transport = transport ?? PacedChainTransport(base: HTTPReaderTransport(), intervals: Endpoints.utxoPacing)
-        self.pool = providers.map(ProviderPool.init) ?? Self.sharedPool(for: chain)
+        let chosen = transport ?? PacedChainTransport(base: HTTPReaderTransport(), intervals: Endpoints.utxoPacing)
+        self.transport = chosen
+        self.pool = providers.map { ProviderPool($0, draws: chosen.drawsProviders) } ?? Self.sharedPool(for: chain, draws: chosen.drawsProviders)
     }
 
     /// Com a prova de inclusao escolhida por quem chama (os testes de SPV). Sem delegar
@@ -54,8 +55,9 @@ public struct UTXOReader: Sendable {
         guard chain.family == .utxo else { throw ChainReaderError.unsupportedAccount }
         self.chain = chain
         self.provesInclusion = provesInclusion
-        self.transport = transport ?? PacedChainTransport(base: HTTPReaderTransport(), intervals: Endpoints.utxoPacing)
-        self.pool = providers.map(ProviderPool.init) ?? Self.sharedPool(for: chain)
+        let chosen = transport ?? PacedChainTransport(base: HTTPReaderTransport(), intervals: Endpoints.utxoPacing)
+        self.transport = chosen
+        self.pool = providers.map { ProviderPool($0, draws: chosen.drawsProviders) } ?? Self.sharedPool(for: chain, draws: chosen.drawsProviders)
     }
 
     public static func providers(for chain: Chain) -> [ProviderPool.Provider] {
@@ -77,10 +79,10 @@ public struct UTXOReader: Sendable {
     private static let pools = Pools()
 
     /// Um banco por rede, para o processo inteiro: o limite dos provedores e por IP.
-    static func sharedPool(for chain: Chain) -> ProviderPool {
+    static func sharedPool(for chain: Chain, draws: Bool) -> ProviderPool {
         pools.lock.withLock {
             if let existing = pools.byChain[chain.id] { return existing }
-            let created = ProviderPool(providers(for: chain))
+            let created = ProviderPool(providers(for: chain), draws: draws)
             pools.byChain[chain.id] = created
             return created
         }

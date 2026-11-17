@@ -13,6 +13,9 @@ final class BridgeFormModel {
     var amountText = ""
     var route: BridgeRoute = .cctpFast
     var options: [ValidatedBridgeQuote] = []
+    /// A rede de destino ja conferida na rede nesta escolha (carteira e rede), para a outra chave no controle (rodada 2 da
+    /// auditoria 8): a ponte e uma hora de deposito, como abrir o Receber.
+    var checkedDestination: String?
     var quoting = false
     var error: String?
     /// A carteira para a qual a ponte ja abriu escolhida (`BridgeSuggestion`). Uma vez por carteira,
@@ -286,8 +289,42 @@ struct BridgeForm: View {
     private func refresh() async {
         model.options = []
         model.error = nil
-        guard let wallet = session.selectedWallet, !wallet.isWatchOnly, let amount = model.amount, !amount.isZero,
+        guard let chosen = session.selectedWallet, !chosen.isWatchOnly, let amount = model.amount, !amount.isZero else { return }
+        // A digitacao do valor assenta antes de qualquer consulta: a conferencia do destino saia a cada tecla (rodada 3).
+        try? await Task.sleep(for: .milliseconds(400))
+        guard !Task.isCancelled else { return }
+        // O destino conferido na rede uma vez por escolha, antes da primeira cotacao (rodada 2 da auditoria 8); a marca que
+        // chegar vale ja para esta cotacao.
+        let destinationKey = "\(chosen.id.uuidString)|\(model.to.id)"
+        if model.checkedDestination != destinationKey {
+            var applied = true
+            if model.to == .tron {
+                applied = await session.checkTronControl(chosen.id).value != nil
+            } else {
+                // Numa EVM, tambem as outras EVM marcadas, como o Receber (rodada 3 da auditoria 8).
+                let marked = model.to.family == .evm
+                    ? Set((chosen.foreignControl ?? [:]).keys.filter { Chain.find($0)?.family == .evm }) : []
+                applied = await session.checkForeignControl(chosen.id, chains: marked.union([model.to.id])).value
+            }
+            // Cancelada no meio (a pausa), ou sem ler a rede, a proxima cotacao confere de novo (rodada 4 da auditoria 8; 15/11/2026).
+            if applied, session.metadata.wallets.first(where: { $0.id == chosen.id })?.controlChecked(on: model.to) == true {
+                model.checkedDestination = destinationKey
+            }
+        }
+        guard let wallet = session.selectedWallet, wallet.id == chosen.id,
               let account = wallet.account(model.from), let owner = try? EVMAddress(account.address) else { return }
+        // A conta desta carteira na rede de destino com outra chave ou contrato no controle nao recebe nem pela ponte: o que
+        // chegar sai sem a assinatura do dono (auditoria 8, 14/11/2026).
+        if let mark = wallet.foreignControl(on: model.to) {
+            model.error = mark.message
+            return
+        }
+        // A rede de destino ainda nao lida para outra chave no controle tambem nao recebe, como o Receber (pedido do dono,
+        // 15/11/2026, a forma mais segura).
+        guard wallet.controlChecked(on: model.to) else {
+            model.error = String(localized: "Esta conta ainda não foi conferida nesta rede. Tente de novo em instantes.")
+            return
+        }
         // Na Tron, quem recebe e a conta Tron desta carteira.
         var tronRecipient: TronAddress?
         if model.to == .tron {
@@ -302,7 +339,6 @@ struct BridgeForm: View {
             }
             tronRecipient = tron
         }
-        try? await Task.sleep(for: .milliseconds(400))
         guard !Task.isCancelled else { return }
         model.quoting = true
         defer { model.quoting = false }

@@ -79,7 +79,7 @@ enum TONActivityScreen {
             { $0.raw }, { $0.friendly(bounceable: false) }, { $0.friendly(bounceable: true) },
         ]
         return spellings.contains { spell in
-            AddressPoisoning.lookalike(spell(address), among: trusted.map(spell), chain: .ton) != nil
+            AddressPoisoning.lookalike(spell(address), among: trusted.map(spell), chain: .ton, forHiding: true) != nil
         }
     }
 

@@ -153,13 +153,25 @@ struct AddCustomTokenView: View {
                     .font(TypeStyle.mono.font).foregroundStyle(Palette.ink)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.asciiCapable)
                     .lineLimit(1...3)
-                    .onChange(of: text.wrappedValue) { error = nil }
+                    .onChange(of: text.wrappedValue) { _, new in
+                        // A frase ou a chave colada ou digitada sai do campo com o aviso, como no observar (revisao dos 3 agentes,
+                        // 09/11/2026). O campo vazio nao apaga o aviso.
+                        if let message = PhraseGuard.secretMessage(new.trimmingCharacters(in: .whitespacesAndNewlines), on: chain) {
+                            text.wrappedValue = ""
+                            error = message
+                        } else if !new.isEmpty {
+                            error = nil
+                        }
+                    }
                     .accessibilityIdentifier(id)
                 // Colar dentro do campo (pedido do dono, 18/10/2026). O do sistema: cola sem o
                 // pedido de permissao do iOS.
                 if text.wrappedValue.isEmpty {
                     AppPasteButton { pasted in
-                        text.wrappedValue = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let trimmed = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+                        // A mesma regra do Android para a area de transferencia.
+                        if PrivateKeyGuard.clipboardHasSecret(trimmed, on: chain) { Pasteboard.clearSecret() }
+                        text.wrappedValue = trimmed
                     }
                     .labelStyle(.titleAndIcon)
                     .buttonBorderShape(.capsule)
@@ -214,6 +226,12 @@ struct AddCustomTokenView: View {
         error = nil
         found = []
         let text = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Nada com cara de segredo vai a rede: o find le o contrato em todas as redes da carteira.
+        if let message = PhraseGuard.secretMessage(text, on: nil) {
+            address = ""
+            error = message
+            return
+        }
         var listed: String?
         var candidates: [(Chain, Asset.Kind)] = []
         for item in chains where !CustomToken.usesIssuer(item) {
@@ -285,6 +303,15 @@ struct AddCustomTokenView: View {
             }
         }
         guard let chain = target else { return }
+        for field in [address, code, issuer] {
+            if let message = PhraseGuard.secretMessage(field.trimmingCharacters(in: .whitespacesAndNewlines), on: chain) {
+                address = ""
+                code = ""
+                issuer = ""
+                error = message
+                return
+            }
+        }
         error = nil
         let kind: Asset.Kind
         do {

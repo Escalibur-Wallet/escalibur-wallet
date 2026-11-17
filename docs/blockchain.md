@@ -193,19 +193,21 @@ Para validade, não. A assinatura aleatorizada verifica como qualquer Ed25519 e 
 
 | Rede | Oficial | Contingência 1 | Contingência 2 |
 |---|---|---|---|
-| Ethereum | `cloudflare-eth.com` | `ethereum-rpc.publicnode.com` | `eth.drpc.org`, `1rpc.io/eth` |
-| Arbitrum | `arb1.arbitrum.io/rpc` | `arbitrum-one-rpc.publicnode.com` | `arbitrum.drpc.org`, `1rpc.io/arb` |
-| Base | `mainnet.base.org` | `base-rpc.publicnode.com` | `base.drpc.org`, `1rpc.io/base` |
-| OP | `mainnet.optimism.io` | `optimism-rpc.publicnode.com` | `optimism.drpc.org`, `1rpc.io/op` |
-| Polygon | (`polygon-rpc.com` morto) | `polygon-bor-rpc.publicnode.com` | `polygon.drpc.org`, `1rpc.io/matic` |
-| BNB | `bsc-dataseed.bnbchain.org` | `bsc-rpc.publicnode.com` | `1rpc.io/bnb` (drpc com rate-limit) |
-| Avalanche | `api.avax.network/ext/bc/C/rpc` | `avalanche-c-chain-rpc.publicnode.com` | `avalanche.drpc.org`, `1rpc.io/avax/c` |
+| Ethereum | `ethereum-rpc.publicnode.com` | `mainnet.gateway.tenderly.co` | `eth.drpc.org` |
+| Arbitrum | `arb1.arbitrum.io/rpc` | `arbitrum-one-rpc.publicnode.com` | `arbitrum.drpc.org` |
+| Base | `mainnet.base.org` | `base-rpc.publicnode.com` | `base.drpc.org` |
+| OP | `mainnet.optimism.io` | `optimism-rpc.publicnode.com` (sem recibo: 403) | `optimism.drpc.org`, `optimism.gateway.tenderly.co` |
+| Polygon | (`polygon-rpc.com` morto) | `polygon-bor-rpc.publicnode.com` | `polygon.drpc.org`, `polygon.gateway.tenderly.co` |
+| BNB | `bsc-dataseed.bnbchain.org` (com `bsc-dataseed1.defibit.io` e, de reserva, `bsc-dataseed1.ninicoin.io`: as três são da BNB Chain, a mesma NodeReal atrás, e contam como um operador só) | `bsc-rpc.publicnode.com` | `rpc-bsc.48.club` (48 Club) (drpc com rate-limit) |
+| Avalanche | `api.avax.network/ext/bc/C/rpc` | `avalanche-c-chain-rpc.publicnode.com` | `avalanche.drpc.org` |
 | Plasma | `rpc.plasma.to` | `9745.rpc.thirdweb.com` | `plasma.gateway.tenderly.co` (dRPC só no plano pago) |
 | X Layer | `rpc.xlayer.tech` | `xlayer.drpc.org` | `196.rpc.thirdweb.com` |
 | Linea | `rpc.linea.build` | `linea-rpc.publicnode.com` | `linea.drpc.org` |
 | Unichain | `mainnet.unichain.org` | `unichain-rpc.publicnode.com` | `unichain.drpc.org` |
 | Sonic | `rpc.soniclabs.com` | `sonic-rpc.publicnode.com` | `sonic.drpc.org` |
 | Celo | `forno.celo.org` | `celo-rpc.publicnode.com` | `42220.rpc.thirdweb.com` (dRPC recusa sem chave) |
+
+A 1rpc saiu em 15/11/2026 (pedido do dono, a forma mais segura): origem dos nós não publicada, e barrou por limite o IP deste Mac. Pelo mesmo critério saiu a MeowRPC da simulação da Arbitrum, no lugar dela o nó oficial (`arb1.arbitrum.io`). Na simulação da troca (`eth_simulateV1`), a Ethereum fica com publicnode e dRPC, a Arbitrum com publicnode e Arbitrum, e a BNB com BNB Chain, publicnode e 48 Club; a Tenderly responde 429 ao `eth_simulateV1`. A simulação conta operadores distintos (`operatorName`), não endereços. [W]
 
 Histórico sem chave da segunda leva: Routescan na Plasma, Blockscout na Linea (`api-explorer.linea.build`), na Unichain e na Celo. X Layer e Sonic não têm indexador sem chave (OKLink e Etherscan v2 pedem chave). [W]
 
@@ -469,7 +471,7 @@ Quote { provider, kind(.evmTx|.eip712|.solIx|.solTx|.deposit(memo)),
 
 **Honestidade da cotação:** simular o top-1 e o top-2 (§3.5). Quem simula mais de X bps abaixo do que cotou é rebaixado. **Na v1 (código):** simula a escolhida, em duas fontes, no plano; a comparação da rodada é pelo mínimo decodificado.
 
-**Âncora do mínimo (v1, código):** em regra, o `minOut` que o provedor escreve só é aceito ancorado fora dele (a exceção, com o aceite do dono, vem no fim deste parágrafo). Com preço de referência (CoinGecko, ou a paridade entre dois stablecoins da lista), a cotação mais de 5% pior bloqueia e acima de 2% avisa. Sem referência, duas cotações válidas, e só é escolhida a que garante o mínimo calculado da maior estimativa entre elas (`TradeValidator.anchored`). Com uma fonte só e sem referência, a cotação segue marcada sem comparação (`TradeValidator.unanchored`, `TradeQuote.unanchored`) e só vira plano com o aceite do dono, que vê o mínimo que vai receber; o plano fica preso a esse mínimo (decisão do dono, 05/11/2026).
+**Âncora do mínimo (v1, código):** em regra, o `minOut` que o provedor escreve só é aceito ancorado fora dele (a exceção, com o aceite do dono, vem no fim deste parágrafo). Com preço de referência (CoinGecko, ou a paridade entre dois stablecoins da lista), a cotação mais de 5% pior bloqueia e acima de 2% avisa. Sem referência, duas cotações válidas, e só é escolhida a que garante o mínimo calculado da maior estimativa entre elas (`TradeValidator.anchored`); a cotação também vem marcada sem comparação e só troca com o aceite do dono (checagem final de 16/11/2026, M3). Com uma fonte só e sem referência, a cotação segue marcada sem comparação (`TradeValidator.unanchored`, `TradeQuote.unanchored`) e só vira plano com o aceite do dono, que vê o mínimo que vai receber; o plano fica preso a esse mínimo (decisão do dono, 05/11/2026).
 
 ### 3.3 Divisão entre provedores
 

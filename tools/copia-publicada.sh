@@ -51,7 +51,7 @@ cd "$limpa"
     && [ -z "$(git status --porcelain=v1 --untracked-files=all --ignored)" ] && [ -z "$(git ls-files -v | grep -v '^H ')" ] \
     || { echo "a copia limpa em $limpa nao confere com o commit $commit" >&2; exit 1; }
 # Os arquivos travados no loja.lock conferem na copia limpa, e nao so onde o verificar.sh roda (decima primeira passada).
-python3 -I -c 'import hashlib, json, sys; lock = json.load(open("loja.lock", encoding="utf-8"), object_pairs_hook=lambda p: dict(p) if len(p) == len({k for k, _ in p}) else sys.exit(1))["arquivos"]; sys.exit(0 if len(lock) == 29 and all(hashlib.sha256(open(c, "rb").read()).hexdigest() == d for c, d in lock.items()) else 1)' \
+python3 -I -c 'import hashlib, json, sys; lock = json.load(open("loja.lock", encoding="utf-8"), object_pairs_hook=lambda p: dict(p) if len(p) == len({k for k, _ in p}) else sys.exit(1))["arquivos"]; sys.exit(0 if len(lock) == 32 and all(hashlib.sha256(open(c, "rb").read()).hexdigest() == d for c, d in lock.items()) else 1)' \
     || { echo "um arquivo travado no loja.lock nao confere na copia limpa do commit $commit" >&2; exit 1; }
 # Cada arquivo da copia limpa e o blob do commit, byte a byte e sem filtro, e nenhum a mais: o worktree divide a
 # configuracao e os atributos do repositorio de trabalho, e um filtro dali mudaria o que o build compila sem que o status

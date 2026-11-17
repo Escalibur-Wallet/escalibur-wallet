@@ -471,12 +471,12 @@ internal fun LinhasDaCotacao(controle: ControleDaTroca, r: RetratoDaTroca, cotac
             "bloqueado" -> Text(t("Esta troca perderia %@%% para o impacto no preço. Divida em ordens menores ou use uma ordem limite.", Formato.agrupado(impacto, 0)),
                                 style = estilo(Tipo.nota), color = Paleta.baixa)
         }
-        // So uma fonte de cotacao e sem preco de referencia: o aviso e a caixa do aceite, como no iOS (pedido do dono,
-        // 05/11/2026). O aceite leva o minimo desenhado, e na cotacao de um pedido que ja mudou a caixa nao muda.
+        // Sem preco de referencia, com uma fonte ou com duas (checagem final de 16/11/2026, M3): o aviso e a caixa do
+        // aceite, como no iOS (pedido do dono, 05/11/2026). O aceite leva o minimo desenhado, e na cotacao de um pedido que ja mudou a caixa nao muda.
         if (cotacao.semComparacao) {
-            Text(t("Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Um preço manipulado não seria percebido pela carteira."),
+            Text(t("Não há preço de referência do mercado para comparar com esta cotação. Um preço manipulado não seria percebido pela carteira."),
                  style = estilo(Tipo.nota), color = Paleta.cautela)
-            Aceite(r.semComparacaoAceita, t("Entendo que agora só há uma fonte de cotação independente e que o preço pode estar manipulado."),
+            Aceite(r.semComparacaoAceita, t("Entendo que agora não há preço de referência do mercado e que o preço pode estar manipulado."),
                    habilitado = cotacao.atual) {
                 mudar(JSONObject().put("aceitarSemComparacao", it).put("garantidoVisto", cotacao.garantido).put("entradaVista", cotacao.entrada))
             }

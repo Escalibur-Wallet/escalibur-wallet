@@ -46,6 +46,49 @@ final class SendLookalikeTests: XCTestCase {
     }
 }
 
+/// Nome da NEAR digitado letra a letra, com "Conferir o endereco em todo envio" ligada: cada comeco ja e conta valida, e o
+/// desafio nascia no segundo caractere. Ele nasce no Continuar, e o nome inteiro e conferido no toque (revisao dos 3 agentes,
+/// 09/11/2026).
+final class SendNEARNameTests: XCTestCase {
+    var shots: String? { ProcessInfo.processInfo.environment["ESCALIBUR_FOTOS"] }
+
+    func shot(_ name: String, _ app: XCUIApplication) {
+        guard let shots else { return }
+        try? app.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: shots).appendingPathComponent("near-\(name).png"))
+    }
+
+    func testNameChallengeStartsOnContinue() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-reset", "-demo", "-tela", "envio-conferir-near"]
+        app.launch()
+        if !app.staticTexts["Para"].waitForExistence(timeout: 60) { shot("falha-abrir", app) }
+        XCTAssertTrue(app.staticTexts["Para"].exists)
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        for letter in "alice-wallet.near" { field.typeText(String(letter)) }
+        let check = app.textFields["conferir-meio-endereco"]
+        XCTAssertFalse(check.waitForExistence(timeout: 2), "o desafio nao pode nascer na digitacao")
+        shot("n0-digitado", app)
+        let next = app.buttons["Continuar"]
+        XCTAssertTrue(next.waitForExistence(timeout: 30))
+        // O historico da rede chega antes de o Continuar acender.
+        let deadline = Date().addingTimeInterval(30)
+        while !next.isEnabled, Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.5)) }
+        XCTAssertTrue(next.isEnabled)
+        next.tap()
+        XCTAssertTrue(check.waitForExistence(timeout: 10), "o Continuar faz o desafio nascer")
+        shot("n1-desafio", app)
+        // Um nome que e o comeco do certo acende o Continuar, mas nao passa: confere no toque.
+        check.tap()
+        check.typeText("alice-wallet.nea")
+        next.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'O nome não confere'")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(check.exists)
+        shot("n2-nao-confere", app)
+    }
+}
+
 extension XCUIElement {
     func clearAndType(_ text: String) {
         guard let current = value as? String else { return }

@@ -65,6 +65,18 @@ final class Envio: @unchecked Sendable {
     private var historicoIndisponivel = false
     /// O desafio escondido e o da opcao "Conferir o endereco em todo envio".
     private var cegoDeTodoEnvio = false
+    /// Nome da NEAR: o texto cujo desafio ja nasceu, no toque do Continuar ou na entrada inteira, sem a rede. Digitando, cada comeco
+    /// ja e conta valida ("bo" de "bob.near"), e o desafio nascia no segundo caractere (o nearArmedFor do iOS, revisao dos 3
+    /// agentes, 09/11/2026).
+    private var nomeArmado: String?
+    /// Nome da NEAR valido no campo, com o desafio ainda por nascer: o Continuar o faz nascer.
+    private var nomePendente = false
+    /// O nome inteiro digitado nao conferiu no toque do Continuar.
+    private var nomeNaoConfere = false
+    /// Primeiro envio para quem nao e contato nem carteira: o desafio escondido pode nascer quando o prazo do historico vencer.
+    private var cegoPossivel = false
+    /// A tag, o memo ou o comentario tinha um segredo e foi apagado (o tagNotice do iOS).
+    private var avisoDaTag: String?
     private var historicoLido = false
     private var trechoCego: AddressPoisoning.Segment?
     private var fonteCega = ""
@@ -83,6 +95,9 @@ final class Envio: @unchecked Sendable {
     private var primeiroEnvio = false
     private var tag = ""
     private var tagDoLink: String?
+    /// O prazo do pedido de pagamento lido (o `exp` da TON) e o endereco a que ele vale, conferido na assinatura (rodada 3 da
+    /// auditoria 8), como no iOS.
+    private var prazoDoLink: (endereco: String, expira: UInt64)?
     private var pulouTag = false
     private var sugestaoDeRede: Holding?
     private var redeConfirmada = false
@@ -119,7 +134,8 @@ final class Envio: @unchecked Sendable {
             let id: String, simbolo: String, nome: String, rede: String, redeNome: String, redeCoingecko: String
             let coingecko: String?, casas: Int, custom: Bool, conferido: Bool, quantidade: String, disponivel: String
         }
-        struct Parecido: Encodable { let conhecido: String; let rotulo: String; let trechoColado: Trecho?; let trechoConhecido: Trecho? }
+        /// `caixaConta`: o desafio confere maiusculas e minusculas (`AddressPoisoning.caseMatters`), e a tela avisa.
+        struct Parecido: Encodable { let conhecido: String; let rotulo: String; let trechoColado: Trecho?; let trechoConhecido: Trecho?; let caixaConta: Bool }
         struct OutroID: Encodable {
             let conhecido: String; let idConhecido: String; let rotulo: String; let trechoColado: Trecho?; let trechoConhecido: Trecho?
         }
@@ -127,6 +143,7 @@ final class Envio: @unchecked Sendable {
             let fonte: String; let trecho: Trecho
             /// O desafio e o de "Conferir o endereco em todo envio" (os 6 ultimos), e nao o do historico ilegivel.
             let todoEnvio: Bool
+            let caixaConta: Bool
         }
         struct Sugestao: Encodable { let ativo: String; let simbolo: String; let redeNome: String }
         struct Disponivel: Encodable { let quantidade: String; let notaDeReserva: String?; let notaDeTaxa: String? }
@@ -173,6 +190,14 @@ final class Envio: @unchecked Sendable {
         let problemaDaTag: String?
         let liberado: Bool
         let podeContinuar: Bool
+        /// O botao Continuar: com o nome da NEAR por nascer ou o nome inteiro digitado, ele acende e confere no toque.
+        /// `podeContinuar` continua a conferencia de verdade, a das etapas seguintes.
+        let podeTocarContinuar: Bool
+        let nomeNaoConfere: Bool
+        /// O nome da NEAR que entrou inteiro e ainda nao tem o desafio calculado (o historico chegando, ou a rede errada): o campo
+        /// e os blocos ficam escondidos, como com o desafio na tela (o wholeEntryHidden do iOS).
+        let campoEscondido: Bool
+        let avisoDaTag: String?
         let disponivel: Disponivel?
         let ativacao: String?
         let valor: String
@@ -213,7 +238,8 @@ final class Envio: @unchecked Sendable {
             destino.map { destino in
                 Estado.Parecido(
                     conhecido: conhecido, rotulo: rotuloConhecido(conhecido, chain: chain),
-                    trechoColado: trechoDoParecido.map(trecho), trechoConhecido: AddressPoisoning.differingSegment(conhecido, from: destino.address, chain: chain).map(trecho)
+                    trechoColado: trechoDoParecido.map(trecho), trechoConhecido: AddressPoisoning.differingSegment(conhecido, from: destino.address, chain: chain).map(trecho),
+                    caixaConta: AddressPoisoning.caseMatters(destino.address, chain: chain)
                 )
             }
         }
@@ -225,7 +251,9 @@ final class Envio: @unchecked Sendable {
                 )
             }
         }
-        let cego: Estado.Cego? = (parecido == nil) ? trechoCego.map { Estado.Cego(fonte: fonteCega, trecho: trecho($0), todoEnvio: cegoDeTodoEnvio) } : nil
+        let cego: Estado.Cego? = (parecido == nil) ? trechoCego.map {
+            Estado.Cego(fonte: fonteCega, trecho: trecho($0), todoEnvio: cegoDeTodoEnvio, caixaConta: AddressPoisoning.caseMatters(fonteCega, chain: chain))
+        } : nil
         let resultado = idDoResultado.map { id -> Estado.Resultado in
             let (nome, detalhe): (String, String?)
             switch situacao {
@@ -249,6 +277,11 @@ final class Envio: @unchecked Sendable {
             muxed: muxed, precisaEtapaDaTag: precisaEtapaDaTag, exigeTag: infoDoDestino?.requiresTag == true, tag: tag,
             tagDoLink: tagDoLink != nil && tagDoLink == tag, problemaDaTag: problemaDaTag, liberado: liberado,
             podeContinuar: destino != nil && historicoLido && liberado && problemaDaTag == nil && (!precisaConfirmarRede || redeConfirmada),
+            podeTocarContinuar: destino != nil && historicoLido && (liberado || nomePendente || nomeInteiroDigitado) && problemaDaTag == nil
+                && (!precisaConfirmarRede || redeConfirmada),
+            nomeNaoConfere: nomeNaoConfere,
+            campoEscondido: nomeColadoSemDesafio,
+            avisoDaTag: avisoDaTag,
             disponivel: disponivel.map { Estado.Disponivel(quantidade: $0.amount.decimalString, notaDeReserva: $0.reserveNote, notaDeTaxa: $0.feeNote) },
             ativacao: infoDoDestino?.activationMinimum.map { Fmt.cripto($0, casas: asset.decimals, simbolo: asset.symbol) },
             valor: textoDoValor, tudo: tudo, plano: plano.map(planoDTO), erro: erro, resultado: resultado, detalheIncerto: detalheIncerto,
@@ -295,17 +328,16 @@ final class Envio: @unchecked Sendable {
     /// Sem endereco parecido, nada a conferir. Com ele, so segue quem digitou o trecho do meio
     /// onde o destino difere do conhecido. Com a mesma conta e outro ID, quem digitou o ID.
     private var liberado: Bool {
+        if nomePendente { return false }
         if let segmento = trechoCego, parecido == nil {
-            let digitado = conferenciaCega.trimmingCharacters(in: .whitespaces).lowercased()
-            guard digitado.count == segmento.length, digitado == segmento.text(in: fonteCega).lowercased() else { return false }
+            guard AddressPoisoning.answers(conferenciaCega, segment: segmento, of: fonteCega, chain: chain) else { return false }
         }
         if outroID != nil {
             guard let address = destino?.address, AddressPoisoning.muxedIDConfirmed(conferenciaDoOutroID, address: address) else { return false }
         }
         guard parecido != nil, let address = destino?.address else { return true }
         guard let segmento = trechoDoParecido else { return false }
-        let digitado = conferenciaDoParecido.trimmingCharacters(in: .whitespaces).lowercased()
-        return digitado.count == segmento.length && digitado == segmento.text(in: address).lowercased()
+        return AddressPoisoning.answers(conferenciaDoParecido, segment: segmento, of: address, chain: chain)
     }
 
     private var problemaDaTag: String? {
@@ -338,7 +370,9 @@ final class Envio: @unchecked Sendable {
         let metadata = Sessao.shared.metadata
         let enviados = metadata.sentTo[chain.id] ?? []
         if enviados.contains(address) || historico.contains(address) { return Textos.t("Você já pagou") }
-        if let carteira = metadata.wallets.first(where: { !$0.isWatchOnly && $0.tronForeignControl != true && $0.account(chain)?.address == address }) {
+        if let carteira = metadata.wallets.first(where: {
+            !$0.isWatchOnly && $0.tronForeignControl != true && $0.foreignControl(on: chain) == nil && $0.controlChecked(on: chain) && $0.account(chain)?.address == address
+        }) {
             return preencher(Textos.t("Sua carteira %@"), carteira.name)
         }
         if let contato = metadata.contacts.first(where: { $0.chainID == chain.id && $0.address == address }) {
@@ -458,8 +492,39 @@ final class Envio: @unchecked Sendable {
         }))
     }
 
+    /// O desafio na tela e o nome inteiro de uma conta NEAR: conferido no toque do Continuar, e nao ao vivo, para o botao nao
+    /// acender no meio do nome verdadeiro, no tamanho de um colado que seja o comeco dele (revisao dos 3 agentes, 09/11/2026).
+    /// Chamar com a trava.
+    private var nomeInteiroNaTela: Bool {
+        if parecido != nil, let segmento = trechoDoParecido, let endereco = destino?.address { return AddressPoisoning.coversAll(segmento, of: endereco) }
+        if parecido == nil, let segmento = trechoCego { return AddressPoisoning.coversAll(segmento, of: fonteCega) }
+        return false
+    }
+
+    /// O nome da NEAR armado (entrou inteiro) e o desafio ainda por calcular. Chamar com a trava.
+    /// So na NEAR (com destino) ou com o texto que e nome da NEAR (sem destino): o bc1 e o addr1 tambem passam pela gramatica do
+    /// nome, e na Bitcoin o campo sumia a toa enquanto o historico chegava (como no iOS).
+    private var nomeColadoSemDesafio: Bool {
+        let texto = textoDoDestino.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !texto.isEmpty else { return false }
+        // Sem destino: o colado inteiro que a sugestao de rede torna destino com um desafio. No envio, a rede so muda pela sugestao:
+        // sem ela, esconder so tirava do dono o que ele colou (como no iOS).
+        guard destino != nil, let chain else { return nomeArmado == texto && sugestaoDeRede != nil }
+        guard !historicoLido else { return false }
+        // Nome da NEAR digitado letra a letra fica a vista (o desafio espera o Continuar); armado, escondido.
+        if chain.family == .near, AddressPoisoning.wholeNEARName(texto, chain: chain) != nil { return nomeArmado == texto }
+        // Em toda rede, o desafio escondido pode nascer quando o prazo do historico vencer: a vista, os blocos destacavam o fim
+        // (o wholeEntryHidden do iOS, revisao dos 3 agentes, 09/11/2026).
+        return cegoPossivel
+    }
+
+    private var nomeInteiroDigitado: Bool { nomeInteiroNaTela && !(parecido != nil ? conferenciaDoParecido : conferenciaCega).isEmpty }
+
     func mudarDestino(_ texto: String) {
         trava.withLock {
+            // O endereco que entra inteiro (colar pelo menu ou pelo teclado), medido pelo que entrou: o desafio do nome nasce na
+            // hora. So a digitacao, letra a letra, espera o Continuar.
+            if AddressPoisoning.enteredWhole(from: textoDoDestino, to: texto) { armarNome(texto) }
             textoDoDestino = texto
             validar()
         }
@@ -477,17 +542,24 @@ final class Envio: @unchecked Sendable {
                 problema = Textos.t("Este código é longo demais para ser um endereço.")
             } catch PaymentLink.Problem.containsPhrase {
                 problema = Textos.t("Este código traz as palavras de uma senha de carteira, não um endereço. Quem tem essas palavras tem o saldo: não mostre a ninguém.")
+            } catch PaymentLink.Problem.containsPrivateKey {
+                problema = Textos.t("Isto parece uma chave privada, não um endereço. Quem tem essa chave tem o saldo: não mostre a ninguém.")
             } catch PaymentLink.Problem.unknownScheme {
                 problema = Textos.t("O app não reconhece este tipo de link. Cole só o endereço.")
             } catch PaymentLink.Problem.unsupportedNetwork {
                 problema = Textos.t("Este pedido de pagamento é de uma rede que a Escalibur não envia. Confira com quem pediu.")
             } catch PaymentLink.Problem.unsupportedMemo {
                 problema = Textos.t("Este pedido traz um memo que o app não envia como está. Cole só o endereço e digite o memo, conferindo com quem pediu.")
+            } catch PaymentLink.Problem.expiredRequest {
+                problema = Textos.t("Este pedido de pagamento venceu. Peça um novo a quem cobrou.")
             } catch {
                 problema = Textos.t("Este pedido de pagamento não pôde ser lido com segurança. Peça só o endereço.")
             }
             if problema == nil, let leitura, let chain {
-                if let pedida = leitura.chainID, pedida != chain.id {
+                if !PaymentLink.matches(leitura.asset, asset: holding.asset) {
+                    // O link que pede outra moeda que a da tela: recusado, como no iOS (rodada 1 da auditoria 8).
+                    problema = preencher(Textos.t("Este pedido é de outra moeda, e o envio é de %@. Confira com quem pediu antes de enviar."), holding.asset.symbol)
+                } else if let pedida = leitura.chainID, pedida != chain.id {
                     let nome = Chain.find(pedida)?.name ?? Textos.t("outra rede")
                     problema = preencher(Textos.t("Este pedido é da rede %@, e o envio é pela %@. Confira com quem pediu antes de enviar."), nome, chain.name)
                 } else if let familia = leitura.family, familia != chain.family {
@@ -496,13 +568,15 @@ final class Envio: @unchecked Sendable {
             }
             let endereco = problema == nil ? (leitura?.address ?? "") : ""
             problemaDoLink = problema.map { (texto: endereco, mensagem: $0) }
+            armarNome(endereco)
             textoDoDestino = endereco
             tag = ""
             tagDoLink = nil
+            prazoDoLink = problema == nil ? leitura?.expiresAt.map { (endereco: endereco, expira: $0) } : nil
             validar()
             if problema == nil, let tagLida = leitura?.tag, !tagLida.isEmpty, let chain, chain.destinationTag != .none, destino != nil, !muxed {
-                tag = tagLida
-                tagDoLink = tagLida
+                guardarTag(tagLida)
+                tagDoLink = tag.isEmpty ? nil : tagLida
             }
         }
     }
@@ -526,6 +600,9 @@ final class Envio: @unchecked Sendable {
         // Pular a tag foi escolha para o destino de antes.
         pulouTag = false
         cegoDeTodoEnvio = false
+        nomePendente = false
+        nomeNaoConfere = false
+        cegoPossivel = false
         sugestaoDeRede = nil
         redeConfirmada = false
         if let link = problemaDoLink {
@@ -537,10 +614,12 @@ final class Envio: @unchecked Sendable {
         }
         let texto = textoDoDestino.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !texto.isEmpty else { return }
-        // A frase digitada ou colada no campo do destino sai dele na hora.
-        if Self.pareceFrase(texto) {
+        // A frase (ou a chave, ou os 64 hexadecimais que nesta rede nao sao endereco) digitada ou colada sai do campo na hora.
+        if Self.pareceFrase(texto) || PrivateKeyGuard.looksLikeHexKey(texto, on: chain) {
+            // A frase tambem nao fica na marca do nome da NEAR (revisao dos 3 agentes, 09/11/2026).
+            nomeArmado = nil
             textoDoDestino = ""
-            let mensagem = Textos.t("Este código traz as palavras de uma senha de carteira, não um endereço. Quem tem essas palavras tem o saldo: não mostre a ninguém.")
+            let mensagem = Self.avisoDoSegredo(texto, rede: chain)
             problemaDoLink = (texto: "", mensagem: mensagem)
             problema = mensagem
             return
@@ -558,6 +637,12 @@ final class Envio: @unchecked Sendable {
                 problema = preencher(Textos.t("Este endereço é da sua carteira na rede %@. Nesta rede ele não é seu: o que for enviado se perde."), outra.name)
                 return
             }
+            // Uma conta deste celular com outra chave no controle nesta rede: o envio para ela e um deposito que quem controla a
+            // outra chave leva (pedido do dono, 15/11/2026, a forma mais segura, como o Receber e o iOS).
+            if let dona = Sessao.shared.metadata.wallets.donaMarcada(de: destination.address, on: chain) {
+                problema = preencher(Textos.t("Este endereço é da carteira %@, e lá a rede mostrou outra chave no controle. O que for enviado para ele, quem controla essa chave leva."), dona.name)
+                return
+            }
             destino = destination
             if let tagDoEndereco = destination.tag { tag = String(tagDoEndereco) }
             if chain.destinationTag == .none || muxed { tag = ""; tagDoLink = nil }
@@ -569,16 +654,24 @@ final class Envio: @unchecked Sendable {
             // qualquer rede) nao contam como suas, e pedem a conferencia (auditoria de 30/10/2026,
             // revisao de 01/11/2026).
             let carteiras = metadata.wallets.filter {
-                !$0.isWatchOnly && $0.hasBackup && $0.tronForeignControl != true
+                !$0.isWatchOnly && $0.hasBackup && $0.tronForeignControl != true && $0.foreignControl(on: chain) == nil && $0.controlChecked(on: chain)
             }.compactMap { $0.account(chain)?.address }
             let conhecidos = conhecidos(chain)
+            cegoPossivel = primeiroEnvio && !contatos.contains(destination.address) && !carteiras.contains(destination.address)
+            // Nome da NEAR: o desafio nasce no toque do Continuar, com o nome inteiro no campo (`continuar`).
+            if AddressPoisoning.wholeNEARName(texto, chain: chain) != nil, nomeArmado != texto {
+                nomePendente = true
+                return
+            }
             parecido = AddressPoisoning.lookalike(destination.address, among: conhecidos, chain: chain)
             trechoDoParecido = parecido.flatMap { AddressPoisoning.differingSegment(destination.address, from: $0, chain: chain) }
             outroID = AddressPoisoning.sameAccountOtherID(destination.address, among: conhecidos, tagged: contatosComTag(chain), chain: chain)
             if parecido == nil, outroID == nil, primeiroEnvio, historicoIndisponivel,
                !contatos.contains(destination.address), !carteiras.contains(destination.address) {
                 fonteCega = texto
-                trechoCego = AddressPoisoning.blindSegment(texto, chain: chain)
+                // Os 6 ultimos, faceis de achar onde o endereco foi copiado (pedido do dono, 08/11/2026; antes era o meio, e o
+                // dono escolheu o fim sabendo que quem troca o endereco copiado imita as pontas). O contato salvo segue no meio.
+                trechoCego = AddressPoisoning.tailSegment(texto, chain: chain)
             }
             // "Conferir o endereco em todo envio" (Ajustes, Seguranca), sempre ligada no Super
             // Security: sem outro desafio na tela, todo envio pede os 6 ultimos caracteres,
@@ -587,37 +680,56 @@ final class Envio: @unchecked Sendable {
             // do dono, 30/10/2026).
             if metadata.settings.confirmEveryAddress == true || Chaves.root.securityMode == .hardened,
                parecido == nil, outroID == nil, trechoCego == nil, !carteiras.contains(destination.address),
-               let ultimos = AddressPoisoning.tailSegment(texto) {
+               let ultimos = AddressPoisoning.tailSegment(texto, chain: chain) {
                 fonteCega = texto
                 trechoCego = ultimos
                 cegoDeTodoEnvio = true
             }
         case .failure(let falha):
             problema = Self.mensagem(falha, chain: chain)
-            if case .otherNetwork(let outra) = falha { sugestaoDeRede = sugestao(para: outra) }
-        }
-    }
-
-    /// Texto que parece a senha de uma carteira: nunca vai para o campo do endereco.
-    private static let palavrasBIP39: Set<String> = Set(WordLexicon.entries.compactMap(\.folded))
-
-    /// A maior sequencia de palavras seguidas do texto que estao em alguma lista BIP-39.
-    static func maiorSequenciaDePalavras(_ texto: String) -> Int {
-        var maior = 0, seguidas = 0
-        for pedaco in texto.split(whereSeparator: { !$0.isLetter }) {
-            if palavrasBIP39.contains(WordLexicon.fold(String(pedaco))) {
-                seguidas += 1
-                maior = max(maior, seguidas)
-            } else {
-                seguidas = 0
+            // A sugestao so quando o colado vale na rede sugerida: a Cardano reconhece tipos que ela mesma recusa como destino.
+            if case .otherNetwork(let outra) = falha, case .success = Address.validate(texto, for: outra) { sugestaoDeRede = sugestao(para: outra) }
+            // Um nome (com ponto) noutra rede: o aviso diz que e um nome, e nao manda copiar de novo (como no iOS).
+            if case .malformed = falha, AddressPoisoning.nameNotAddress(texto, on: chain) {
+                problema = preencher(Textos.t("Este é um nome, não um endereço. Cole o endereço da rede %@."), chain.name)
             }
         }
-        return maior
     }
 
+    /// A chave privada colada (WIF, xprv, a semente da Stellar ou da XRPL, a chave da Solana) tem o mesmo destino da frase
+    /// (`PrivateKeyGuard`, como o PhraseGuard do iOS, revisao dos 3 agentes, 09/11/2026).
+    /// Tambem o pedaco da frase, o SeedQR e os 64 hexadecimais com rotulo de chave (como no iOS, revisao dos 3 agentes, 09/11/2026).
     static func pareceFrase(_ texto: String) -> Bool {
-        let espacado = texto.replacingOccurrences(of: "[,;\\-]", with: " ", options: .regularExpression)
-        return Mnemonic.words(in: espacado).count >= 12
+        PrivateKeyGuard.looksLikeSecretInAddressField(texto)
+    }
+
+    /// O aviso do segredo colado: o da chave, o dos 64 hexadecimais (chave ou codigo de transacao) ou o da frase.
+    static func avisoDoSegredo(_ texto: String, rede: Chain? = nil) -> String {
+        if PrivateKeyGuard.looksLikePrivateKey(texto) || PrivateKeyGuard.looksLikeLabeledHexKey(texto) {
+            return Textos.t("Isto parece uma chave privada, não um endereço. Quem tem essa chave tem o saldo: não mostre a ninguém.")
+        }
+        if PrivateKeyGuard.looksLikeHexKey(texto, on: rede) {
+            return Textos.t("Isto parece uma chave privada ou o código de uma transação, não um endereço. Se for uma chave, não mostre a ninguém.")
+        }
+        return Textos.t("Este código traz as palavras de uma senha de carteira, não um endereço. Quem tem essas palavras tem o saldo: não mostre a ninguém.")
+    }
+
+    /// O que e segredo num campo de endereco desta rede (o reconhecer do observar e o Colar usam sem rede).
+    static func ehSegredo(_ texto: String, rede: Chain?) -> Bool {
+        pareceFrase(texto) || PrivateKeyGuard.looksLikeHexKey(texto, on: rede)
+    }
+
+    /// A tag, o memo ou o comentario: com uma frase ou uma chave, sai na hora. O comentario da TON vai a rede ja na estimativa da
+    /// taxa e, enviado, fica publico para sempre (o guardTag do iOS, revisao dos 3 agentes, 09/11/2026). Chamar com a trava.
+    private func guardarTag(_ texto: String) {
+        // A regra das 12 palavras soltas fica so no campo do endereco: aqui ela apagava qualquer comentario comprido.
+        if PrivateKeyGuard.publicTextHasSecret(texto) {
+            tag = ""
+            avisoDaTag = Textos.t("Este campo tinha uma frase ou uma chave de carteira, e foi apagado. O que vai aqui fica público na rede.")
+        } else {
+            tag = String(texto.prefix(120))
+            if !texto.isEmpty { avisoDaTag = nil }
+        }
     }
 
     static func mensagem(_ falha: Address.Problem, chain: Chain) -> String {
@@ -657,7 +769,12 @@ final class Envio: @unchecked Sendable {
             guard carteira.id != wallet.id, !carteira.isWatchOnly, carteira.hasBackup, let address = carteira.account(chain)?.address, !address.isEmpty,
                   // A carteira com a Tron em outra chave nao e sua em rede nenhuma: quem trocou a
                   // chave tem as palavras (revisao de seguranca de 01/11/2026).
-                  carteira.tronForeignControl != true else { return nil }
+                  carteira.tronForeignControl != true,
+                  // Nem a conta com outra chave ou contrato no controle nesta rede: o que entrar nela pode sair sem a
+                  // assinatura do dono, e aqui ele nao ve o aviso do Receber (auditoria 8, 14/11/2026).
+                  carteira.foreignControl(on: chain) == nil,
+                  // Nem a importada que nunca foi conferida (rodada 5 da auditoria 8), como no iOS.
+                  carteira.controlChecked(on: chain) else { return nil }
             return (carteira, address)
         }
     }
@@ -665,8 +782,9 @@ final class Envio: @unchecked Sendable {
     /// Um contato salvo (com a tag dele) ou outra carteira do dono (sem tag).
     func escolher(endereco: String, tag: String?) {
         trava.withLock {
+            armarNome(endereco)
             textoDoDestino = endereco
-            self.tag = tag ?? ""
+            guardarTag(tag ?? "")
             validar()
         }
     }
@@ -681,6 +799,10 @@ final class Envio: @unchecked Sendable {
             disponivel = nil
             historico = []
             historicoLido = false
+            // O "historico ilegivel" era da rede de antes: o desafio dela nao nasce na nova antes da leitura (como no iOS).
+            historicoIndisponivel = false
+            historicoTerminado = false
+            historicoRede = nil
             validar()
         }
     }
@@ -690,8 +812,9 @@ final class Envio: @unchecked Sendable {
             if let parecido { conferenciaDoParecido = parecido }
             if let outroID { conferenciaDoOutroID = outroID }
             if let cego { conferenciaCega = cego }
+            if parecido != nil || cego != nil { nomeNaoConfere = false }
             if let redeConfirmada { self.redeConfirmada = redeConfirmada }
-            if let tag { self.tag = String(tag.prefix(120)) }
+            if let tag { guardarTag(tag) }
         }
     }
 
@@ -708,11 +831,25 @@ final class Envio: @unchecked Sendable {
             trechoCego = nil
             cegoDeTodoEnvio = false
             conferenciaCega = ""
+            nomeArmado = nil
+            nomePendente = false
+            nomeNaoConfere = false
+            cegoPossivel = false
             infoDoDestino = nil
             pulouTag = false
             tag = ""
             tagDoLink = nil
+            prazoDoLink = nil
+            // O erro e a sugestao de rede do texto de antes saem com ele (o iOS revalida pelo onChange).
+            validar()
         }
+    }
+
+    /// O endereco entrou inteiro (colar, QR, contato, Minhas carteiras): o desafio do nome da NEAR nasce na hora. Adiar ate o
+    /// Continuar deixava o nome trocado a vista no campo (o armNEAR do iOS, revisao dos 3 agentes, 09/11/2026). Chamar com a trava.
+    private func armarNome(_ texto: String) {
+        // So o texto, sem a rede: colado noutra rede e trocado para a NEAR pela sugestao, o nome voltava a vista.
+        nomeArmado = texto.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// De volta ao destino por um guard (a revisao, a assinatura): os passos dele recomecam, iguais na tela e no nucleo,
@@ -724,6 +861,22 @@ final class Envio: @unchecked Sendable {
 
     /// Continuar do destino: a rede diz se o destino existe e se exige tag.
     func continuar() async {
+        // Nome da NEAR: o desafio nasce aqui, e o nome inteiro e conferido aqui (revisao dos 3 agentes, 09/11/2026). Sem desafio,
+        // segue direto.
+        let parar = trava.withLock { () -> Bool in
+            if nomePendente {
+                armarNome(textoDoDestino)
+                validar()
+                return parecido != nil || outroID != nil || trechoCego != nil
+            }
+            if nomeInteiroNaTela, !liberado {
+                // Sem nada digitado (dois toques rapidos), nada a dizer: alarme falso ensina a ignorar o verdadeiro.
+                nomeNaoConfere = nomeInteiroDigitado
+                return true
+            }
+            return false
+        }
+        if parar { return }
         let (destino, chain, motor, pode) = trava.withLock { (self.destino, self.chain, self.motor, montarEstado().podeContinuar) }
         guard pode, let destino, let chain else { return }
         guard let motor else {
@@ -757,8 +910,8 @@ final class Envio: @unchecked Sendable {
                 tag = ""
                 etapa = .valor
             } else if !texto.isEmpty {
-                tag = String(texto.prefix(120))
-                if problemaDaTag == nil {
+                guardarTag(texto)
+                if !tag.isEmpty, problemaDaTag == nil {
                     pulouTag = false
                     etapa = .valor
                 }
@@ -870,9 +1023,9 @@ final class Envio: @unchecked Sendable {
                 etapa = .revisao
             }
         } catch {
-            if (error as? SendEngineError)?.isLocalNonceQueueAhead == true {
-                FilaDeNonces.esquecer(carteira: wallet.id, rede: chain, endereco: conta.address)
-            }
+            // A fila a frente da rede nao e apagada aqui: a poda de antes do plano ja tira, no prazo dela, a transacao que a rede
+            // descartou. Apagar tudo numa leitura so (dois nos atrasados logo depois de uma confirmacao) fazia o plano seguinte reusar
+            // o nonce de uma transacao viva, como a troca pela rota privada (auditoria 8, 14/11/2026).
             trava.withLock { erro = (error as? LocalizedError)?.errorDescription ?? Textos.t("Não foi possível preparar o envio.") }
         }
     }
@@ -945,9 +1098,9 @@ final class Envio: @unchecked Sendable {
                 return novo
             }
         } catch {
-            if (error as? SendEngineError)?.isLocalNonceQueueAhead == true {
-                FilaDeNonces.esquecer(carteira: wallet.id, rede: chain, endereco: conta.address)
-            }
+            // A fila a frente da rede nao e apagada aqui: a poda de antes do plano ja tira, no prazo dela, a transacao que a rede
+            // descartou. Apagar tudo numa leitura so (dois nos atrasados logo depois de uma confirmacao) fazia o plano seguinte reusar
+            // o nonce de uma transacao viva, como a troca pela rota privada (auditoria 8, 14/11/2026).
             trava.withLock { erro = (error as? LocalizedError)?.errorDescription ?? Textos.t("Não foi possível renovar os dados da rede. Tente de novo.") }
             return nil
         }
@@ -965,6 +1118,11 @@ final class Envio: @unchecked Sendable {
 
     private func avisos(_ plano: SigningPlan) -> [String] {
         var saida: [String] = []
+        // Outra chave ou contrato no controle desta conta (auditoria 8, 14/11/2026): o envio segue, porque tirar o saldo
+        // dali e o que o dono precisa fazer, mas ele fica sabendo. Como no iOS.
+        if let chain, let marca = Sessao.shared.metadata.wallets.first(where: { $0.id == wallet.id })?.foreignControl(on: chain) {
+            saida.append(marca.message)
+        }
         if let parecido { saida.append(preencher(Textos.t("Endereço parecido com %@. Confira o endereço inteiro."), Fmt.endereco(parecido, chain: chain))) }
         if outroID != nil || memoComOutroID != nil {
             saida.append(Textos.t("Mesma conta de um endereço que você já usou, com outro ID. Confira o ID com quem vai receber."))
@@ -992,7 +1150,10 @@ final class Envio: @unchecked Sendable {
     static func textoDoAviso(_ aviso: PlanReview.Warning, chain: Chain?, tipo tipoDeTag: TipoDeTag) -> String {
         switch aviso {
         case .firstSendToAddress: return Textos.t("Primeira vez que você envia para este endereço.")
-        case .lookalikeAddress(let conhecido): return preencher(Textos.t("Endereço parecido com %@."), Fmt.endereco(conhecido, chain: chain))
+        case .lookalikeAddress(let conhecido):
+            // Nome da NEAR: o aviso e o do nome (revisao dos 3 agentes, 09/11/2026).
+            if let chain, AddressPoisoning.wholeNEARName(conhecido, chain: chain) != nil { return preencher(Textos.t("Nome parecido com %@."), conhecido) }
+            return preencher(Textos.t("Endereço parecido com %@."), Fmt.endereco(conhecido, chain: chain))
         case .noDestinationTag:
             switch tipoDeTag {
             case .tag: return Textos.t("Sem tag de destino. Se o destino for uma exchange, confira na tela de depósito se ela pede: sem isso o valor não chega na sua conta de lá.")
@@ -1011,7 +1172,7 @@ final class Envio: @unchecked Sendable {
         case .publicMempool:
             return Textos.t("Nesta rede a troca passa pela fila pública, sem proteção contra robôs: eles podem comprar antes e vender depois. O mínimo garantido continua valendo, mas o que ficar entre a estimativa e ele pode não chegar.")
         case .uncomparedPrice:
-            return Textos.t("Não há uma segunda fonte de cotação independente nem preço de referência do mercado: o preço desta troca não foi comparado com nenhum outro.")
+            return Textos.t("Não há preço de referência do mercado: o preço desta troca não foi comparado com o mercado.")
         }
     }
 
@@ -1034,6 +1195,16 @@ final class Envio: @unchecked Sendable {
             }
             guard confere(plano) else {
                 erro = Textos.t("O envio montado não confere com o destino digitado. Nada foi assinado.")
+                return nil
+            }
+            // A marca que chegou depois do destino: nada e assinado para a conta que outra chave controla (15/11/2026), como no iOS.
+            if let destino, let dona = Sessao.shared.metadata.wallets.donaMarcada(de: destino.address, on: chain) {
+                erro = preencher(Textos.t("Este endereço é da carteira %@, e lá a rede mostrou outra chave no controle. O que for enviado para ele, quem controla essa chave leva."), dona.name)
+                return nil
+            }
+            if let prazo = prazoDoLink, prazo.endereco == textoDoDestino, PaymentLink.expired(prazo.expira) {
+                // O pedido que venceu entre a leitura e a assinatura (rodada 3 da auditoria 8).
+                erro = Textos.t("Este pedido de pagamento venceu. Peça um novo a quem cobrou.")
                 return nil
             }
             guard versao == versaoDaRevisao else {
@@ -1121,11 +1292,15 @@ final class Envio: @unchecked Sendable {
     }
 
     private func concluir(id: String, motor: any SendEngine, chain: Chain) async {
-        let endereco = trava.withLock { () -> String? in
+        let (endereco, valor, ativo) = trava.withLock { () -> (String?, BigUInt, Asset) in
             idDoResultado = id
             etapa = .enviado
-            return destino?.address
+            return (destino?.address, plano?.review.outgoing?.amount ?? quantidade ?? BigUInt(), holding.asset)
         }
+        // O envio aparece ja em "Pendentes" na Atividade: a leitura da rede pode levar minutos (pedido do dono, 08/11/2026).
+        Atividade.shared.anotarEnviado(ActivityEntry(id: "enviado-\(chain.id)-\(id)", chainID: chain.id, direction: .sent, asset: ativo,
+                                                     amount: valor, counterparty: endereco, date: Date(), status: .pending(nil), fee: nil,
+                                                     hash: id, suspicious: false), carteira: wallet.id)
         // Saiu: o registro vale mesmo que o app tenha travado durante a transmissao.
         Sessao.shared.alterarOuDepois { metadata in
             if let endereco {
@@ -1163,10 +1338,35 @@ final class Envio: @unchecked Sendable {
                 trava.withLock { assinadoIncerto = nil }
                 await concluir(id: id, motor: motor, chain: chain)
                 trava.withLock { situacao = agora }
+                // Saiu de "incerto" ja confirmado: a linha da Atividade e o saldo tambem (revisao, 08/11/2026).
+                Task { await self.assentar(agora, id: id, chain: chain) }
             }
         } else {
-            trava.withLock { situacao = agora }
+            let antes = trava.withLock { () -> TransferStatus in
+                defer { situacao = agora }
+                return situacao
+            }
+            // Sem segurar a resposta: o "Confirmado" chega a tela na hora, e a releitura segue por fora.
+            if case .pending = antes, agora != .pending { Task { await self.assentar(agora, id: id, chain: chain) } }
         }
+    }
+
+    /// A rede respondeu sobre o envio: a linha da Atividade muda de situacao, e o saldo e o historico desta rede leem de novo,
+    /// sem esperar o prazo de cada um (o settled do iOS, pedido do dono de 08/11/2026).
+    private func assentar(_ agora: TransferStatus, id: String, chain: Chain) async {
+        if case .failed(let motivo) = agora {
+            Atividade.shared.assentarEnviado(hash: id, carteira: wallet.id, situacao: .failed(motivo))
+        } else {
+            Atividade.shared.assentarEnviado(hash: id, carteira: wallet.id, situacao: .confirmed)
+        }
+        let carteira = wallet.id
+        Sessao.shared.alterarOuDepois { metadata in metadata.activityFetched?[carteira]?[chain.id] = nil }
+        // As leituras sao da carteira escolhida: travado, ou com outra carteira na tela, nada a reler (o iOS faz igual).
+        func aindaNela() -> Bool { Sessao.shared.fase == .unlocked && Sessao.shared.metadata.selectedWalletID == carteira }
+        guard aindaNela() else { return }
+        await Saldos.shared.atualizarRede(chain)
+        guard aindaNela() else { return }
+        await Atividade.shared.atualizar(forcar: false)
     }
 
     /// "0,5 ETH para 0x12ab…34cd": o valor que a transacao move, do plano. Chamar com a trava.
@@ -1362,13 +1562,17 @@ enum FilaDeNonces {
         guard rede.family == .evm, let entradas = Sessao.shared.metadata.pendingEVM?[chave], !entradas.isEmpty,
               let motor = SendEngines.engine(for: rede) else { return }
         // A mesma regra do iOS (`NonceQueuePruning`): sai a confirmada ou falha, a que a rede nao conhece depois
-        // do prazo de propagacao, com tudo acima, e fica marcada a que a rede ja viu (terceira e quarta passadas
-        // de 03/11/2026).
+        // do prazo de propagacao, com tudo acima (salvo a de nonce ja minerado, que sai sozinha), e fica marcada a que
+        // a rede ja viu (terceira e quarta passadas
+        // de 03/11/2026). Uma leitura por poda do nonce minerado: o que esta abaixo dele sai sem depender do recibo
+        // antigo (bug de 14/11/2026).
+        let minerado = await motor.minedNonce(chain: rede, from: endereco)
         let resultado = await NonceQueuePruning.pruned(
             entradas.map {
                 NonceQueuePruning.Entry(nonce: $0.nonce, hash: $0.hash, sentAt: $0.sentAt, privateRoute: $0.privateRoute == true,
                                         wasSeen: $0.everSeen == true || $0.seen == true, heldAt: $0.heldAt, releasedAt: $0.releasedAt)
             },
+            minedNonce: minerado,
             settled: { entrada in
                 if case .pending = await motor.status(entrada.hash, chain: rede) { return false }
                 return true
@@ -1415,10 +1619,6 @@ enum FilaDeNonces {
             return preencher(Textos.t("Uma transação anterior com %@ ainda não confirmou na rede. Tente de novo quando ela confirmar. Se ela tiver sido descartada, o app libera em até 30 minutos, ou em até 3 horas se a rede já tinha visto a transação. Se ela seguir esperando na rede, só libera quando ela confirmar."), ativo.symbol)
         }
         return nil
-    }
-
-    static func esquecer(carteira: UUID, rede: Chain, endereco: String) {
-        try? Sessao.shared.alterar { $0.pendingEVM?[chave(carteira: carteira, rede: rede, endereco: endereco)] = nil }
     }
 
     /// Uma transacao deste aparelho que tira `ativo` desta conta ainda nao confirmou (ler depois de

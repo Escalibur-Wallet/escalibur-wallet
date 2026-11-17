@@ -183,9 +183,32 @@ public enum CoinCatalog {
     static let paprika = URL(string: "https://api.coinpaprika.com/v1")!
     public static let paprikaPrefix = "paprika:"
 
+    /// A busca procura nome e simbolo, e nenhum tem um pedaco de 20 letras e algarismos seguidos, ou 16 algarismos: um texto
+    /// assim e um endereco, uma chave (inteira, entre aspas, com "bitcoin:", ou o comeco dela sendo digitada) ou os numeros
+    /// secretos do Xaman, e nao sai do aparelho. A porta e uma so, aqui, para as duas plataformas (revisao dos 3 agentes,
+    /// 09/11/2026). O pedaco de 12 com algarismo ou maiuscula no meio tambem fica: o comeco de uma semente da XRPL digitada a
+    /// mao, com 19 caracteres, deixava pouco para adivinhar. O nome comprido ("Decentraland") continua indo; o resto acha pela
+    /// lista embarcada. Recebe o texto como foi digitado, sem passar para minusculas.
+    public static func mayCarrySecret(_ raw: String) -> Bool {
+        // Sem os caracteres invisiveis e com os de largura cheia trocados pelos comuns, como no `PrivateKeyGuard`.
+        let text = PrivateKeyGuard.visible(raw)
+        // A frase chinesa digitada sem espaco, como o teclado chines escreve: seis caracteres seguidos das listas. So 10 dos 22 mil
+        // nomes de moeda do catalogo dao isso, e a lista embarcada continua achando-os (revisao dos 3 agentes, 09/11/2026).
+        if PrivateKeyGuard.longestHanRun(text) >= 6 { return true }
+        // Tres palavras das listas, ou do comeco de 4 letras delas (a placa de aco), com o espaco de largura zero ja tirado: a frase
+        // digitada na busca deixava sair o bastante para o resto cair numa GPU.
+        if PrivateKeyGuard.listTokenCount(text) >= 3 { return true }
+        for run in text.split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
+            if run.count >= 20 { return true }
+            if run.count >= 12, run.contains(where: \.isNumber) || run.dropFirst().contains(where: \.isUppercase) { return true }
+        }
+        if text.filter(\.isNumber).count >= 16 { return true }
+        return PrivateKeyGuard.containsSecret(text)
+    }
+
     public static func search(_ query: String, client: HTTPClient = .shared) async throws -> [CoinSearchResult] {
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard text.count >= 2, text.count <= 60 else { return [] }
+        guard text.count >= 2, text.count <= 60, !mayCarrySecret(text) else { return [] }
         var components = URLComponents(url: base.appendingPathComponent("search"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "query", value: text)]
         guard let url = components.url else { return [] }

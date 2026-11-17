@@ -10,16 +10,16 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,14 +43,12 @@ import app.escalibur.wallet.nucleo.Api
 import app.escalibur.wallet.ui.Ciclo
 import app.escalibur.wallet.ui.comp.BotaoPrimario
 import app.escalibur.wallet.ui.comp.DeslizeParaSeguir
-import app.escalibur.wallet.ui.comp.EmblemaCifrado
 import app.escalibur.wallet.ui.comp.Icone
 import app.escalibur.wallet.ui.comp.Icones
 import app.escalibur.wallet.ui.comp.Rodape
 import app.escalibur.wallet.ui.t
 import app.escalibur.wallet.ui.tema.Espaco
 import app.escalibur.wallet.ui.tema.Paleta
-import app.escalibur.wallet.ui.tema.Raio
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
 import kotlinx.coroutines.delay
@@ -214,28 +212,23 @@ fun TelaDeAtualizar() {
     // O toque nao passa para a carteira por baixo; a semantica dela sai da arvore no Raiz.
     Column(Modifier.fillMaxSize().background(Paleta.vazio).pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
                .semantics { paneTitle = titulo }.statusBarsPadding()) {
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.lg),
-               horizontalAlignment = Alignment.CenterHorizontally) {
-            // A seta num circulo simples, sem o anel de pixels, como no iPhone.
-            Box(Modifier.padding(top = Espaco.xl).size(72.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
-                Icone(Icones.receber, Paleta.acento, tamanho = 26.dp)
-            }
-            Text(if (obrigatoria) t("Atualização obrigatória") else t("Atualização"), style = estilo(Tipo.nota).copy(fontWeight = FontWeight.SemiBold),
-                 color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.lg))
-            Text(titulo, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
-                 modifier = Modifier.padding(top = Espaco.xs).semantics { heading() })
-            // Sem o "confirmada pela lista assinada" do iPhone: a lista confirma que a Escalibur liberou o build, mas o app nao
-            // confere o que a Play entrega no toque (no iPhone, a conferencia nova antes de abrir a loja confere).
-            Text(if (obrigatoria) t("A Escalibur liberou a versão %@ na Google Play. Esta atualização é obrigatória: atualize para continuar usando o app.", versao)
-                 else t("A Escalibur liberou a versão %@ na Google Play. Atualize para continuar com as correções mais recentes.", versao),
-                 style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.base))
-            Row(Modifier.padding(top = Espaco.lg).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.md),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.md)) {
-                EmblemaCifrado(76.dp, Icones.cadeadoCheio, Paleta.sucesso)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espaco.xxs)) {
-                    Text(t("Seus fundos estão seguros"), style = estilo(Tipo.linha), color = Paleta.tinta)
-                    Text(t("Atualizar não pede suas palavras e mantém suas carteiras como estão."), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+        // O conteudo no meio do espaco acima dos botoes (pedido do dono, 15/11/2026); com letra grande, rola.
+        BoxWithConstraints(Modifier.weight(1f)) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = maxHeight)
+                       .padding(horizontal = Espaco.margem).padding(vertical = Espaco.lg),
+                   horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                // A seta num circulo simples, sem o anel de pixels, como no iPhone.
+                Box(Modifier.size(72.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
+                    Icone(Icones.receber, Paleta.acento, tamanho = 26.dp)
                 }
+                Text(if (obrigatoria) t("Atualização obrigatória") else t("Atualização"), style = estilo(Tipo.nota).copy(fontWeight = FontWeight.SemiBold),
+                     color = Paleta.tinta, modifier = Modifier.padding(top = Espaco.lg))
+                Text(titulo, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
+                     modifier = Modifier.padding(top = Espaco.xs).semantics { heading() })
+                // Sem citar a lista assinada, como no iPhone (pedido do dono, 15/11/2026).
+                Text(if (obrigatoria) t("A Escalibur liberou a versão %@ na Google Play. Esta atualização é obrigatória: atualize para continuar usando o app.", versao)
+                     else t("A Escalibur liberou a versão %@ na Google Play. Atualize para continuar com as correções mais recentes.", versao),
+                     style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.base))
             }
         }
         Rodape {

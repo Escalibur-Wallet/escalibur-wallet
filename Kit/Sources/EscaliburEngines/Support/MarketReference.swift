@@ -21,10 +21,10 @@ protocol TradePriceOracle: Sendable {
 /// So preco de agora. Com as fontes fora, o `MarketService` devolve o ultimo preco bom,
 /// que pode ser de horas atras; como referencia, ele deixaria passar com uma cotacao so
 /// a troca que o mercado de agora ja nao sustenta (auditoria de 16/10/2026, R7-B2).
-/// Mais velho que `maxAge`, o preco nao vem, e a troca segue como sem referencia: duas
-/// cotacoes e a maior estimativa como ancora (`TradeValidator.anchored`); com uma fonte so na
-/// EVM, a cotacao sem comparacao, que so troca com o aceite do dono (`TradeQuote.unanchored`);
-/// recusa na Solana.
+/// Mais velho que `maxAge`, o preco nao vem, e a troca segue como sem referencia: na EVM a
+/// maior estimativa de duas fontes como ancora (`TradeValidator.anchored`) e, com uma fonte ou
+/// com duas, a cotacao sem comparacao, que so troca com o aceite do dono (`TradeQuote.unanchored`;
+/// checagem final de 16/11/2026, M3); o mesmo na Stellar e no XRPL; recusa na Solana.
 struct MarketPriceOracle: TradePriceOracle {
     let service: MarketService
     /// `nil`: qualquer idade. So o aviso de taxa alta do envio usa assim: ele compara a

@@ -217,6 +217,14 @@ struct TradeReviewFlow: View {
                                message: String(localized: "A autorização do token vai antes e a troca logo depois, em transações separadas. Se a troca não sair, a autorização continua valendo, só para este valor e só para o contrato desta troca."))
                             .padding(.top, Space.md)
                     }
+                    // Outra chave ou contrato no controle desta conta (auditoria 8, 14/11/2026), com o aviso. A troca e a ordem limite
+                    // ficam fechadas: o que for comprado chegaria nesta conta (pedido do dono, 15/11/2026, a forma mais segura).
+                    if let mark = session.selectedWallet?.foreignControl(on: plan.chain) {
+                        Banner(kind: .failure, title: mark.message).padding(.top, Space.sm)
+                    }
+                    if let closed = closedReason(plan) {
+                        Banner(kind: .failure, title: closed).padding(.top, Space.sm)
+                    }
                     ForEach(Array(plan.review.warnings.enumerated()), id: \.offset) { _, warning in
                         Banner(kind: .caution, title: PlanWarningText.text(warning, chain: plan.chain)).padding(.top, Space.sm)
                     }
@@ -226,7 +234,8 @@ struct TradeReviewFlow: View {
             .padding(.bottom, Space.lg)
         }
         .safeAreaInset(edge: .bottom) {
-            PrimaryButton(title: text(swap: String(localized: "Confirmar troca"), limit: String(localized: "Criar ordem limite"), cancel: String(localized: "Cancelar a ordem"))) {
+            PrimaryButton(title: text(swap: String(localized: "Confirmar troca"), limit: String(localized: "Criar ordem limite"), cancel: String(localized: "Cancelar a ordem")),
+                          enabled: plan.map { closedReason($0) == nil } ?? true) {
                 Task { await confirm() }
             }
                 .padding(.top, Space.sm)
@@ -453,6 +462,8 @@ struct TradeReviewFlow: View {
             planFailed(String(localized: "Esta carteira não tem conta nesta rede."))
             return
         }
+        // A rede da conta conferida de novo antes, como o Receber: a compra chegaria nesta conta (15/11/2026).
+        if !isCancel { await session.checkBeforeReceiving(wallet.id, on: item.chain) }
         // A fila de nonces EVM desta conta, sem o que a rede ja confirmou, entra no
         // pedido: o planejador sabe o que este aparelho ja transmitiu.
         await NonceQueue.prune(session, wallet: wallet.id, chain: item.chain, address: account.address)
@@ -494,9 +505,9 @@ struct TradeReviewFlow: View {
             plan = built
             stage = .review
         } catch {
-            if (error as? SendEngineError)?.isLocalNonceQueueAhead == true {
-                NonceQueue.clear(session, wallet: wallet.id, chain: item.chain, address: account.address)
-            }
+            // A fila a frente da rede nao e apagada aqui: a poda de antes do plano ja tira, no prazo dela, a transacao que a rede
+            // descartou. Apagar tudo numa leitura so (dois nos atrasados logo depois de uma confirmacao) fazia o plano seguinte reusar
+            // o nonce de uma transacao viva, como a troca pela rota privada (auditoria 8, 14/11/2026).
             planFailed((error as? LocalizedError)?.errorDescription ?? String(localized: "Não foi possível montar agora. Tente de novo."))
         }
     }
@@ -544,6 +555,18 @@ struct TradeReviewFlow: View {
         return Fmt.double(outgoing.amount, decimals: sell.decimals) * price
     }
 
+    /// A troca e a ordem limite numa conta que nao recebe (outra chave no controle, nesta carteira ou no mesmo endereco de outra):
+    /// o que for comprado chegaria nela, e quem controla a outra chave leva (pedido do dono, 15/11/2026, a forma mais segura).
+    /// Cancelar uma ordem nao recebe nada e segue. Na carteira gravada agora, e nao na de quando a tela abriu.
+    /// A rede ainda nao lida para outra chave no controle tambem nao recebe a compra: ela espera a conferencia, como o Receber.
+    private func closedReason(_ plan: SigningPlan) -> String? {
+        guard !isCancel, let wallet = session.metadata.wallets.first(where: { $0.id == plan.walletID }) else { return nil }
+        if !wallet.receives(on: plan.chain) || session.markedElsewhere(wallet, on: plan.chain) != nil {
+            return String(localized: "A troca fica fechada nesta conta: o que você comprar chegaria nela, e quem controla a outra chave leva.")
+        }
+        return wallet.controlChecked(on: plan.chain) ? nil : String(localized: "Esta conta ainda não foi conferida nesta rede. Tente de novo em instantes.")
+    }
+
     private func confirm() async {
         guard let plan, let engine else { return }
         guard !plan.isExpired() else {
@@ -552,6 +575,11 @@ struct TradeReviewFlow: View {
             return
         }
         guard planMatches(plan) else { return }
+        // A conta que deixou de receber depois da revisao (a marca que chegou com a tela aberta): nada e assinado.
+        if let closed = closedReason(plan) {
+            error = closed
+            return
+        }
         // Ate a assinatura: outra transacao desta conta pode ter saido depois da revisao.
         if let wallet = session.selectedWallet, let account = wallet.account(item.chain),
            let reason = NonceQueue.blockedReason(session, wallet: wallet.id, chain: item.chain, address: account.address, asset: soldAsset,

@@ -261,10 +261,27 @@ fun AjustesDaCarteira(id: String) {
                         LinhaDeAjuste(Icones.falha, t("Tron: controlada por outra chave"), corDoTitulo = Paleta.baixa, seta = false)
                         continue
                     }
+                    // Outra chave ou contrato no controle nesta rede, nesta carteira ou em outra com o mesmo endereco: o endereco tambem
+                    // nao copia (auditoria 8; a outra carteira desde 15/11/2026), como no iOS.
+                    if (rede in carteira.outroControle || rede in carteira.marcadaEmOutra) {
+                        LinhaDeAjuste(Icones.falha, t("%@: outra chave no controle", info.nome), corDoTitulo = Paleta.baixa, seta = false)
+                        continue
+                    }
+                    // A rede ainda nao lida para outra chave no controle: o endereco copia depois (pedido do dono, 15/11/2026).
+                    if (rede in carteira.naoLidas) {
+                        // A rede desligada nao e conferida: diz isso, em vez de "ainda nao conferida" para sempre (15/11/2026), como no iOS.
+                        if (rede in App.estado.redesDesligadas) LinhaDeAjuste(Icones.ampulheta, info.nome, valor = t("Desligada"), seta = false)
+                        else LinhaDeAjuste(Icones.ampulheta, t("%@: ainda não conferida", info.nome), seta = false)
+                        continue
+                    }
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = Altura.linha).clickable {
-                            Transferencia.copiar(contexto, endereco)
-                            Avisos.mostrar(t("Endereço copiado."))
+                            // Conferido no nucleo na hora do toque, na carteira gravada (rodada 8 da auditoria 8).
+                            escopo.launch {
+                                if (app.escalibur.wallet.ui.carteira.enderecoParaCopiar(carteira.id, listOf(rede)) != endereco) return@launch
+                                Transferencia.copiarEndereco(contexto, endereco, carteira.id, rede)
+                                Avisos.mostrar(t("Endereço copiado."))
+                            }
                         }.padding(horizontal = Espaco.md),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
                     ) {

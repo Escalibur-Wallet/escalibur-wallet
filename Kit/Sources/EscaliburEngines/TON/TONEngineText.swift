@@ -65,6 +65,8 @@ enum TONEngineText {
             return kitText("O comentário é longo demais para a mensagem.")
         case .commentHasControlCharacters:
             return kitText("O comentário tem caracteres invisíveis ou de controle. Digite de novo, só com texto comum.")
+        case .commentHasSecret:
+            return kitText("O comentário tem uma frase ou uma chave de carteira. Ele fica público na rede: apague e não envie.")
         case .commentHasSurroundingSpaces:
             return kitText("O comentário tem espaço no começo ou no fim. Tire os espaços: a exchange compara o comentário exatamente.")
         case .invalidPath:

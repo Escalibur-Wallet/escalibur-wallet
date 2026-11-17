@@ -1,6 +1,6 @@
 # TON: resumo (branch rede/ton, 61d1509)
 
-Carteira nova V4R2 em `m/44'/607'/i'` (compatível com Trust Wallet; Tonkeeper reconhece). Descoberta na importação: `TONDerivationScheme.importCandidates(account:)` = [44'/607'/i' V4R2, 44'/607'/i' W5, 44'/607'/0'/0'/i'/0' V4R2 (Ledger)].
+Carteira nova V4R2 em `m/44'/607'/i'` (compatível com Trust Wallet; Tonkeeper reconhece). Os candidatos conhecidos estão em `TONDerivationScheme.importCandidates(account:)` = [44'/607'/i' V4R2, 44'/607'/i' W5, 44'/607'/0'/0'/i'/0' V4R2 (Ledger)]. A descoberta que roda (`TONDiscovery`, auditoria 8, 14/11/2026) é a da W5: depois de gravar ou abrir a carteira, e uma vez no destravar para a que já estava aqui, o app confere os dois endereços da mesma chave (estado e saldo na toncenter e na tonapi de acordo, e o USDT) e passa para a W5 quando só ela teve movimento. O caminho da Ledger Live pede a frase de novo (é outra chave) e não é consultado: quem vem dela vê a conta da Escalibur.
 
 Arquivos em `Kit/Sources/EscaliburChains/TON/`: TONCell, TONBOC (+CRC32C), TONAddress, TONWallet, TONTransfer, TONJetton, TONPlanning.
 API: `TONPlanner.planSendTON / planSendUSDT` → SigningPlan. `TONWallet(publicKey:version:)`. `TONJetton.usdtMaster / usdtWallet(owner:) / attachedTON 0,05 / forwardTON 1 nanoton`. Transmitir `SignedTransaction.encoded` (BOC base64 da mensagem externa).

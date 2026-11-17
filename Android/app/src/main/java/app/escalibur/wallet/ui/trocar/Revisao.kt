@@ -213,9 +213,12 @@ private fun ColumnScope.Revisao(controle: ControleDaTroca, r: RetratoDaTroca, fr
                   mensagem = t("A autorização do token vai antes e a troca logo depois, em transações separadas. Se a troca não sair, a autorização continua valendo, só para este valor e só para o contrato desta troca."))
         }
         for (aviso in revisao.avisos) Faixa(TipoDeFaixa.cautela, aviso, Modifier.padding(top = Espaco.sm))
+        // A troca e a ordem limite numa conta com outra chave no controle: o que for comprado chegaria nela (pedido do dono,
+        // 15/11/2026, a forma mais segura), como no iOS. O nucleo recusa de novo na assinatura.
+        revisao.fechada?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.sm)) }
         (erro ?: revisao.erro)?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
     }
-    BotaoPrimario(frases.confirmar, Modifier.padding(top = Espaco.sm), carregando = controle.trabalhando) {
+    BotaoPrimario(frases.confirmar, Modifier.padding(top = Espaco.sm), ligado = revisao.fechada == null, carregando = controle.trabalhando) {
         escopo.launch {
             erro = null
             erro = assinar(controle, r, frases, revisao.titulo)
@@ -264,7 +267,9 @@ private suspend fun assinar(controle: ControleDaTroca, r: RetratoDaTroca, frases
         val pedido = if (frases.tipo == "cancelar") {
             t("Para cancelar a ordem de %@, digite a passphrase. Depois vem a biometria ou o PIN, como sempre.", r.nomeDaCarteira)
         } else null
-        passphrase = PedidoDePassphrase.pedir(r.nomeDaCarteira, pedido) ?: return null
+        // Toda assinatura oferece a folga, cancelar ordem tambem (pedido do dono, 08/11/2026): ela so comeca depois de o
+        // assinador conferir a passphrase, e a biometria ou o PIN continuam.
+        passphrase = PedidoDePassphrase.pedir(r.nomeDaCarteira, pedido, ofereceFolga = true) ?: return null
     }
     val naoSaiu = when (frases.tipo) {
         "limite" -> t("A ordem não saiu. Nada foi debitado.")

@@ -77,16 +77,39 @@ struct SupportView: View {
     @State private var noMailApp = false
     @State private var sent = false
     @Environment(\.openURL) private var openURL
+    @Environment(AppSession.self) private var session
     @FocusState private var writing: Bool
 
-    /// Seis palavras seguidas da lista BIP-39 e texto de senha da carteira, nao conversa.
-    private var looksLikePhrase: Bool { Self.longestWordRun(details) >= 6 || Self.longestWordRun(transaction) >= 6 }
+    /// A chave, a frase ou um pedaco dela, e no texto os hexadecimais longos (`PrivateKeyGuard.supportSecret`): o chamado nao sai
+    /// (revisao dos 3 agentes, 09/11/2026). A conta roda fora da linha principal, depois de uma pausa curta na digitacao, e de
+    /// novo no Enviar; ate ela chegar, o Enviar espera.
+    @State private var secret: PrivateKeyGuard.FreeTextSecret = .none
+    @State private var checkedFor: String?
+    private var checkKey: String { details + "\u{0}" + sentTransaction + "\u{0}" + (sentChain?.id ?? "") }
+    /// O ID e a rede so contam no assunto que os pede: fora dele, nem vao no chamado.
+    private var sentTransaction: String { topic?.asksTransaction == true ? transaction : "" }
+    private var sentChain: Chain? { topic?.asksNetwork == true ? chain : nil }
+    /// Os enderecos que o app ja conhece na rede do chamado (as contas, os contatos, os destinos de envios): so eles passam no
+    /// texto. O 0x mais 64 desconhecido na Aptos ou na Sui pode ser a chave da Petra.
+    private var knownAddresses: Set<String> {
+        guard let chain = sentChain else { return [] }
+        let id = chain.id
+        let metadata = session.metadata
+        let accounts = metadata.wallets.flatMap(\.accounts).filter { $0.chainID == id }.map(\.address)
+        let contacts = metadata.contacts.filter { $0.chainID == id }.map(\.address)
+        // Tambem os contratos publicos: o USDC e o USDt oficiais e as moedas custom da carteira.
+        return Set((accounts + contacts + (metadata.sentTo[id] ?? [])).map(PrivateKeyGuard.hexKey))
+            .union(PrivateKeyGuard.publicContracts(on: chain, assetIDs: metadata.customTokens.map(\.id)))
+    }
+    private var looksLikePhrase: Bool { secret != .none }
+    /// Os campos param onde a conferencia alcanca, como no Android.
+    static let fieldLimit = 4096
     private var replyEmail: String { email.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var emailValid: Bool { replyEmail.wholeMatch(of: /[^@\s]+@[^@\s]+\.[^@\s]{2,}/) != nil }
     private var emailsMatch: Bool { replyEmail.lowercased() == emailAgain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
     private var canSend: Bool {
         topic != nil && details.trimmingCharacters(in: .whitespacesAndNewlines).count >= 10 && !looksLikePhrase
-            && emailValid && emailsMatch
+            && checkedFor == checkKey && emailValid && emailsMatch
     }
 
     var body: some View {
@@ -166,9 +189,27 @@ struct SupportView: View {
                 }
                 .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.body))
                 .padding(.top, Space.sm)
-                if looksLikePhrase {
+                switch secret {
+                case .none:
+                    EmptyView()
+                case .secret:
                     Banner(kind: .failure, title: String(localized: "Isto parece a senha da carteira"),
-                           message: String(localized: "Apague as palavras antes de mandar. Ninguém da Escalibur precisa delas, nem para ajudar."))
+                           message: String(localized: "Apague as palavras ou a chave antes de mandar. Ninguém da Escalibur precisa delas, nem para ajudar."))
+                        .padding(.top, Space.sm)
+                case .words(let run):
+                    // O trecho que pesou: quem so conversava sabe o que trocar. Ele ja esta na tela, no campo.
+                    Banner(kind: .failure, title: String(localized: "Isto parece a senha da carteira"),
+                           message: String(localized: "As palavras “\(run)” estão na lista das senhas de carteira. Se forem da sua, apague. Se não, escreva de outro jeito."))
+                        .padding(.top, Space.sm)
+                case .hex:
+                    Banner(kind: .failure, title: String(localized: "Isto parece uma chave ou o código de uma transação"),
+                           message: topic?.asksTransaction == true
+                               ? String(localized: "Se for o código da transação, cole no campo do ID da transação. Se for uma chave, apague: ninguém da Escalibur precisa dela.")
+                               : String(localized: "Apague o código longo: neste assunto o suporte não precisa dele. Se for uma chave, ninguém da Escalibur precisa dela."))
+                        .padding(.top, Space.sm)
+                case .needsNetwork:
+                    Banner(kind: .failure, title: String(localized: "Isto parece uma chave ou o código de uma transação"),
+                           message: String(localized: "Escolha a rede acima, para o app conferir se isto é o código de uma transação dessa rede."))
                         .padding(.top, Space.sm)
                 }
 
@@ -199,10 +240,11 @@ struct SupportView: View {
                            message: String(localized: "Depois de enviar, a resposta do suporte chega no seu e-mail."))
                         .padding(.top, Space.md)
                 }
-                if noMailApp {
+                if noMailApp && !looksLikePhrase && checkedFor == checkKey {
                     Banner(kind: .neutral, title: String(localized: "Nenhum app de e-mail abriu"),
                            message: String(localized: "Copie o chamado e mande pelo e-mail que você usa. O endereço do suporte vai junto no texto."),
                            actionTitle: String(localized: "Copiar o chamado")) {
+                        guard PrivateKeyGuard.supportSecret(details: details, transaction: sentTransaction, chain: sentChain, known: knownAddresses) == .none else { return }
                         Pasteboard.copyTicket(String(localized: "Para: \(SupportContact.email)") + "\n" + subject + "\n\n" + ticketBody)
                     }
                     .padding(.top, Space.md)
@@ -229,6 +271,24 @@ struct SupportView: View {
             }
         }
         .background(Palette.void.ignoresSafeArea())
+        // O texto mudou: o "Copiar o chamado" de antes sai, e volta so pelo Enviar, que confere de novo (revisao dos 3 agentes).
+        .onChange(of: details) { _, new in
+            if new.count > Self.fieldLimit { details = String(new.prefix(Self.fieldLimit)) }
+            noMailApp = false
+        }
+        .onChange(of: transaction) { _, new in
+            if new.count > Self.fieldLimit { transaction = String(new.prefix(Self.fieldLimit)) }
+            noMailApp = false
+        }
+        .task(id: checkKey) {
+            let key = checkKey, text = details, id = sentTransaction, network = sentChain, known = knownAddresses
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            let found = await Task.detached(priority: .userInitiated) { PrivateKeyGuard.supportSecret(details: text, transaction: id, chain: network, known: known) }.value
+            guard !Task.isCancelled, key == checkKey else { return }
+            secret = found
+            checkedFor = key
+        }
         .navigationTitle("Suporte")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -294,6 +354,13 @@ struct SupportView: View {
     }
 
     private func send() {
+        // De novo, na hora: o resultado guardado pode ser de um texto de um instante antes.
+        let found = PrivateKeyGuard.supportSecret(details: details, transaction: sentTransaction, chain: sentChain, known: knownAddresses)
+        guard found == .none else {
+            secret = found
+            checkedFor = checkKey
+            return
+        }
         writing = false
         noMailApp = false
         sent = false
@@ -306,24 +373,6 @@ struct SupportView: View {
         } else {
             noMailApp = true
         }
-    }
-
-    /// As palavras da lista BIP-39 (todas as listas latinas, sem acento), para reconhecer
-    /// uma senha de carteira colada no texto.
-    private static let bip39Words: Set<String> = Set(WordLexicon.entries.compactMap(\.folded))
-
-    /// A maior sequencia de palavras seguidas do texto que estao na lista BIP-39.
-    static func longestWordRun(_ text: String) -> Int {
-        var longest = 0, run = 0
-        for token in text.split(whereSeparator: { !$0.isLetter }) {
-            if bip39Words.contains(WordLexicon.fold(String(token))) {
-                run += 1
-                longest = max(longest, run)
-            } else {
-                run = 0
-            }
-        }
-        return longest
     }
 }
 

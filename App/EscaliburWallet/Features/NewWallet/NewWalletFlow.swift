@@ -159,6 +159,14 @@ struct NewWalletFlow: View {
         // As palavras, a conferencia e as sugestoes da conferencia: tudo atras da guarda
         // (auditoria 4, C7-11).
         .guardedAgainstCapture()
+        // Travar zera a frase da carteira recem-criada na hora do aviso: suspenso, o SwiftUI so tira a tela na volta, e a frase
+        // ficava na memoria do iPhone travado (revisao dos 3 agentes, 09/11/2026; o Android zera o rascunho no travar). A carteira
+        // ja guardada fica "Palavras nao confirmadas", como no "Confirmar depois".
+        .onReceive(NotificationCenter.default.publisher(for: AppSession.didLock)) { _ in
+            drawnWord = nil
+            guard draft != nil else { return }
+            cancel()
+        }
     }
 
     /// Antes das palavras (pedido do dono, 15/10/2026: mais bonita e com animacao): a
@@ -320,7 +328,8 @@ struct NewWalletFlow: View {
             let name = session.metadata.wallets.isEmpty ? String(localized: "Carteira principal") : String(localized: "Carteira \(session.metadata.wallets.count + 1)")
             let words = wordCount
             guard let saved = try await auth.retrying(reason: String(localized: "Guardar a carteira nova neste iPhone"), { credential in
-                try await session.addWallet(secret: secret, name: name, origin: .created, wordCount: words, backupConfirmed: false, credential: credential)
+                try await session.addWallet(secret: secret, name: name, origin: .created, wordCount: words, backupConfirmed: false,
+                                            chosenWords: ownWords, credential: credential)
             }) else {
                 secret.wipe()
                 newDraft.wipe()
@@ -338,10 +347,10 @@ struct NewWalletFlow: View {
     }
 
     private func confirmed() {
-        guard var wallet else { return }
-        wallet.backupConfirmedAt = .now
-        session.update(wallet)
-        self.wallet = wallet
+        // A carteira gravada, e nao a copia de quando foi guardada: a conferencia das palavras escolhidas grava a marca no
+        // meio, e a copia velha a apagava (rodada 7 da auditoria 8).
+        guard let id = wallet?.id else { return }
+        wallet = session.update(id) { $0.backupConfirmedAt = .now } ?? wallet
         draft?.wipe()
         draft = nil
         step = .created

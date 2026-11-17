@@ -60,7 +60,7 @@ public actor PolkadotReader {
         let hosts = (providers.map(\.baseURL) + [sidecar, history]).compactMap(\.host)
         self.transport = PacedTransport(base: transport, intervals: Dictionary(hosts.map { ($0, pacing) }, uniquingKeysWith: { a, _ in a }))
         self.providers = providers
-        self.pool = ProviderPool(providers)
+        self.pool = ProviderPool(providers, draws: transport.drawsProviders)
         self.sidecar = sidecar
         self.historyURL = history
     }
@@ -104,6 +104,35 @@ public actor PolkadotReader {
         )
     }
 
+    /// `twox128("Proxy") ++ twox128("Proxies")`, o prefixo do mapa `Proxy.Proxies` (`Twox64Concat`): a chave de cada
+    /// conta e este prefixo, o xxHash64 da conta e a conta. Conferido com o mesmo xxHash que da o `System.Account` acima.
+    static let proxiesPrefix: [UInt8] = [UInt8](hex: "1809d78346727a0ef58c0fa03bafa3231d885dcfb277f185f2d8e62a5f290c85")!
+
+    /// Outra conta registrada como procuradora da do dono (`Proxy.Proxies`): ela assina no lugar dele, e no tipo `Any`
+    /// move o saldo. Dois provedores no bloco de referencia; sem registro, nao ha (auditoria 8, 14/11/2026).
+    /// Por `Quorum.firm`; com `everyone` (para tirar a marca), todos os provedores iguais. Nil quando nada decide.
+    public func proxies(owner: PolkadotAddress, everyone: Bool = false) async throws -> Bool? {
+        // Para tirar a marca (`everyone`), cada dono no bloco mais novo dele, e nao no fixado por dois (rodada 2 da auditoria 8).
+        let at: String? = everyone ? nil : Hex.encode(try await checkpoint().hash, prefix: true)
+        let key = Self.proxiesKey(owner)
+        return try await Quorum.firm(await live(), pool: pool, everyone: everyone) { provider in
+            try await self.ensureGenesis(provider)
+            let params: [StrictJSON] = [.string(key)] + (at.map { [.string($0)] } ?? [])
+            return Self.hasProxies(try Self.optionalHex(try await self.call(provider, "state_getStorage", params), "storage"))
+        }
+    }
+
+    static func proxiesKey(_ address: PolkadotAddress) -> String {
+        Hex.encode(proxiesPrefix + XXHash64.twox64(address.accountID) + address.accountID, prefix: true)
+    }
+
+    /// O valor e `(Vec<ProxyDefinition>, Balance)`: o comprimento compacto da lista na frente. Zero (o byte `0x00`), ou
+    /// nada guardado, e lista vazia.
+    static func hasProxies(_ raw: [UInt8]?) -> Bool {
+        guard let first = raw?.first else { return false }
+        return first != 0
+    }
+
     /// A taxa da transacao exata no bloco de referencia, igual em dois provedores. Um no
     /// que nao decodifica a transacao responde com erro, e nao ha taxa.
     public func fee(for extrinsic: [UInt8], at checkpoint: PolkadotCheckpoint) async throws -> BigUInt {
@@ -124,13 +153,19 @@ public actor PolkadotReader {
         }
     }
 
+    /// Quantos blocos finalizados as duas pontas podem diferir.
+    static let maxHeadGap: UInt64 = 10
+
     /// O finalizado mais baixo de dois provedores, e o hash dele igual em dois.
     func checkpoint() async throws -> PolkadotCheckpoint {
         let providers = await live()
         let heads = try await Quorum.collect(providers, pool: pool, count: 2) { provider in
             try await self.finalizedNumber(provider)
         }
-        guard let number = heads.map(\.value).min() else { throw ReaderError.notEnoughProviders(needed: 2, got: 0) }
+        guard let number = heads.map(\.value).min(), let high = heads.map(\.value).max() else { throw ReaderError.notEnoughProviders(needed: 2, got: 0) }
+        // As duas pontas finalizadas perto uma da outra (uns 60 s): o menor de dois sem limite deixava um no fixar um bloco antigo,
+        // de antes do procurador (rodada 1 da auditoria 8).
+        guard high - number <= Self.maxHeadGap else { throw ReaderError.providersDisagree(field: "chain_getFinalizedHead") }
         let hash = try await Quorum.agree(providers, pool: pool, field: "checkpoint") { provider in
             try await self.blockHash(provider, number)
         }

@@ -183,8 +183,9 @@ struct TronPlannerTests {
         #expect(Self.line(plan, "Custo estimado") == "1 TRX queimados")
         // 5 TRX: varint de 4 bytes (268), mais tag, tamanho e 11 bytes de memo.
         #expect(TronTransaction.bandwidthBytes(of: tx.raw) == 268 + 2 + 11)
+        // "z", e nao "a": 257 letras "a" sao hex longo, e a trava de chave pega antes do tamanho (memoHasSecret).
         #expect(throws: TronPlanError.memoTooLong(maxBytes: 256)) {
-            try Self.sendTRX(5_000_000, memo: String(repeating: "a", count: 257), state: Self.state())
+            try Self.sendTRX(5_000_000, memo: String(repeating: "z", count: 257), state: Self.state())
         }
     }
 

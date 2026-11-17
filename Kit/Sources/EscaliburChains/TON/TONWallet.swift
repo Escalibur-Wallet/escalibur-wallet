@@ -172,8 +172,9 @@ public struct TONWallet: Sendable, Hashable {
 /// Um caminho e uma versao que outra carteira BIP-39 pode ter usado para a TON.
 ///
 /// Importar com o esquema errado mostra saldo zero, e o dono conclui que perdeu o
-/// dinheiro. A importacao consulta o estado de cada candidato (saldo, estado da
-/// conta) e grava o que achou; sem nada achado, fica o padrao da Escalibur.
+/// dinheiro. Depois de gravar, o app confere a W5 da mesma chave (`TONDiscovery`) e passa
+/// para ela quando so ela teve movimento; sem nada achado, fica o padrao da Escalibur. O
+/// caminho da Ledger Live (outra chave) nao e consultado.
 public struct TONDerivationScheme: Sendable, Hashable {
     public let path: DerivationPath
     public let version: TONWalletVersion

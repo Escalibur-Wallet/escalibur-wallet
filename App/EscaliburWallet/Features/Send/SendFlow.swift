@@ -4,6 +4,7 @@ import EscaliburEngines
 import EscaliburKeys
 import EscaliburNetwork
 import SwiftUI
+import UIKit
 
 /// O estado de um envio em andamento.
 @MainActor
@@ -56,20 +57,35 @@ final class SendModel {
 
     /// O destino de agora passou pelos passos do Continuar: a consulta (tag, ativacao) e a rede do primeiro envio.
     var destinationStepsDone: Bool { destinationInfo != nil && (!needsNetworkConfirmation || networkConfirmed) }
-    /// Primeiro envio sem historico para comparar: os 6 do meio que o dono digita.
+    /// Primeiro envio sem historico para comparar (ou "Conferir o endereco em todo envio"): os 6 ultimos que o dono digita, ou o
+    /// nome inteiro de uma conta NEAR.
     var blindSegment: AddressPoisoning.Segment?
-    /// O endereco como foi colado: o desafio do meio e conferido nele, com o trecho
+    /// Nome da NEAR: o texto cujo desafio ja nasceu, no toque do Continuar ou na entrada inteira. Digitando, cada comeco ja e
+    /// conta valida ("bo" de "bob.near"), e o desafio nascia no segundo caractere. So o texto, sem a rede: colado noutra rede e
+    /// trocado para a NEAR pela sugestao, o nome voltava a vista (revisao dos 3 agentes, 09/11/2026).
+    var nearArmedFor: String?
+    /// Nome da NEAR valido no campo, com o desafio ainda por nascer: o Continuar o faz nascer.
+    var nearPending = false
+    /// O nome inteiro digitado nao conferiu no toque do Continuar.
+    var wholeNameMiss = false
+    /// A tag, o memo ou o comentario tinha um segredo e foi apagado: o aviso fica ate o dono digitar outra coisa.
+    var tagNotice: String?
+    /// Primeiro envio para quem nao e contato nem carteira: o desafio escondido pode nascer quando o prazo do historico vencer.
+    var blindPossible = false
+    /// O endereco como foi colado: o desafio escondido e conferido nele, com o trecho
     /// escondido na tela, para o dono ler na fonte (revisao da auditoria 4, M-1).
     var blindSource = ""
     var blindCheck = ""
-    /// O desafio escondido e o da opcao "Conferir o endereco em todo envio" (os 6 ultimos), e
-    /// nao o do historico ilegivel (o meio): muda so o texto da tela.
+    /// O desafio escondido e o da opcao "Conferir o endereco em todo envio", e nao o do historico
+    /// ilegivel: os dois pedem o mesmo trecho, e muda so o texto da tela.
     var everySendCheck = false
     var isFirstSend = false
     var tagText = ""
     /// A tag ou o memo que o QR ou o link trazia: ja no campo, e dito na tela para o dono
     /// conferir (auditoria 4, B5).
     var linkTag: String?
+    /// O prazo do pedido de pagamento lido (o `exp` da TON) e o endereco a que ele vale (rodada 3 da auditoria 8).
+    var linkExpiry: (address: String, expiresAt: UInt64)?
     var skippedTag = false
     /// O dono abriu o campo opcional de tag, memo ou comentario (auditoria 2, M5).
     var showOptionalTag = false
@@ -159,17 +175,16 @@ final class SendModel {
     /// do meio onde o destino difere do conhecido, lendo-o em vez de reconhecer as
     /// pontas. Com a mesma conta e outro ID, quem digitou o ID que quem recebe mostra.
     var lookalikeCleared: Bool {
+        if nearPending { return false }
         if let segment = blindSegment {
-            let typed = blindCheck.trimmingCharacters(in: .whitespaces).lowercased()
-            guard typed.count == segment.length, typed == segment.text(in: blindSource).lowercased() else { return false }
+            guard AddressPoisoning.answers(blindCheck, segment: segment, of: blindSource, chain: chain) else { return false }
         }
         if otherID != nil {
             guard let address = destination?.address, AddressPoisoning.muxedIDConfirmed(otherIDCheck, address: address) else { return false }
         }
         guard lookalike != nil, let address = destination?.address else { return true }
         guard let segment = lookalikeSegment else { return false }
-        let typed = lookalikeCheck.trimmingCharacters(in: .whitespaces).lowercased()
-        return typed.count == segment.length && typed == segment.text(in: address).lowercased()
+        return AddressPoisoning.answers(lookalikeCheck, segment: segment, of: address, chain: chain)
     }
 
     /// Um desafio do destino esta na tela (parecido, ID trocado, ou o trecho escondido sem
@@ -179,6 +194,38 @@ final class SendModel {
     var challengeOnScreen: Bool {
         destination != nil && (lookalike != nil || otherID != nil || blindSegment != nil)
     }
+
+    /// O desafio na tela e o nome inteiro de uma conta NEAR: a resposta e conferida no toque do Continuar, e nao ao vivo. Ao vivo,
+    /// o Continuar acendia no meio do nome verdadeiro, no tamanho de um colado que fosse o comeco dele (revisao dos 3 agentes,
+    /// 09/11/2026).
+    var wholeNameOnScreen: Bool {
+        if lookalike != nil { return lookalikeSegment.map { AddressPoisoning.coversAll($0, of: destination?.address ?? "") } ?? false }
+        return blindSegment.map { AddressPoisoning.coversAll($0, of: blindSource) } ?? false
+    }
+
+    var wholeNameTyped: Bool { wholeNameOnScreen && !(lookalike != nil ? lookalikeCheck : blindCheck).isEmpty }
+
+    /// O nome da NEAR que entrou inteiro e ainda nao tem o desafio calculado: o historico da rede chegando (ate 4 s, e quem
+    /// segura o indexador estica), ou a rede errada com a sugestao da NEAR. O campo e os blocos ficam escondidos, como com o
+    /// desafio na tela: a vista, o dono lia o nome trocado e o digitava de memoria (revisao dos 3 agentes, 09/11/2026).
+    /// So na NEAR (com destino) ou com o texto que e nome da NEAR (sem destino): o bc1 e o addr1 tambem passam pela gramatica do
+    /// nome, e na Bitcoin o campo sumia a toa enquanto o historico chegava.
+    var wholeEntryHidden: Bool {
+        let text = destinationText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return false }
+        // Sem destino: o colado inteiro que a sugestao de rede torna destino com um desafio (revisao dos 3 agentes, 09/11/2026). No
+        // envio, a rede so muda pela sugestao: sem ela ("vitalik.eth"), esconder so tirava do dono o que ele colou. A sugestao e o
+        // Editar ficam fora do campo escondido.
+        guard destination != nil, let chain else { return nearArmedFor == text && networkSuggestion != nil }
+        guard !historyLoaded else { return false }
+        // Nome da NEAR digitado letra a letra fica a vista (o desafio espera o Continuar); armado, escondido.
+        if chain.family == .near, AddressPoisoning.wholeNEARName(text, chain: chain) != nil { return nearArmedFor == text }
+        // Em toda rede, o desafio escondido pode nascer quando o prazo do historico vencer: a vista, os blocos destacavam o fim, e
+        // o dono digitava de memoria quase toda a resposta dos 6 ultimos (revisao dos 3 agentes, 09/11/2026).
+        return blindPossible
+    }
+
+    var hideDestination: Bool { challengeOnScreen || wholeEntryHidden }
 
     /// O dono quer mudar o endereco com um desafio na tela: o campo volta vazio, e o desafio
     /// sai junto com o endereco. A tag de antes tambem sai: ela era do destino de antes
@@ -195,8 +242,12 @@ final class SendModel {
         blindSegment = nil
         blindCheck = ""
         everySendCheck = false
+        nearArmedFor = nil
+        nearPending = false
+        wholeNameMiss = false
         tagText = ""
         linkTag = nil
+        linkExpiry = nil
     }
 
     /// Endereco M da Stellar: o id do cliente ja vai nele, e um memo junto seria um
@@ -499,7 +550,12 @@ struct SendStages: View {
             guard wallet.id != current, !wallet.isWatchOnly, wallet.hasBackup, let address = wallet.account(chain)?.address, !address.isEmpty,
                   // A carteira com a Tron em outra chave nao e sua em rede nenhuma: quem trocou a
                   // chave tem as palavras (revisao de seguranca de 01/11/2026).
-                  wallet.tronForeignControl != true else { return nil }
+                  wallet.tronForeignControl != true,
+                  // Nem a conta com outra chave ou contrato no controle nesta rede: o que entrar nela pode sair sem a
+                  // assinatura do dono, e aqui ele nao ve o aviso do Receber (auditoria 8, 14/11/2026).
+                  wallet.foreignControl(on: chain) == nil,
+                  // Nem a importada que nunca foi conferida (rodada 5 da auditoria 8).
+                  wallet.controlChecked(on: chain) else { return nil }
             return (wallet, address)
         }
     }
@@ -516,6 +572,7 @@ struct SendStages: View {
                     }
                     ForEach(ownWallets, id: \.wallet.id) { item in
                         Button {
+                            armNEAR(item.address)
                             model.destinationText = item.address
                             model.tagText = ""
                             pickingWallet = false
@@ -578,7 +635,7 @@ struct SendStages: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                 Text("Para").typeStyle(.note).foregroundStyle(Palette.inkSoft).padding(.top, Space.lg)
-                if model.challengeOnScreen {
+                if model.hideDestination {
                     HiddenAddressField { model.editDestination() }
                         .padding(.top, Space.xs)
                 } else {
@@ -591,7 +648,13 @@ struct SendStages: View {
                             .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).stroke(Palette.edge, lineWidth: 1)))
                         .padding(.top, Space.xs)
                     HStack(spacing: Space.xs) {
-                        AppPasteButton { text in apply(PaymentURI.read(text)) }
+                        AppPasteButton { text in
+                            let reading = PaymentURI.read(text)
+                            // A frase ou a chave colada sai tambem da area de transferencia, pela mesma regra do Android (revisao dos 3
+                            // agentes, 09/11/2026).
+                            if PrivateKeyGuard.clipboardHasSecret(text, on: model.chain) { Pasteboard.clearSecret() }
+                            apply(reading)
+                        }
                         .labelStyle(.titleOnly).tint(Palette.rail).buttonBorderShape(.capsule)
                         Button { scanning = true } label: {
                             Label("Ler QR", systemImage: "qrcode.viewfinder").typeStyle(.label)
@@ -616,20 +679,35 @@ struct SendStages: View {
                 optionalTag.id("tag-opcional")
 
                 if let lookalike = model.lookalike, let destination = model.destination, let chain = model.chain {
-                    Banner(kind: .caution, title: String(localized: "Endereço parecido com um que você já usou"),
-                           message: String(localized: "As pontas são iguais, o meio é diferente. Golpistas mandam centavos de um endereço assim para ele aparecer no seu histórico."))
+                    // Parecido com nome da NEAR: o aviso e o do nome, e o desafio, o nome colado inteiro, a vista acima (revisao dos 3
+                    // agentes, 08/11/2026).
+                    let wholeLookalike = model.lookalikeSegment.map { AddressPoisoning.coversAll($0, of: destination.address) } ?? false
+                    Banner(kind: .caution,
+                           title: wholeLookalike ? String(localized: "Nome parecido com um que você já usou") : String(localized: "Endereço parecido com um que você já usou"),
+                           message: wholeLookalike ? String(localized: "Golpistas registram por centavos nomes assim, para o envio cair na conta deles.")
+                                                   : String(localized: "As pontas são iguais, o meio é diferente. Golpistas mandam centavos de um endereço assim para ele aparecer no seu histórico."))
                         .padding(.top, Space.md)
                     VStack(alignment: .leading, spacing: Space.sm) {
-                        comparedAddress(String(localized: "Você colou"), destination.address, model.lookalikeSegment)
+                        // O nome colado escondido, como no desafio escondido: a vista, quem copiasse da tela passava (revisao dos 3
+                        // agentes, 09/11/2026). O conhecido fica a vista.
+                        MarkedAddress(label: String(localized: "Você colou"), address: destination.address, segment: model.lookalikeSegment,
+                                      masked: wholeLookalike)
                         comparedAddress(KnownAddress.label(lookalike, chain: chain, session: session, history: model.historyRecipients), lookalike,
                                         AddressPoisoning.differingSegment(lookalike, from: destination.address, chain: chain))
                     }
                     .padding(.top, Space.sm)
-                    Text("Para seguir, digite os 6 caracteres marcados do endereço que você colou.")
+                    Text(wholeLookalike
+                         ? String(localized: "Para seguir, digite o nome inteiro da conta, com o final (como .near), lendo no lugar de onde você copiou o endereço.")
+                         : String(localized: "Para seguir, digite os 6 caracteres marcados do endereço que você colou."))
                         .typeStyle(.note).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm)
                         .fixedSize(horizontal: false, vertical: true)
-                    CharacterBoxes(text: $model.lookalikeCheck, count: model.lookalikeSegment?.length ?? 6, identifier: "conferir-trecho-endereco")
+                    if AddressPoisoning.caseMatters(destination.address, chain: chain) { CaseNote().padding(.top, Space.xxs) }
+                    // Acima do campo: abaixo, o teclado e o Continuar o cobriam.
+                    if model.wholeNameMiss { WholeNameMiss().padding(.top, Space.xs) }
+                    CharacterBoxes(text: $model.lookalikeCheck, count: model.lookalikeSegment?.length ?? 6,
+                                   limit: wholeLookalike ? AddressPoisoning.wholeNameLimit : nil, identifier: "conferir-trecho-endereco")
                         .padding(.top, Space.sm)
+                        .id("campo-do-desafio")
                 }
 
                 if let known = model.otherID, let destination = model.destination, let chain = model.chain {
@@ -640,9 +718,12 @@ struct SendStages: View {
                 }
 
                 if model.lookalike == nil, let segment = model.blindSegment, model.destination != nil {
+                    // Na NEAR com nome, o trecho e o nome inteiro, com o registro (revisao dos 3 agentes, 08/11/2026).
+                    let wholeName = AddressPoisoning.coversAll(segment, of: model.blindSource)
                     if model.everySendCheck {
                         Banner(kind: .neutral, title: String(localized: "Conferência do endereço"),
-                               message: String(localized: "Você pediu para conferir o endereço em todo envio. Os 6 últimos caracteres estão escondidos."),
+                               message: wholeName ? String(localized: "Você pediu para conferir o endereço em todo envio. O nome da conta está escondido.")
+                                                  : String(localized: "Você pediu para conferir o endereço em todo envio. Os 6 últimos caracteres estão escondidos."),
                                plain: true)
                             .padding(.top, Space.md)
                     } else {
@@ -651,12 +732,18 @@ struct SendStages: View {
                             .padding(.top, Space.md)
                     }
                     MarkedAddress(label: String(localized: "Você colou"), address: model.blindSource, segment: segment, masked: true).padding(.top, Space.sm)
-                    Text(model.everySendCheck ? String(localized: "Para seguir, digite os 6 últimos caracteres, lendo no lugar de onde você copiou o endereço.")
-                         : String(localized: "Para seguir, digite os 6 caracteres escondidos, lendo no lugar de onde você copiou o endereço."))
+                    Text(wholeName
+                         ? String(localized: "Para seguir, digite o nome inteiro da conta, com o final (como .near), lendo no lugar de onde você copiou o endereço.")
+                         : String(localized: "Para seguir, digite os 6 últimos caracteres, lendo no lugar de onde você copiou o endereço."))
                         .typeStyle(.note).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm)
                         .fixedSize(horizontal: false, vertical: true)
-                    CharacterBoxes(text: $model.blindCheck, count: segment.length, identifier: "conferir-meio-endereco")
+                    if let chain = model.chain, AddressPoisoning.caseMatters(model.blindSource, chain: chain) { CaseNote().padding(.top, Space.xxs) }
+                    // Acima do campo: abaixo, o teclado e o Continuar o cobriam.
+                    if model.wholeNameMiss { WholeNameMiss().padding(.top, Space.xs) }
+                    CharacterBoxes(text: $model.blindCheck, count: segment.length, limit: wholeName ? AddressPoisoning.wholeNameLimit : nil,
+                                   identifier: "conferir-meio-endereco")
                         .padding(.top, Space.sm)
+                        .id("campo-do-desafio")
                 }
 
                 networkConfirmation
@@ -665,7 +752,17 @@ struct SendStages: View {
             .padding(.bottom, Space.lg)
             // Na pilha, e nao no campo: o campo some com um desafio na tela, e o "Editar"
             // que o devolve vazio tem de validar de novo.
-            .onChange(of: model.destinationText) { _, _ in validate() }
+            // O endereco que entra inteiro pelo Colar do menu do campo: o desafio do nome nasce na hora, como no colar, no QR e
+            // nos contatos. So a digitacao, letra a letra, espera o Continuar.
+            .onChange(of: model.destinationText) { old, new in
+                // Colado pelo menu do sistema: com um segredo, a area de transferencia esvazia tambem (o campo esvazia na validacao),
+                // como no Colar do app (revisao dos 3 agentes, 09/11/2026).
+                if new.count > old.count + 1, PrivateKeyGuard.clipboardHasSecret(new, on: model.chain) { Pasteboard.clearSecret() }
+                if AddressPoisoning.enteredWhole(from: old, to: new) { armNEAR(new) }
+                validate()
+            }
+            .onChange(of: model.blindCheck) { _, _ in model.wholeNameMiss = false }
+            .onChange(of: model.lookalikeCheck) { _, _ in model.wholeNameMiss = false }
         }
         .scrollDismissesKeyboard(.interactively)
         // Com o teclado aberto, o Continuar cobria a tag opcional logo abaixo do endereco
@@ -676,12 +773,18 @@ struct SendStages: View {
                   model.lookalike == nil, model.otherID == nil, model.blindSegment == nil else { return }
             withAnimation(Motion.fade) { proxy.scrollTo("tag-opcional", anchor: .bottom) }
         }
+        // O nome que nao conferiu: a mensagem entra acima do campo e o empurrava para tras do Continuar.
+        .onChange(of: model.wholeNameMiss) { _, miss in
+            guard miss else { return }
+            withAnimation(Motion.fade) { proxy.scrollTo("campo-do-desafio", anchor: .bottom) }
+        }
         }
         .safeAreaInset(edge: .bottom) {
-            PrimaryButton(title: String(localized: "Continuar"), enabled: model.destination != nil && model.historyLoaded && model.lookalikeCleared && tagProblem == nil
-                          && (!model.needsNetworkConfirmation || model.networkConfirmed),
+            PrimaryButton(title: String(localized: "Continuar"),
+                          enabled: model.destination != nil && model.historyLoaded && (model.lookalikeCleared || model.nearPending || model.wholeNameTyped)
+                          && tagProblem == nil && (!model.needsNetworkConfirmation || model.networkConfirmed),
                           loading: model.working || (model.destination != nil && !model.historyLoaded)) {
-                Task { await continueFromDestination() }
+                Task { await continueTapped() }
             }
             .padding(.top, Space.xs)
             .background(Palette.void)
@@ -702,7 +805,7 @@ struct SendStages: View {
                 // O endereco como ele vai para a transacao, com o comeco e o fim marcados
                 // para conferir contra a origem. Com um desafio na tela, ele some com o campo:
                 // o fim do ID e o trecho escondido se leriam aqui.
-                if !model.challengeOnScreen {
+                if !model.hideDestination {
                     AddressBlocks(address: destination.address).padding(.bottom, Space.xxs)
                 }
                 Text(KnownExchanges.name(for: destination.address).map { String(localized: "\($0), endereço de depósito") }
@@ -725,8 +828,10 @@ struct SendStages: View {
             Text("Endereços salvos").typeStyle(.note).foregroundStyle(Palette.inkSoft)
             ForEach(saved) { contact in
                 Button {
+                    armNEAR(contact.address)
                     model.destinationText = contact.address
                     model.tagText = contact.tag ?? ""
+                    guardTag(model.tagText)
                     validate()
                 } label: {
                     HStack {
@@ -762,6 +867,15 @@ struct SendStages: View {
         model.networkSuggestion = nil
         model.amountText = ""
         model.sendAll = false
+        // O historico era da rede de antes: zerado aqui, e nao so na leitura da nova, o nome colado nao aparece nem um quadro, e
+        // uma leitura da rede de antes que chegue depois nao vale (revisao dos 3 agentes, 09/11/2026; o trocarRede do Android
+        // faz igual).
+        model.historyReading?.cancel()
+        model.historyChainID = nil
+        model.historyLoaded = false
+        model.historyUnavailable = false
+        model.historySettled = false
+        model.historyRecipients = []
         validate()
     }
 
@@ -853,13 +967,13 @@ struct SendStages: View {
             let usage = model.wallet.utxoUsage[chain.id]
             model.historyReading = Task {
                 let read = try? await ActivitySources.source(for: chain)?.history(chain: chain, account: account, usage: usage)
-                guard !Task.isCancelled, model.historyChainID == chain.id else { return }
+                guard !Task.isCancelled, model.historyChainID == chain.id, model.chain?.id == chain.id else { return }
                 applyHistory(read, chain: chain)
             }
         }
         guard !model.historyLoaded else { return }
         try? await Task.sleep(for: Self.historyWait)
-        guard !Task.isCancelled, model.historyChainID == chain.id, !model.historyLoaded else { return }
+        guard !Task.isCancelled, model.historyChainID == chain.id, model.chain?.id == chain.id, !model.historyLoaded else { return }
         // O prazo passou sem a leitura: soma o historico guardado pela Atividade, e o desafio do primeiro envio.
         let cached = (session.metadata.activityCache?[model.wallet.id] ?? []).compactMap(\.entry).filter { $0.chainID == chain.id }
         model.historyRecipients = Array(Set(model.historyRecipients + Self.paidTo(cached)))
@@ -918,22 +1032,34 @@ struct SendStages: View {
         if problem == nil, let chain = model.chain {
             problem = PaymentURI.networkProblem(reading, chain: chain)
         }
+        // O link que pede outra moeda que a da tela (USDC pedido na tela do ETH): recusado, em vez de pagar a moeda da tela ao
+        // endereco que pediu outra (rodada 1 da auditoria 8).
+        if problem == nil, let holding = model.holding, !PaymentLink.matches(reading.asset, asset: holding.asset) {
+            problem = String(localized: "Este pedido é de outra moeda, e o envio é de \(holding.asset.symbol). Confira com quem pediu antes de enviar.")
+        }
         // Link de outra rede: o endereco nem entra no campo, para uma edicao nao soltar o
         // aviso e a tela aceitar o endereco de outra rede (revisao dos baixos, B1).
         let address = problem == nil ? reading.address : ""
         model.linkProblem = problem.map { (text: address, message: $0) }
+        armNEAR(address)
         model.destinationText = address
         // A tag de antes nunca fica para o destino novo, escondida ou nao (revisao da
         // auditoria 4, B-1): o campo fica com a do codigo, ou vazio.
         model.tagText = ""
         model.linkTag = nil
+        // O prazo do pedido vale enquanto o destino for o do link (rodada 3 da auditoria 8).
+        model.linkExpiry = problem == nil ? reading.expiresAt.map { (address: address, expiresAt: $0) } : nil
         validate()
         // A tag ou o memo do link vai para o campo, nunca some (auditoria 4, B5).
         if problem == nil, let tag = reading.tag, !tag.isEmpty, let chain = model.chain, chain.destinationTag != .none,
            model.destination != nil, !model.isMuxedStellar {
-            model.tagText = tag
-            model.linkTag = tag
-            model.showOptionalTag = true
+            // A guarda roda aqui, e nao so no onChange do campo: com a etapa da tag, o campo opcional nem esta na tela.
+            guardTag(tag)
+            if !PhraseGuard.tagHasSecret(tag) {
+                model.tagText = tag
+                model.linkTag = tag
+                model.showOptionalTag = true
+            }
         }
     }
 
@@ -950,6 +1076,9 @@ struct SendStages: View {
         // A resposta do trecho escondido e do desafio de antes: cada validacao pede de novo.
         model.blindCheck = ""
         model.everySendCheck = false
+        model.nearPending = false
+        model.wholeNameMiss = false
+        model.blindPossible = false
         // Pular a tag foi escolha para o destino de antes.
         model.skippedTag = false
         model.networkSuggestion = nil
@@ -965,11 +1094,13 @@ struct SendStages: View {
         }
         let text = model.destinationText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        // A frase digitada ou colada no campo do destino sai dele na hora.
-        if PhraseGuard.looksLikePhrase(text) {
+        // A frase (ou a chave) digitada ou colada no campo do destino sai dele na hora.
+        if let message = PhraseGuard.secretMessage(text, on: chain) {
+            // A frase tambem nao fica na marca do nome da NEAR (revisao dos 3 agentes, 09/11/2026).
+            model.nearArmedFor = nil
             model.destinationText = ""
-            model.linkProblem = (text: "", message: PhraseGuard.message)
-            model.destinationProblem = PhraseGuard.message
+            model.linkProblem = (text: "", message: message)
+            model.destinationProblem = message
             return
         }
         switch Address.validate(text, for: chain) {
@@ -985,6 +1116,12 @@ struct SendStages: View {
                 model.destinationProblem = String(localized: "Este endereço é da sua carteira na rede \(other.name). Nesta rede ele não é seu: o que for enviado se perde.")
                 return
             }
+            // Uma conta deste iPhone com outra chave no controle nesta rede: o envio para ela e um deposito que quem controla a
+            // outra chave leva (pedido do dono, 15/11/2026, a forma mais segura, como o Receber).
+            if let owner = session.markedOwner(of: destination.address, on: chain) {
+                model.destinationProblem = String(localized: "Este endereço é da carteira \(owner.name), e lá a rede mostrou outra chave no controle. O que for enviado para ele, quem controla essa chave leva.")
+                return
+            }
             model.destination = destination
             if let tag = destination.tag { model.tagText = String(tag) }
             // Rede sem tag, ou endereco M da Stellar: nenhuma tag vai junto, mesmo uma que
@@ -997,9 +1134,15 @@ struct SendStages: View {
             // qualquer rede) nao contam como suas, e pedem a conferencia (auditoria de 30/10/2026,
             // revisao de 01/11/2026).
             let wallets = session.metadata.wallets.filter {
-                !$0.isWatchOnly && $0.hasBackup && $0.tronForeignControl != true
+                !$0.isWatchOnly && $0.hasBackup && $0.tronForeignControl != true && $0.foreignControl(on: chain) == nil && $0.controlChecked(on: chain)
             }.compactMap { $0.account(chain)?.address }
             let known = knownAddresses(chain)
+            model.blindPossible = model.isFirstSend && !contacts.contains(destination.address) && !wallets.contains(destination.address)
+            // Nome da NEAR: o desafio nasce no toque do Continuar, com o nome inteiro no campo (`continueTapped`).
+            if AddressPoisoning.wholeNEARName(text, chain: chain) != nil, model.nearArmedFor != text {
+                model.nearPending = true
+                return
+            }
             model.lookalike = AddressPoisoning.lookalike(destination.address, among: known, chain: chain)
             model.lookalikeSegment = model.lookalike.flatMap { AddressPoisoning.differingSegment(destination.address, from: $0, chain: chain) }
             // Endereco M da mesma conta de um ja usado (ou de um contato G salvo com o ID no
@@ -1008,13 +1151,15 @@ struct SendStages: View {
             model.otherID = AddressPoisoning.sameAccountOtherID(destination.address, among: known,
                                                                 tagged: Self.taggedContacts(chain, session: session), chain: chain)
             // Sem historico da rede, o primeiro envio para endereco que nao e contato nem
-            // carteira deste iPhone pede um trecho do endereco digitado, escondido: o meio,
-            // ou, num M, o fim do ID (o meio de um M e a chave, igual em todo M da conta).
-            // Com o ID trocado, o desafio do ID basta.
+            // carteira deste iPhone pede um trecho do endereco digitado, escondido: os 6 ultimos,
+            // faceis de achar onde ele foi copiado (pedido do dono, 08/11/2026; antes era o meio, e
+            // o dono escolheu o fim sabendo que quem troca o endereco copiado imita as pontas). Num M,
+            // o fim e o do ID. Com o ID trocado, o desafio do ID basta. O parecido continua no trecho
+            // onde os dois diferem, e o contato salvo, no meio.
             if model.lookalike == nil, model.otherID == nil, model.isFirstSend, model.historyUnavailable,
                !contacts.contains(destination.address), !wallets.contains(destination.address) {
                 model.blindSource = text
-                model.blindSegment = AddressPoisoning.blindSegment(text, chain: chain)
+                model.blindSegment = AddressPoisoning.tailSegment(text, chain: chain)
             }
             // "Conferir o endereco em todo envio" (Ajustes, Seguranca): sem outro desafio na tela,
             // todo envio pede os 6 ultimos caracteres, escondidos, lidos na fonte. O mesmo desafio
@@ -1023,14 +1168,21 @@ struct SendStages: View {
             // do dono, 30/10/2026).
             if session.confirmEveryAddressOn, model.lookalike == nil, model.otherID == nil, model.blindSegment == nil,
                !wallets.contains(destination.address),
-               let tail = AddressPoisoning.tailSegment(text) {
+               let tail = AddressPoisoning.tailSegment(text, chain: chain) {
                 model.blindSource = text
                 model.blindSegment = tail
                 model.everySendCheck = true
             }
         case .failure(let problem):
             model.destinationProblem = Self.message(problem, chain: chain)
-            if case .otherNetwork(let other) = problem { model.networkSuggestion = networkSuggestion(for: other) }
+            // A sugestao so quando o colado vale na rede sugerida: a Cardano reconhece tipos que ela mesma recusa como destino.
+            if case .otherNetwork(let other) = problem, case .success = Address.validate(text, for: other) {
+                model.networkSuggestion = networkSuggestion(for: other)
+            }
+            // Um nome (com ponto) noutra rede: o aviso diz que e um nome, e nao manda copiar de novo.
+            if case .malformed = problem, AddressPoisoning.nameNotAddress(text, on: chain) {
+                model.destinationProblem = String(localized: "Este é um nome, não um endereço. Cole o endereço da rede \(chain.name).")
+            }
         }
     }
 
@@ -1049,6 +1201,28 @@ struct SendStages: View {
                 ? String(localized: "Este endereço não é do \(chain.name). Confira se copiou inteiro.")
                 : String(localized: "Este endereço não é da \(chain.name). Confira se copiou inteiro.")
         }
+    }
+
+    /// O endereco entrou inteiro (colar, QR, contato, Minhas carteiras): o desafio do nome da NEAR nasce na hora. Adiar ate o
+    /// Continuar deixava o nome trocado a vista no campo, e o dono digitava de memoria o que o app mostrou, sem ler na fonte
+    /// (revisao dos 3 agentes, 09/11/2026).
+    private func armNEAR(_ text: String) {
+        model.nearArmedFor = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// O Continuar do destino. Nome da NEAR: o desafio nasce aqui, e nao na digitacao; o nome inteiro e conferido aqui, e nao ao
+    /// vivo (revisao dos 3 agentes, 09/11/2026). Sem desafio, segue direto. O `continueFromDestination` confere tudo de novo.
+    private func continueTapped() async {
+        if model.nearPending {
+            armNEAR(model.destinationText)
+            validate()
+            if model.challengeOnScreen { return }
+        } else if model.wholeNameOnScreen, !model.lookalikeCleared {
+            // Sem nada digitado (dois toques rapidos), nada a dizer: alarme falso ensina a ignorar o verdadeiro.
+            model.wholeNameMiss = model.wholeNameTyped
+            return
+        }
+        await continueFromDestination()
     }
 
     private func continueFromDestination() async {
@@ -1103,8 +1277,12 @@ struct SendStages: View {
                     .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.body)
                         .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).stroke(Palette.edge, lineWidth: 1)))
                     .accessibilityIdentifier("tag-opcional")
+                    .onChange(of: model.tagText) { _, new in guardTag(new) }
                 if let problem = tagProblem {
                     Text(problem).typeStyle(.note).foregroundStyle(Palette.down).fixedSize(horizontal: false, vertical: true)
+                }
+                if let notice = model.tagNotice {
+                    Text(notice).typeStyle(.note).foregroundStyle(Palette.down).fixedSize(horizontal: false, vertical: true)
                 }
                 if let linkTag = model.linkTag, linkTag == model.tagText {
                     Text("Veio do código que você leu. Confira com quem pediu.")
@@ -1194,8 +1372,14 @@ struct SendStages: View {
                 .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.body)
                     .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).stroke(Palette.edgeStrong, lineWidth: 1)))
                 .padding(.top, Space.lg)
+                .onChange(of: model.tagText) { _, new in guardTag(new) }
+                // A tag que ja veio preenchida (do link ou do contato) nao passa pelo onChange.
+                .onAppear { guardTag(model.tagText) }
             if let problem = tagProblem {
                 Text(problem).typeStyle(.note).foregroundStyle(Palette.down).padding(.top, Space.xs)
+            }
+            if let notice = model.tagNotice {
+                Text(notice).typeStyle(.note).foregroundStyle(Palette.down).padding(.top, Space.xs).fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
             PrimaryButton(title: String(localized: "Continuar"), enabled: !model.tagText.isEmpty && tagProblem == nil) {
@@ -1210,6 +1394,17 @@ struct SendStages: View {
                 }
                 .padding(.top, Space.sm)
             }
+        }
+    }
+
+    /// A frase ou a chave na tag, no memo ou no comentario sai do campo na hora: o comentario da TON vai a rede ja na estimativa
+    /// da taxa e, enviado, fica publico para sempre (revisao dos 3 agentes, 09/11/2026).
+    private func guardTag(_ text: String) {
+        if PhraseGuard.tagHasSecret(text) {
+            model.tagText = ""
+            model.tagNotice = PhraseGuard.tagMessage
+        } else if !text.isEmpty {
+            model.tagNotice = nil
         }
     }
 
@@ -1483,11 +1678,9 @@ struct SendStages: View {
             model.reviewChanged = false
             model.stage = .review
         } catch {
-            // A fila estava a frente da rede (transacao descartada): esquecida, o proximo
-            // plano parte do que a rede conhece.
-            if (error as? SendEngineError)?.isLocalNonceQueueAhead == true {
-                NonceQueue.clear(session, wallet: model.wallet.id, chain: chain, address: account.address)
-            }
+            // A fila a frente da rede nao e apagada aqui: a poda de antes do plano ja tira, no prazo dela, a transacao que a rede
+            // descartou. Apagar tudo numa leitura so (dois nos atrasados logo depois de uma confirmacao) fazia o plano seguinte reusar
+            // o nonce de uma transacao viva, como a troca pela rota privada (auditoria 8, 14/11/2026).
             model.error = (error as? LocalizedError)?.errorDescription ?? String(localized: "Não foi possível preparar o envio.")
         }
     }
@@ -1632,9 +1825,9 @@ struct SendStages: View {
             }
             return fresh
         } catch {
-            if (error as? SendEngineError)?.isLocalNonceQueueAhead == true {
-                NonceQueue.clear(session, wallet: model.wallet.id, chain: chain, address: account.address)
-            }
+            // A fila a frente da rede nao e apagada aqui: a poda de antes do plano ja tira, no prazo dela, a transacao que a rede
+            // descartou. Apagar tudo numa leitura so (dois nos atrasados logo depois de uma confirmacao) fazia o plano seguinte reusar
+            // o nonce de uma transacao viva, como a troca pela rota privada (auditoria 8, 14/11/2026).
             model.error = (error as? LocalizedError)?.errorDescription ?? String(localized: "Não foi possível renovar os dados da rede. Tente de novo.")
             return nil
         }
@@ -1681,6 +1874,11 @@ struct SendStages: View {
 
     private func warnings(_ plan: SigningPlan) -> [String] {
         var out: [String] = []
+        // Outra chave ou contrato no controle desta conta (auditoria 8, 14/11/2026): o envio segue, porque tirar o saldo
+        // dali e o que o dono precisa fazer, mas ele fica sabendo.
+        if let chain = model.chain, let mark = session.metadata.wallets.first(where: { $0.id == model.wallet.id })?.foreignControl(on: chain) {
+            out.append(mark.message)
+        }
         if let lookalike = model.lookalike { out.append(String(localized: "Endereço parecido com \(Fmt.address(lookalike, chain: model.chain)). Confira o endereço inteiro.")) }
         if model.otherID != nil || memoOtherID != nil {
             out.append(String(localized: "Mesma conta de um endereço que você já usou, com outro ID. Confira o ID com quem vai receber."))
@@ -1722,6 +1920,11 @@ struct SendStages: View {
             model.error = String(localized: "O envio montado não confere com o destino digitado. Nada foi assinado.")
             return
         }
+        // A marca que chegou depois do destino: nada e assinado para a conta que outra chave controla (15/11/2026).
+        if let destination = model.destination, let owner = session.markedOwner(of: destination.address, on: chain) {
+            model.error = String(localized: "Este endereço é da carteira \(owner.name), e lá a rede mostrou outra chave no controle. O que for enviado para ele, quem controla essa chave leva.")
+            return
+        }
         // Dado vencido nao se assina: renova aqui mesmo. Igual ao que o dono viu, segue com o
         // plano novo; diferente (valor ou taxa), mostra e pede para confirmar de novo.
         var renewed = current
@@ -1730,6 +1933,11 @@ struct SendStages: View {
             renewed = fresh
         }
         let plan = renewed
+        // O pedido de pagamento que venceu entre a leitura e a assinatura: o comerciante pode nao creditar (rodada 3).
+        if let expiry = model.linkExpiry, expiry.address == model.destinationText, PaymentLink.expired(expiry.expiresAt) {
+            model.error = String(localized: "Este pedido de pagamento venceu. Peça um novo a quem cobrou.")
+            return
+        }
         // Ate a assinatura: uma troca ou outro envio deste ativo pode ter saido depois da revisao.
         if let address = model.account?.address, sellsInFlight(chain: chain, address: address) { return }
         // Sem cotacao, o valor em reais e desconhecido e a voz e pedida (falha fechada). So a cotacao da fonte: a convertida na
@@ -1755,6 +1963,11 @@ struct SendStages: View {
             // achado um parecido. Os bytes assinados ficam aqui, sem sair (revisao de seguranca de 06/11/2026).
             guard model.historyLoaded, model.lookalikeCleared, model.destinationStepsDone, planMatches(plan) else {
                 model.stage = .destination
+                return
+            }
+            // O prazo do pedido de novo depois da voz e do PIN, que podem demorar: vencido no meio, nada sai (rodada 4).
+            if let expiry = model.linkExpiry, expiry.address == model.destinationText, PaymentLink.expired(expiry.expiresAt) {
+                model.error = String(localized: "Este pedido de pagamento venceu. Peça um novo a quem cobrou.")
                 return
             }
             signed = result
@@ -1793,10 +2006,9 @@ struct SendStages: View {
             NonceQueue.record(session, wallet: model.wallet.id, chain: chain, address: address, plan: plan, signed: signed,
                               sells: model.holding?.asset.id)
         }
-        if let usage = engine.usage(after: plan, current: model.wallet.utxoUsage[chain.id]),
-           var wallet = session.metadata.wallets.first(where: { $0.id == model.wallet.id }) {
-            wallet.utxoUsage[chain.id] = usage
-            session.update(wallet)
+        // Sobre o uso gravado, e nao o da foto da tela, como o Android (rodada 8 da auditoria 8).
+        session.update(model.wallet.id) { stored in
+            if let usage = engine.usage(after: plan, current: stored.utxoUsage[chain.id]) { stored.utxoUsage[chain.id] = usage }
         }
         // Conta na sequencia de envios sem a frase ja na transmissao: mesmo sem resposta,
         // o envio pode ter saido (falha para o lado de pedir a frase antes).
@@ -1828,6 +2040,13 @@ struct SendStages: View {
             try? session.persist()
         }
         model.stage = .done
+        // O envio aparece ja em "Pendentes" na Atividade: a leitura da rede pode levar minutos (pedido do dono, 08/11/2026). O
+        // valor e o do plano (em "enviar tudo", sem a taxa); travado no meio, ou com a carteira apagada, nada fica na memoria.
+        if session.phase == .unlocked, session.metadata.wallets.contains(where: { $0.id == model.wallet.id }) {
+            ActivityFeed.shared.noteSent(ActivityEntry(id: "enviado-\(chain.id)-\(id)", chainID: chain.id, direction: .sent, asset: model.holding?.asset,
+                                                       amount: plan.review.outgoing?.amount ?? model.amount ?? 0, counterparty: address, date: .now,
+                                                       status: .pending(nil), fee: nil, hash: id, suspicious: false), wallet: model.wallet.id)
+        }
         await track(engine: engine, id: id, chain: chain)
     }
 
@@ -1884,8 +2103,32 @@ struct SendStages: View {
         for _ in 0..<40 {
             let status = await engine.status(id, chain: chain)
             model.status = status
-            if status != .pending { return }
+            if status != .pending {
+                settled(status, id: id, chain: chain)
+                return
+            }
             try? await Task.sleep(for: .seconds(chain.typicalConfirmationSeconds > 60 ? 15 : 3))
+        }
+    }
+
+    /// A rede respondeu sobre o envio: a linha da Atividade muda de situacao, e o saldo e o historico desta rede leem de novo,
+    /// sem esperar o prazo de cada um (pedido do dono, 08/11/2026: o saldo so mudava depois de minutos).
+    private func settled(_ status: TransferStatus, id: String, chain: Chain) {
+        let walletID = model.wallet.id
+        if case .failed(let reason) = status {
+            ActivityFeed.shared.settleSent(hash: id, wallet: walletID, status: .failed(reason))
+        } else {
+            ActivityFeed.shared.settleSent(hash: id, wallet: walletID, status: .confirmed)
+        }
+        session.metadata.activityFetched?[walletID]?[chain.id] = nil
+        // So a carteira que esta na tela, e so esta rede: com outra escolhida, ler a que enviou punha o historico dela na
+        // Atividade da outra, e ligava as duas para quem ve a rede (revisao dos 3 agentes, 08/11/2026).
+        Task {
+            guard session.phase == .unlocked, let wallet = session.selectedWallet, wallet.id == walletID else { return }
+            await portfolio.refreshChain(chain, wallet: wallet, session: session)
+            guard session.phase == .unlocked, session.selectedWallet?.id == walletID else { return }
+            await ActivityFeed.shared.load(wallet, disabled: session.metadata.settings.disabledChainIDs, session: session,
+                                           balances: portfolio.balances)
         }
     }
 
@@ -1982,6 +2225,10 @@ enum PaymentURI {
         var tag: String? = nil
         /// Por que o link foi recusado; nil quando foi lido.
         let problem: String?
+        /// A moeda que o link pede, quando pede uma (rodada 1 da auditoria 8).
+        var asset: PaymentLink.RequestedAsset? = nil
+        /// O prazo do pedido, conferido de novo na assinatura (rodada 3 da auditoria 8).
+        var expiresAt: UInt64? = nil
     }
 
     /// O link de outra rede que a da tela: "litecoin:" na tela de Bitcoin, ou "ethereum:"
@@ -2001,18 +2248,23 @@ enum PaymentURI {
     static func read(_ text: String) -> Reading {
         do {
             let reading = try PaymentLink.read(text)
-            return Reading(address: reading.address, chainID: reading.chainID, family: reading.family, tag: reading.tag, problem: nil)
+            return Reading(address: reading.address, chainID: reading.chainID, family: reading.family, tag: reading.tag, problem: nil,
+                           asset: reading.asset, expiresAt: reading.expiresAt)
         } catch PaymentLink.Problem.tooLong {
             return Reading(address: "", chainID: nil, problem: String(localized: "Este código é longo demais para ser um endereço."))
         } catch PaymentLink.Problem.containsPhrase {
             // Nada do codigo vai para o campo (auditoria 4, C7-13).
-            return Reading(address: "", chainID: nil, problem: String(localized: "Este código traz as palavras de uma senha de carteira, não um endereço. Quem tem essas palavras tem o saldo: não mostre a ninguém."))
+            return Reading(address: "", chainID: nil, problem: PhraseGuard.wordsMessage)
+        } catch PaymentLink.Problem.containsPrivateKey {
+            return Reading(address: "", chainID: nil, problem: PhraseGuard.keyMessage)
         } catch PaymentLink.Problem.unknownScheme {
             return Reading(address: "", chainID: nil, problem: String(localized: "O app não reconhece este tipo de link. Cole só o endereço."))
         } catch PaymentLink.Problem.unsupportedNetwork {
             return Reading(address: "", chainID: nil, problem: String(localized: "Este pedido de pagamento é de uma rede que a Escalibur não envia. Confira com quem pediu."))
         } catch PaymentLink.Problem.unsupportedMemo {
             return Reading(address: "", chainID: nil, problem: String(localized: "Este pedido traz um memo que o app não envia como está. Cole só o endereço e digite o memo, conferindo com quem pediu."))
+        } catch PaymentLink.Problem.expiredRequest {
+            return Reading(address: "", chainID: nil, problem: String(localized: "Este pedido de pagamento venceu. Peça um novo a quem cobrou."))
         } catch {
             return Reading(address: "", chainID: nil, problem: String(localized: "Este pedido de pagamento não pôde ser lido com segurança. Peça só o endereço."))
         }
@@ -2160,13 +2412,17 @@ struct MarkedAddress: View {
 
     var body: some View {
         var shown = address
+        var marked = segment
         if masked, let segment, segment.start + segment.length <= address.count {
             let start = address.index(address.startIndex, offsetBy: segment.start)
             let end = address.index(start, offsetBy: segment.length)
-            shown.replaceSubrange(start..<end, with: String(repeating: "•", count: segment.length))
+            // O nome inteiro escondido vai em 8 pontos fixos: um por letra diria o tamanho do colado (revisao dos 3 agentes, 08/11/2026).
+            let dots = AddressPoisoning.coversAll(segment, of: address) ? 8 : segment.length
+            shown.replaceSubrange(start..<end, with: String(repeating: "•", count: dots))
+            marked = AddressPoisoning.Segment(start: segment.start, length: dots)
         }
         var text = AttributedString(shown)
-        if let segment,
+        if let segment = marked,
            let lower = text.characters.index(text.startIndex, offsetBy: segment.start, limitedBy: text.endIndex),
            let upper = text.characters.index(lower, offsetBy: segment.length, limitedBy: text.endIndex) {
             text[lower..<upper].foregroundColor = Palette.caution
@@ -2184,36 +2440,158 @@ struct MarkedAddress: View {
 /// Os caracteres da conferencia do endereco, um por caixa (pedido do dono, 27/10/2026): da para ver
 /// quantos faltam e qual vem agora, marcado na cor de acao. O campo de verdade fica por cima, sem
 /// cor, e recebe o teclado; espaco nao entra, e o que passa do tamanho do trecho fica de fora.
+/// O nome inteiro de uma conta NEAR (`limit`) nao cabe em caixas: um campo so, que aceita mais que o trecho,
+/// para o nome verdadeiro mais comprido nao parar no tamanho do colado.
 struct CharacterBoxes: View {
     @Binding var text: String
     var count = 6
+    /// O nome inteiro: campo unico ate este tamanho.
+    var limit: Int?
     let identifier: String
-    @FocusState private var focused: Bool
+    @State private var focused = false
 
     var body: some View {
         let typed = Array(text)
-        ZStack {
-            HStack(spacing: Space.xs) {
-                ForEach(0..<count, id: \.self) { index in
-                    let current = focused && index == min(typed.count, count - 1)
-                    Text(index < typed.count ? String(typed[index]) : "")
-                        .font(.system(size: 22, weight: .semibold, design: .monospaced)).foregroundStyle(Palette.ink)
-                        .frame(width: 46, height: 56)
-                        .background(RoundedRectangle(cornerRadius: Radius.track, style: .continuous).fill(Palette.body))
-                        .overlay(RoundedRectangle(cornerRadius: Radius.track, style: .continuous)
-                            .stroke(current ? Palette.accent : .clear, lineWidth: 1.5))
+        Group {
+            if let limit {
+                // Sem contagem: "x de N" diria o tamanho do colado, e cortar o nome verdadeiro ate caber passaria com o comeco.
+                ChallengeTextField(text: $text, isFocused: $focused, limit: limit, identifier: identifier)
+                    .padding(.horizontal, Space.sm).frame(height: 56)
+                    .background(RoundedRectangle(cornerRadius: Radius.track, style: .continuous).fill(Palette.control))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.track, style: .continuous)
+                        .stroke(focused ? Palette.accent : Palette.edgeStrong, lineWidth: 1.5))
+                    .contentShape(Rectangle())
+                    .onTapGesture { focused = true }
+            } else {
+                ZStack {
+                    HStack(spacing: Space.xs) {
+                        ForEach(0..<count, id: \.self) { index in
+                            let current = focused && index == min(typed.count, count - 1)
+                            Text(index < typed.count ? String(typed[index]) : "")
+                                .font(.system(size: 22, weight: .semibold, design: .monospaced)).foregroundStyle(Palette.ink)
+                                .frame(width: 46, height: 56)
+                                // Cada caixa com fundo e contorno a vista: no escuro sobre escuro elas sumiam (pedido do dono, 08/11/2026).
+                                .background(RoundedRectangle(cornerRadius: Radius.track, style: .continuous).fill(Palette.control))
+                                .overlay(RoundedRectangle(cornerRadius: Radius.track, style: .continuous)
+                                    .stroke(current ? Palette.accent : Palette.edgeStrong, lineWidth: 1.5))
+                        }
+                    }
+                    ChallengeTextField(text: $text, isFocused: $focused, limit: count, identifier: identifier, masked: true)
                 }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture { focused = true }
             }
-            TextField("", text: Binding(get: { text }, set: { text = String($0.filter { !$0.isWhitespace }.prefix(count)) }))
-                .focused($focused)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-                .foregroundStyle(.clear).tint(.clear)
-                .accessibilityIdentifier(identifier)
         }
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
-        .onTapGesture { focused = true }
         .animation(Motion.fade, value: text)
+    }
+}
+
+/// O nome inteiro digitado nao conferiu no toque do Continuar ou do Salvar.
+struct WholeNameMiss: View {
+    var body: some View {
+        Text(String(localized: "O nome não confere com o que você colou. Se você digitou o que está na fonte, o endereço colado foi trocado: apague e copie de novo."))
+            .typeStyle(.note).foregroundStyle(Palette.down)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Nas redes em que a caixa e parte do endereco, o desafio confere maiusculas e minusculas (`AddressPoisoning.caseMatters`).
+struct CaseNote: View {
+    var body: some View {
+        Text(String(localized: "Maiúsculas e minúsculas contam.")).typeStyle(.note).foregroundStyle(Palette.inkMuted)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// O campo do trecho que o dono le na fonte e digita. So entra um caractere por vez, e o Colar do menu, o texto da camera e o
+/// ditado ficam de fora: colar a area de transferencia, que um programa no computador pode ter trocado, dava a resposta
+/// certa no nome inteiro de uma conta NEAR (revisao dos 3 agentes, 08/11/2026). Previsao, correcao e as ferramentas de
+/// escrita desligadas, como no campo da palavra (`WordInputField`).
+struct ChallengeTextField: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    let limit: Int
+    let identifier: String
+    /// O texto invisivel: as caixas por baixo mostram o digitado.
+    var masked = false
+    var placeholder = ""
+    var fontSize: CGFloat = 20
+    var weight: UIFont.Weight = .semibold
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = ChallengeUITextField()
+        field.delegate = context.coordinator
+        field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
+        field.textContentType = nil
+        field.keyboardType = .asciiCapable
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.spellCheckingType = .no
+        field.smartQuotesType = .no
+        field.smartDashesType = .no
+        field.smartInsertDeleteType = .no
+        field.inlinePredictionType = .no
+        if #available(iOS 18.0, *) { field.writingToolsBehavior = .none }
+        field.keyboardAppearance = .dark
+        field.font = .monospacedSystemFont(ofSize: fontSize, weight: weight)
+        field.accessibilityIdentifier = identifier
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        context.coordinator.parent = self
+        if field.text != text { field.text = text }
+        field.textColor = masked ? .clear : UIColor(Palette.ink)
+        field.tintColor = masked ? .clear : UIColor(Palette.accent)
+        field.attributedPlaceholder = NSAttributedString(string: placeholder, attributes: [.foregroundColor: UIColor(Palette.inkDead)])
+        field.isEnabled = context.environment.isEnabled
+        if isFocused, !field.isFirstResponder, field.isEnabled {
+            DispatchQueue.main.async { field.becomeFirstResponder() }
+        } else if !isFocused, field.isFirstResponder {
+            DispatchQueue.main.async { if field.isFirstResponder { field.resignFirstResponder() } }
+        }
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: ChallengeTextField
+
+        init(_ parent: ChallengeTextField) { self.parent = parent }
+
+        @objc func changed(_ field: UITextField) { parent.text = field.text ?? "" }
+
+        /// Apagar sempre; digitar, um caractere sem espaco, ate o limite. Colar e a sugestao do teclado entram de uma vez.
+        func textField(_ field: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+            if field.textInputMode?.primaryLanguage == "dictation" { return false }
+            guard !string.isEmpty else { return true }
+            guard string.count == 1, let character = string.first, !character.isWhitespace,
+                  let current = field.text, let swapped = Range(range, in: current) else { return false }
+            return current.replacingCharacters(in: swapped, with: string).count <= parent.limit
+        }
+
+        func textFieldDidBeginEditing(_ field: UITextField) {
+            if !parent.isFocused { parent.isFocused = true }
+        }
+
+        func textFieldDidEndEditing(_ field: UITextField) {
+            if parent.isFocused { parent.isFocused = false }
+        }
+
+        func textFieldShouldReturn(_ field: UITextField) -> Bool {
+            field.resignFirstResponder()
+            return false
+        }
+    }
+}
+
+/// Sem Colar, sem texto da camera: o trecho e lido na fonte e digitado.
+final class ChallengeUITextField: UITextField {
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if [#selector(paste(_:)), #selector(pasteAndMatchStyle(_:)), #selector(captureTextFromCamera(_:))].contains(action) { return false }
+        return super.canPerformAction(action, withSender: sender)
     }
 }
 
@@ -2260,6 +2638,7 @@ struct OtherIDCheck: View {
     @Binding var check: String
     var field: Color = Palette.body
     var identifier = "conferir-id-endereco"
+    @State private var focused = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.sm) {
@@ -2271,13 +2650,12 @@ struct OtherIDCheck: View {
             Text(String(localized: "Para seguir, digite o número do ID que quem vai receber mostra, ou os 6 últimos caracteres do endereço, lendo onde você o copiou."))
                 .typeStyle(.note).foregroundStyle(Palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
-            TextField("", text: $check, prompt: Text(String(localized: "Número do ID")).foregroundColor(Palette.inkDead))
-                .font(TypeStyle.mono.font).foregroundStyle(Palette.ink)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            // Um caractere por vez e sem Colar, como as caixas: o ID e lido na fonte (revisao dos 3 agentes, 08/11/2026). Ate 20, o maior ID.
+            ChallengeTextField(text: $check, isFocused: $focused, limit: 20, identifier: identifier,
+                               placeholder: String(localized: "Número do ID"), fontSize: 16, weight: .medium)
                 .padding(Space.sm)
                 .background(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous).fill(field))
                 .frame(maxWidth: 220, alignment: .leading)
-                .accessibilityIdentifier(identifier)
         }
     }
 }
@@ -2290,7 +2668,9 @@ enum KnownAddress {
     static func label(_ address: String, chain: Chain, session: AppSession, history: [String] = []) -> String {
         let sent = session.metadata.sentTo[chain.id] ?? []
         if sent.contains(address) || history.contains(address) { return String(localized: "Você já pagou") }
-        if let wallet = session.metadata.wallets.first(where: { !$0.isWatchOnly && $0.tronForeignControl != true && $0.account(chain)?.address == address }) {
+        if let wallet = session.metadata.wallets.first(where: {
+            !$0.isWatchOnly && $0.tronForeignControl != true && $0.foreignControl(on: chain) == nil && $0.controlChecked(on: chain) && $0.account(chain)?.address == address
+        }) {
             return String(localized: "Sua carteira \(wallet.name)")
         }
         if let contact = session.metadata.contacts.first(where: { $0.chainID == chain.id && $0.address == address }) {
@@ -2303,13 +2683,44 @@ enum KnownAddress {
 /// Texto que parece a senha de uma carteira (12 palavras ou mais, separadas por espaco,
 /// virgula, ponto e virgula ou hifen): nunca vai para um campo de endereco, por colar,
 /// digitar ou ler QR (revisao do envio da auditoria 4, B-8).
+/// A chave privada colada (WIF, xprv, a semente da Stellar ou da XRPL, a chave da Solana) tem o mesmo destino
+/// (`PrivateKeyGuard`, revisao dos 3 agentes, 09/11/2026).
 enum PhraseGuard {
+    /// Tambem o pedaco da frase (seis palavras seguidas, ou unidas por ponto, que na NEAR e um nome valido e ia ao RPC), o
+    /// SeedQR digitado e os 64 hexadecimais com rotulo de chave (revisao dos 3 agentes, 09/11/2026).
     static func looksLikePhrase(_ text: String) -> Bool {
-        let spaced = text.replacingOccurrences(of: "[,;\\-]", with: " ", options: .regularExpression)
-        return Mnemonic.words(in: spaced).count >= 12
+        PrivateKeyGuard.looksLikeSecretInAddressField(text)
     }
 
-    static var message: String {
+    static func message(for text: String) -> String {
+        PrivateKeyGuard.looksLikePrivateKey(text) || PrivateKeyGuard.looksLikeLabeledHexKey(text) ? keyMessage : wordsMessage
+    }
+
+    static var wordsMessage: String {
         String(localized: "Este código traz as palavras de uma senha de carteira, não um endereço. Quem tem essas palavras tem o saldo: não mostre a ninguém.")
+    }
+
+    static var keyMessage: String {
+        String(localized: "Isto parece uma chave privada, não um endereço. Quem tem essa chave tem o saldo: não mostre a ninguém.")
+    }
+
+    /// O segredo num campo de endereco desta rede, com o aviso dele: a frase, a chave, ou os 64 hexadecimais que aqui nao sao
+    /// endereco (a chave da MetaMask ou da TronLink, `PrivateKeyGuard.looksLikeHexKey`). Sem rede, o endereco so de observacao.
+    static func secretMessage(_ text: String, on chain: Chain?) -> String? {
+        if looksLikePhrase(text) { return message(for: text) }
+        if PrivateKeyGuard.looksLikeHexKey(text, on: chain) {
+            return String(localized: "Isto parece uma chave privada ou o código de uma transação, não um endereço. Se for uma chave, não mostre a ninguém.")
+        }
+        return nil
+    }
+
+    /// O campo da tag, do memo ou do comentario com um segredo: o que vai ali fica publico na rede. A regra das 12 palavras
+    /// soltas fica so no campo do endereco: aqui ela apagava qualquer comentario comprido (revisao dos 3 agentes, 09/11/2026).
+    static func tagHasSecret(_ text: String) -> Bool {
+        PrivateKeyGuard.publicTextHasSecret(text)
+    }
+
+    static var tagMessage: String {
+        String(localized: "Este campo tinha uma frase ou uma chave de carteira, e foi apagado. O que vai aqui fica público na rede.")
     }
 }

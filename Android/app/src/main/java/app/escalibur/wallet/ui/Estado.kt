@@ -20,6 +20,12 @@ data class Carteira(
     val temPassphrase: Boolean,
     val passphraseConfirmada: Boolean,
     val tronOutraChave: Boolean,
+    /** As redes com outra chave ou contrato no controle (auditoria 8): o endereco nao aparece nem copia. */
+    val outroControle: Set<String> = emptySet(),
+    /** As redes ainda nao lidas para outra chave no controle: o endereco espera a conferencia para aparecer e copiar (15/11/2026). */
+    val naoLidas: Set<String> = emptySet(),
+    /** As redes cujo endereco outra carteira deste celular tem marcado: nao aparece nem copia (15/11/2026). */
+    val marcadaEmOutra: Set<String> = emptySet(),
     /** Pede a passphrase para mover saldo e para ver as palavras. */
     val pedePassphrase: Boolean,
     /** A carteira com passphrase que esta versao nao confere: ver, lacrar e conferir recusam antes do PIN. */
@@ -51,6 +57,9 @@ data class Carteira(
             temPassphrase = json.optBoolean("temPassphrase"),
             passphraseConfirmada = json.optBoolean("passphraseConfirmada"),
             tronOutraChave = json.optBoolean("tronOutraChave"),
+            outroControle = json.optJSONArray("outroControle")?.let { lista -> (0 until lista.length()).map { lista.getString(it) }.toSet() } ?: emptySet(),
+            naoLidas = json.optJSONArray("naoLidas")?.let { lista -> (0 until lista.length()).map { lista.getString(it) }.toSet() } ?: emptySet(),
+            marcadaEmOutra = json.optJSONArray("marcadaEmOutra")?.let { lista -> (0 until lista.length()).map { lista.getString(it) }.toSet() } ?: emptySet(),
             pedePassphrase = json.optBoolean("pedePassphrase"),
             semConferencia = json.optBoolean("semConferencia"),
             selecionada = json.optBoolean("selecionada"),
@@ -151,14 +160,21 @@ object App {
     var ocultarJa by mutableStateOf<Boolean?>(null)
     val ocultarSaldos: Boolean get() = ocultarJa ?: estado.ocultarSaldos
 
+    /** Quantas vezes o estado foi aplicado: a leitura que voltou depois de outra (o travar no meio) nao vale (rodada 12). */
+    private var geracao = 0
+
     fun aplicar(json: JSONObject): JSONObject {
         if (json.has("fase") && json.has("biometria")) {
+            geracao++
             val novo = EstadoDoApp.de(json)
             // O app foi apagado (a ultima carteira saiu, ou "Esqueci o PIN"): recomeca sem a aba,
             // as telas e o ocultar da sessao de antes.
             if (novo.fase == "onboarding" && estado.fase != "onboarding") {
                 app.escalibur.wallet.ui.principal.Navegacao.recomecar()
                 ocultarJa = null
+                // Toda ida ao onboarding, tambem a do apagar tudo adiado para o destravar, tira da gaveta os avisos da carteira de
+                // antes ("Entrou moeda", as ordens), como o iPhone (rodada 16 da auditoria 8).
+                app.escalibur.wallet.vigias.Vigia.limparGaveta()
             }
             estado = novo
         }
@@ -166,7 +182,17 @@ object App {
     }
 
     suspend fun recarregar() {
-        aplicar(Api.objeto("estado"))
+        // O travar (ou outra resposta) que entrou durante a leitura vale mais que ela: o estado velho nao volta por cima (rodada 12).
+        // E le de novo, porque a que entrou pode ter sido montada antes da marca (rodada 13): a releitura feita depois dela nunca e
+        // mais velha que ela.
+        repeat(3) {
+            val antes = geracao
+            val json = Api.objeto("estado")
+            if (geracao == antes) {
+                aplicar(json)
+                return
+            }
+        }
     }
 }
 

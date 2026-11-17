@@ -235,7 +235,7 @@ public struct BridgeEngine: Sendable {
         case .refunded:
             // So com o reembolso conferido na origem, em dois RPCs.
             guard let hash = status.refundTxHash, let originSpoke = from.across?.spokePool,
-                  let refund = try await reader.receiptLogs(chain: from.chain, hash: hash), refund.success,
+                  let refund = try await reader.receiptLogs(chain: from.chain, hash: hash, votes: EVMReader.moneyVotes), refund.success,
                   BridgeArrival.acrossRefunded(refund.logs, transfer: transfer, originSpoke: originSpoke)
             else { return .inFlight }
             return .refunded(txHash: hash)
@@ -247,7 +247,10 @@ public struct BridgeEngine: Sendable {
             guard deposit.success, let depositID = BridgeArrival.acrossDepositID(deposit.logs, transfer: transfer, originSpoke: originSpoke) else {
                 return .mismatch
             }
-            guard let hash = status.fillTxHash, let receipt = try await reader.receiptLogs(chain: to.chain, hash: hash) else { return .inFlight }
+            // A entrega e o "devolvido" levam o dono a dar por chegado ou a refazer a ponte: tres recibos (rodada 1 da auditoria 8).
+            guard let hash = status.fillTxHash, let receipt = try await reader.receiptLogs(chain: to.chain, hash: hash, votes: EVMReader.moneyVotes) else {
+                return .inFlight
+            }
             guard receipt.success, let spoke = to.across?.spokePool,
                   BridgeArrival.acrossDelivered(receipt.logs, transfer: transfer, destinationSpoke: spoke, depositID: depositID,
                                                 destinationWrappedNative: to.across?.wrappedNative ?? .zero) else {

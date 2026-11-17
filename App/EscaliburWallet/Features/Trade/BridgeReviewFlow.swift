@@ -111,6 +111,10 @@ struct BridgeReviewFlow: View {
                     PlanVerbatimPlate(review: plan.review, collapsible: true).padding(.top, Space.lg)
                     PlanDetailLines(review: plan.review, extra: [(String(localized: "Carteira"), session.selectedWallet?.name ?? "")])
                         .padding(.top, Space.lg)
+                    // Outra chave ou contrato no controle desta conta (auditoria 8, 14/11/2026): a operacao segue, com o aviso.
+                    if let mark = session.selectedWallet?.foreignControl(on: plan.chain) {
+                        Banner(kind: .failure, title: mark.message).padding(.top, Space.sm)
+                    }
                     ForEach(Array(plan.review.warnings.enumerated()), id: \.offset) { _, warning in
                         Banner(kind: .caution, title: PlanWarningText.text(warning, chain: plan.chain)).padding(.top, Space.sm)
                     }
@@ -204,9 +208,9 @@ struct BridgeReviewFlow: View {
             plan = built
             stage = .review
         } catch {
-            if (error as? SendEngineError)?.isLocalNonceQueueAhead == true {
-                NonceQueue.clear(session, wallet: wallet.id, chain: intent.from.chain, address: account.address)
-            }
+            // A fila a frente da rede nao e apagada aqui: a poda de antes do plano ja tira, no prazo dela, a transacao que a rede
+            // descartou. Apagar tudo numa leitura so (dois nos atrasados logo depois de uma confirmacao) fazia o plano seguinte reusar
+            // o nonce de uma transacao viva, como a troca pela rota privada (auditoria 8, 14/11/2026).
             self.error = (error as? LocalizedError)?.errorDescription ?? String(localized: "Não foi possível montar agora. Tente de novo.")
         }
     }
@@ -255,6 +259,18 @@ struct BridgeReviewFlow: View {
             return
         }
         guard planMatches(plan, quote: quote) else { return }
+        // O destino de novo ate a assinatura: a marca de outra chave que chegou depois da cotacao barra a ponte (rodada 2 da
+        // auditoria 8).
+        // Pela carteira do plano, e nao pela escolhida agora (rodada 6).
+        if let owner = session.metadata.wallets.first(where: { $0.id == plan.walletID }), !owner.receives(on: intent.to.chain) {
+            error = owner.foreignControl(on: intent.to.chain)?.message ?? String(localized: "Esta conta na Tron é controlada por outra chave")
+            return
+        }
+        // E so com a rede de destino lida (15/11/2026), como a cotacao.
+        if let owner = session.metadata.wallets.first(where: { $0.id == plan.walletID }), !owner.controlChecked(on: intent.to.chain) {
+            error = String(localized: "Esta conta ainda não foi conferida nesta rede. Tente de novo em instantes.")
+            return
+        }
         // Ate a assinatura: uma troca ou um envio deste ativo pode ter saido depois da revisao.
         if let account = session.selectedWallet?.account(intent.from.chain), sellsInFlight(wallet: plan.walletID, address: account.address) { return }
         guard await VoiceGate.shared.confirm(.send(fiat: voiceFiat), session: session) else { return }
@@ -287,9 +303,18 @@ struct BridgeReviewFlow: View {
     private func transmit(_ signed: [SignedTransaction], plan: SigningPlan, quote: ValidatedBridgeQuote) async {
         // Travou entre assinar e enviar: nada sai (ver o envio). Antes, a carteira sumida da sessao
         // travada fazia a ponte parar calada no meio. Destravado, o dono envia de novo.
-        guard session.phase == .unlocked, let wallet = session.selectedWallet, let account = wallet.account(intent.from.chain) else {
+        // A carteira do plano assinado, e nao a escolhida agora, como no Android (rodada 7 da auditoria 8).
+        guard session.phase == .unlocked, let wallet = session.metadata.wallets.first(where: { $0.id == plan.walletID }),
+              let account = wallet.account(intent.from.chain) else {
             error = WalletError.locked.errorDescription
             stage = unsureSigned == nil ? .review : .unsure
+            return
+        }
+        // A marca de outra chave no destino que chegou entre a assinatura e o envio: nada sai (rodada 3 da auditoria 8). Pelo
+        // `receives`, que tambem ve a marca propria da Tron (rodada 4).
+        if unsureSigned == nil, !wallet.receives(on: intent.to.chain) {
+            error = wallet.foreignControl(on: intent.to.chain)?.message ?? String(localized: "Esta conta na Tron é controlada por outra chave")
+            stage = .review
             return
         }
         // Na Ethereum a ponte sai pela rota privada (protecao de MEV), e a poda espera mais por ela.

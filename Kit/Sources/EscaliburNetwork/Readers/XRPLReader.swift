@@ -17,7 +17,7 @@ public actor XRPLReader {
 
     public init(transport: ReaderTransport = HTTPClient.shared, providers: [ProviderPool.Provider] = Endpoints.xrpl) {
         self.transport = transport
-        self.pool = ProviderPool(providers)
+        self.pool = ProviderPool(providers, draws: transport.drawsProviders)
     }
 
     /// Rede principal. `network_id` diferente disso no `server_info` e servidor de outra
@@ -64,6 +64,47 @@ public actor XRPLReader {
             address: address, sequenceReadings: [first.sequence, second.sequence],
             balance: first.balance, ownerCount: first.ownerCount, flags: first.flags, ledgerIndex: readings[0].ledger
         )
+    }
+
+    /// Outra chave com poder sobre a conta do dono: a `RegularKey` ou uma lista de assinantes (`SignerList`), que
+    /// assinam no lugar da chave da frase. Dois servidores no mesmo ledger validado; `nil` quando discordam. Conta que
+    /// ainda nao existe nao tem nenhuma das duas (auditoria 8, 14/11/2026).
+    /// `everyone`: a conta ja tem a marca, e "limpa" so vale com todos os donos que respondem (pelo menos tres, ou todos), cada
+    /// um no ultimo ledger validado dele, e nao no fixado por dois (rodada 2 da auditoria 8).
+    public func foreignControl(address: String, everyone: Bool = false) async throws -> Bool? {
+        guard XRPLAddress.accountID(address) != nil else { throw ReaderError.invalidInput("endereco") }
+        let transport = self.transport
+        if everyone {
+            return try await Quorum.unanimous(await pool.available(), pool: pool) { provider in
+                let ledger = try Self.parseValidatedLedger(try Self.checked(try await Self.call(transport, provider.baseURL, "ledger", [
+                    "ledger_index": .string("validated"),
+                ]), "ledger"))
+                let result = try await Self.call(transport, provider.baseURL, "account_info", [
+                    "account": .string(address), "ledger_index": .int(ledger), "signer_lists": .bool(true),
+                ])
+                return try Self.parseControl(result, address: address, ledger: ledger)
+            }
+        }
+        let readings = try await pinnedPair { provider, ledger in
+            let result = try await Self.call(transport, provider.baseURL, "account_info", [
+                "account": .string(address), "ledger_index": .int(ledger), "signer_lists": .bool(true),
+            ])
+            return try Self.parseControl(result, address: address, ledger: ledger)
+        }
+        guard readings.count >= 2, readings.allSatisfy({ $0.value == readings[0].value }) else { return nil }
+        return readings[0].value
+    }
+
+    /// A `RegularKey` na conta, ou alguma lista de assinantes: dentro de `account_data` (API 1) ou ao lado dele (API 2).
+    static func parseControl(_ result: StrictJSON, address: String, ledger: UInt32) throws -> Bool {
+        guard case .found = try parseAccountInfo(result, address: address, ledger: ledger) else { return false }
+        let data = try result.field("account_data", "account_info")
+        if data.optionalField("RegularKey") != nil { return true }
+        // Pedidas, as listas vem sempre (vazias, sem nenhuma): sem o campo, a resposta nao diz e e erro, e nao "limpa" (rodada 1).
+        let lists = [data.optionalField("signer_lists"), result.optionalField("signer_lists")].compactMap { $0 }
+        guard !lists.isEmpty else { throw ReaderError.malformed(field: "account_info.signer_lists") }
+        for list in lists where try !list.array("account_info.signer_lists").isEmpty { return true }
+        return false
     }
 
     /// O destino em dois servidores, no mesmo ledger: existe? com que flags? Com
@@ -207,15 +248,27 @@ public actor XRPLReader {
     ) async throws -> [Pinned<T>] {
         let providers = await pool.available()
         let transport = self.transport
-        let ledger = try await Quorum.first(providers, pool: pool) { provider in
+        // O ledger validado de dois servidores, o menor, perto um do outro: o de um so, sempre o primeiro da lista, fixava a
+        // leitura num ledger antigo, de antes da RegularKey, e os dois de acordo diziam "limpa" (rodada 1 da auditoria 8).
+        let heads = try await Quorum.collect(providers, pool: pool, count: 2) { provider in
             try Self.parseValidatedLedger(try Self.checked(try await Self.call(transport, provider.baseURL, "ledger", [
                 "ledger_index": .string("validated"),
             ]), "ledger"))
-        }
+        }.map(\.value)
+        let ledger = try Self.pin(heads)
         let readings = try await Quorum.collect(providers, pool: pool, count: 2) { provider in
             try await read(provider, ledger)
         }
         return readings.map { Pinned(value: $0.value, ledger: ledger) }
+    }
+
+    /// Quantos ledgers validados as duas pontas podem diferir: uns 70 s. Mais que isso e servidor parado ou mentindo.
+    static let maxLedgerGap: UInt32 = 20
+
+    static func pin(_ heads: [UInt32]) throws -> UInt32 {
+        guard heads.count >= 2, let low = heads.min(), let high = heads.max() else { throw ReaderError.notEnoughProviders(needed: 2, got: heads.count) }
+        guard high - low <= maxLedgerGap else { throw ReaderError.providersDisagree(field: "ledger") }
+        return low
     }
 
     private func accountReading(_ provider: Provider, address: String, ledger: UInt32) async throws -> AccountReading {

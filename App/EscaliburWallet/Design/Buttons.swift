@@ -230,7 +230,8 @@ struct AccentStyle: ButtonStyle {
 struct CopyButton: View {
     var title = String(localized: "Copiar endereço")
     var doneTitle = String(localized: "Endereço copiado")
-    let action: () -> Void
+    /// Devolve se copiou: o visto so acende no ok (rodada 10 da auditoria 8).
+    let action: () -> Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var copied = false
@@ -240,7 +241,7 @@ struct CopyButton: View {
     var body: some View {
         let still = reduceMotion
         Button {
-            action()
+            guard action() else { return }
             taps += 1
             reset?.cancel()
             withAnimation(.spring(response: 0.32, dampingFraction: 0.7)) { copied = true }

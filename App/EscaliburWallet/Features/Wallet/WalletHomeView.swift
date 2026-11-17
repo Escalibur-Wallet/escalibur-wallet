@@ -732,6 +732,8 @@ struct WalletSwitcherSheet: View {
                 .padding(.horizontal, Space.gutter).padding(.bottom, Space.xs)
         }
         .presentationDetents([.medium, .large])
+        // Na metade da tela, a lista rola; a folha cresce pela alca ou pelo titulo (pedido do dono, 08/11/2026).
+        .presentationContentInteraction(.scrolls)
         .fullScreenCover(item: $deleting) { wallet in
             RemoveWalletScreen(wallet: wallet) { confirmed in
                 deleting = nil
@@ -756,12 +758,11 @@ struct WalletSwitcherSheet: View {
     /// O nome passa pelo mesmo saneamento dos nomes vindos de envelope: sem controle,
     /// sem caractere invisivel, ate 40 caracteres.
     private func saveName() {
-        guard var wallet = renaming else { return }
+        guard let wallet = renaming else { return }
         let clean = Envelope.sanitize(newName, limit: 40)
         renaming = nil
         guard !clean.isEmpty else { return }
-        wallet.name = clean
-        session.update(wallet)
+        session.rename(wallet.id, to: clean)
     }
 
     private func subtitle(_ wallet: WalletMeta) -> String { wallet.summaryLine }
@@ -879,6 +880,10 @@ struct CopyAddressSheet: View {
     /// A lista das redes EVM aberta.
     @State private var expanded = false
 
+    /// A carteira gravada agora, e nao a de quando a folha abriu: a marca que chega com ela aberta tira o endereco na hora
+    /// (rodada 7 da auditoria 8).
+    private var current: WalletMeta { session.metadata.wallets.first { $0.id == wallet.id } ?? wallet }
+
     struct Target: Identifiable {
         let title: String
         let address: String
@@ -886,16 +891,33 @@ struct CopyAddressSheet: View {
         var id: String { address }
     }
 
-    private var targets: [Target] {
+    /// So o que copia agora: a rede ja lida para outra chave no controle, e nenhum endereco que outra carteira deste aparelho tem
+    /// marcado (pedido do dono, 15/11/2026, a forma mais segura). O toque confere de novo (`copyableAddress`).
+    private var targets: [Target] { candidates.filter { ready($0) && clear($0) } }
+
+    /// Falta ler a rede de algum endereco: ele aparece aqui depois da conferencia.
+    private var pending: Bool { candidates.contains { clear($0) && !ready($0) } }
+
+    private func ready(_ target: Target) -> Bool { current.isWatchOnly || target.chains.allSatisfy { current.controlChecked(on: $0) } }
+
+    private func clear(_ target: Target) -> Bool { target.chains.allSatisfy { session.markedElsewhere(current, on: $0) == nil } }
+
+    private var candidates: [Target] {
+        let wallet = current
         var out = [Target]()
         var seen = Set<String>()
-        let evm = Chain.all.filter { $0.family == .evm && wallet.account($0) != nil }
-        if let first = evm.first, let account = wallet.account(first) {
+        // So as redes ligadas: a desligada nao e conferida, e seguraria para sempre a linha das EVM (revisao dos tres agentes de
+        // 15/11/2026).
+        let off = session.metadata.settings.disabledChainIDs
+        let evm = Chain.all.filter { $0.family == .evm && wallet.account($0) != nil && !off.contains($0.id) }
+        // O endereco EVM e o mesmo em todas as redes EVM: com outra chave ou contrato no controle em qualquer uma, o atalho de
+        // "todas as redes EVM" sai, e o Receber de cada rede diz qual recebe (auditoria 8, 14/11/2026).
+        if let first = evm.first, let account = wallet.account(first), evm.allSatisfy({ wallet.receives(on: $0) }) {
             out.append(Target(title: String(localized: "Ethereum e redes EVM"), address: account.address, chains: evm))
             evm.compactMap { wallet.account($0)?.address }.forEach { seen.insert($0) }
         }
         // A conta da Tron com outra chave no controle fica de fora (auditoria de 31/10/2026).
-        for chain in Chain.all where chain.family != .evm && wallet.receives(on: chain) {
+        for chain in Chain.all where chain.family != .evm && wallet.receives(on: chain) && !off.contains(chain.id) {
             guard let account = wallet.account(chain), seen.insert(account.address).inserted else { continue }
             out.append(Target(title: chain.name, address: account.address, chains: [chain]))
         }
@@ -911,6 +933,12 @@ struct CopyAddressSheet: View {
             ScrollView {
                 VStack(spacing: Space.xs) {
                     ForEach(targets) { target in row(target) }
+                    if pending {
+                        Text("As redes que o app ainda não conferiu aparecem aqui depois da conferência.")
+                            .typeStyle(.note).foregroundStyle(Palette.inkMuted).fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, Space.xs)
+                    }
                 }
                 .padding(.horizontal, Space.gutter).padding(.vertical, Space.md)
             }
@@ -922,6 +950,8 @@ struct CopyAddressSheet: View {
     }
 
     private func copy(_ target: Target) {
+        // Conferido na carteira gravada, na hora do toque (rodada 9 da auditoria 8).
+        guard session.copyableAddress(wallet.id, chains: target.chains) == target.address else { return }
         Pasteboard.copyReceiveAddress(target.address, hasPassphrase: wallet.hasPassphrase, session: session)
         withAnimation(Motion.fade) { copied = target.id }
         Task {

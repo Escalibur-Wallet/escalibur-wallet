@@ -42,7 +42,7 @@ public actor AptosReader {
         // uma vez.
         let hosts = (providers.map(\.baseURL) + [indexer].compactMap { $0 }).compactMap(\.host)
         self.transport = PacedTransport(base: transport, intervals: Dictionary(hosts.map { ($0, pacing) }, uniquingKeysWith: { a, _ in a }))
-        self.pool = ProviderPool(providers)
+        self.pool = ProviderPool(providers, draws: transport.drawsProviders)
         self.providers = providers
         self.indexer = indexer
     }
@@ -74,6 +74,34 @@ public actor AptosReader {
         try await pinned(field: "destination") { provider, version in
             try await self.storeExists(destination, at: provider, version: version)
         }.value
+    }
+
+    /// A chave de autenticacao da conta ja nao e a da frase (a rotacao): outra chave assina por ela, e o que entrar e
+    /// dela. Dois provedores na mesma versao do ledger (auditoria 8, 14/11/2026). O plano ja recusa assinar
+    /// (`authenticationKeyRotated`); isto e o aviso antes de receber.
+    /// A chave girada, ou a capacidade de assinar ou de girar a chave oferecida a outra conta (rodada 3). `everyone`: a conta ja
+    /// tem a marca, e "nao girada" so vale com todos os donos que respondem (pelo menos tres), cada um na versao mais nova dele, e
+    /// nao na fixada por dois (rodada 2 da auditoria 8).
+    public func authenticationKeyRotated(owner: AptosAddress, everyone: Bool = false) async throws -> Bool {
+        let read: @Sendable (Provider, UInt64?) async throws -> Bool = { provider, version in
+            let key = try Self.parseBytesView(
+                try await self.view(provider, version, "0x1::account::get_authentication_key", [], [owner.hex]), "get_authentication_key"
+            )
+            if key != owner.bytes { return true }
+            // A capacidade de assinar oferecida a outra conta (que assina pela do dono sem girar a chave) e a de girar a chave
+            // (que a gira depois), na mesma versao (rodada 3 da auditoria 8).
+            for function in ["0x1::account::is_signer_capability_offered", "0x1::account::is_rotation_capability_offered"] {
+                if try Self.parseBoolView(try await self.view(provider, version, function, [], [owner.hex]), function) { return true }
+            }
+            return false
+        }
+        guard everyone else { return try await pinned(field: "get_authentication_key") { try await read($0, $1) }.value }
+        let unanimous = try await Quorum.unanimous(await pool.available(), pool: pool) { provider in
+            try await self.ensureMainnet(provider)
+            return try await read(provider, nil)
+        }
+        guard let unanimous else { throw ReaderError.providersDisagree(field: "get_authentication_key") }
+        return unanimous
     }
 
     struct AccountReading: Sendable, Equatable {
@@ -192,7 +220,7 @@ public actor AptosReader {
         guard hash.hasPrefix("0x"), let bytes = Hex.decode(hash), bytes.count == 32 else { throw ReaderError.invalidInput("hash") }
         let id = Hex.encode(bytes, prefix: true)
         let transport = self.transport
-        let readings = try await Quorum.collect(await pool.available(), pool: pool, count: 2) { provider in
+        let lookup: @Sendable (Provider) async throws -> Lookup = { provider in
             try await self.ensureMainnet(provider)
             do {
                 let data = try await transport.send(.get(provider.baseURL.adding(path: "transactions/by_hash/" + id)))
@@ -200,16 +228,26 @@ public actor AptosReader {
             } catch HTTPClient.Failure.status(404) {
                 return Lookup.notFound
             }
-        }.map(\.value)
+        }
+        let readings = try await Quorum.collect(await pool.available(), pool: pool, count: 2, lookup).map(\.value)
         switch (readings[0], readings[1]) {
         case (.committed(let a, let versionA), .committed(let b, let versionB)) where a == b:
-            return a ? .confirmed(block: min(versionA, versionB), confirmations: nil) : .failed(reason: "execution")
+            if a { return .confirmed(block: min(versionA, versionB), confirmations: nil) }
+            // A falha leva o dono a reenviar: todos os donos que respondem, e pelo menos tres, como na Sui e na Tron (rodada 2
+            // da auditoria 8). Dois sorteados combinados nao bastam.
+            let failed = await Quorum.everyoneSays(true, await pool.available(), pool: pool) { provider -> Bool in
+                if case .committed(success: false, _) = try await lookup(provider) { return true }
+                return false
+            }
+            return failed ? .failed(reason: "execution") : .pending
         case (.notFound, .notFound):
+            // Vencida: cada dono, no ledger dele, ja passou da validade e nao conhece a transacao (rodada 2).
             if let expiresAt {
-                let ledgers = try await Quorum.collect(await pool.available(), pool: pool, count: 2) { provider in
-                    try await self.ledger(provider)
-                }.map(\.value)
-                if ledgers.allSatisfy({ $0.timestampMicros / 1_000_000 > expiresAt }) { return .failed(reason: "expired") }
+                let gone = await Quorum.everyoneSays(true, await pool.available(), pool: pool) { provider -> Bool in
+                    guard try await self.ledger(provider).timestampMicros / 1_000_000 > expiresAt else { return false }
+                    return try await lookup(provider) == .notFound
+                }
+                if gone { return .failed(reason: "expired") }
             }
             return .notFound
         default:
@@ -329,12 +367,23 @@ public actor AptosReader {
             try await self.ledger(provider)
         }
         let first = ledgers[0], second = ledgers[1]
+        // As duas pontas perto uma da outra: o menor de dois sem limite deixava um no dar uma versao antiga, de antes da chave
+        // girada, e os dois de acordo diziam "nao girada" (rodada 1 da auditoria 8).
+        try Self.checkGap(first.value, second.value)
         let base = first.value.version <= second.value.version ? first.value : second.value
         async let a = read(first.provider, base.version)
         async let b = read(second.provider, base.version)
         let (x, y) = try await (a, b)
         guard x == y else { throw ReaderError.providersDisagree(field: field) }
         return (x, base)
+    }
+
+    /// Quanto as horas dos dois ledgers podem diferir: 30 s.
+    static let maxLedgerGapMicros: UInt64 = 30_000_000
+
+    static func checkGap(_ a: Ledger, _ b: Ledger) throws {
+        let gap = a.timestampMicros > b.timestampMicros ? a.timestampMicros - b.timestampMicros : b.timestampMicros - a.timestampMicros
+        guard gap <= maxLedgerGapMicros else { throw ReaderError.providersDisagree(field: "ledger") }
     }
 
     /// Diferenca na primeira vez rele uma vez (o preco do gas muda entre leituras).

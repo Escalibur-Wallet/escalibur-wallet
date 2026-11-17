@@ -47,6 +47,12 @@ public enum ChainReaderError: Error, Equatable, Sendable {
 public protocol ChainReaderTransport: Sendable {
     func fetch(_ url: URL) async throws -> Data
     func send(_ url: URL, body: Data, contentType: String, timeout: TimeInterval) async throws -> Data
+    /// Como em `ReaderTransport`: so a rede de verdade sorteia a ordem dos donos no consenso.
+    var drawsProviders: Bool { get }
+}
+
+public extension ChainReaderTransport {
+    var drawsProviders: Bool { false }
 }
 
 /// O transporte de producao, sobre o `HTTPClient`.
@@ -56,6 +62,8 @@ public struct HTTPReaderTransport: ChainReaderTransport {
     public init(client: HTTPClient = .shared) {
         self.client = client
     }
+
+    public var drawsProviders: Bool { client.drawsProviders }
 
     public func fetch(_ url: URL) async throws -> Data {
         try await client.get(url)
@@ -79,6 +87,8 @@ public struct PacedChainTransport: ChainReaderTransport {
         self.base = base
         self.intervals = intervals
     }
+
+    public var drawsProviders: Bool { base.drawsProviders }
 
     private func pace(_ url: URL) async throws {
         let host = url.host ?? ""

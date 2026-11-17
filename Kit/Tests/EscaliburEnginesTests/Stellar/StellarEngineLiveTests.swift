@@ -32,7 +32,7 @@ struct StellarEngineLiveTests {
         let usdc = try #require(TokenRegistry.tokens.first { $0.chainID == "stellar" && $0.symbol == "USDC" })
         let tradeRequest = TradeRequest(
             walletID: UUID(), chain: .stellar, account: TestAccounts.stellar, sell: .native(.stellar), buy: usdc,
-            amountIn: 1_000_000_000, slippageBasisPoints: 100
+            amountIn: 1_000_000_000, slippageBasisPoints: 100, acceptsUnanchored: true
         )
         let quote = try await trade.quote(tradeRequest)
         #expect(quote.minimumOut > 0 && quote.minimumOut < quote.expectedOut)

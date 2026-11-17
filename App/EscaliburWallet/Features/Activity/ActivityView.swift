@@ -79,6 +79,8 @@ final class ActivityFeed {
     /// Ao travar, ao apagar tudo e ao remover a carteira da tela: a leitura em curso para, e nada dela fica na tela nem
     /// volta ao disco (o `esquecer` do Android; revisao da decima terceira passada). `wallet` nil esquece qualquer uma.
     func forget(_ wallet: UUID? = nil) {
+        // Os envios feitos aqui saem junto: travar ou apagar nao deixa endereco nenhum na memoria.
+        if let wallet { sentHere[wallet] = nil; claimedReads[wallet] = nil } else { sentHere = [:]; claimedReads = [:] }
         if let wallet, wallet != shownWalletID, wallet != currentWalletID { return }
         current?.cancel()
         current = nil
@@ -216,8 +218,61 @@ final class ActivityFeed {
         }
     }
 
+    /// Os envios feitos agora por este app que a leitura da rede ainda nao trouxe, por carteira: aparecem ja em "Pendentes" e
+    /// saem quando a leitura traz o mesmo envio, ou depois de um dia (pedido do dono, 08/11/2026: o envio demorava a aparecer).
+    /// Um dia, e nao uma hora: um Bitcoin de taxa baixa espera mais que isso, e sumir de "Pendentes" levava a enviar de novo.
+    private var sentHere: [UUID: [ActivityEntry]] = [:]
+    /// Na TON e na Aptos, as leituras que nao podem fechar um envio daqui, por carteira: as que ja fecharam um (uma leitura
+    /// fecha um envio so, tambem nas chamadas seguintes) e as que ja estavam la quando o envio saiu (um envio igual de antes).
+    /// Sai junto com o ultimo envio daqui da carteira (revisao dos 3 agentes, 08/11/2026).
+    private var claimedReads: [UUID: Set<String>] = [:]
+
+    func noteSent(_ entry: ActivityEntry, wallet: UUID) {
+        if shownWalletID == wallet, let family = entry.chain?.family, family == .ton || family == .aptos {
+            claimedReads[wallet, default: []].formUnion((byChain[entry.chainID] ?? []).map(\.id))
+        }
+        sentHere[wallet, default: []].removeAll { $0.hash.lowercased() == entry.hash.lowercased() }
+        sentHere[wallet, default: []].append(entry)
+        if shownWalletID == wallet { publish(failures: failed, missing: unavailable) }
+    }
+
+    /// A rede respondeu sobre um envio feito aqui: a linha muda de situacao ate a leitura da rede trazer a de verdade.
+    func settleSent(hash: String, wallet: UUID, status: ActivityEntry.Status) {
+        guard let index = sentHere[wallet]?.firstIndex(where: { $0.hash.lowercased() == hash.lowercased() }),
+              let old = sentHere[wallet]?[index] else { return }
+        sentHere[wallet]?[index] = ActivityEntry(id: old.id, chainID: old.chainID, direction: old.direction, asset: old.asset, amount: old.amount,
+                                                 counterparty: old.counterparty, date: old.date, status: status, fee: old.fee, hash: old.hash,
+                                                 suspicious: false)
+        if shownWalletID == wallet { publish(failures: failed, missing: unavailable) }
+    }
+
     private func publish(failures: [Chain], missing: [(chain: Chain, reason: String)]) {
-        let collected = byChain.values.flatMap { $0 }
+        var collected = byChain.values.flatMap { $0 }
+        if let wallet = shownWalletID {
+            let read = Set(collected.map { $0.hash.lowercased() })
+            let day = Date.now.addingTimeInterval(-24 * 3600)
+            // Cada movimentacao lida responde por um envio daqui no maximo: dois envios iguais seguidos sao duas linhas.
+            var claimed = claimedReads[wallet] ?? []
+            sentHere[wallet] = sentHere[wallet]?.filter { local in
+                guard !read.contains(local.hash.lowercased()), local.date > day else { return false }
+                // So pelo hash: a regra de valor escondia um envio diferente de mesmo valor (dois pagamentos de 100 USDT seguidos).
+                // Na TON e na Aptos, o hash que a leitura traz nao e o do envio: o mesmo envio pela rede, ativo, valor, destino e
+                // hora, de uma leitura que nao e suspeita (revisao dos 3 agentes, 08/11/2026).
+                guard let chain = local.chain, chain.family == .ton || chain.family == .aptos,
+                      let to = local.counterparty, let key = Address.canonicalRecipient(to, chain: chain) else { return true }
+                let match = collected.first { item in
+                    !claimed.contains(item.id) && item.chainID == local.chainID && item.direction == .sent && !item.suspicious
+                        && item.asset?.id == local.asset?.id && item.amount == local.amount
+                        && item.date >= local.date.addingTimeInterval(-120) && item.date <= local.date.addingTimeInterval(24 * 3600)
+                        && item.counterparty.flatMap { Address.canonicalRecipient($0, chain: chain) } == key
+                }
+                guard let match else { return true }
+                claimed.insert(match.id)
+                return false
+            }
+            claimedReads[wallet] = sentHere[wallet]?.isEmpty == false ? claimed : nil
+            collected += sentHere[wallet] ?? []
+        }
         suspiciousCount = collected.filter(\.suspicious).count
         entries = collected.filter { !$0.suspicious }.sorted { $0.date > $1.date }
         failed = failures.sorted { $0.name < $1.name }
@@ -577,6 +632,20 @@ struct ActivityDetailView: View {
 
     enum Check: Equatable { case checking, confirmed(UInt64), notFound, mismatch, unverifiable, failed }
 
+    /// O "Para" de um envio pode ser copiado so quando este app mesmo enviou para ele (`sentTo`, gravado no envio que passou
+    /// pelas conferencias do destino), confirmado e sem marca de suspeito (pedido do dono, 08/11/2026). Um envio falso do
+    /// envenenamento (transferencia de valor zero "da sua carteira" para um parecido) nunca passou por aqui, e nao copia: copiar
+    /// do historico e o golpe (secao 4.10). O "De" de quem mandou nunca copia.
+    private var copyableRecipient: String? {
+        guard entry.direction == .sent, !entry.suspicious, entry.status == .confirmed, let to = entry.counterparty, let chain = entry.chain,
+              let sent = session.metadata.sentTo[entry.chainID], let key = Address.canonicalRecipient(to, chain: chain),
+              // Nunca o endereco de uma conta deste iPhone com outra chave no controle (revisao dos tres agentes de 15/11/2026).
+              session.markedOwner(of: to, on: chain) == nil else { return nil }
+        // A mesma conta pela identidade da rede (caixa, forma crua ou amigavel da TON), e o que vai para a area de transferencia e
+        // o endereco que o envio gravou, nao o texto do indexador (revisao dos 3 agentes, 08/11/2026).
+        return sent.first { Address.canonicalRecipient($0, chain: chain) == key }
+    }
+
     /// Recebimento numa rede EVM, que o indexador mostrou: confere na rede.
     private var verifiable: Bool {
         entry.direction == .received && entry.chain?.family == .evm && entry.status == .confirmed
@@ -588,10 +657,29 @@ struct ActivityDetailView: View {
                 hero
                 facts
                 if let counterparty = entry.counterparty {
-                    // Sem botao de copiar: endereco de quem mandou pode ser isca (secao 4.10).
+                    // Sem botao de copiar, salvo o "Para" de um envio deste app: endereco do historico pode ser isca (secao 4.10).
                     VStack(alignment: .leading, spacing: Space.xs) {
-                        Text(entry.direction == .received ? "De" : "Para").typeStyle(.note).foregroundStyle(Palette.inkSoft)
-                        AddressBlocks(address: counterparty)
+                        HStack {
+                            Text(entry.direction == .received ? "De" : "Para").typeStyle(.note).foregroundStyle(Palette.inkSoft)
+                            Spacer()
+                            if let recipient = copyableRecipient {
+                                Button {
+                                    Pasteboard.copyAddress(recipient)
+                                    // Nas redes com tag ou memo, ela nao vai junto: o deposito numa corretora sem ela fica sem dono.
+                                    toasts.show(entry.chain.map { $0.destinationTag != .none } == true
+                                                ? String(localized: "Endereço copiado. A tag ou o memo não vai junto: confira com quem recebe.")
+                                                : String(localized: "Endereço copiado"))
+                                } label: {
+                                    Image(systemName: "doc.on.doc").font(.system(size: 14, weight: .medium)).foregroundStyle(Palette.inkSoft)
+                                        .frame(width: Height.touch, height: 28).contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Copiar endereço")
+                                .accessibilityIdentifier("copiar-para")
+                            }
+                        }
+                        // Com o copiar, a tela mostra o que vai ser copiado: na TON, o indexador traz a forma crua, e o envio, a amigavel.
+                        AddressBlocks(address: copyableRecipient ?? counterparty)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(Space.base)

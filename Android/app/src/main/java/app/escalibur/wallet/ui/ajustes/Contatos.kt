@@ -60,7 +60,10 @@ import app.escalibur.wallet.ui.comp.Rodape
 import app.escalibur.wallet.ui.comp.SeloDaRede
 import app.escalibur.wallet.ui.comp.TipoDeFaixa
 import app.escalibur.wallet.ui.comp.Transferencia
+import app.escalibur.wallet.ui.enviar.CaixasDeConferencia
 import app.escalibur.wallet.ui.enviar.CampoCurto
+import app.escalibur.wallet.ui.enviar.NotaDaCaixa
+import app.escalibur.wallet.ui.enviar.NomeNaoConfere
 import app.escalibur.wallet.ui.enviar.EnderecoMarcado
 import app.escalibur.wallet.ui.enviar.LeitorDeQR
 import app.escalibur.wallet.ui.enviar.Trecho
@@ -74,6 +77,7 @@ import app.escalibur.wallet.ui.tema.Paleta
 import app.escalibur.wallet.ui.tema.Raio
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import androidx.compose.animation.core.Animatable
@@ -97,6 +101,8 @@ private class Contato(j: JSONObject) {
     val redeCoingecko: String = j.getString("redeCoingecko")
     val endereco: String = j.getString("endereco")
     val tag: String? = j.opcional("tag")
+    /** O endereco de uma conta deste celular com outra chave no controle: sem o copiar (15/11/2026). */
+    val marcado: Boolean = j.optBoolean("marcado")
 }
 
 /** Os enderecos salvos: atalho no envio e conhecidos na conferencia de endereco parecido. */
@@ -150,14 +156,15 @@ fun TelaDeContatos() {
                         }
                         MenuFlutuante(
                             menuDe == contato.id,
-                            listOf(
-                                OpcaoDoMenu("copiar", t("Copiar endereço")) { Icone(Icones.copiar, Paleta.tinta, tamanho = 17.dp) },
+                            listOfNotNull(
+                                // Nunca o endereco de uma conta deste celular com outra chave no controle (15/11/2026), como no iOS.
+                                if (contato.marcado) null else OpcaoDoMenu("copiar", t("Copiar endereço")) { Icone(Icones.copiar, Paleta.tinta, tamanho = 17.dp) },
                                 OpcaoDoMenu("apagar", t("Apagar")) { Icone(Icones.lixeira, Paleta.baixa, tamanho = 17.dp) },
                             ),
                             escolhida = null, aoFechar = { menuDe = null },
                         ) { opcao ->
                             when (opcao) {
-                                "copiar" -> {
+                                "copiar" -> if (!contato.marcado) {
                                     Transferencia.copiar(contexto, contato.endereco)
                                     Avisos.mostrar(t("Endereço copiado."))
                                 }
@@ -244,13 +251,57 @@ private fun NovoContato() {
     var mensagem by remember { mutableStateOf<String?>(null) }
     var salvando by remember { mutableStateOf(false) }
     var escolhendoRede by remember { mutableStateOf(false) }
+    /** Nome da NEAR: o texto cujo desafio ja nasceu, no toque do Salvar ou quando o endereco entra inteiro (colar, QR,
+     * recentes). So o texto, sem a rede: colado na Bitcoin e trocado para a NEAR pela sugestao, o nome voltava a vista. Qualquer
+     * mudanca de texto desarma (revisao dos 3 agentes, 09/11/2026). */
+    var armadoPara by remember { mutableStateOf<String?>(null) }
+    fun armar(texto: String) { armadoPara = texto.trim() }
+    fun pedidoDeConferencia() = JSONObject().put("rede", rede).put("endereco", endereco).put("tag", tag).put("conferencia", conferencia)
+        .put("conferenciaDoMemo", conferenciaDoMemo).put("comMemo", comMemo).put("armado", armadoPara == endereco.trim())
+    var nomeNaoConfere by remember { mutableStateOf(false) }
+    /** O texto do QR e o endereco que ele deu: trocar a rede depois confere o pedido de novo, como no iOS. */
+    var lidoDoQR by remember { mutableStateOf<Pair<String, String>?>(null) }
+    // O endereco que veio de um QR de outra rede nao fica para a rede nova (paridade com o iOS, revisao dos 3 agentes, 09/11/2026).
+    LaunchedEffect(rede) {
+        val qr = lidoDoQR ?: return@LaunchedEffect
+        if (qr.second != endereco) { lidoDoQR = null; return@LaunchedEffect }
+        val link = runCatching { Api.objeto("contatos.link", JSONObject().put("texto", qr.first).put("rede", rede)) }.getOrNull() ?: return@LaunchedEffect
+        link.opcional("problema")?.let { problema ->
+            endereco = ""
+            armadoPara = null
+            mensagem = problema
+            lidoDoQR = null
+        }
+    }
 
     LaunchedEffect(Unit) { recentes = runCatching { Api.lista("contatos.recentes").objetos() }.getOrDefault(emptyList()) }
-    LaunchedEffect(rede, endereco, tag, conferencia, conferenciaDoMemo, comMemo) {
-        resposta = runCatching {
-            Api.objeto("contatos.conferir", JSONObject().put("rede", rede).put("endereco", endereco).put("tag", tag).put("conferencia", conferencia)
-                .put("conferenciaDoMemo", conferenciaDoMemo).put("comMemo", comMemo))
-        }.getOrNull()
+    /** A rede e o texto da ultima resposta do nucleo: ate ela chegar, a tela nao decide pelo texto de antes. */
+    var respondidoPara by remember { mutableStateOf<Pair<String, String>?>(null) }
+    LaunchedEffect(rede, endereco, tag, conferencia, conferenciaDoMemo, comMemo, armadoPara) {
+        val pedido = rede to endereco
+        val lida = runCatching { Api.objeto("contatos.conferir", pedidoDeConferencia()) }.getOrNull()
+        // Cancelado por uma chave nova, nada abaixo roda: o runCatching engolia o cancelamento, e a resposta nula "em dia" mostrava
+        // o endereco inteiro durante o desafio. Numa falha do nucleo, a tela fica como estava (revisao dos 3 agentes, 09/11/2026).
+        ensureActive()
+        if (lida == null) return@LaunchedEffect
+        resposta = lida
+        respondidoPara = pedido
+        // A frase de carteira no campo sai dele na hora, como no envio (revisao dos 3 agentes, 09/11/2026).
+        if (resposta?.optBoolean("limpar") == true) {
+            mensagem = resposta?.optString("problema")
+            // A frase tambem nao fica na marca do nome da NEAR, nem na leitura do QR.
+            armadoPara = null
+            lidoDoQR = null
+            endereco = ""
+        }
+        // A tag com uma frase ou uma chave sai na hora: salva, ela iria a rede em cada envio.
+        if (resposta?.optBoolean("limparTag") == true) {
+            tag = ""
+            mensagem = t("Este campo tinha uma frase ou uma chave de carteira, e foi apagado. O que vai aqui fica público na rede.")
+        } else if (tag.length > 120) {
+            // O campo entrega o colado inteiro ao nucleo, que confere antes; conferido, fica o que se salva.
+            tag = tag.take(120)
+        }
     }
     // Endereco ou rede novos: a conferencia comeca de novo.
     LaunchedEffect(rede, endereco) {
@@ -258,13 +309,21 @@ private fun NovoContato() {
         comMemo = false
         conferenciaDoMemo = ""
     }
+    LaunchedEffect(conferencia) { nomeNaoConfere = false }
 
     val r = resposta
     val valido = r?.optBoolean("valido") == true
     val conferido = r?.optBoolean("conferido") == true
     val memoConferido = r?.optBoolean("memoConferido", true) != false
     val tipoDeTag = r?.optString("tipoDeTag") ?: "none"
-    val desafio = valido && (r?.has("outroID") == true || r?.has("trecho") == true)
+    // O nome da NEAR colado na rede errada (a sugestao da NEAR na tela) tambem esconde o campo ate a troca: a vista, o dono lia o
+    // nome trocado e o digitava de memoria (revisao dos 3 agentes, 09/11/2026).
+    val nomeColadoNaRedeErrada = !valido && armadoPara != null && armadoPara == endereco.trim() && r?.optBoolean("nomeNaRedeErrada") == true
+    // O endereco que entrou inteiro fica escondido ate a resposta do nucleo para ele: com a resposta do texto de antes, o nome
+    // colado aparecia por uma ida ao nucleo (o esperandoInteiro do envio, revisao dos 3 agentes, 09/11/2026).
+    val emDia = respondidoPara == (rede to endereco)
+    val esperandoInteiro = !emDia && armadoPara != null && armadoPara == endereco.trim()
+    val desafio = (emDia && valido && (r?.has("outroID") == true || r?.has("trecho") == true)) || nomeColadoNaRedeErrada || esperandoInteiro
     val redeAtual = Redes.rede(rede)
 
     fun salvar() {
@@ -288,6 +347,7 @@ private fun NovoContato() {
                     "contato.naoConferido" -> mensagem = t("Confira o endereço antes de salvar.")
                     "contato.tagInvalida" -> mensagem = t("A tag é um número de 0 a 4.294.967.295. Confira na exchange.")
                     "contato.memoInvalido" -> mensagem = t("O memo cabe até 28 caracteres.")
+                    "contato.tagSegredo" -> { tag = ""; mensagem = t("Este campo tinha uma frase ou uma chave de carteira, e foi apagado. O que vai aqui fica público na rede.") }
                     else -> mensagem = Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível salvar. Tente de novo.")
                 }
             } finally {
@@ -308,6 +368,8 @@ private fun NovoContato() {
                                 Modifier.fillMaxWidth().heightIn(min = Altura.linhaCompacta).clickable {
                                     rede = item.getString("rede")
                                     endereco = item.getString("endereco")
+                                    mensagem = null
+                                    armar(endereco)
                                 }.padding(horizontal = Espaco.sm),
                                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
                             ) {
@@ -339,7 +401,7 @@ private fun NovoContato() {
             }
             Rotulado(t("Endereço")) {
                 if (desafio) {
-                    app.escalibur.wallet.ui.enviar.CampoEscondido { endereco = "" }
+                    app.escalibur.wallet.ui.enviar.CampoEscondido { endereco = ""; tag = ""; armadoPara = null }
                 } else {
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = Altura.campo).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo)
@@ -350,7 +412,20 @@ private fun NovoContato() {
                         Box(Modifier.weight(1f)) {
                             if (endereco.isEmpty()) Text(t("Cole ou escaneie"), style = estilo(Tipo.corpo), color = Paleta.tintaMorta)
                             BasicTextField(
-                                endereco, { endereco = it.take(512) }, maxLines = 3, textStyle = estilo(Tipo.mono).copy(color = Paleta.tinta),
+                                endereco, { novo ->
+                                    // O endereco que entra inteiro (colar pelo menu ou pelo teclado): o desafio do nome nasce na hora. So
+                                    // a digitacao, letra a letra, espera o Salvar.
+                                    val limpo = novo.take(512)
+                                    // Colado pelo menu do sistema: com um segredo, a area de transferencia esvazia tambem.
+                                    if (limpo.length > endereco.length + 1) {
+                                        val gerente = contexto.getSystemService(android.content.ClipboardManager::class.java)
+                                        escopo.launch { app.escalibur.wallet.ui.enviar.limparSeSegredo(gerente, limpo, rede) }
+                                    }
+                                    if (app.escalibur.wallet.ui.enviar.entrouInteiro(endereco, limpo)) armar(limpo)
+                                    // O aviso de antes (a frase colada) sai com o texto novo, como no iOS: alarme velho ensina a ignorar.
+                                    if (limpo.isNotEmpty()) mensagem = null
+                                    endereco = limpo
+                                }, maxLines = 3, textStyle = estilo(Tipo.mono).copy(color = Paleta.tinta),
                                 cursorBrush = SolidColor(Paleta.acento),
                                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = KeyboardType.Ascii),
                                 modifier = Modifier.fillMaxWidth(),
@@ -360,6 +435,12 @@ private fun NovoContato() {
                             Box(Modifier.size(Altura.toque).clickable {
                                 val gerente = contexto.getSystemService(ClipboardManager::class.java)
                                 endereco = runCatching { gerente.primaryClip?.getItemAt(0)?.text?.toString() }.getOrNull().orEmpty().trim().take(512)
+                                if (endereco.isNotEmpty()) {
+                                    mensagem = null
+                                    val colado = endereco
+                                    escopo.launch { app.escalibur.wallet.ui.enviar.limparSeSegredo(gerente, colado, rede) }
+                                }
+                                armar(endereco)
                             }, contentAlignment = Alignment.Center) { Icone(Icones.colar, Paleta.tintaSuave, tamanho = 16.dp, descricao = t("Colar")) }
                             Box(Modifier.size(Altura.toque).clickable {
                                 Navegacao.folha {
@@ -369,6 +450,9 @@ private fun NovoContato() {
                                         escopo.launch {
                                             val link = runCatching { Api.objeto("contatos.link", JSONObject().put("texto", lido).put("rede", rede)) }.getOrNull() ?: return@launch
                                             endereco = link.optString("endereco")
+                                            // So o QR lido sem problema e com endereco: o texto cru de um QR recusado (a frase, a chave) nao fica.
+                                            lidoDoQR = if (link.opcional("problema") == null && endereco.isNotEmpty()) lido to endereco else null
+                                            armar(endereco)
                                             link.opcional("tag")?.let { tag = it }
                                             mensagem = link.opcional("problema")
                                         }
@@ -392,10 +476,10 @@ private fun NovoContato() {
                     }
                 }
             }
-            if (valido) ConferenciaDoContato(r!!, conferencia) { conferencia = it }
+            if (valido) ConferenciaDoContato(r!!, conferencia, nomeNaoConfere) { conferencia = it }
             if (valido && tipoDeTag != "none") {
                 Rotulado(if (tipoDeTag == "stellarMemo") t("Memo, se houver") else t("Tag de destino, se houver")) {
-                    Campo(tag, if (tipoDeTag == "xrplTag") "Ex.: 123456789" else t("Cole aqui, se tiver"), numerico = tipoDeTag == "xrplTag") { tag = it.take(120) }
+                    Campo(tag, if (tipoDeTag == "xrplTag") "Ex.: 123456789" else t("Cole aqui, se tiver"), numerico = tipoDeTag == "xrplTag") { tag = it.take(4096) }
                 }
             }
             r?.optJSONObject("conflitoDoMemo")?.let { conflito ->
@@ -404,20 +488,41 @@ private fun NovoContato() {
                     EnderecoMarcado(t("%@ · ID %@", conflito.getString("rotulo"), conflito.getString("idConhecido")), conflito.getString("conhecido"),
                                     conflito.optJSONObject("trechoConhecido")?.let { Trecho.de(it) })
                     Text(t("Para seguir, digite o memo que quem vai receber mostra, lendo onde você o copiou."), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
-                    CampoCurto(conferenciaDoMemo, t("Memo"), largura = 220.dp) { conferenciaDoMemo = it }
+                    CampoCurto(conferenciaDoMemo, t("Memo"), largura = 220.dp, semColar = true) { conferenciaDoMemo = it }
                 }
             }
             mensagem?.let { Faixa(TipoDeFaixa.falha, it) }
         }
         Rodape {
-            BotaoPrimario(t("Salvar"), ligado = nome.isNotBlank() && valido && conferido && memoConferido, carregando = salvando) { salvar() }
+            // Nome da NEAR: o primeiro toque faz o desafio nascer, e o nome inteiro e conferido no toque, e nao ao vivo. O nucleo
+            // confere tudo de novo ao salvar.
+            val pendente = r?.optBoolean("pendente") == true
+            val nomeInteiro = r?.optBoolean("nomeInteiro") == true
+            BotaoPrimario(t("Salvar"), ligado = emDia && nome.isNotBlank() && valido && (conferido || pendente || (nomeInteiro && conferencia.isNotEmpty())) && memoConferido,
+                          carregando = salvando) {
+                when {
+                    pendente -> armar(endereco)
+                    // A resposta do nucleo pode estar uma letra atras: confere de novo agora, antes de dizer que nao confere. Sem
+                    // nada digitado, nada a dizer: alarme falso ensina a ignorar o verdadeiro.
+                    nomeInteiro && !conferido -> escopo.launch {
+                        val pedido = rede to endereco
+                        val atual = runCatching { Api.objeto("contatos.conferir", pedidoDeConferencia()) }.getOrNull()
+                        // Com o Editar no meio, a resposta e de um texto que ja saiu: nao vale (revisao dos 3 agentes, 09/11/2026).
+                        if (atual == null || pedido != (rede to endereco)) return@launch
+                        resposta = atual
+                        respondidoPara = pedido
+                        if (atual.optBoolean("conferido")) salvar() else nomeNaoConfere = conferencia.isNotEmpty()
+                    }
+                    else -> salvar()
+                }
+            }
         }
     }
 }
 
 /** O trecho do meio digitado olhando a fonte: onde o colado difere do parecido, ou um trecho escondido. */
 @Composable
-private fun ConferenciaDoContato(r: JSONObject, conferencia: String, aoMudar: (String) -> Unit) {
+private fun ConferenciaDoContato(r: JSONObject, conferencia: String, naoConfere: Boolean, aoMudar: (String) -> Unit) {
     val destino = r.opcional("destino") ?: return
     val parecido = r.optJSONObject("parecido")
     val outro = r.optJSONObject("outroID")
@@ -430,22 +535,33 @@ private fun ConferenciaDoContato(r: JSONObject, conferencia: String, aoMudar: (S
                             outro.optJSONObject("trechoConhecido")?.let { Trecho.de(it) })
             Text(t("Para seguir, digite o número do ID que quem vai receber mostra, ou os 6 últimos caracteres do endereço, lendo onde você o copiou."),
                  style = estilo(Tipo.nota), color = Paleta.tintaSuave)
-            CampoCurto(conferencia, t("Número do ID"), largura = 220.dp, aoMudar = aoMudar)
+            CampoCurto(conferencia, t("Número do ID"), largura = 220.dp, semColar = true, aoMudar = aoMudar)
         }
         trecho != null -> Column(verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+            // Na NEAR com nome, o nome inteiro, com o registro, como no envio (revisao dos 3 agentes, 08/11/2026).
+            val nomeInteiro = trecho.inicio == 0 && trecho.tamanho == (if (parecido == null) r.getString("fonte") else destino).trim().length
             if (parecido != null) {
-                Faixa(TipoDeFaixa.cautela, t("Endereço parecido com um que você já usou"), mensagem = t("As pontas são iguais, o meio é diferente. Confira na fonte antes de salvar."))
-                EnderecoMarcado(t("Você colou"), destino, trecho)
+                Faixa(TipoDeFaixa.cautela, if (nomeInteiro) t("Nome parecido com um que você já usou") else t("Endereço parecido com um que você já usou"),
+                      mensagem = if (nomeInteiro) t("Golpistas registram por centavos nomes assim. Confira na fonte antes de salvar.")
+                                 else t("As pontas são iguais, o meio é diferente. Confira na fonte antes de salvar."))
+                // O nome colado escondido, como no desafio escondido: a vista, quem copiasse da tela passava (revisao dos 3 agentes,
+                // 09/11/2026). O conhecido fica a vista.
+                EnderecoMarcado(t("Você colou"), destino, trecho, escondido = nomeInteiro)
                 EnderecoMarcado(parecido.getString("rotulo"), parecido.getString("conhecido"), parecido.optJSONObject("trechoConhecido")?.let { Trecho.de(it) })
             } else {
                 EnderecoMarcado(t("Confira com a fonte"), r.getString("fonte"), trecho, escondido = true)
             }
             Text(
-                if (parecido == null) t("Olhando onde você copiou o endereço, digite os 6 caracteres escondidos. Um programa no computador pode trocar o endereço na hora de copiar.")
+                if (nomeInteiro) t("Olhando onde você copiou o endereço, digite o nome inteiro da conta, com o final (como .near). Um programa no computador pode trocar o endereço na hora de copiar.")
+                else if (parecido == null) t("Olhando onde você copiou o endereço, digite os 6 caracteres escondidos. Um programa no computador pode trocar o endereço na hora de copiar.")
                 else t("Olhando onde você copiou o endereço, digite os 6 caracteres marcados. Um programa no computador pode trocar o endereço na hora de copiar."),
                 style = estilo(Tipo.nota), color = Paleta.tintaSuave,
             )
-            CampoCurto(conferencia, if (parecido == null) t("6 escondidos") else t("6 marcados"), aoMudar = aoMudar)
+            if (r.optBoolean("caixaConta")) NotaDaCaixa()
+            // As caixas do envio, que so aceitam um caractere por vez: colar a area de transferencia nao responde o desafio.
+            // Acima do campo: abaixo, o teclado e o Salvar o cobriam.
+            if (naoConfere) NomeNaoConfere()
+            CaixasDeConferencia(conferencia, trecho.tamanho, inteiro = nomeInteiro, aoMudar = aoMudar)
         }
     }
 }

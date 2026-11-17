@@ -120,7 +120,10 @@ enum PlanWarningText {
     static func text(_ warning: PlanReview.Warning, tag: TagKind = .tag, chain: Chain? = nil) -> String {
         switch warning {
         case .firstSendToAddress: return String(localized: "Primeira vez que você envia para este endereço.")
-        case .lookalikeAddress(let known): return String(localized: "Endereço parecido com \(Fmt.address(known, chain: chain)).")
+        case .lookalikeAddress(let known):
+            // Nome da NEAR: o aviso e o do nome (revisao dos 3 agentes, 09/11/2026).
+            if let chain, AddressPoisoning.wholeNEARName(known, chain: chain) != nil { return String(localized: "Nome parecido com \(known).") }
+            return String(localized: "Endereço parecido com \(Fmt.address(known, chain: chain)).")
         case .noDestinationTag:
             switch tag {
             case .tag: return String(localized: "Sem tag de destino. Se o destino for uma exchange, confira na tela de depósito se ela pede: sem isso o valor não chega na sua conta de lá.")
@@ -140,7 +143,7 @@ enum PlanWarningText {
         case .publicMempool:
             return String(localized: "Nesta rede a troca passa pela fila pública, sem proteção contra robôs: eles podem comprar antes e vender depois. O mínimo garantido continua valendo, mas o que ficar entre a estimativa e ele pode não chegar.")
         case .uncomparedPrice:
-            return String(localized: "Não há uma segunda fonte de cotação independente nem preço de referência do mercado: o preço desta troca não foi comparado com nenhum outro.")
+            return String(localized: "Não há preço de referência do mercado: o preço desta troca não foi comparado com o mercado.")
         }
     }
 }

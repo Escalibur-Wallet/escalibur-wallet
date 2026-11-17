@@ -173,7 +173,7 @@ public actor BalanceService {
 
     private func pool(_ key: String, _ providers: [ProviderPool.Provider]) -> ProviderPool {
         if let existing = pools[key] { return existing }
-        let created = ProviderPool(providers)
+        let created = ProviderPool(providers, draws: transport.drawsProviders)
         pools[key] = created
         return created
     }

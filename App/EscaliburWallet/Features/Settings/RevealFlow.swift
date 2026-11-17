@@ -20,6 +20,9 @@ struct RevealFlow: View {
     @State private var acknowledged: Set<Int> = []
     /// Depois das palavras conferidas, a passphrase da carteira que tem uma (C7-02).
     @State private var confirmingPassphrase = false
+    /// A checagem do aparelho entre o "estou ciente" e o PIN, como antes de digitar ou de
+    /// gerar as palavras (pedido do dono, 15/11/2026). Cada "Ver as palavras" confere de novo.
+    @State private var checkingDevice = false
 
     var body: some View {
         NavigationStack {
@@ -37,6 +40,11 @@ struct RevealFlow: View {
                     // lista sai da tela: antes ela reaparecia por baixo, e um toque rapido no
                     // teclado do PIN desmarcava um "estou ciente" (pedido do dono, 16/10/2026).
                     opening
+                } else if checkingDevice {
+                    DeviceCheckView(slideTitle: String(localized: "Deslize para ver as palavras"),
+                                    consent: String(localized: "Estou ciente de que este iPhone falhou na verificação de integridade e de que ver as palavras aqui pode expor a carteira. Quero seguir mesmo assim.")) {
+                        Task { await open() }
+                    }
                 } else {
                     warning
                 }
@@ -108,7 +116,8 @@ struct RevealFlow: View {
             if let error { Banner(kind: .failure, title: error).padding(.top, Space.md) }
             Spacer()
             PrimaryButton(title: String(localized: "Ver as palavras"), enabled: acknowledged.count == Self.statements.count, loading: working) {
-                Task { await open() }
+                error = nil
+                checkingDevice = true
             }
         }
         .padding(.horizontal, Space.gutter)
@@ -128,7 +137,9 @@ struct RevealFlow: View {
 
     private func open() async {
         working = true
-        defer { working = false }
+        // Sem as palavras (recusa, PIN cancelado, passphrase errada), volta ao aviso com o motivo,
+        // e o proximo "Ver as palavras" confere o aparelho de novo.
+        defer { working = false; checkingDevice = false }
         error = nil
         let id = wallet.id
         var counted = false
@@ -159,13 +170,8 @@ struct RevealFlow: View {
             }
             defer { typed?.wipe() }
             let check = typed
-            let result: SecureBytes? = try await auth.perform(session, reason: String(localized: "Ver a senha de \(wallet.name)"), presence: .pinAndBiometry) { rk in
-                let secret = try KeyServices.wallets.open(walletID: id, rk: rk)
-                defer { secret.wipe() }
-                if let check, try PassphraseProof.check(secret, typed: check, fingerprint: fingerprint, cardanoPublicKey: nil) == .mismatch {
-                    throw Signer.Failure.passphraseMismatch
-                }
-                return try secret.phrase()
+            let result: SecureBytes? = try await auth.retrying(reason: String(localized: "Ver a senha de \(wallet.name)"), presence: .pinAndBiometry) {
+                try await session.walletPhrase($0, walletID: id, check: check, fingerprint: fingerprint)
             }
             guard let phrase = result else {
                 if check != nil { PassphraseGate.shared.refund(session, wallet: id) }
@@ -187,9 +193,7 @@ struct RevealFlow: View {
     }
 
     private func confirmed() {
-        var updated = session.metadata.wallets.first { $0.id == wallet.id } ?? wallet
-        updated.backupConfirmedAt = .now
-        session.update(updated)
+        let updated = session.update(wallet.id) { $0.backupConfirmedAt = .now } ?? wallet
         if updated.hasPassphrase, updated.passphraseConfirmedAt == nil, draft != nil {
             confirmingPassphrase = true
         } else {
@@ -199,9 +203,7 @@ struct RevealFlow: View {
 
     private func finish() {
         if draft != nil {
-            var updated = session.metadata.wallets.first { $0.id == wallet.id } ?? wallet
-            updated.lastRevealedAt = .now
-            session.update(updated)
+            session.update(wallet.id) { $0.lastRevealedAt = .now }
         }
         draft?.wipe()
         draft = nil

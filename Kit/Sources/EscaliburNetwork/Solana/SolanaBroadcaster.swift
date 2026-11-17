@@ -102,7 +102,7 @@ public actor SolanaBroadcaster {
 
     public init(client: HTTPClient = .shared, providers: [ProviderPool.Provider] = Endpoints.solana, reader: SolanaNetworkReader = .shared) {
         self.client = client
-        self.pool = ProviderPool(providers)
+        self.pool = ProviderPool(providers, draws: client.drawsProviders)
         self.reader = reader
     }
 
@@ -180,13 +180,15 @@ public actor SolanaBroadcaster {
         return result.value.first.flatMap { $0 }.map(SolanaSignatureStatus.init)
     }
 
-    /// O status da assinatura no historico de dois provedores diferentes, um por
-    /// provedor (nil: aquele nao conhece). Para decidir que venceu, os dois tem de nao
-    /// conhecer; um provedor so diria "venceu" de uma transacao que entrou.
+    /// O status da assinatura no historico de todos os donos, um por dono (nil: aquele nao conhece), na ordem sorteada. Para
+    /// decidir que falhou ou venceu, todos tem de dizer o mesmo, e pelo menos tres (ou todos os donos da lista, se forem
+    /// menos): dois combinados, com o par sorteado a cada consulta, acabavam respondendo juntos (rodada 1 da auditoria 8).
     public func historyStatuses(of signature: String) async throws -> [SolanaSignatureStatus?] {
         let client = self.client
         var answers = [SolanaSignatureStatus?]()
-        for provider in await pool.available() where answers.count < 2 {
+        var asked = Set<String>()
+        let operators = Set(pool.providers.map(\.operatorName)).count
+        for provider in pool.consensusOrder(await pool.available()) where asked.insert(provider.operatorName).inserted {
             do {
                 let result: RPCContextual<[RPCSignatureStatus?]> = try await SolanaRPC.call(
                     provider.baseURL, "getSignatureStatuses",
@@ -197,44 +199,8 @@ public actor SolanaBroadcaster {
                 await pool.reportFailure(provider)
             }
         }
-        guard answers.count == 2 else { throw ConsensusFailure(answers: answers.count) }
+        guard answers.count >= min(3, max(2, operators)) else { throw ConsensusFailure(answers: answers.count) }
         return answers
-    }
-
-    /// Acompanha ate `target` (confirmada ou finalizada), falha ou vencimento,
-    /// reenviando os mesmos bytes enquanto a transacao nao aparece. Os reenvios
-    /// usam `skipPreflight: true`: o no ja simulou no primeiro envio, e a mesma
-    /// transacao em voo faria a simulacao repetida falhar sem motivo real.
-    public func waitForConfirmation(
-        _ signed: SignedTransaction, lastValidBlockHeight: UInt64, target: SolanaCommitment = .confirmed,
-        pollInterval: Duration = .seconds(2), timeout: Duration = .seconds(120)
-    ) async throws -> SolanaConfirmation {
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: timeout)
-        var last = SolanaConfirmation.pending
-        while clock.now < deadline {
-            let status = try? await self.status(of: signed.id)
-            let height = (try? await reader.blockHeight()) ?? 0
-            var state = SolanaConfirmationTracker.evaluate(status: status, currentBlockHeight: height, lastValidBlockHeight: lastValidBlockHeight)
-            if state == .expired {
-                // Antes de declarar vencida: a altura finalizada de dois provedores passou do
-                // prazo com folga, e o historico dos dois nao conhece a transacao. Uma fonte
-                // so diria "venceu" de uma transacao que entrou (auditoria 2, M4).
-                let finalized = (try? await reader.finalizedBlockHeights())?.min() ?? 0
-                let histories = try? await historyStatuses(of: signed.id)
-                if finalized > lastValidBlockHeight &+ Self.expiryMargin, let histories, histories.count == 2 {
-                    let found = histories.compactMap { $0 }.first
-                    state = found.map { SolanaConfirmationTracker.evaluate(status: $0, currentBlockHeight: 0, lastValidBlockHeight: .max) } ?? .expired
-                } else {
-                    state = .pending
-                }
-            }
-            last = state
-            if state.isFinal || Self.reached(state, target) { return state }
-            if state == .pending { _ = try? await send(signed, skipPreflight: true) }
-            try await Task.sleep(for: pollInterval, clock: clock)
-        }
-        return last
     }
 
     /// Blocos alem do `lastValidBlockHeight` antes de dizer que venceu.

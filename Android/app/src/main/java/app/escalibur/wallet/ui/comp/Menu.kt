@@ -85,7 +85,7 @@ fun MenuFlutuante(aberto: Boolean, opcoes: List<OpcaoDoMenu>, escolhida: String?
         ) {
             val forma = RoundedCornerShape(22.dp)
             Column(
-                Modifier.width(250.dp).heightIn(max = 440.dp)
+                Modifier.recusaToqueCoberto().width(250.dp).heightIn(max = 440.dp)
                     .shadow(28.dp, forma, ambientColor = Color.Black.copy(alpha = 0.6f), spotColor = Color.Black.copy(alpha = 0.6f))
                     .clip(forma).background(Paleta.corpo).border(1.dp, Paleta.borda, forma)
                     .verticalScroll(rememberScrollState()).padding(vertical = Espaco.xs),

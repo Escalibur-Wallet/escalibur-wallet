@@ -24,8 +24,23 @@ struct XRPLTradeTests {
         try #require(XRPLTradeEngine(reader: N.reader(fake), tokens: [rlusd]))
     }
 
-    static func request(sell: Asset = xrp, buy: Asset = rlusd, amount: BigUInt = 10_000_000, bps: Int = 50) -> TradeRequest {
-        TradeRequest(walletID: UUID(), chain: .xrpl, account: TestAccounts.xrpl, sell: sell, buy: buy, amountIn: amount, slippageBasisPoints: bps)
+    /// `acceptsUnanchored`: sem preco de referencia a troca pede o aceite do dono (checagem final de 16/11/2026, M3);
+    /// os testes sem oraculo marcam o aceite, como o dono faria, e o teste da caixa desmarca.
+    static func request(sell: Asset = xrp, buy: Asset = rlusd, amount: BigUInt = 10_000_000, bps: Int = 50,
+                        acceptsUnanchored: Bool = true) -> TradeRequest {
+        TradeRequest(walletID: UUID(), chain: .xrpl, account: TestAccounts.xrpl, sell: sell, buy: buy, amountIn: amount, slippageBasisPoints: bps,
+                     acceptsUnanchored: acceptsUnanchored)
+    }
+
+    @Test("Checagem final M3: sem preco de referencia a cotacao vem sem comparacao, o plano pede o aceite e a revisao avisa")
+    func unanchoredWithoutReference() async throws {
+        let engine = try Self.engine(try N.fake())
+        let quote = try await engine.quote(Self.request())
+        #expect(quote.unanchored)
+        await #expect(throws: SendEngineError.message("Não há preço de referência do mercado para comparar. Marque que entende o risco para trocar.")) {
+            _ = try await engine.plan(Self.request(acceptsUnanchored: false), quote: quote)
+        }
+        #expect(try await engine.plan(Self.request(), quote: quote).review.warnings.contains(.uncomparedPrice))
     }
 
     static func offer(_ plan: SigningPlan) throws -> (XRPLTransaction, XRPLOfferCreate) {
@@ -69,6 +84,10 @@ struct XRPLTradeTests {
         let request = Self.request(buy: rlusd)
         // O livro da uns 1,55 RLUSD por XRP. Com o XRP a US$ 1,55, passa.
         let quote = try await engine(xrpUSD: "1.55").quote(request)
+        // Com a referencia, sem a marca de sem comparacao e sem o aviso (checagem final de 16/11/2026).
+        #expect(!quote.unanchored)
+        let anchoredRequest = Self.request(buy: rlusd, acceptsUnanchored: false)
+        #expect(!(try await engine(xrpUSD: "1.55").plan(anchoredRequest, quote: quote)).review.warnings.contains(.uncomparedPrice))
         #expect((15_400_000...15_600_000).contains(quote.expectedOut))
         // Com o XRP a US$ 2, o livro pagaria uns 22% abaixo do mercado: recusa.
         await #expect(throws: SendEngineError.self) { _ = try await engine(xrpUSD: "2").quote(request) }

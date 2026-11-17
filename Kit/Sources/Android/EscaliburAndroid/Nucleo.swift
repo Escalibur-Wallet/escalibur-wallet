@@ -146,7 +146,8 @@ enum Nucleo {
             try Sessao.shared.selecionar(try uuid(pedido["id"]))
             return try json(Estado.agora())
         case "carteira.renomear":
-            let nome = String((pedido["nome"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(48))
+            // O mesmo saneamento do iOS: sem controle, sem caractere invisivel ou de direcao (revisao, 08/11/2026).
+            let nome = Envelope.sanitize(pedido["nome"]?.stringValue ?? "", limit: 40)
             guard !nome.isEmpty else { throw Falha(erro: "nome vazio") }
             try Sessao.shared.atualizar(try uuid(pedido["id"])) { $0.name = nome }
             return try json(Estado.agora())
@@ -168,20 +169,121 @@ enum Nucleo {
             return try json(Sugestoes(palavras: WordLexicon.completions(digitado, preferring: idiomas, limit: max(1, min(limite, 8))),
                                       letras: WordLexicon.nextLetters(after: digitado, languages: idiomas).map(String.init).sorted()))
         case "carteira.tron":
-            // Quem controla a conta da Tron da carteira em conferencia (fora da tela das palavras).
+            // Quem controla a conta da Tron da carteira em conferencia (fora da tela das palavras). A rodada do dia da escolhida
+            // para antes, como no `carteira.evm` (rodada 4 da auditoria 8). Com passphrase, nada e poupado (rodada 5).
+            Sessao.shared.abrirPrevia(oculta: pedido["oculta"]?.boolValue ?? true)
             let endereco = pedido["endereco"]?.stringValue ?? ""
+            // A Tron desligada nos Ajustes nao e consultada por nada (rodada 5 da auditoria 8).
+            guard !Sessao.shared.metadata.settings.disabledChainIDs.contains(Chain.tron.id) else { return try json(["outraChave": false]) }
             let outra = try esperar { await Importacao.tronComOutraChave(endereco) }
             return try json(["outraChave": outra])
+        case "conferencias.agendar":
+            // A tela das palavras fechou: a rodada do dia que desistiu no silencio volta, se for a hora (rodada 9), como no iOS.
+            Sessao.shared.agendarConferencias()
+            return try json(["ok": true])
+        case "conferencias.segurar":
+            // A previa da importacao com a passphrase depois: a rodada do dia fica segura ate o fluxo fechar (rodada 8), como no iOS.
+            Sessao.shared.abrirPrevia(oculta: true)
+            return try json(["ok": true])
+        case "conferencias.retomar":
+            // A previa da importacao fechou: a rodada do dia da escolhida volta (rodada 5 da auditoria 8), como no iOS.
+            Sessao.shared.fecharPrevia()
+            return try json(["ok": true])
+        case "carteira.evm":
+            // A conta EVM da carteira em conferencia com contrato instalado por delegacao (EIP-7702) numa das redes da previa,
+            // como o `checkEVM` do iOS (auditoria 8, 14/11/2026). O aviso, e a marca ao gravar (rodada 4).
+            let endereco = pedido["endereco"]?.stringValue ?? ""
+            // A rodada do dia da escolhida para antes: a previa consulta a importada, e as duas nao saem juntas (rodada 4). Com
+            // passphrase, nada e poupado (rodada 5).
+            Sessao.shared.abrirPrevia(oculta: pedido["oculta"]?.boolValue ?? true)
+            let epoca = Sessao.shared.epocaAtual
+            // As redes desligadas nos Ajustes nao sao consultadas por nada (rodada 5 da auditoria 8).
+            let desligadas = Sessao.shared.metadata.settings.disabledChainIDs
+            let achado = try esperar { await ForeignControlCheck.previewDelegation(address: endereco, skipping: desligadas) }
+            // Guardado no nucleo, pelo endereco: ao gravar esta carteira, vira marca (rodada 4 da auditoria 8). So destravado, na
+            // mesma epoca de antes da leitura: travado no meio, o achado ficava na memoria com o app travado (rodada 5).
+            Sessao.shared.seDestravada(desde: epoca) { Importacao.guardarPreviaEVM(endereco, achado) }
+            return try json(["rede": achado?.chain.name, "aviso": achado?.control.message])
+        // Sem segredo nenhum: chegam pelo `Api.objeto` do Kotlin, que vem para ca. Dentro do `chamarComSegredo`, caiam em
+        // "metodo desconhecido", e a busca de movimento da carteira com passphrase nunca respondia (segunda revisao de
+        // blockchain, 08/11/2026).
+        case "carteira.usoDaPassphrase":
+            // A busca de movimento na carteira recem-aberta (o UsageCheck, igual ao iOS).
+            let id = try uuid(pedido["id"])
+            // A rodada do dia para: a carteira com passphrase e a de base nao sao consultadas juntas (rodada 1 da auditoria 8). A
+            // pausa mantem as desta, que acabaram de sair (rodada 4).
+            Sessao.shared.pararConferencias(mantendo: id)
+            guard let contas = Sessao.shared.metadata.wallets.first(where: { $0.id == id })?.accounts else { throw Sessao.Falha.carteiraNaoEncontrada }
+            // A Tron dela junto da busca: com outra chave no controle, a carteira nao abre sozinha (revisao, 08/11/2026).
+            let tron = Sessao.shared.conferirTron(id)
+            Sessao.shared.conferirControle(id)
+            Sessao.shared.conferirVersaoTON(id)
+            let uso = try esperar({ await UsageCheck.run(contas) })
+            // No maximo 5 s depois da busca: um provedor lento nao prende a tela, e a conferencia continua sozinha.
+            let outraChave = try esperar({ await Nucleo.respostaDaTron(tron, segundos: 5) })
+            switch uso {
+            case .used: return try json(UsoDaPassphrase(resultado: "usada", falharam: nil, tronOutraChave: outraChave))
+            case .never: return try json(UsoDaPassphrase(resultado: "nunca", falharam: nil, tronOutraChave: outraChave))
+            case .incomplete(let falharam):
+                let nomes = falharam.compactMap { Chain.find($0)?.name }.joined(separator: ", ")
+                return try json(UsoDaPassphrase(resultado: "incompleta", falharam: nomes, tronOutraChave: outraChave))
+            }
+        case "carteira.esperarTron":
+            // A conferencia da Tron de uma carteira que acabou de abrir, esperada fora da tela: a resposta recarrega o estado
+            // do Kotlin, e os atalhos de copiar deixam de mostrar a Tron marcada (revisao de blockchain, 08/11/2026).
+            let id = try uuid(pedido["id"])
+            let tarefa = Sessao.shared.conferirTron(id)
+            return try json(["outraChave": try esperar { await tarefa.value ?? false }])
+        case "carteira.descartarPassphrase":
+            try Sessao.shared.descartarCarteiraComPassphrase(try uuid(pedido["id"]), anterior: pedido["anterior"]?.stringValue.flatMap(UUID.init(uuidString:)))
+            return try json(Estado.agora())
         case "suporte.pareceFrase":
-            // Seis palavras seguidas da lista BIP-39, em qualquer idioma, como no SupportView do
-            // iOS: o chamado com um pedaco da frase nao sai. Contar palavras soltas recusava qualquer
-            // texto de 12 palavras e deixava passar 11 da frase.
-            let textos = ["detalhes", "transacao"].map { String((pedido[$0]?.stringValue ?? "").prefix(4096)) }
-            return try json(["frase": textos.contains { Envio.maiorSequenciaDePalavras($0) >= 6 }])
+            // A mesma conferencia do SupportView do iOS (`PrivateKeyGuard.supportSecret`): a chave, a frase ou um pedaco dela, e
+            // no texto os hexadecimais longos, que no ID da transacao passam. O tipo escolhe o aviso; nas palavras, o trecho vai
+            // junto, para quem so conversava saber o que trocar (revisao dos 3 agentes, 09/11/2026). Um caractere a mais que o
+            // campo aceita, para o texto comprido demais tambem ficar.
+            let detalhes = String((pedido["detalhes"]?.stringValue ?? "").prefix(4097))
+            let transacao = String((pedido["transacao"]?.stringValue ?? "").prefix(4097))
+            struct Resposta: Encodable { let frase: Bool; let tipo: String; let palavras: String }
+            // Com a rede do chamado: os 64 hexadecimais no ID passam so no formato do codigo de transacao dela.
+            let rede = pedido["rede"]?.stringValue.flatMap(Chain.find)
+            // So os enderecos que o app ja conhece na rede passam no texto (as contas, os contatos, os destinos), como no iOS.
+            let conhecidos: Set<String> = rede.map { chain in
+                let metadata = Sessao.shared.metadata
+                let contas = metadata.wallets.flatMap(\.accounts).filter { $0.chainID == chain.id }.map(\.address)
+                let contatos = metadata.contacts.filter { $0.chainID == chain.id }.map(\.address)
+                // Tambem os contratos publicos: o USDC e o USDt oficiais e as moedas custom da carteira.
+                return Set((contas + contatos + (metadata.sentTo[chain.id] ?? [])).map(PrivateKeyGuard.hexKey))
+                    .union(PrivateKeyGuard.publicContracts(on: chain, assetIDs: metadata.customTokens.map(\.id)))
+            } ?? []
+            switch PrivateKeyGuard.supportSecret(details: detalhes, transaction: transacao, chain: rede, known: conhecidos) {
+            case .none: return try json(Resposta(frase: false, tipo: "", palavras: ""))
+            case .secret: return try json(Resposta(frase: true, tipo: "chave", palavras: ""))
+            case .words(let trecho): return try json(Resposta(frase: true, tipo: "palavras", palavras: trecho))
+            case .hex: return try json(Resposta(frase: true, tipo: "hex", palavras: ""))
+            case .needsNetwork: return try json(Resposta(frase: true, tipo: "rede", palavras: ""))
+            }
+        case "texto.segredo":
+            // O Colar do app pergunta antes: com uma frase ou uma chave, a area de transferencia esvazia (como no iOS).
+            // Com a rede da tela, como no iOS: sem ela, a chave com 0x na EVM saia do campo e ficava na area de transferencia.
+            // Um caractere a mais que a conferencia alcanca: o texto comprido demais tambem esvazia (como no iOS).
+            let texto = String((pedido["texto"]?.stringValue ?? "").prefix(4097))
+            let rede = pedido["rede"]?.stringValue.flatMap(Chain.find)
+            return try json(["segredo": PrivateKeyGuard.clipboardHasSecret(texto, on: rede)])
+        case "texto.campo":
+            // O campo da moeda custom (o contrato, o codigo, o emissor): a frase ou a chave sai dele com o aviso, como no observar.
+            let texto = String((pedido["texto"]?.stringValue ?? "").prefix(4097)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let rede = pedido["rede"]?.stringValue.flatMap(Chain.find)
+            struct Campo: Encodable { let segredo: Bool; let aviso: String }
+            let segredo = Envio.ehSegredo(texto, rede: rede)
+            return try json(Campo(segredo: segredo, aviso: segredo ? Envio.avisoDoSegredo(texto, rede: rede) : ""))
         case "carteira.reconhecer":
             // A rede de um endereco colado para so observar: nada e guardado.
             let texto = String((pedido["endereco"]?.stringValue ?? "").prefix(512))
-            if Envio.pareceFrase(texto) { return try json(["frase": true]) }
+            if Envio.ehSegredo(texto, rede: nil) {
+                struct Segredo: Encodable { let frase: Bool; let aviso: String }
+                return try json(Segredo(frase: true, aviso: Envio.avisoDoSegredo(texto)))
+            }
             return try json(["reconhecida": Observacao.reconhecer(texto)])
         case "carteira.observar":
             let wallet = try Observacao.guardar(String((pedido["endereco"]?.stringValue ?? "").prefix(512)), nome: pedido["nome"]?.stringValue ?? "")
@@ -194,7 +296,8 @@ enum Nucleo {
             return try json(Contatos.conferir(
                 rede: pedido["rede"]?.stringValue ?? "", endereco: String((pedido["endereco"]?.stringValue ?? "").prefix(512)),
                 tag: pedido["tag"]?.stringValue ?? "", conferencia: pedido["conferencia"]?.stringValue ?? "",
-                conferenciaDoMemo: pedido["conferenciaDoMemo"]?.stringValue ?? "", comMemo: pedido["comMemo"]?.boolValue ?? false
+                conferenciaDoMemo: pedido["conferenciaDoMemo"]?.stringValue ?? "", comMemo: pedido["comMemo"]?.boolValue ?? false,
+                armado: pedido["armado"]?.boolValue ?? true
             ))
         case "contatos.link":
             return try json(Contatos.lerLink(String((pedido["texto"]?.stringValue ?? "").prefix(4096)), rede: pedido["rede"]?.stringValue ?? ""))
@@ -238,6 +341,46 @@ enum Nucleo {
             return try json(Receber.moedas())
         case "receber.endereco":
             return try json(try Receber.endereco(ativo: pedido["ativo"]?.stringValue ?? "", rede: pedido["rede"]?.stringValue))
+        case "carteira.enderecoParaCopiar":
+            // O Copiar endereco e os Enderecos dos Ajustes conferem aqui, na hora do toque e na carteira gravada: a tela pode estar um
+            // passo atras da marca de outra chave (rodada 8 da auditoria 8). Sem a marca em nenhuma das redes e com o mesmo endereco
+            // em todas, volta o endereco; senao, nada.
+            let pedidas = pedido["redes"]?.arrayValue ?? []
+            let redes = pedidas.compactMap { $0.stringValue.flatMap(Chain.find) }
+            guard Sessao.shared.fase == .unlocked, let id = UUID(uuidString: pedido["id"]?.stringValue ?? ""), !redes.isEmpty,
+                  redes.count == pedidas.count, let carteira = Sessao.shared.metadata.wallets.first(where: { $0.id == id }),
+                  // Com a copia conferida, como as telas: o nucleo e o portao inteiro (rodada 9).
+                  carteira.hasBackup || carteira.isWatchOnly,
+                  let endereco = carteira.account(redes[0])?.address,
+                  // Desde 15/11/2026 (pedido do dono, a forma mais segura), so a rede ja lida para outra chave no controle, e nunca
+                  // o endereco que outra carteira deste aparelho tem marcado, como no iOS.
+                  redes.allSatisfy({ carteira.recebe(on: $0) && (carteira.isWatchOnly || carteira.controlChecked(on: $0))
+                                     && Sessao.shared.metadata.wallets.marcadaEmOutra(carteira, on: $0) == nil
+                                     && carteira.account($0)?.address == endereco }) else {
+                return try json(["endereco": String?.none])
+            }
+            return try json(["endereco": endereco])
+        case "receber.conferirControle":
+            // A hora do deposito: a rede desta conta conferida de novo ao abrir o Receber, sem esperar a do destravar, como o
+            // iOS (auditoria 8, 14/11/2026). Volta o aviso que vale agora; a tela recarrega o endereco com ele.
+            guard let rede = Chain.find(pedido["rede"]?.stringValue ?? ""), let carteira = Sessao.shared.metadata.selectedWallet,
+                  !carteira.isWatchOnly else { return try json(["aviso": String?.none]) }
+            if rede.family == .tron {
+                // Cancelada, nil: a tela espera os 3 s, como nas outras redes (rodada 4 da auditoria 8).
+                guard try esperar({ await Sessao.shared.conferirTron(carteira.id).value }) != nil else {
+                    throw Falha(erro: "receber.naoConferida")
+                }
+            } else {
+                // Numa EVM, tambem as outras EVM marcadas: a marca de uma fecha todas (rodada 3 da auditoria 8), como no iOS.
+                let marcadas = rede.family == .evm
+                    ? Set((carteira.foreignControl ?? [:]).keys.filter { Chain.find($0)?.family == .evm }) : []
+                // A que nao foi ate o fim (a pausa) volta como erro: a tela espera os 3 s em vez de liberar na hora (rodada 4).
+                guard try esperar({ await Sessao.shared.conferirControle(carteira.id, redes: marcadas.union([rede.id])).value }) else {
+                    throw Falha(erro: "receber.naoConferida")
+                }
+            }
+            let atual = Sessao.shared.metadata.wallets.first { $0.id == carteira.id }
+            return try json(["aviso": atual?.foreignControl(on: rede)?.message, "tronOutraChave": atual?.tronForeignControl == true ? "sim" : nil])
         case "receber.buscar":
             let texto = pedido["texto"]?.stringValue ?? ""
             return try json(esperar { await Receber.buscar(texto) })
@@ -364,7 +507,7 @@ enum Nucleo {
             // So observar: nao ha chave a proteger, nada pede o PIN.
             let id = try uuid(pedido["id"])
             guard Sessao.shared.metadata.wallets.first(where: { $0.id == id })?.isWatchOnly == true else { throw Falha(erro: "carteira com chave") }
-            try Sessao.shared.remover(id)
+            try Sessao.shared.remover(id, credencial: nil)
             return try json(Estado.agora())
 
         #if DEBUG
@@ -426,6 +569,18 @@ enum Nucleo {
             case "pinEBiometria": return .pinEBiometria(try proxima(), motivo: motivo)
             case "reforcado": return .reforcado(try proxima(), motivo: motivo)
             default: throw Falha(erro: "credencial desconhecida")
+            }
+        }
+        // Ver as palavras, lacra-las num envelope e remover a carteira pedem a presenca inteira: o PIN e, com a biometria
+        // ligada, ela tambem (ou o Super Security). As telas ja pedem assim; o nucleo confere, para nenhuma tela nova pedir
+        // menos (auditoria 8, 14/11/2026), como o `desligarBiometria` ja fazia.
+        func credencialForte() throws -> Credencial {
+            let cred = try credencial()
+            switch cred {
+            case .pinEBiometria, .reforcado: return cred
+            case .pin, .biometria:
+                cred.zerar()
+                throw RootKeyVault.Failure.biometryRequired
             }
         }
 
@@ -497,6 +652,31 @@ enum Nucleo {
                 tronComOutraChave: pedido["tronOutraChave"]?.boolValue ?? false, digital: pedido["digital"]?.stringValue, credencial: cred
             )
             return try json(CarteiraResumo(wallet, selecionada: true))
+        case "carteira.importarComPassphrase":
+            // O interruptor da passphrase na importacao: so a carteira com passphrase vai ao cofre (revisao dos 3 agentes, 08/11/2026).
+            // A rodada do dia da carteira de base para antes, como ao abrir pelos Ajustes (rodada 2 da auditoria 8). Sem abrir (o
+            // PIN recusado, um erro), ela volta (rodada 6), como no iOS.
+            Sessao.shared.pararConferencias()
+            var aberta = false
+            defer { if !aberta { Sessao.shared.agendarConferencias() } }
+            let cred = try credencial()
+            let frase = try proxima()
+            let nome = nomeComPassphrase(pedido["nome"]?.stringValue)
+            let anterior = Sessao.shared.metadata.selectedWalletID
+            let (wallet, jaAberta) = try Importacao.importarComPassphrase(
+                frase, passphrase: try passphraseCheia(cred), palavras: Int(pedido["palavras"]?.doubleValue ?? 12),
+                digitalDaFrase: pedido["digital"]?.stringValue, nome: nome, credencial: cred
+            )
+            aberta = true
+            _ = Sessao.shared.conferirTron(wallet.id)
+            Sessao.shared.conferirControle(wallet.id)
+            Sessao.shared.conferirVersaoTON(wallet.id)
+            return try json(AbertaComPassphrase(carteira: CarteiraResumo(wallet, selecionada: true), jaAberta: jaAberta, anterior: anterior?.uuidString))
+        case "sessao.confirmar":
+            // O PIN ou a digital, sem abrir nada: importar com o interruptor da passphrase pede a confirmacao antes da tela da
+            // passphrase (pedido do dono, 08/11/2026).
+            try Sessao.shared.comChaveRaiz(try credencial()) { _ in }
+            return try json(["ok": true])
         case "ajustes.tecladoProprio":
             guard Chaves.root.securityMode != .hardened else { throw Falha(erro: "ajustes.tecladoNoReforco") }
             try Sessao.shared.comChaveRaiz(try credencial()) { _ in }
@@ -532,6 +712,12 @@ enum Nucleo {
             try Sessao.shared.comChaveRaiz(cred) { _ in }
             try Chaves.root.setWipeAfterErrors(limite)
             return try json(Estado.agora())
+        case "passphrase.escrevivel":
+            // Antes do PIN, sem credencial: a passphrase da importacao tem o que o papel nao mostra? O app pergunta antes de
+            // abrir (revisao de seguranca, 08/11/2026). O Kotlin zera a dele na volta.
+            let passphrase = try passphraseCheia(nil)
+            defer { passphrase.wipe() }
+            return try json(["escrevivel": PortaDaPassphrase.escrevivel(passphrase)])
         case "passphrase.entregar":
             // A passphrase digitada para a proxima assinatura, sem credencial: o Kotlin zera a dele na volta.
             PortaDaPassphrase.entregar(try passphraseCheia(nil))
@@ -551,7 +737,7 @@ enum Nucleo {
             return try Troca.assinar(cred, passphrase: passphrase, folga: pedido["folga"]?.doubleValue.map { Int($0) }, alvo: pedido["alvo"]?.stringValue)
         case "envelope.abrirCarteira":
             let id = try uuid(pedido["id"])
-            let cred = try credencial()
+            let cred = try credencialForte()
             let passphrase = try passphraseOpcional(cred)
             return try json(["nome": try Envelopes.abrirCarteira(id, credencial: cred, passphraseDigitada: passphrase)])
         case "envelope.medir":
@@ -571,26 +757,22 @@ enum Nucleo {
         case "carteira.abrirComPassphrase":
             let base = try uuid(pedido["base"])
             let cred = try credencial()
-            let nome = String((pedido["nome"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+            let nome = nomeComPassphrase(pedido["nome"]?.stringValue)
             let anterior = Sessao.shared.metadata.selectedWalletID
+            Sessao.shared.pararConferencias()
+            // Sem abrir (o PIN recusado, um erro), a rodada do dia da base volta (rodada 6 da auditoria 8), como no iOS.
+            var aberta = false
+            defer { if !aberta { Sessao.shared.agendarConferencias() } }
             let (wallet, jaAberta) = try Sessao.shared.abrirComPassphrase(base: base, passphrase: try passphraseCheia(cred), nome: nome, credencial: cred)
+            aberta = true
+            // A Tron dela conferida ja, nova ou reaberta, mesmo que o dono abra sem esperar a busca de movimento (o golpe da
+            // "frase com saldo", revisao de 08/11/2026).
+            _ = Sessao.shared.conferirTron(wallet.id)
+            Sessao.shared.conferirControle(wallet.id)
+            Sessao.shared.conferirVersaoTON(wallet.id)
             return try json(AbertaComPassphrase(carteira: CarteiraResumo(wallet, selecionada: true), jaAberta: jaAberta, anterior: anterior?.uuidString))
-        case "carteira.usoDaPassphrase":
-            // A busca de movimento na carteira recem-aberta (o UsageCheck, igual ao iOS).
-            let id = try uuid(pedido["id"])
-            guard let contas = Sessao.shared.metadata.wallets.first(where: { $0.id == id })?.accounts else { throw Sessao.Falha.carteiraNaoEncontrada }
-            switch try esperar({ await UsageCheck.run(contas) }) {
-            case .used: return try json(["resultado": "usada"])
-            case .never: return try json(["resultado": "nunca"])
-            case .incomplete(let falharam):
-                let nomes = falharam.compactMap { Chain.find($0)?.name }.joined(separator: ", ")
-                return try json(["resultado": "incompleta", "falharam": nomes])
-            }
-        case "carteira.descartarPassphrase":
-            try Sessao.shared.descartarCarteiraComPassphrase(try uuid(pedido["id"]), anterior: pedido["anterior"]?.stringValue.flatMap(UUID.init(uuidString:)))
-            return try json(Estado.agora())
         case "carteira.revelar":
-            let cred = try credencial()
+            let cred = try credencialForte()
             let passphrase = try passphraseOpcional(cred)
             let aberto = try Sessao.shared.revelar(try uuid(pedido["id"]), credencial: cred, passphraseDigitada: passphrase)
             return try json(Revelado(palavras: aberto.palavras, passphrase: aberto.passphrase))
@@ -601,9 +783,8 @@ enum Nucleo {
             return try json(["resultado": resultado.rawValue])
         case "carteira.remover":
             let id = try uuid(pedido["id"])
-            // Remover pede a mesma presenca que ver as palavras: o cofre confere antes.
-            try Sessao.shared.comChaveRaiz(try credencial()) { _ in }
-            try Sessao.shared.remover(id)
+            // Remover pede a mesma presenca que ver as palavras: a remocao confere e o cofre abre antes (rodada 3).
+            try Sessao.shared.remover(id, credencial: try credencialForte())
             return try json(Estado.agora())
         default:
             throw Falha(erro: "metodo desconhecido: \(metodo)")
@@ -613,6 +794,40 @@ enum Nucleo {
     /// O pedido de "Esqueci o PIN": sem `restante`, nada pedido; 0, pode apagar.
     struct EsqueciPIN: Encodable {
         let restante: Double?
+    }
+
+    /// O nome da carteira com passphrase, saneado como no iOS. So com caractere de controle ou invisivel, o saneamento deixava
+    /// vazio, e a carteira ficava sem nome na lista (revisao dos 3 agentes, 08/11/2026).
+    static func nomeComPassphrase(_ pedido: String?) -> String {
+        let nome = Envelope.sanitize(pedido ?? "", limit: 40)
+        return nome.isEmpty ? Textos.t("Carteira com passphrase") : nome
+    }
+
+    /// A resposta da Tron, esperada no maximo `segundos` (o tronAnswer do iOS): sem resposta no prazo, "nao", e a conferencia
+    /// segue sozinha e marca a carteira quando chegar.
+    static func respostaDaTron(_ tarefa: Task<Bool?, Never>, segundos: Double) async -> Bool {
+        final class Uma: @unchecked Sendable {
+            private let trava = NSLock()
+            private var feita = false
+            func vez() -> Bool { trava.withLock { defer { feita = true }; return !feita } }
+        }
+        let uma = Uma()
+        return await withCheckedContinuation { continuacao in
+            Task {
+                let valor = await tarefa.value ?? false
+                if uma.vez() { continuacao.resume(returning: valor) }
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(segundos * 1_000_000_000))
+                if uma.vez() { continuacao.resume(returning: false) }
+            }
+        }
+    }
+
+    struct UsoDaPassphrase: Encodable {
+        let resultado: String
+        let falharam: String?
+        let tronOutraChave: Bool
     }
 
     struct AbertaComPassphrase: Encodable {
@@ -837,7 +1052,7 @@ struct Estado: Encodable {
             erros: Int(root.failureCount()),
             reforcado: root.securityMode == .hardened,
             espera: root.securityMode == .hardened ? max(0, root.hardenedHoldRemaining) : 0,
-            carteiras: metadata.wallets.map { CarteiraResumo($0, selecionada: $0.id == selecionada) },
+            carteiras: metadata.wallets.map { CarteiraResumo($0, selecionada: $0.id == selecionada, todas: metadata.wallets) },
             selecionada: selecionada?.uuidString,
             ajustes: Ajustes(
                 moeda: metadata.settings.currency, unidade: metadata.settings.totalUnit ?? metadata.settings.currency,
@@ -869,6 +1084,13 @@ struct CarteiraResumo: Encodable {
     let temPassphrase: Bool
     let passphraseConfirmada: Bool
     let tronOutraChave: Bool
+    /// As redes com outra chave ou contrato no controle (auditoria 8): o endereco nao aparece nem copia.
+    let outroControle: [String]
+    /// As redes ainda nao lidas para outra chave no controle (`controlChecked`): o endereco espera a conferencia para aparecer e
+    /// copiar (pedido do dono, 15/11/2026, a forma mais segura). Vazio na so de observacao, que nao e conferida.
+    let naoLidas: [String]
+    /// As redes cujo endereco outra carteira deste aparelho tem marcado (`marcadaEmOutra`): nao aparece nem copia (15/11/2026).
+    let marcadaEmOutra: [String]
     /// Pede a passphrase para assinar e para ver as palavras: toda carteira com passphrase (05/11/2026).
     let pedePassphrase: Bool
     /// A carteira com passphrase que esta versao nao confere: ver, lacrar e conferir recusam antes da passphrase e do PIN.
@@ -881,7 +1103,7 @@ struct CarteiraResumo: Encodable {
     let envelopeLacradoEm: Date?
     let vistaEm: Date?
 
-    init(_ wallet: WalletMeta, selecionada: Bool) {
+    init(_ wallet: WalletMeta, selecionada: Bool, todas: [WalletMeta]? = nil) {
         id = wallet.id.uuidString
         nome = wallet.name
         observacao = wallet.isWatchOnly
@@ -893,6 +1115,17 @@ struct CarteiraResumo: Encodable {
         temPassphrase = wallet.hasPassphrase
         passphraseConfirmada = wallet.passphraseConfirmed
         tronOutraChave = wallet.tronForeignControl ?? false
+        // Toda rede com a marca, e numa EVM tambem a marca de outra EVM (o mesmo endereco e a mesma chave; rodada 2 da auditoria 8).
+        outroControle = Set((wallet.foreignControl ?? [:]).keys).union(wallet.accounts.compactMap { conta in
+            Chain.find(conta.chainID).flatMap { wallet.foreignControl(on: $0) != nil ? conta.chainID : nil }
+        }).sorted()
+        naoLidas = wallet.isWatchOnly ? [] : wallet.accounts.compactMap { conta in
+            Chain.find(conta.chainID).flatMap { wallet.controlChecked(on: $0) ? nil : conta.chainID }
+        }.sorted()
+        let todas = todas ?? Sessao.shared.metadata.wallets
+        marcadaEmOutra = wallet.accounts.compactMap { conta in
+            Chain.find(conta.chainID).flatMap { todas.marcadaEmOutra(wallet, on: $0) != nil ? conta.chainID : nil }
+        }.sorted()
         pedePassphrase = PortaDaPassphrase.pede(wallet)
         semConferencia = PortaDaPassphrase.semConferencia(wallet)
         self.selecionada = selecionada

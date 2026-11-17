@@ -70,9 +70,11 @@ enum EVMTradeFixtures {
         return try TradeIntent(owner: owner, sell: .token(usdcToken), buy: .native(.base), amountIn: amount, slippageBps: 50)
     }
 
-    static func request(amount: BigUInt = amount) throws -> TradeRequest {
+    /// `acceptsUnanchored`: sem preco de referencia a troca pede o aceite do dono tambem com duas fontes (checagem
+    /// final de 16/11/2026, M3); os testes do plano sem oraculo marcam o aceite, como o dono faria.
+    static func request(amount: BigUInt = amount, acceptsUnanchored: Bool = false) throws -> TradeRequest {
         TradeRequest(walletID: UUID(), chain: .base, account: try EVMTestAccounts.testAccount(on: .base), sell: usdc,
-                     buy: .native(.base), amountIn: amount, slippageBasisPoints: 50)
+                     buy: .native(.base), amountIn: amount, slippageBasisPoints: 50, acceptsUnanchored: acceptsUnanchored)
     }
 
     /// Os provedores que tem router na Base, onde estao as gravacoes (a ShibaSwap so existe
@@ -362,9 +364,11 @@ enum EVMTradeHarness {
     static func engine(
         chain: Chain = .base, state: FakeTradeChain = FakeTradeChain(), cow: FakeCoW = FakeCoW(), prices: [String: String]? = nil,
         oracleDelay: Duration = .zero, oracle: (any EVMPriceOracle)? = nil, sources: [any TradeQuoteSource], transport: EVMFixtureTransport,
-        quoteAddress: @escaping @Sendable (EVMAddress) -> EVMAddress = { $0 }
+        quoteAddress: @escaping @Sendable (EVMAddress) -> EVMAddress = { $0 },
+        // Tres: o "confirmado" da autorizacao pede tres operadores atras do recibo (15/11/2026).
+        providers: [ProviderPool.Provider] = testProviders("a", "b", "c")
     ) -> EVMTradeEngine {
-        let reader = EVMReader(transport: transport, rpc: [chain.id: testProviders("a", "b")], history: [:],
+        let reader = EVMReader(transport: transport, rpc: [chain.id: providers], history: [:],
                                privateRelays: testProviders("relay1", "relay2"))
         let services = EVMTradeServices(
             aggregator: TradeAggregator(sources: sources), chainState: state, reader: reader, cow: cow,

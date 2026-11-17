@@ -82,7 +82,75 @@ object Transferencia {
     private const val ARQUIVO = "transferencia.pendente"
     private const val SEGREDO = "segredo"
 
-    fun copiar(contexto: Context, texto: CharSequence, segundos: Long = 120, rotulo: String = "Escalibur", segredo: Boolean = false) {
+    /** O endereco de receber copiado por ultimo, a marca da copia e a conta de onde saiu, so na memoria (rodadas 10 e 11). */
+    private data class Copia(val endereco: String, val marca: String, val carteira: String, val rede: String, val ordenada: Boolean = false)
+    // Atomica: o aviso do nucleo chega por outra thread, e um ler e gravar solto apagava a ordem de uma copia nova (rodada 15).
+    private val ultima = java.util.concurrent.atomic.AtomicReference<Copia?>(null)
+    @Volatile private var aplicativo: Context? = null
+
+    /** O endereco de receber: copiado como os outros textos, e lembrado para sair antes do prazo se a conta deixar de receber. */
+    fun copiarEndereco(contexto: Context, endereco: String, carteira: String, rede: String) {
+        aplicativo = contexto.applicationContext
+        ultima.set(Copia(endereco, copiar(contexto, endereco), carteira, rede))
+    }
+
+    /**
+     * O endereco copiado sai antes do prazo quando a conta dele deixa de receber (a marca de outra chave que chegou depois da
+     * copia) ou troca de endereco (a TON da V4R2 para a W5), se a copia ainda e a nossa (rodadas 10 e 11 da auditoria 8), como no
+     * iOS. Pela conta da copia: travado, a lista vem vazia, e nada conta como mudado. Sem o foco o Android nao deixa ler: fica
+     * para quando o foco voltar.
+     */
+    fun retirarSeBloqueado(contexto: Context, carteiras: List<app.escalibur.wallet.ui.Carteira>, fase: String) {
+        val copia = ultima.get() ?: return
+        val conta = carteiras.firstOrNull { it.id == copia.carteira }
+        // A carteira que saiu do aparelho (destravado e fora da lista) e o app apagado tambem tiram a copia (rodada 12).
+        val saiu = (fase == "unlocked" && conta == null) || fase == "onboarding"
+        val trocou = conta?.endereco(copia.rede)?.let { it != copia.endereco } == true
+        // A marca em qualquer carteira com esse endereco (a so de observacao do mesmo endereco tambem), como o iOS, que retira
+        // pelo endereco (rodada 12).
+        val marcada = carteiras.any { c ->
+            c.contas.any { (rede, endereco) ->
+                endereco == copia.endereco && (rede in c.outroControle || (c.tronOutraChave && app.escalibur.wallet.ui.carteira.Redes.rede(rede)?.familia == "tron"))
+            }
+        }
+        // O nucleo mandou tirar sem o foco: sai quando ele voltar, mesmo com o app travado e a lista vazia (rodada 13).
+        if (!saiu && !trocou && !marcada && !copia.ordenada) return
+        limpar(contexto, copia)
+    }
+
+    /** O aviso do nucleo, anotado de qualquer thread assim que chega (rodada 14): a copia de um destes enderecos fica condenada. */
+    fun anotarRetirada(json: String) {
+        val lista = runCatching { org.json.JSONObject(json).getJSONArray("enderecos") }.getOrNull() ?: return
+        val enderecos = (0 until lista.length()).map { lista.getString(it) }.toSet()
+        if (marcar(enderecos)?.ordenada != true) return
+        // E tenta ja, na principal: com o app na frente e o foco, a copia sai sem esperar a volta do foco nem a lista, que um aviso
+        // perdido no fluxo deixava para tras (rodada 15). Sem o foco, a ordem fica para a volta.
+        val app = aplicativo ?: return
+        android.os.Handler(android.os.Looper.getMainLooper()).post { ultima.get()?.takeIf { it.ordenada }?.let { limpar(app, it) } }
+    }
+
+    /** A copia de um destes enderecos fica condenada; devolve a copia de agora. */
+    private fun marcar(enderecos: Set<String>): Copia? =
+        ultima.updateAndGet { copia -> if (copia != null && copia.endereco in enderecos) copia.copy(ordenada = true) else copia }
+
+    /** O aviso do nucleo na hora da marca, com o app travado ou nao (rodada 12): sai a copia de um destes enderecos. */
+    fun retirarEnderecos(contexto: Context, enderecos: Set<String>) {
+        // Sem o foco o Android nao deixa ler: a ordem fica anotada para a volta (rodada 13).
+        val copia = marcar(enderecos)?.takeIf { it.ordenada && it.endereco in enderecos } ?: return
+        limpar(contexto, copia)
+    }
+
+    /** So com o foco e so se a copia ainda e a nossa; sem o foco, fica para quando ele voltar. */
+    private fun limpar(contexto: Context, copia: Copia) {
+        val gerente = contexto.getSystemService(ClipboardManager::class.java)
+        val descricao = runCatching { gerente.primaryClipDescription }.getOrNull() ?: return
+        // So esquece a copia que ainda e a de agora: uma nova copiada no meio fica (rodada 15).
+        ultima.compareAndSet(copia, null)
+        if (descricao.label?.toString() == copia.marca) runCatching { gerente.clearPrimaryClip() }
+    }
+
+    /** Devolve a marca da copia (o rotulo com o sorteio), que so o app conhece. */
+    fun copiar(contexto: Context, texto: CharSequence, segundos: Long = 120, rotulo: String = "Escalibur", segredo: Boolean = false): String {
         val gerente = contexto.getSystemService(ClipboardManager::class.java)
         val sorteio = ByteArray(8).also { java.security.SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
         val marca = "$rotulo $sorteio"
@@ -98,7 +166,7 @@ object Transferencia {
             delay(segundos * 1000)
             apagarSeVenceu(aplicativo, comFoco = false)
         }
-        val alarmes = aplicativo.getSystemService(AlarmManager::class.java) ?: return
+        val alarmes = aplicativo.getSystemService(AlarmManager::class.java) ?: return marca
         // Um alarme so: a copia nova substitui o da anterior, e a que nao e segredo cancela o da frase.
         val aviso = PendingIntent.getBroadcast(
             aplicativo, 0, Intent(aplicativo, ApagarTransferencia::class.java),
@@ -109,6 +177,7 @@ object Transferencia {
         } else {
             runCatching { alarmes.cancel(aviso) }
         }
+        return marca
     }
 
     /**

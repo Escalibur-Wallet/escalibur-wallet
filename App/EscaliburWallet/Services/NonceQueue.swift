@@ -72,17 +72,21 @@ enum NonceQueue {
     }
 
     /// Tira da fila o que a rede ja confirmou ou recusou num bloco, o que esta pendente ha tempo demais e
-    /// o que a rede nao conhece depois do prazo de propagacao, com tudo acima (`NonceQueuePruning`, a
+    /// o que a rede nao conhece depois do prazo de propagacao, com tudo acima, salvo a de nonce ja minerado, que sai
+    /// sozinha (`NonceQueuePruning`, a
     /// mesma regra do Android). Leitura que falha: a entrada fica, a nao ser que esteja velha.
     static func prune(_ session: AppSession, wallet: UUID, chain: Chain, address: String) async {
         let key = key(wallet: wallet, chain: chain, address: address)
         guard chain.family == .evm, let entries = session.metadata.pendingEVM?[key], !entries.isEmpty,
               let engine = SendEngines.engine(for: chain) else { return }
+        // Uma leitura por poda: o que esta abaixo do nonce minerado sai sem depender do recibo antigo (bug de 14/11/2026).
+        let mined = await engine.minedNonce(chain: chain, from: address)
         let result = await NonceQueuePruning.pruned(
             entries.map {
                 NonceQueuePruning.Entry(nonce: $0.nonce, hash: $0.hash, sentAt: $0.sentAt, privateRoute: $0.privateRoute == true,
                                         wasSeen: $0.everSeen == true || $0.seen == true, heldAt: $0.heldAt, releasedAt: $0.releasedAt)
             },
+            minedNonce: mined,
             settled: { entry in
                 if case .pending = await engine.status(entry.hash, chain: chain) { return false }
                 return true
@@ -140,10 +144,5 @@ enum NonceQueue {
     static func sellsInFlight(_ session: AppSession, wallet: UUID, chain: Chain, address: String, asset: String) -> Bool {
         guard chain.family == .evm, let entries = session.metadata.pendingEVM?[key(wallet: wallet, chain: chain, address: address)] else { return false }
         return asset == Asset.native(chain).id ? !entries.isEmpty : entries.contains { $0.sells == asset }
-    }
-
-    static func clear(_ session: AppSession, wallet: UUID, chain: Chain, address: String) {
-        session.metadata.pendingEVM?[key(wallet: wallet, chain: chain, address: address)] = nil
-        try? session.persist()
     }
 }

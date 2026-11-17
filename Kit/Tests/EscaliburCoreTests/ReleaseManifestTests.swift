@@ -145,6 +145,23 @@ struct ReleaseManifestTests {
     func chavesCompiladas() {
         #expect(ReleaseKeys.trusted.count == ReleaseKeys.published.count)
         #expect(ReleaseKeys.threshold >= 1 && ReleaseKeys.threshold <= ReleaseKeys.trusted.count)
+        // Nenhuma chave publicada com dois nomes: o limiar conta chaves (auditoria 8, 14/11/2026).
+        #expect(Set(ReleaseKeys.trusted.values.map(\.rawRepresentation)).count == ReleaseKeys.trusted.count)
+    }
+
+    @Test("Auditoria 8: a mesma chave com dois nomes conta uma vez no limiar")
+    func mesmaChaveDoisNomes() throws {
+        let chave = P256.Signing.PrivateKey(), outra = P256.Signing.PrivateKey()
+        let texto = Self.manifesto()
+        let apelidos = ["nome-novo": chave.publicKey, "nome-antigo": chave.publicKey]
+        #expect(throws: ReleaseManifest.Failure.notEnoughSignatures) {
+            try ReleaseManifest.verified(try Self.arquivo(texto, assinantes: [("nome-novo", chave), ("nome-antigo", chave)]),
+                                         app: Self.app, keys: apelidos, threshold: 2)
+        }
+        // Duas chaves de verdade fecham o limiar de dois.
+        let duas = ["a": chave.publicKey, "b": outra.publicKey]
+        #expect(try ReleaseManifest.verified(try Self.arquivo(texto, assinantes: [("a", chave), ("b", outra)]), app: Self.app, keys: duas,
+                                             threshold: 2).signedBy == ["a", "b"])
     }
 
     /// A lista que o site publica (`site/versoes.json`, assinada no Mac do dono) passa pelo

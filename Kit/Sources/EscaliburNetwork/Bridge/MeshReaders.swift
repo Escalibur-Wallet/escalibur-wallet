@@ -66,7 +66,7 @@ extension TronReader {
         guard guid.count == 32 else { throw ReaderError.invalidInput("guid") }
         guard !historyProviders.isEmpty else { throw ReaderError.unsupported("eventos sem indexador") }
         let transport = self.transport
-        let historyPool = ProviderPool(historyProviders)
+        let historyPool = ProviderPool(historyProviders, draws: transport.drawsProviders)
         let wanted = Hex.encode(guid)
         let start = String(Int64(max(0, since.timeIntervalSince1970) * 1_000))
         let found: String? = try await Quorum.first(historyProviders, pool: historyPool) { provider in

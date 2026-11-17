@@ -195,7 +195,8 @@ enum EVMTradeQuoteMapping {
             providersCompared: alternativesFrom.map { kept in ranked.filter { kept.contains($0.quote.provider) }.count } ?? ranked.count,
             needsApproval: sellsToken && legs.contains { (allowances[$0.quote.spender] ?? 0) < $0.quote.intent.amountIn || $0.quote.router.viaPermit2 },
             expiresAt: (legs.map(\.quote.validatedAt).min() ?? .now).addingTimeInterval(ValidatedTradeQuote.lifetime),
-            unanchored: unanchored
+            // So a cotacao sem comparacao de uma fonte so chega com `alternativesFrom` (EVMTradeEngine.aggregatorQuote).
+            unanchored: unanchored, singleSource: unanchored && alternativesFrom != nil
         )
     }
 

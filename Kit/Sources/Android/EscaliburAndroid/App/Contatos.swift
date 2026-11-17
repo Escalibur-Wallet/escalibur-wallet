@@ -9,13 +9,16 @@ import Foundation
 enum Contatos {
     struct Resumo: Encodable {
         let id: String, nome: String, rede: String, redeNome: String, redeCoingecko: String, endereco: String, tag: String?
+        /// O endereco de uma conta deste celular com outra chave no controle: a tela nao oferece copiar (15/11/2026), como no iOS.
+        let marcado: Bool
     }
 
     static func lista() -> [Resumo] {
-        Sessao.shared.metadata.contacts.compactMap { contato in
+        let metadata = Sessao.shared.metadata
+        return metadata.contacts.compactMap { contato in
             guard let chain = Chain.find(contato.chainID) else { return nil }
             return Resumo(id: contato.id.uuidString, nome: contato.name, rede: chain.id, redeNome: chain.name, redeCoingecko: chain.coingeckoID,
-                          endereco: contato.address, tag: contato.tag)
+                          endereco: contato.address, tag: contato.tag, marcado: metadata.wallets.donaMarcada(de: contato.address, on: chain) != nil)
         }
     }
 
@@ -61,6 +64,19 @@ enum Contatos {
         let conferido: Bool
         let conflitoDoMemo: Envio.Estado.OutroID?
         let memoConferido: Bool
+        /// O desafio confere maiusculas e minusculas (`AddressPoisoning.caseMatters`), e a tela avisa.
+        let caixaConta: Bool
+        /// Nome da NEAR valido, com o desafio ainda por nascer: o Salvar o faz nascer.
+        let pendente: Bool
+        /// O desafio e o nome inteiro: conferido no toque do Salvar, e nao ao vivo.
+        let nomeInteiro: Bool
+        /// O campo tem uma frase de carteira: a tela o esvazia na hora, como no envio (revisao dos 3 agentes, 09/11/2026).
+        let limpar: Bool
+        /// A tag tem uma frase ou uma chave: a tela a esvazia na hora (salva, ela iria a rede em cada envio).
+        let limparTag: Bool
+        /// O texto nao vale na rede escolhida mas e um nome da NEAR: colado inteiro, a tela esconde o campo ate a troca de rede, com
+        /// a mesma regra do iOS, e nao so quando a sugestao e da NEAR (".near", ".tg").
+        let nomeNaRedeErrada: Bool
     }
 
     private struct Calculo {
@@ -72,15 +88,19 @@ enum Contatos {
         var segmento: AddressPoisoning.Segment?
         var fonte = ""
         var conferido = false
+        var pendente = false
+        /// A frase no campo: a tela o esvazia na hora, como no envio.
+        var limpar = false
         var memoOutroID: AddressPoisoning.SameAccount?
     }
 
-    private static func calcular(_ chain: Chain, endereco texto: String, tag: String, conferencia: String) -> Calculo {
+    private static func calcular(_ chain: Chain, endereco texto: String, tag: String, conferencia: String, armado: Bool = true) -> Calculo {
         var c = Calculo()
         let limpo = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpo.isEmpty else { return c }
-        if Envio.pareceFrase(limpo) {
-            c.problema = Textos.t("Este código traz as palavras de uma senha de carteira, não um endereço. Quem tem essas palavras tem o saldo: não mostre a ninguém.")
+        if Envio.ehSegredo(limpo, rede: chain) {
+            c.problema = Envio.avisoDoSegredo(limpo, rede: chain)
+            c.limpar = true
             return c
         }
         switch Address.validate(limpo, for: chain) {
@@ -88,10 +108,23 @@ enum Contatos {
             c.destino = destino
         case .failure(let falha):
             c.problema = Envio.mensagem(falha, chain: chain)
-            if let palpite = Address.guessChain(limpo), palpite.id != chain.id { c.sugestao = palpite }
+            // Um nome (com ponto) noutra rede: o aviso diz que e um nome, e nao manda copiar de novo (como no iOS).
+            if case .malformed = falha, AddressPoisoning.nameNotAddress(limpo, on: chain) {
+                c.problema = preencher(Textos.t("Este é um nome, não um endereço. Cole o endereço da rede %@."), chain.name)
+            }
+            // A sugestao so quando o colado vale na rede sugerida: a Cardano reconhece tipos que ela mesma recusa como destino.
+            if let palpite = Address.guessChain(limpo), palpite.id != chain.id, case .success = Address.validate(limpo, for: palpite) {
+                c.sugestao = palpite
+            }
             return c
         }
         guard let destino = c.destino else { return c }
+        // Nome da NEAR: o desafio nasce no toque do Salvar, como no Continuar do envio. Digitando, cada comeco ja e conta valida, e
+        // o desafio nascia no segundo caractere (revisao dos 3 agentes, 09/11/2026). O salvar calcula sempre armado.
+        if !armado, AddressPoisoning.wholeNEARName(limpo, chain: chain) != nil {
+            c.pendente = true
+            return c
+        }
         let metadata = Sessao.shared.metadata
         let conhecidos = (metadata.sentTo[chain.id] ?? []) + metadata.contacts.filter { $0.chainID == chain.id }.map(\.address)
             + metadata.wallets.filter { !$0.isWatchOnly }.compactMap { $0.account(chain)?.address }
@@ -110,8 +143,7 @@ enum Contatos {
         if c.outroID != nil {
             c.conferido = AddressPoisoning.muxedIDConfirmed(conferencia, address: destino.address)
         } else if let segmento = c.segmento {
-            let digitado = conferencia.trimmingCharacters(in: .whitespaces).lowercased()
-            c.conferido = digitado.count == segmento.length && digitado == segmento.text(in: c.fonte).lowercased()
+            c.conferido = AddressPoisoning.answers(conferencia, segment: segmento, of: c.fonte, chain: chain)
         } else {
             c.conferido = c.parecido == nil
         }
@@ -126,17 +158,20 @@ enum Contatos {
         return AddressPoisoning.idConfirmed(conferencia, id: id)
     }
 
-    static func conferir(rede: String, endereco: String, tag: String, conferencia: String, conferenciaDoMemo: String, comMemo: Bool) -> Conferencia {
+    static func conferir(rede: String, endereco: String, tag: String, conferencia: String, conferenciaDoMemo: String, comMemo: Bool,
+                         armado: Bool = true) -> Conferencia {
         guard let chain = Chain.find(rede) else {
             return Conferencia(valido: false, problema: nil, sugestao: nil, destino: nil, tipoDeTag: "none", parecido: nil, outroID: nil, trecho: nil,
-                               fonte: "", escondido: false, conferido: false, conflitoDoMemo: nil, memoConferido: true)
+                               fonte: "", escondido: false, conferido: false, conflitoDoMemo: nil, memoConferido: true, caixaConta: false,
+                               pendente: false, nomeInteiro: false, limpar: false, limparTag: false, nomeNaRedeErrada: false)
         }
-        let c = calcular(chain, endereco: endereco, tag: tag, conferencia: conferencia)
+        let c = calcular(chain, endereco: endereco, tag: tag, conferencia: conferencia, armado: armado)
         let trecho = { (s: AddressPoisoning.Segment) in Envio.Trecho(inicio: s.start, tamanho: s.length) }
         let parecidoDTO: Envio.Estado.Parecido? = c.parecido.flatMap { conhecido in
             c.destino.map { destino in
                 Envio.Estado.Parecido(conhecido: conhecido, rotulo: rotulo(conhecido, chain: chain), trechoColado: c.segmento.map(trecho),
-                                      trechoConhecido: AddressPoisoning.differingSegment(conhecido, from: destino.address, chain: chain).map(trecho))
+                                      trechoConhecido: AddressPoisoning.differingSegment(conhecido, from: destino.address, chain: chain).map(trecho),
+                                      caixaConta: AddressPoisoning.caseMatters(destino.address, chain: chain))
             }
         }
         func outroDTO(_ conhecido: AddressPoisoning.SameAccount, colado: String?) -> Envio.Estado.OutroID {
@@ -150,7 +185,16 @@ enum Contatos {
             destino: c.destino?.address, tipoDeTag: chain.destinationTag.rawValue, parecido: parecidoDTO,
             outroID: c.outroID.map { outroDTO($0, colado: c.destino?.address) }, trecho: c.segmento.map(trecho), fonte: c.fonte,
             escondido: c.parecido == nil, conferido: c.conferido, conflitoDoMemo: conflito.map { outroDTO($0, colado: nil) },
-            memoConferido: conflito == nil || memoConferido(tag, conferenciaDoMemo)
+            memoConferido: conflito == nil || memoConferido(tag, conferenciaDoMemo),
+            caixaConta: c.segmento != nil && AddressPoisoning.caseMatters(c.fonte, chain: chain),
+            pendente: c.pendente, nomeInteiro: c.segmento.map { AddressPoisoning.coversAll($0, of: c.fonte) } ?? false, limpar: c.limpar,
+            limparTag: PrivateKeyGuard.publicTextHasSecret(tag),
+            nomeNaRedeErrada: c.destino == nil && {
+                // Tambem o endereco que vale noutra rede, com ou sem sugestao (a Sui, a Aptos, a implicita da NEAR): a rede do contato
+                // e livre, e depois da troca o desafio pede um trecho que estava a vista (como no iOS).
+                let texto = endereco.trimmingCharacters(in: .whitespacesAndNewlines)
+                return c.sugestao != nil || AddressPoisoning.looksLikeNEARName(texto) || AddressPoisoning.validElsewhere(texto, than: chain)
+            }()
         )
     }
 
@@ -172,6 +216,11 @@ enum Contatos {
             credencial.zerar()
             throw Nucleo.Falha(erro: "contato.conferirMemo")
         }
+        // A tag com uma frase ou uma chave nunca e salva: ela iria a rede em cada envio (revisao dos 3 agentes, 09/11/2026).
+        if PrivateKeyGuard.publicTextHasSecret(tag) {
+            credencial.zerar()
+            throw Nucleo.Falha(erro: "contato.tagSegredo")
+        }
         // So rede que tem tag guarda tag.
         let tagFinal = chain.destinationTag == .none ? nil : (destino.tag.map(String.init) ?? (tag.isEmpty ? nil : String(tag.prefix(120))))
         if let tagFinal, Envio.problemaDaTag(tagFinal, rede: chain) != nil {
@@ -182,7 +231,8 @@ enum Contatos {
         let contato = Contact(id: UUID(), name: titulo, chainID: chain.id, address: destino.address, tag: tagFinal)
         try Sessao.shared.alterar { $0.contacts.append(contato) }
         return Resumo(id: contato.id.uuidString, nome: titulo, rede: chain.id, redeNome: chain.name, redeCoingecko: chain.coingeckoID,
-                      endereco: destino.address, tag: tagFinal)
+                      endereco: destino.address, tag: tagFinal,
+                      marcado: Sessao.shared.metadata.wallets.donaMarcada(de: destino.address, on: chain) != nil)
     }
 
     struct Lido: Encodable { let endereco: String; let tag: String?; let problema: String? }
@@ -196,6 +246,8 @@ enum Contatos {
             leitura = try PaymentLink.read(texto)
         } catch PaymentLink.Problem.containsPhrase {
             return Lido(endereco: "", tag: nil, problema: Textos.t("Este código traz as palavras de uma senha de carteira, não um endereço. Quem tem essas palavras tem o saldo: não mostre a ninguém."))
+        } catch PaymentLink.Problem.containsPrivateKey {
+            return Lido(endereco: "", tag: nil, problema: Textos.t("Isto parece uma chave privada, não um endereço. Quem tem essa chave tem o saldo: não mostre a ninguém."))
         } catch PaymentLink.Problem.tooLong {
             return Lido(endereco: "", tag: nil, problema: Textos.t("Este código é longo demais para ser um endereço."))
         } catch PaymentLink.Problem.unknownScheme {
@@ -204,6 +256,8 @@ enum Contatos {
             return Lido(endereco: "", tag: nil, problema: Textos.t("Este pedido de pagamento é de uma rede que a Escalibur não envia. Confira com quem pediu."))
         } catch PaymentLink.Problem.unsupportedMemo {
             return Lido(endereco: "", tag: nil, problema: Textos.t("Este pedido traz um memo que o app não envia como está. Cole só o endereço e digite o memo, conferindo com quem pediu."))
+        } catch PaymentLink.Problem.expiredRequest {
+            return Lido(endereco: "", tag: nil, problema: Textos.t("Este pedido de pagamento venceu. Peça um novo a quem cobrou."))
         } catch {
             return Lido(endereco: "", tag: nil, problema: Textos.t("Este pedido de pagamento não pôde ser lido com segurança. Peça só o endereço."))
         }

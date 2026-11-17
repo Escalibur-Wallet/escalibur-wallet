@@ -24,8 +24,8 @@ final class PassphraseGate {
         let walletName: String
         /// A frase de cima da folha: mover saldo, ou deixar de pedir a passphrase.
         let reason: String
-        /// Mover saldo oferece a folga de alguns minutos; ver as palavras, lacrar o envelope e
-        /// deixar de pedir, nao.
+        /// Assinar (mover saldo, e cancelar uma ordem, pedido do dono de 08/11/2026) oferece a folga
+        /// de alguns minutos; ver as palavras, lacrar o envelope e deixar de pedir, nao.
         let offersGrace: Bool
         let continuation: CheckedContinuation<SecureBytes?, Never>
         /// O que a folha digita, do pedido e nao da tela: fechar o pedido de fora (o app saiu, travou) o
@@ -56,9 +56,10 @@ final class PassphraseGate {
 
     /// A passphrase digitada, ou nil se o dono fechou a folha. O buffer e do chamador: ele
     /// zera depois de assinar.
-    func ask(_ wallet: WalletMeta, reason: String? = nil) async -> SecureBytes? {
+    /// `offersGrace`: sem dizer, so a frase de mover saldo (sem `reason`) oferece a folga.
+    func ask(_ wallet: WalletMeta, reason: String? = nil, offersGrace: Bool? = nil) async -> SecureBytes? {
         let line = reason ?? String(localized: "\(wallet.name) pede a passphrase para mover saldo. Depois dela vem o \(KeyServices.biometryName) ou o PIN, como sempre.")
-        return await ask(walletID: wallet.id, name: wallet.name, line: line, offersGrace: reason == nil)
+        return await ask(walletID: wallet.id, name: wallet.name, line: line, offersGrace: offersGrace ?? (reason == nil))
     }
 
     /// Para uma carteira que ainda nao esta na lista (a do envelope que vai ser importado). Sem folga.
@@ -207,7 +208,9 @@ final class PassphraseGate {
             if let copy = heldCopy(wallet.id) {
                 typed = copy
             } else {
-                guard let given = await ask(wallet, reason: prompt?(wallet)) else { return .cancelled }
+                // Toda assinatura oferece a folga, com a frase propria ou nao (cancelar ordem, pedido do dono de 08/11/2026): ela
+                // so comeca depois de o assinador conferir a passphrase, e o rosto ou o PIN continuam.
+                guard let given = await ask(wallet, reason: prompt?(wallet), offersGrace: true) else { return .cancelled }
                 typed = given
                 fresh = true
             }

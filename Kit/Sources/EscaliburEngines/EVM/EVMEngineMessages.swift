@@ -79,7 +79,7 @@ enum EVMEngineMessages {
         case .priceMoved: return kitText("O preço mudou mais que a sua tolerância desde a cotação. Atualize a cotação e revise de novo.")
         case .riskIncreased: return kitText("O impacto no preço subiu desde a cotação. Atualize a cotação e confirme de novo.")
         case .unanchoredNotAccepted:
-            return kitText("Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Marque que entende o risco para trocar.")
+            return kitText("Não há preço de referência do mercado para comparar. Marque que entende o risco para trocar.")
         case .belowAcceptedMinimum: return kitText("O mínimo garantido caiu desde o seu aceite. Atualize a cotação e marque de novo.")
         case .noQuote: return kitText("Nenhum provedor cotou esta troca agora. Tente um valor menor ou outro par.")
         case .allQuotesRefused: return kitText("Nenhuma cotação passou na conferência de segurança da carteira. Nada foi assinado.")

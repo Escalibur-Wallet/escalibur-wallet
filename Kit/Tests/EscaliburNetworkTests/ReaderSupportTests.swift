@@ -237,4 +237,101 @@ struct ReaderSupportTests {
         #expect(page.items.first?.date == Date(timeIntervalSince1970: 39))
         #expect(Set(page.items.map(\.id)).count == 30)
     }
+
+    // MARK: Ordem do consenso (auditoria 8, 14/11/2026)
+
+    @Test("Auditoria 8: na rede de verdade, a primeira onda sorteia os donos; nos testes, a ordem da lista")
+    func consensusOrderDraws() {
+        let list = [
+            ProviderPool.Provider(name: "a", baseURL: URL(string: "https://a.test")!, operatorName: "A"),
+            ProviderPool.Provider(name: "a2", baseURL: URL(string: "https://a2.test")!, operatorName: "A"),
+            ProviderPool.Provider(name: "b", baseURL: URL(string: "https://b.test")!, operatorName: "B"),
+            ProviderPool.Provider(name: "c", baseURL: URL(string: "https://c.test")!, operatorName: "C"),
+            ProviderPool.Provider(name: "d", baseURL: URL(string: "https://d.test")!, operatorName: "D"),
+        ]
+        let fixed = ProviderPool(list)
+        #expect(fixed.consensusOrder(list).map(\.name) == ["a", "b", "c", "d", "a2"])
+        let drawn = ProviderPool(list, draws: true)
+        var pairs = Set<String>()
+        for _ in 0..<400 {
+            let order = drawn.consensusOrder(list)
+            // Os donos diferentes na frente, cada um uma vez; a repeticao do mesmo dono, no fim.
+            #expect(Set(order.prefix(4).map(\.operatorName)) == ["A", "B", "C", "D"])
+            #expect(order.last?.name == "a2")
+            pairs.insert(order.prefix(2).map(\.operatorName).sorted().joined())
+        }
+        // Os seis pares de quatro donos saem na primeira onda.
+        #expect(pairs.count == 6)
+        // O transporte de teste nao sorteia; o cliente de verdade, sem URLProtocol de teste, sorteia.
+        #expect(!FixtureTransport([]).drawsProviders)
+        #expect(HTTPClient.shared.drawsProviders)
+    }
+
+    @Test("Rodada 1: firm decide com os dois primeiros de acordo; sem acordo, so com margem; everyone so com todos iguais")
+    func firm() async throws {
+        let providers = testProviders("a", "b", "c", "d")
+        let pool = ProviderPool(providers)
+        #expect(try await Quorum.firm(providers, pool: pool) { _ in 7 } == 7)
+        // [1, 2, 1, 1]: tres contra um decide.
+        #expect(try await Quorum.firm(providers, pool: pool) { ["a": 1, "b": 2, "c": 1, "d": 1][$0.name]! } == 1)
+        // [1, 2, 2]: dois contra um honesto que respondeu nao decidem.
+        let three = testProviders("a", "b", "c")
+        #expect(try await Quorum.firm(three, pool: ProviderPool(three)) { ["a": 1, "b": 2, "c": 2][$0.name]! } == nil)
+        #expect(try await Quorum.firm(providers, pool: pool, everyone: true) { _ in 7 } == 7)
+        #expect(try await Quorum.firm(providers, pool: pool, everyone: true) { $0.name == "d" ? 1 : 7 } == nil)
+        await #expect(throws: ReaderError.notEnoughProviders(needed: 2, got: 1)) {
+            _ = try await Quorum.firm(providers, pool: pool) { provider -> Int in
+                guard provider.name == "a" else { throw ReaderError.providerError(code: "x") }
+                return 1
+            }
+        }
+    }
+
+    @Test("Rodada 1: everyoneSays so com todos os donos que responderam iguais, e pelo menos tres (ou todos, se forem menos)")
+    func everyoneSays() async {
+        let three = testProviders("a", "b", "c")
+        #expect(await Quorum.everyoneSays(true, three, pool: ProviderPool(three)) { _ in true })
+        #expect(!(await Quorum.everyoneSays(true, three, pool: ProviderPool(three)) { $0.name != "c" }))
+        // Com tres donos, um fora do ar: os dois que dizem nao bastam.
+        #expect(!(await Quorum.everyoneSays(true, three, pool: ProviderPool(three)) { provider -> Bool in
+            if provider.name == "c" { throw HTTPClient.Failure.timeout }
+            return true
+        }))
+        let two = testProviders("a", "b")
+        #expect(await Quorum.everyoneSays(true, two, pool: ProviderPool(two)) { _ in true })
+    }
+
+    @Test("Rodada 1: o ledger fixado e o menor de dois perto um do outro (XRP Ledger ate 20 ledgers, Aptos ate 30 s)")
+    func pinnedGap() throws {
+        #expect(try XRPLReader.pin([120, 100]) == 100)
+        #expect(throws: ReaderError.providersDisagree(field: "ledger")) { try XRPLReader.pin([100, 121]) }
+        #expect(throws: ReaderError.notEnoughProviders(needed: 2, got: 1)) { try XRPLReader.pin([100]) }
+        let early = AptosReader.Ledger(chainID: 1, version: 10, timestampMicros: 1_000_000_000)
+        try AptosReader.checkGap(early, AptosReader.Ledger(chainID: 1, version: 20, timestampMicros: 1_030_000_000))
+        #expect(throws: ReaderError.providersDisagree(field: "ledger")) {
+            try AptosReader.checkGap(early, AptosReader.Ledger(chainID: 1, version: 20, timestampMicros: 1_030_000_001))
+        }
+    }
+
+    @Test("Rodada 2: tirar a marca pede todos os que respondem e pelo menos tres; com os honestos fora do ar, dois nao bastam")
+    func unanimousFloor() async throws {
+        let four = testProviders("a", "b", "c", "d")
+        let pool = ProviderPool(four)
+        #expect(Quorum.floorOfEveryone(pool) == 3)
+        #expect(Quorum.floorOfEveryone(ProviderPool(testProviders("a", "b"))) == 2)
+        // Dois honestos derrubados, dois combinados dizendo "limpa": nada decide, e a marca fica.
+        #expect(try await Quorum.unanimous(four, pool: pool) { provider -> Int in
+            if provider.name == "a" || provider.name == "b" { throw HTTPClient.Failure.timeout }
+            return 0
+        } == nil)
+        #expect(try await Quorum.unanimous(four, pool: pool) { provider -> Int in
+            if provider.name == "a" { throw HTTPClient.Failure.timeout }
+            return 0
+        } == 0)
+        // O `firm` com `everyone` segue a mesma regra.
+        #expect(try await Quorum.firm(four, pool: pool, everyone: true) { provider -> Int in
+            if provider.name == "a" || provider.name == "b" { throw HTTPClient.Failure.timeout }
+            return 0
+        } == nil)
+    }
 }

@@ -112,6 +112,22 @@ struct WalletMeta: Codable, Equatable, Identifiable, Hashable {
     /// "frase com saldo"): o Receber da Tron nesta carteira fica fechado. O envio ja recusa
     /// pela leitura das permissoes (`TronSendEngine`). Opcional para os metadados antigos.
     var tronForeignControl: Bool?
+    /// Outra chave, conta ou contrato no controle das contas da carteira, por rede (`ForeignControl`; auditoria 8,
+    /// 14/11/2026): a delegacao EIP-7702, a RegularKey do XRP Ledger, os assinantes da Stellar, a chave de acesso total da
+    /// NEAR, o plugin da TON, o procurador da Polkadot, a chave girada da Aptos. Fora a Tron, que tem a marca propria. O
+    /// Receber da rede mostra o aviso, a conta sai de Minhas carteiras e a revisao avisa. Opcional para os metadados antigos.
+    var foreignControl: [String: ForeignControl]?
+    /// A ultima conferencia de todas as redes (`ForeignControlCheck`): a do destravar espera um dia.
+    var foreignControlCheckedAt: Date?
+    /// As redes em que a outra chave no controle ja foi lida de verdade (resposta que decidiu, e nao "sem resposta"): a carteira
+    /// so conta como sua no envio numa rede lida (rodada 6 da auditoria 8). Opcional para os metadados antigos.
+    var foreignControlRead: Set<String>?
+    /// Criada aqui com as palavras escolhidas pelo dono: o app sorteia so 7 bits (12 palavras) ou 3 (24), e a frase pode ser a
+    /// de outra pessoa, ja delegada; e conferida como a importada (rodada 6 da auditoria 8).
+    var chosenWords: Bool?
+    /// A versao da carteira TON ja conferida (`TONDiscovery`): a V4R2 sem movimento troca pela W5 da mesma chave que teve.
+    /// Uma vez por carteira (auditoria 8, 14/11/2026).
+    var tonVersionChecked: Bool?
     var envelopeSealedAt: Date?
     var lastRevealedAt: Date?
     var hiddenAssetIDs: Set<String> = []
@@ -417,7 +433,34 @@ extension WalletMeta {
     /// A carteira recebe nesta rede: a conta da Tron com outra chave no controle, vista na
     /// importacao, nao recebe por caminho nenhum, nem Receber, nem Copiar endereco, nem ponte
     /// (auditoria de 31/10/2026; C7-05).
+    /// Desde 14/11/2026 (auditoria 8, pela regra do dono de sempre a forma mais segura): tambem a conta com outra chave,
+    /// conta ou contrato no controle nesta rede (`foreignControl`), como a Tron. Quem instalou a carteira inteligente de
+    /// proposito nao recebe por esta rede na Escalibur ate tirar a delegacao; enviar e tirar o saldo seguem, com o aviso.
     func receives(on chain: Chain) -> Bool {
-        !(chain.family == .tron && tronForeignControl == true)
+        !(chain.family == .tron && tronForeignControl == true) && foreignControl(on: chain) == nil
+    }
+
+    /// Outra chave, conta ou contrato no controle da conta desta rede (fora a Tron, que tem a marca propria). Numa rede EVM,
+    /// tambem a marca de outra rede EVM: o endereco e a chave sao os mesmos em todas, e a delegacao 7702 com `chainId` 0 vale
+    /// em todas; a marca que o dono nao pos quer dizer frase vazada (rodada 2 da auditoria 8, a forma mais segura).
+    func foreignControl(on chain: Chain) -> ForeignControl? {
+        if let own = foreignControl?[chain.id] { return own }
+        guard chain.family == .evm, let marks = foreignControl else { return nil }
+        return marks.keys.sorted().lazy.filter { Chain.find($0)?.family == .evm }.first.flatMap { marks[$0] }
+    }
+
+    /// Ja conferida para outra chave no controle, ou criada aqui (nao tem o que ler). A importada que nunca foi conferida (de
+    /// antes desta versao, ou o envelope cuja primeira conferencia foi cortada) nao conta como sua no envio: em Minhas carteiras
+    /// ela seria o destino da taxa numa conta com varredor (rodada 5 da auditoria 8).
+    /// Por rede: a rede sem outra chave para ler conta direto, e a com leitura so depois de lida (rodada 6).
+    func controlChecked(on chain: Chain) -> Bool {
+        (origin == .created && chosenWords != true) || !ForeignControlCheck.reads(chain) || foreignControlRead?.contains(chain.id) == true
+    }
+
+    /// A rede onde a marca de `foreignControl(on:)` foi vista: a propria, ou, numa EVM, a outra EVM marcada (rodada 3).
+    func foreignControlOrigin(on chain: Chain) -> Chain? {
+        if foreignControl?[chain.id] != nil { return chain }
+        guard chain.family == .evm, let marks = foreignControl else { return nil }
+        return marks.keys.sorted().lazy.compactMap { Chain.find($0) }.first { $0.family == .evm }
     }
 }

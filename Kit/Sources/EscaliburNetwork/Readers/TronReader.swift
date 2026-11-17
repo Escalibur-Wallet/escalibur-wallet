@@ -54,7 +54,7 @@ public actor TronReader {
         self.transport = PacedTransport(base: transport, intervals: [
             "api.trongrid.io": Self.trongridInterval, "api.tronstack.io": Self.trongridInterval,
         ])
-        self.pool = ProviderPool(providers)
+        self.pool = ProviderPool(providers, draws: transport.drawsProviders)
         // Historico: so a TronGrid tem a API v1 de indexacao (`/v1/accounts/...`).
         self.historyProviders = providers.filter { $0.name == "trongrid" }
     }
@@ -119,6 +119,51 @@ public actor TronReader {
         try await ownerAccount(owner, providers: await pool.available()).control
     }
 
+    /// A checagem que fica guardada na carteira: o veredito so com os dois operadores de acordo (os dois veem outra chave,
+    /// ou os dois veem a conta so do dono ou ainda inexistente); `nil` quando discordam. A marca guardada fecha o Receber
+    /// da Tron, e um operador sozinho, com defeito ou mentindo, a punha para sempre; agora dois limpos a tiram. O aviso na
+    /// hora e a recusa no envio seguem com `ownerControl`, em que basta um (auditoria 8, 14/11/2026).
+    public func agreedOwnerControl(owner: TronAddress, everyone: Bool = false) async throws -> TronAccountControl? {
+        try await ownerControlCheck(owner: owner, everyone: everyone).agreed
+    }
+
+    /// As duas numa leitura so: `shown`, o aviso na hora (basta um operador ver outra chave), e `agreed`, o que fica
+    /// guardado (dois que veem outra chave, ou todos os que responderam limpos; nil no resto). `everyone`: pergunta a todos
+    /// os operadores, para tirar a marca so com todos limpos (rodada 1 da auditoria 8).
+    public func ownerControlCheck(owner: TronAddress, everyone: Bool = false) async throws -> (shown: TronAccountControl, agreed: TronAccountControl?) {
+        let providers = await pool.available()
+        let readings: [OwnerReading]
+        if everyone {
+            // Todos os donos que respondem, e pelo menos tres (ou todos, se forem menos): dois combinados com os honestos
+            // derrubados nao tiram a marca (rodada 2 da auditoria 8). Com tres donos, um fora do ar segura a marca ate voltar.
+            let transport = self.transport
+            let (answers, lastError) = await Quorum.gather(providers, pool: pool, count: providers.count) { provider in
+                try Self.parseOwnerAccount(try await transport.send(.post(provider.baseURL.adding(path: "wallet/getaccount"), .object([
+                    "address": .string(owner.base58), "visible": .bool(true),
+                ]))), owner: owner)
+            }
+            // Cancelada no meio, nao decide com quem respondeu antes, como o `unanimous` (rodada 5 da auditoria 8).
+            if Task.isCancelled { throw CancellationError() }
+            if answers.isEmpty, let lastError { throw lastError }
+            readings = answers.map(\.value)
+        } else {
+            readings = try await ownerReadings(owner, providers: providers, count: 2)
+        }
+        let agreed = Self.agreed(readings, floor: everyone ? Quorum.floorOfEveryone(pool) : 2)
+        // Uma conta so do dono e uma ainda inexistente sao as duas limpas: `combine` recusa a diferenca, e vale o acordo.
+        if let shown = try? Self.combine(readings).control { return (shown, agreed) }
+        guard let agreed else { throw ReaderError.providersDisagree(field: "getaccount") }
+        return (agreed, agreed)
+    }
+
+    /// Dois que veem outra chave, ou todos os que responderam (pelo menos `floor`) sem ver: o veredito; no resto, nada.
+    static func agreed(_ readings: [OwnerReading], floor: Int = 2) -> TronAccountControl? {
+        let compromised = readings.filter { $0.control.isCompromised }
+        if compromised.count >= 2 { return compromised[0].control }
+        if compromised.isEmpty, let first = readings.first, readings.count >= max(2, floor) { return first.control }
+        return nil
+    }
+
     /// O destino antes do valor, sem conta de origem: existe na rede (dois provedores
     /// concordando, a mesma leitura do plano)? e contrato? E os parametros da rede, de
     /// onde sai o custo de ativar a conta. So para a tela do destino: o plano le tudo
@@ -179,13 +224,22 @@ public actor TronReader {
         let solid = try await Quorum.collect(providers, pool: pool, count: 2) { provider in
             try Self.parseTransactionInfo(try await Self.post(transport, provider, "walletsolidity/gettransactioninfobyid", ["value": .string(id)]), id: id)
         }.map(\.value)
-        if let first = solid[0], solid[1] == first { return first }
+        let solidified: @Sendable (Provider) async throws -> TransactionStatus? = { provider in
+            try Self.parseTransactionInfo(try await Self.post(transport, provider, "walletsolidity/gettransactioninfobyid", ["value": .string(id)]), id: id)
+        }
+        if let first = solid[0], solid[1] == first {
+            // A falha leva a reenviar: so com todos os donos dizendo o mesmo, pelo menos tres (rodada 1 da auditoria 8).
+            if case .failed = first { return await Quorum.everyoneSays(first, providers, pool: pool, solidified) ? first : .pending }
+            return first
+        }
         if solid.contains(where: { $0 != nil }) { return .pending }
         let head = try await Quorum.first(Self.singleReadOrder(providers), pool: pool) { provider in
             try Self.parseTransactionInfo(try await Self.post(transport, provider, "wallet/gettransactioninfobyid", ["value": .string(id)]), id: id)
         }
         if head != nil { return .pending }
-        if let expiresAt, try await solidifiedTime().timeIntervalSince(expiresAt) > Self.expiryMargin { return .failed(reason: "expired") }
+        if let expiresAt, try await solidifiedTime().timeIntervalSince(expiresAt) > Self.expiryMargin {
+            return await Quorum.everyoneSays(nil, providers, pool: pool, solidified) ? .failed(reason: "expired") : .pending
+        }
         return .notFound
     }
 
@@ -219,7 +273,7 @@ public actor TronReader {
     public func history(address: TronAddress) async throws -> ActivityPage {
         guard !historyProviders.isEmpty else { throw ReaderError.unsupported("historico sem indexador") }
         let transport = self.transport
-        let historyPool = ProviderPool(historyProviders)
+        let historyPool = ProviderPool(historyProviders, draws: transport.drawsProviders)
         return try await Quorum.first(historyProviders, pool: historyPool) { provider in
             let base = provider.baseURL.adding(path: "v1/accounts/" + address.base58)
             let native = try await transport.send(.get(base.adding(path: "transactions").adding(query: [("limit", "\(ActivityRules.pageSize)")]), timeout: 30))
@@ -240,14 +294,17 @@ public actor TronReader {
     /// `getaccount` do dono em dois provedores, pela checagem de permissoes de
     /// EscaliburChains, mais o saldo de TRX.
     private func ownerAccount(_ owner: TronAddress, providers: [Provider]) async throws -> (control: TronAccountControl, trx: BigUInt) {
+        try Self.combine(try await ownerReadings(owner, providers: providers))
+    }
+
+    private func ownerReadings(_ owner: TronAddress, providers: [Provider], count: Int = 2) async throws -> [OwnerReading] {
         let transport = self.transport
-        let readings = try await Quorum.collect(providers, pool: pool, count: 2) { provider in
+        return try await Quorum.collect(providers, pool: pool, count: max(2, count)) { provider in
             let data = try await transport.send(.post(provider.baseURL.adding(path: "wallet/getaccount"), .object([
                 "address": .string(owner.base58), "visible": .bool(true),
             ])))
             return try Self.parseOwnerAccount(data, owner: owner)
         }.map(\.value)
-        return try Self.combine(readings)
     }
 
     private func accountResources(_ owner: TronAddress, providers: [Provider]) async throws -> TronAccountResources {

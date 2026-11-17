@@ -111,7 +111,23 @@ class MainActivity : ComponentActivity() {
         return if (rotulo.isBlank() || rotulo == pacote) pacote else "$rotulo ($pacote)"
     }
 
+    /**
+     * No Android 11 a janela de outro app por cima nao some (`setHideOverlayWindows` e do 12 em diante), e o
+     * `filterTouchesWhenObscured` so recusa o toque que passa pela janela de cima: um app com "sobrepor a outros apps"
+     * desenhava outro endereco por cima da revisao, ou um teclado de PIN falso, e o toque no Confirmar ao lado passava.
+     * Ali, com qualquer janela de outro app cobrindo parte da tela, nenhum toque vale, e o aviso diz por que (auditoria 8,
+     * 14/11/2026). As janelas proprias do app (dialogos) seguem a mesma regra (`ProtegerJanela`).
+     */
+    override fun dispatchTouchEvent(evento: android.view.MotionEvent): Boolean {
+        if (!app.escalibur.wallet.ui.comp.ToqueCoberto.recusa(evento)) return super.dispatchTouchEvent(evento)
+        app.escalibur.wallet.ui.comp.ToqueCoberto.cancelar(evento) { super.dispatchTouchEvent(it) }
+        return true
+    }
+
     override fun onStart() {
+        // A copia do envelope compartilhado que passou do prazo sai tambem aqui: o alarme de 10 minutos nao sobrevive ao
+        // processo morto (rodada 1 da auditoria 8).
+        EnvelopeCompartilhado.apagarVelhas(this)
         super.onStart()
         // Antes de qualquer quadro: um servico ligado enquanto o app estava fora fecha a carteira ja.
         app.escalibur.wallet.ui.Acessibilidade.conferir(this)
@@ -141,6 +157,8 @@ class MainActivity : ComponentActivity() {
         // Com o foco o Android deixa ler a area de transferencia: a copia do app que venceu enquanto ele
         // estava em segundo plano e apagada agora.
         if (temFoco) app.escalibur.wallet.ui.comp.Transferencia.apagarSeVenceu(this, comFoco = true)
+        // A marca que chegou sem o foco (outro app na frente, a biometria por cima) tira a copia quando ele volta (rodada 11).
+        if (temFoco) app.escalibur.wallet.ui.comp.Transferencia.retirarSeBloqueado(this, app.escalibur.wallet.ui.App.estado.carteiras, app.escalibur.wallet.ui.App.estado.fase)
     }
 
     override fun onStop() {

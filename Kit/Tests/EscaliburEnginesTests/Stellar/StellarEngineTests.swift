@@ -294,8 +294,27 @@ struct StellarEngineTests {
 struct StellarTradeTests {
     typealias S = StellarEngineTests
 
-    static func request(sell: Asset = S.xlm, buy: Asset = S.usdc, amount: BigUInt = 1_000_000_000, bps: Int = 50) -> TradeRequest {
-        TradeRequest(walletID: UUID(), chain: .stellar, account: TestAccounts.stellar, sell: sell, buy: buy, amountIn: amount, slippageBasisPoints: bps)
+    /// `acceptsUnanchored`: sem preco de referencia a troca pede o aceite do dono (checagem final de 16/11/2026, M3);
+    /// os testes sem oraculo marcam o aceite, como o dono faria, e o teste da caixa desmarca.
+    static func request(sell: Asset = S.xlm, buy: Asset = S.usdc, amount: BigUInt = 1_000_000_000, bps: Int = 50,
+                        acceptsUnanchored: Bool = true) -> TradeRequest {
+        TradeRequest(walletID: UUID(), chain: .stellar, account: TestAccounts.stellar, sell: sell, buy: buy, amountIn: amount, slippageBasisPoints: bps,
+                     acceptsUnanchored: acceptsUnanchored)
+    }
+
+    @Test("Checagem final M3: sem preco de referencia a cotacao vem sem comparacao, o plano pede o aceite e a revisao avisa")
+    func unanchoredWithoutReference() async throws {
+        let engine = Self.engine(try S.network())
+        let quote = try await engine.quote(Self.request())
+        #expect(quote.unanchored)
+        await #expect(throws: SendEngineError.message("Não há preço de referência do mercado para comparar. Marque que entende o risco para trocar.")) {
+            _ = try await engine.plan(Self.request(acceptsUnanchored: false), quote: quote)
+        }
+        #expect(try await engine.plan(Self.request(), quote: quote).review.warnings.contains(.uncomparedPrice))
+        let fair = Self.engine(try S.network(), prices: FakeOracle(prices: ["stellar": "0.2173087", "usd-coin": "1"]))
+        let compared = try await fair.quote(Self.request(acceptsUnanchored: false))
+        #expect(!compared.unanchored)
+        #expect(!(try await fair.plan(Self.request(acceptsUnanchored: false), quote: compared)).review.warnings.contains(.uncomparedPrice))
     }
 
     /// Oraculo fora do ar: a troca segue com as duas Horizons, sem a sanidade.

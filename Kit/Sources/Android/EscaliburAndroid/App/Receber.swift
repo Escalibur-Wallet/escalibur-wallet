@@ -75,6 +75,16 @@ enum Receber {
         let temLinha: Bool
         let observacao: Bool
         let tronOutraChave: Bool
+        /// Outra chave, conta ou contrato no controle desta conta nesta rede: o aviso, no lugar do endereco, que nao sai do
+        /// nucleo (auditoria 8, 14/11/2026), como no iOS.
+        let outroControle: String?
+        /// A rede desta conta ainda nao foi lida para outra chave no controle: o endereco nao sai do nucleo ate a conferencia
+        /// (pedido do dono, 15/11/2026, a forma mais segura), como no iOS.
+        let naoLida: Bool
+        /// A rede desligada nos Ajustes: a conferencia nunca chega, e a tela pede para ligar (15/11/2026), como no iOS.
+        let desligada: Bool
+        /// A outra carteira deste aparelho com o mesmo endereco, onde a marca foi vista (`marcadaEmOutra`), como no iOS.
+        let outraCarteira: String?
     }
 
     /// Tokens que representam outra moeda, pelo id de preco: aparecem tambem dentro dela no
@@ -164,12 +174,28 @@ enum Receber {
         let ativo = achado ?? Asset(chainID: chain.id, kind: .native, symbol: "", name: "", decimals: 0, coingeckoID: nil,
                                     isStablecoin: false, origin: .discovered)
         let saldo = metadata.balanceCache[wallet.id]?[chain.id]
-        // A conta da Tron com outra chave no controle: o endereco nem sai do nucleo (auditoria de 31/10/2026).
-        let outraChave = chain.family == .tron && wallet.tronForeignControl == true
+        // A conta da Tron com outra chave no controle: o endereco nem sai do nucleo (auditoria de 31/10/2026). Nem o da conta
+        // com outra chave ou contrato no controle em qualquer rede (auditoria 8, 14/11/2026).
+        // O mesmo endereco em outra carteira deste aparelho, com a marca: a so de observacao dele tambem nao mostra (pedido do
+        // dono, 15/11/2026), com o aviso de la. E a rede ainda nao lida espera a conferencia, como no iOS.
+        let dono = wallet.recebe(on: chain) ? metadata.wallets.marcadaEmOutra(wallet, on: chain) : nil
+        let marcada = dono ?? wallet
+        let lida = wallet.isWatchOnly || wallet.controlChecked(on: chain)
+        let outraChave = chain.family == .tron && marcada.tronForeignControl == true
         return Endereco(
-            endereco: outraChave ? "" : conta.address, existe: saldo?.accountExists ?? true,
+            endereco: wallet.recebe(on: chain) && dono == nil && lida ? conta.address : "", existe: saldo?.accountExists ?? true,
             temLinha: saldo?.holdings.contains { $0.asset.id == ativo.id } ?? false,
-            observacao: wallet.isWatchOnly, tronOutraChave: outraChave
+            observacao: wallet.isWatchOnly, tronOutraChave: outraChave, outroControle: marcada.foreignControl(on: chain).map { marca in
+                // A marca de outra rede EVM diz onde foi vista (rodada 3 da auditoria 8), como no iOS.
+                guard let origem = marcada.foreignControlOrigin(on: chain), origem != chain else { return marca.message }
+                var aviso = marca.message + " " + preencher(Textos.t("Vista na rede %@. O endereço e a chave são os mesmos em todas as redes EVM."), origem.name)
+                // A rede desligada nao e consultada, e a marca dela nunca sairia (rodada 4 da auditoria 8).
+                if Sessao.shared.metadata.settings.disabledChainIDs.contains(origem.id) {
+                    aviso += " " + preencher(Textos.t("Ligue a rede %@ nos Ajustes para o app conferir de novo."), origem.name)
+                }
+                return aviso
+            },
+            naoLida: !lida, desligada: metadata.settings.disabledChainIDs.contains(chain.id), outraCarteira: dono?.name
         )
     }
 
@@ -195,11 +221,14 @@ enum Receber {
     static func buscar(_ texto: String) async -> Busca {
         let chave = texto.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard chave.count >= 2 else { return Busca(estado: "ok", resultados: []) }
+        // A chave privada colada na busca tambem nao vai ao CoinGecko (como no iOS, revisao dos 3 agentes, 09/11/2026).
+        if PrivateKeyGuard.looksLikePrivateKey(texto) { return Busca(estado: "chave", resultados: []) }
         if pareceFrase(chave) { return Busca(estado: "frase", resultados: []) }
         func saida(_ lista: [CoinSearchResult]) -> Busca {
             Busca(estado: "ok", resultados: lista.map { Resultado(id: $0.id, simbolo: $0.symbol, nome: $0.name, posicao: $0.rank) })
         }
-        if let achados = try? await CoinCatalog.search(chave) {
+        // O texto como foi digitado: a porta do `CoinCatalog` olha as maiusculas.
+        if let achados = try? await CoinCatalog.search(texto.trimmingCharacters(in: .whitespacesAndNewlines)) {
             let reserva = achados.isEmpty || achados.contains { $0.id.hasPrefix(CoinCatalog.paprikaPrefix) }
             let locais = reserva ? (lista()?.search(chave) ?? []) : []
             guard !locais.isEmpty else { return saida(achados) }

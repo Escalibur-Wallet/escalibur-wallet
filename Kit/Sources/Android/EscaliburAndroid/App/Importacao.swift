@@ -25,6 +25,24 @@ enum Importacao {
 
     static let redesDaPrevia: [Chain] = [.bitcoin, .ethereum, .solana]
 
+    /// A delegacao EVM que a previa viu (dois operadores de acordo), pelo endereco EVM em minusculas: ao gravar a carteira desse
+    /// endereco, nasce como marca, como a da Tron (rodada 4 da auditoria 8, como o iOS). Sai ao gravar e ao travar.
+    private static let previasEVM = Guarda<[String: (chain: Chain, control: ForeignControl)]>([:])
+
+    static func guardarPreviaEVM(_ endereco: String, _ achado: (chain: Chain, control: ForeignControl)?) {
+        previasEVM.withLock { $0[endereco.lowercased()] = achado }
+    }
+
+    static func consumirPreviaEVM(_ contas: [DerivedAccount]) -> (chain: Chain, control: ForeignControl)? {
+        let enderecos = Set(contas.filter { Chain.find($0.chainID)?.family == .evm }.map { $0.address.lowercased() })
+        return previasEVM.withLock { previas in
+            for endereco in enderecos { if let achado = previas.removeValue(forKey: endereco) { return achado } }
+            return nil
+        }
+    }
+
+    static func esquecerPreviasEVM() { previasEVM.withLock { $0 = [:] } }
+
     /// A frase, como digitada, e a frase que vale: digitada sem acento, ela fecha no idioma dela
     /// trocando cada palavra pela de acento.
     static func resolver(_ frase: SecureBytes) -> (SecureBytes, Mnemonic.Validation) {
@@ -143,6 +161,68 @@ enum Importacao {
             secret, nome: nome, origem: .importedPhrase, palavras: palavras, copiaConfirmada: true,
             tronComOutraChave: tronComOutraChave, digitalEsperada: digital, credencial: credencial
         )
+    }
+
+    /// Importar com o interruptor da passphrase (08/11/2026): as palavras ficaram so na memoria da tela, e uma gravacao so
+    /// guarda a carteira com passphrase, como a importacao fazia antes. Nenhuma carteira sem passphrase destas palavras e
+    /// criada: com uma aqui, quem tem o PIN e a digital veria as palavras sem a passphrase e testaria passphrases fora do
+    /// aparelho, e travar no meio deixava as duas (o addImportedPassphraseWallet do iOS, revisao dos 3 agentes, 08/11/2026).
+    /// Ver as palavras da carteira com passphrase pede a passphrase. A passphrase que o
+    /// papel nao mostra nao e recusada: ela ja existe em outra carteira. A mesma frase com a mesma passphrase ja aqui so passa
+    /// a ser a escolhida.
+    static func importarComPassphrase(_ frase: SecureBytes, passphrase: SecureBytes, palavras: Int, digitalDaFrase: String?,
+                                      nome: String, credencial: Credencial) throws -> (WalletMeta, jaAberta: Bool) {
+        defer {
+            frase.wipe()
+            passphrase.wipe()
+        }
+        // Passphrase vazia seria a carteira das palavras marcada como "com passphrase" (revisao de blockchain de 26/10/2026).
+        guard passphrase.count > 0 else { credencial.zerar(); throw Sessao.Falha.passphraseVazia }
+        // Sem a digital da previa, nada e gravado: um chamador novo nao fura a conferencia em silencio.
+        guard let digitalDaFrase else { credencial.zerar(); throw Nucleo.Falha(erro: "importacao.mudou") }
+        let sozinha: WalletSecret
+        let secret: WalletSecret
+        do {
+            sozinha = try segredo(copia(frase), passphrase: nil)
+            do { secret = try segredo(copia(frase), passphrase: copia(passphrase)) } catch { sozinha.wipe(); throw error }
+        } catch {
+            credencial.zerar()
+            throw error
+        }
+        let digitais: (sozinha: String, oculta: String, bitcoin: String?)
+        do {
+            defer { sozinha.wipe() }
+            let oculta = try AccountDeriver.derive(secret, chains: [.bitcoin])
+            digitais = (try AccountDeriver.derive(sozinha, chains: [.bitcoin]).fingerprint.hex.uppercased(),
+                        oculta.fingerprint.hex.uppercased(), oculta.accounts.first?.address)
+        } catch {
+            secret.wipe()
+            credencial.zerar()
+            throw error
+        }
+        // As palavras na memoria sao as da previa que o dono conferiu.
+        guard digitais.sozinha == digitalDaFrase.uppercased() else {
+            secret.wipe()
+            credencial.zerar()
+            throw Nucleo.Falha(erro: "importacao.mudou")
+        }
+        // A digital tem 4 bytes: o endereco da Bitcoin confirma que e a mesma carteira. Uma de outra frase com a mesma digital
+        // nunca e escolhida no lugar; `adicionarCarteira` abaixo a recusa como ja importada (revisao, 08/11/2026).
+        if let existente = Sessao.shared.metadata.wallets.first(where: {
+            $0.fingerprint?.uppercased() == digitais.oculta && !$0.isWatchOnly && digitais.bitcoin != nil
+                && $0.account(.bitcoin)?.address == digitais.bitcoin
+        }) {
+            secret.wipe()
+            try Sessao.shared.comChaveRaiz(credencial) { _ in }
+            try Sessao.shared.selecionar(existente.id)
+            return (existente, true)
+        }
+        let wallet = try Sessao.shared.adicionarCarteira(
+            secret, nome: nome, origem: .importedPhrase, palavras: palavras, copiaConfirmada: true, digitalEsperada: digitais.oculta,
+            credencial: credencial
+        )
+        Sessao.shared.marcarRecemAberta(wallet.id)
+        return (wallet, false)
     }
 
     private static func copia(_ origem: SecureBytes) -> SecureBytes {

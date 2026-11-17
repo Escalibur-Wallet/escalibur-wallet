@@ -15,9 +15,9 @@ struct NonceQueuePruningTests {
     }
 
     /// true: dois operadores devolvem a transacao; false: dois sem ela; nil: sem resposta.
-    static func prune(_ entries: [E], settled: @escaping @Sendable (E) -> Bool = { _ in false },
+    static func prune(_ entries: [E], minedNonce: UInt64? = nil, settled: @escaping @Sendable (E) -> Bool = { _ in false },
                       known: @escaping @Sendable (E) -> Bool?) async -> NonceQueuePruning.Result {
-        await NonceQueuePruning.pruned(entries, now: now, settled: { settled($0) }, known: { entry in
+        await NonceQueuePruning.pruned(entries, now: now, minedNonce: minedNonce, settled: { settled($0) }, known: { entry in
             known(entry).map { $0 ? EVMReader.Sighting.seen : .unknown }
         })
     }
@@ -159,6 +159,30 @@ struct NonceQueuePruningTests {
     func settledLeavesAlone() async {
         let result = await Self.prune([Self.entry(5, ago: 60), Self.entry(6, ago: 50)], settled: { $0.nonce == 5 }) { _ in true }
         #expect(result.gone == ["0x5"] && result.seen == ["0x6"])
+    }
+
+    @Test("Abaixo do nonce minerado: sai mesmo vista e sem recibo (o indice antigo podado, bug de 14/11/2026); no nonce, fica")
+    func belowMinedNonceLeaves() async {
+        // Dias depois: a 5 entrou num bloco, mas o recibo sumiu dos provedores e ela segue vista por dois.
+        let days = 6 * 24 * 60 * 60.0
+        let mined = await Self.prune([Self.entry(5, ago: days), Self.entry(6, ago: 30)], minedNonce: 6) { _ in true }
+        #expect(mined.gone == ["0x5"] && mined.seen == ["0x6"])
+        let notYet = await Self.prune([Self.entry(5, ago: days)], minedNonce: 5) { _ in true }
+        #expect(notYet.gone.isEmpty && notYet.seen == ["0x5"])
+        let unread = await Self.prune([Self.entry(5, ago: days)]) { _ in true }
+        #expect(unread.gone.isEmpty && unread.seen == ["0x5"])
+        // Antes de 30 minutos o nonce minerado nao tira: cobre a reorganizacao e o par que infla o nonce contra um honesto.
+        let young = await Self.prune([Self.entry(5, ago: 60, privateRoute: true)], minedNonce: 6) { _ in true }
+        #expect(young.gone.isEmpty && young.seen == ["0x5"])
+        // Nonce gasto por outra transacao (a mesma frase em outro aparelho) e a nossa sumiu da rede: sai so ela, antes dos
+        // 30 minutos, e a de cima (privada, ainda viva) fica.
+        let spent = await Self.prune([Self.entry(5, ago: 60), Self.entry(6, ago: 30, privateRoute: true)], minedNonce: 6) {
+            $0.nonce == 5 ? false : nil
+        }
+        #expect(spent.gone == ["0x5"])
+        // A de baixo sai pelo nonce: a de cima segue a regra de sempre, sem cascata.
+        let alone = await Self.prune([Self.entry(5, ago: days), Self.entry(6, ago: 20)], minedNonce: 6) { $0.nonce == 5 ? true : nil }
+        #expect(alone.gone == ["0x5"])
     }
 
     actor Asked {

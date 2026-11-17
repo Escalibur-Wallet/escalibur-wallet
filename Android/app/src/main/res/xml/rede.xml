@@ -7,4 +7,32 @@
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+    <!-- Os precos que a troca usa como referencia (checagem final de 16/11/2026, M3): so as raizes que a Cloudflare usa
+         para esses tres (Google Trust Services, Let's Encrypt com as geracoes X e Y, e SSL.com; a Sectigo dos
+         certificados de reserva fica de fora). Uma autoridade coagida ou comprometida nao forja o preco de referencia.
+         Sem data de validade: uma data desligaria o pin sozinha. Com o pin recusado, somem os precos do app (saldo em
+         moeda, Mercado, alertas, busca e aviso de golpe do token), a troca EVM, Stellar e XRPL pede o aceite, a da Solana
+         fora de pares de stablecoin para, e o aviso de taxa alta do envio some; a lista e conferida a cada versao. -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">api.coingecko.com</domain>
+        <domain includeSubdomains="false">api.coinpaprika.com</domain>
+        <domain includeSubdomains="false">api.kraken.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+        <pin-set>
+            <pin digest="SHA-256">hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Gc=</pin> <!-- GTS Root R1 -->
+            <pin digest="SHA-256">Vfd95BwDeSQo+NUYxVEEIlvkOlWY2SalKK1lPhzOx78=</pin> <!-- GTS Root R2 -->
+            <pin digest="SHA-256">QXnt2YHvdHR3tJYmQIr0Paosp6t/nggsEGD4QJZ3Q0g=</pin> <!-- GTS Root R3 -->
+            <pin digest="SHA-256">mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=</pin> <!-- GTS Root R4 -->
+            <pin digest="SHA-256">C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</pin> <!-- ISRG Root X1 -->
+            <pin digest="SHA-256">diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=</pin> <!-- ISRG Root X2 -->
+            <pin digest="SHA-256">sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w=</pin> <!-- ISRG Root YE (Let's Encrypt, geracao Y) -->
+            <pin digest="SHA-256">fk6IOKit1ild5647BH06ujSIq5XbCgqlbYl6ANhhi88=</pin> <!-- ISRG Root YR (Let's Encrypt, geracao Y) -->
+            <pin digest="SHA-256">0cRTd+vc1hjNFlHcLgLCHXUeWqn80bNDH/bs9qMTSPo=</pin> <!-- SSL.com Root Certification Authority RSA -->
+            <pin digest="SHA-256">oyD01TTXvpfBro3QSZc1vIlcMjrdLTiL/M9mLCPX+Zo=</pin> <!-- SSL.com Root Certification Authority ECC -->
+            <pin digest="SHA-256">K89VOmb1cJAN3TK6bf4ezAbJGC1mLcG2Dh97dnwr3VQ=</pin> <!-- SSL.com TLS RSA Root CA 2022 -->
+            <pin digest="SHA-256">G/ANXI8TwJTdF+AFBM8IiIUPEv0Gf6H5LA/b9guG4yE=</pin> <!-- SSL.com TLS ECC Root CA 2022 -->
+        </pin-set>
+    </domain-config>
 </network-security-config>

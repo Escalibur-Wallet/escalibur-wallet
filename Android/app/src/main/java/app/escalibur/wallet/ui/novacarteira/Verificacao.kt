@@ -292,7 +292,7 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
  * checagem que falha pede o "estou ciente" do dono; sem bloqueio de tela, nao segue.
  */
 @Composable
-fun VerificacaoDoAparelho(tituloDoDeslize: String, criando: Boolean, aoSeguir: () -> Unit) {
+fun VerificacaoDoAparelho(tituloDoDeslize: String, criando: Boolean, ciencia: String? = null, aoSeguir: () -> Unit) {
     val contexto = LocalContext.current
     val parado = movimentoReduzido()
     val passos = remember { Checagem.passos() }
@@ -360,7 +360,7 @@ fun VerificacaoDoAparelho(tituloDoDeslize: String, criando: Boolean, aoSeguir: (
             if (terminou && bloqueantes.isNotEmpty() && !impede) {
                 Aceite(
                     ciente,
-                    if (criando) t("Estou ciente de que este celular falhou na verificação de integridade e de que gerar as palavras aqui pode expor a carteira. Quero seguir mesmo assim.")
+                    ciencia ?: if (criando) t("Estou ciente de que este celular falhou na verificação de integridade e de que gerar as palavras aqui pode expor a carteira. Quero seguir mesmo assim.")
                     else t("Estou ciente de que este celular falhou na verificação de integridade e de que digitar as palavras aqui pode expor a carteira. Quero seguir mesmo assim."),
                     Modifier.padding(top = Espaco.md),
                 ) { ciente = it }

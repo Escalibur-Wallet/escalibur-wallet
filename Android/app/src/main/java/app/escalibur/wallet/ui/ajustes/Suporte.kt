@@ -28,6 +28,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.CancellationException
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -112,14 +116,41 @@ fun TelaDeSuporte() {
     var transacao by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var repeticao by remember { mutableStateOf("") }
-    var pareceFrase by remember { mutableStateOf(false) }
+    /** O que o nucleo achou: "" (nada), "chave", "palavras" (com o trecho), "hex" ou "rede" (`PrivateKeyGuard.supportSecret`). */
+    var segredo by remember { mutableStateOf("") }
+    var palavras by remember { mutableStateOf("") }
+    /** O pedido da ultima resposta: ate ela chegar, o Enviar e o Copiar esperam (como o `emDia` dos contatos). */
+    var conferidoPara by remember { mutableStateOf<List<String>?>(null) }
     var semAppDeEmail by remember { mutableStateOf(false) }
-    LaunchedEffect(detalhes, transacao) {
-        pareceFrase = runCatching { Api.objeto("suporte.pareceFrase", JSONObject().put("detalhes", detalhes).put("transacao", transacao)).optBoolean("frase") }.getOrDefault(false)
+    val escopo = rememberCoroutineScope()
+    // O ID e a rede so contam no assunto que os pede: fora dele, nem vao no chamado (como no iOS).
+    // Lido na hora de cada chamada: dentro de uma tarefa, e o texto de agora, nao o da composicao.
+    fun pedidoAgora() = listOf(detalhes, if (assunto?.pedeTransacao == true) transacao else "", if (assunto?.pedeRede == true) rede.orEmpty() else "")
+    val pedido = pedidoAgora()
+    /** A conferencia no nucleo; null na falha, que bloqueia. O cancelamento por uma tecla nova nao conta como falha: engolido, ele
+     *  acendia o aviso enquanto o dono digitava (revisao dos 3 agentes, 09/11/2026). */
+    suspend fun conferir(pedido: List<String>): JSONObject? = try {
+        Api.objeto("suporte.pareceFrase", JSONObject().put("detalhes", pedido[0]).put("transacao", pedido[1]).put("rede", pedido[2]))
+    } catch (cancelado: CancellationException) {
+        throw cancelado
+    } catch (falha: Exception) {
+        null
     }
+    LaunchedEffect(pedido) {
+        // O texto mudou: o "Copiar o chamado" de antes sai, e volta so pelo Enviar, que confere de novo.
+        semAppDeEmail = false
+        // Uma pausa curta na digitacao, como no iOS; o pedido e o desta chamada, nunca o lido de novo depois da espera.
+        delay(150)
+        val resposta = conferir(pedido)
+        segredo = if (resposta == null) "chave" else resposta.optString("tipo")
+        palavras = resposta?.optString("palavras").orEmpty()
+        conferidoPara = pedido
+    }
+    val pareceFrase = segredo.isNotEmpty()
+    val emDia = conferidoPara == pedido
     val emailValido = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$").matches(email.trim())
     val iguais = email.trim().equals(repeticao.trim(), ignoreCase = true)
-    val pode = assunto != null && detalhes.isNotBlank() && emailValido && iguais && !pareceFrase
+    val pode = assunto != null && detalhes.isNotBlank() && emailValido && iguais && !pareceFrase && emDia
     val versao = BuildConfig.VERSION_NAME
 
     fun assuntoDoEmail() = t("Suporte: %@ · Escalibur %@", assunto?.titulo ?: "", versao)
@@ -137,14 +168,28 @@ fun TelaDeSuporte() {
         return linhas.joinToString("\n")
     }
 
-    fun enviar() {
-        semAppDeEmail = false
+    fun abrirEmail() {
         val intencao = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")).apply {
             putExtra(Intent.EXTRA_EMAIL, arrayOf(EMAIL_DO_SUPORTE))
             putExtra(Intent.EXTRA_SUBJECT, assuntoDoEmail())
             putExtra(Intent.EXTRA_TEXT, corpo())
         }
         semAppDeEmail = runCatching { contexto.startActivity(intencao) }.isFailure
+    }
+
+    fun enviar() {
+        semAppDeEmail = false
+        // De novo, na hora: a resposta guardada pode ser de um texto de um instante antes (como no iOS).
+        val agora = pedidoAgora()
+        escopo.launch {
+            val resposta = conferir(agora)
+            val tipo = if (resposta == null) "chave" else resposta.optString("tipo")
+            if (tipo.isNotEmpty() || agora != pedidoAgora()) {
+                segredo = tipo.ifEmpty { segredo }
+                return@launch
+            }
+            abrirEmail()
+        }
     }
 
     var escolhendoRede by remember { mutableStateOf(false) }
@@ -195,25 +240,39 @@ fun TelaDeSuporte() {
                 }
             }
             Passo(numero++, t("O que aconteceu?"))
-            CampoDeTexto(detalhes, t("O que você fez, o que esperava e o que apareceu na tela."), linhas = 5, alturaMinima = 132.dp) { detalhes = it.take(2000) }
-            if (pareceFrase) {
-                Faixa(TipoDeFaixa.falha, t("Isto parece a senha da carteira"), Modifier.padding(top = Espaco.sm),
-                      mensagem = t("Apague as palavras antes de mandar. Ninguém da Escalibur precisa delas, nem para ajudar."))
+            CampoDeTexto(detalhes, t("O que você fez, o que esperava e o que apareceu na tela."), linhas = 5, alturaMinima = 132.dp) { detalhes = it.take(4096) }
+            when (segredo) {
+                "palavras" -> Faixa(TipoDeFaixa.falha, t("Isto parece a senha da carteira"), Modifier.padding(top = Espaco.sm),
+                    // O trecho que pesou: quem so conversava sabe o que trocar. Ele ja esta na tela, no campo.
+                    mensagem = t("As palavras “%@” estão na lista das senhas de carteira. Se forem da sua, apague. Se não, escreva de outro jeito.", palavras))
+                "hex" -> Faixa(TipoDeFaixa.falha, t("Isto parece uma chave ou o código de uma transação"), Modifier.padding(top = Espaco.sm),
+                    mensagem = if (assunto?.pedeTransacao == true) t("Se for o código da transação, cole no campo do ID da transação. Se for uma chave, apague: ninguém da Escalibur precisa dela.")
+                               else t("Apague o código longo: neste assunto o suporte não precisa dele. Se for uma chave, ninguém da Escalibur precisa dela."))
+                "rede" -> Faixa(TipoDeFaixa.falha, t("Isto parece uma chave ou o código de uma transação"), Modifier.padding(top = Espaco.sm),
+                    mensagem = t("Escolha a rede acima, para o app conferir se isto é o código de uma transação dessa rede."))
+                "" -> {}
+                else -> Faixa(TipoDeFaixa.falha, t("Isto parece a senha da carteira"), Modifier.padding(top = Espaco.sm),
+                    mensagem = t("Apague as palavras ou a chave antes de mandar. Ninguém da Escalibur precisa delas, nem para ajudar."))
             }
             if (assunto?.pedeTransacao == true) {
                 Text(t("ID da transação, se tiver"), style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.md))
-                CampoDeTexto(transacao, t("Copie na Atividade, no detalhe do envio"), mono = true) { transacao = it.take(200) }
+                CampoDeTexto(transacao, t("Copie na Atividade, no detalhe do envio"), mono = true) { transacao = it.take(4096) }
             }
             Passo(numero, t("Seu e-mail para a resposta"))
             Box(Modifier.padding(top = Espaco.xs)) { CampoDeTexto(email, t("seu@email.com"), email = true) { email = it.take(120) } }
             CampoDeTexto(repeticao, t("Repita o e-mail"), email = true) { repeticao = it.take(120) }
             if (repeticao.isNotEmpty() && !iguais) Text(t("Os dois e-mails não conferem."), style = estilo(Tipo.nota), color = Paleta.baixa, modifier = Modifier.padding(top = Espaco.xs))
             else if (email.isNotEmpty() && !emailValido) Text(t("Confira o e-mail: falta o @ ou o domínio."), style = estilo(Tipo.nota), color = Paleta.baixa, modifier = Modifier.padding(top = Espaco.xs))
-            if (semAppDeEmail) {
+            if (semAppDeEmail && !pareceFrase && emDia) {
                 Faixa(TipoDeFaixa.neutra, t("Nenhum app de e-mail abriu"), Modifier.padding(top = Espaco.md),
                       mensagem = t("Copie o chamado e mande pelo e-mail que você usa. O endereço do suporte vai junto no texto."),
                       tituloDaAcao = t("Copiar o chamado")) {
-                    Transferencia.copiar(contexto, t("Para: %@", EMAIL_DO_SUPORTE) + "\n" + assuntoDoEmail() + "\n\n" + corpo(), rotulo = "Escalibur")
+                    val agora = pedidoAgora()
+                    escopo.launch {
+                        val resposta = conferir(agora)
+                        if (resposta == null || resposta.optString("tipo").isNotEmpty() || agora != pedidoAgora()) return@launch
+                        Transferencia.copiar(contexto, t("Para: %@", EMAIL_DO_SUPORTE) + "\n" + assuntoDoEmail() + "\n\n" + corpo(), rotulo = "Escalibur")
+                    }
                 }
             }
             // Os avisos num cartao, como no iOS.

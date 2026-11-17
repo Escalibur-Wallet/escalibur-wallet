@@ -97,6 +97,8 @@ object RemocaoDeCarteira {
                 return true
             }
         } catch (falha: FalhaDoNucleo) {
+            // Travado no meio, a remocao fica para o destravar: os avisos dela saem da gaveta ja (rodada 16).
+            if (falha.codigo == "sessao.travada") Vigia.limparGaveta()
             Avisos.mostrar(Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível remover agora."))
         }
         return false

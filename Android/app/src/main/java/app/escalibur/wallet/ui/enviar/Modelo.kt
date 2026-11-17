@@ -76,19 +76,20 @@ class RetratoDoEnvio(json: JSONObject) {
     /** Sobe a cada validacao: os campos dos desafios zeram junto com o nucleo. */
     val rodadaDoDesafio: Int = e.optInt("rodadaDoDesafio")
 
-    class Parecido(val conhecido: String, val rotulo: String, val trechoColado: Trecho?, val trechoConhecido: Trecho?)
+    class Parecido(val conhecido: String, val rotulo: String, val trechoColado: Trecho?, val trechoConhecido: Trecho?, val caixaConta: Boolean = false)
     class OutroID(val conhecido: String, val idConhecido: String, val rotulo: String, val trechoColado: Trecho?, val trechoConhecido: Trecho?)
     /** `todoEnvio`: o desafio e o da opcao "Conferir o endereco em todo envio" (os 6 ultimos), e nao o do historico ilegivel. */
-    class Cego(val fonte: String, val trecho: Trecho, val todoEnvio: Boolean = false)
+    class Cego(val fonte: String, val trecho: Trecho, val todoEnvio: Boolean = false, val caixaConta: Boolean = false)
 
     val parecido: Parecido? = e.optJSONObject("parecido")?.let {
-        Parecido(it.getString("conhecido"), it.getString("rotulo"), Trecho.de(it.optJSONObject("trechoColado")), Trecho.de(it.optJSONObject("trechoConhecido")))
+        Parecido(it.getString("conhecido"), it.getString("rotulo"), Trecho.de(it.optJSONObject("trechoColado")), Trecho.de(it.optJSONObject("trechoConhecido")),
+                 it.optBoolean("caixaConta"))
     }
     val outroID: OutroID? = e.optJSONObject("outroID")?.let {
         OutroID(it.getString("conhecido"), it.getString("idConhecido"), it.getString("rotulo"),
                 Trecho.de(it.optJSONObject("trechoColado")), Trecho.de(it.optJSONObject("trechoConhecido")))
     }
-    val cego: Cego? = e.optJSONObject("cego")?.let { Cego(it.getString("fonte"), Trecho.de(it.getJSONObject("trecho"))!!, it.optBoolean("todoEnvio")) }
+    val cego: Cego? = e.optJSONObject("cego")?.let { Cego(it.getString("fonte"), Trecho.de(it.getJSONObject("trecho"))!!, it.optBoolean("todoEnvio"), it.optBoolean("caixaConta")) }
     /** Com um desafio na tela, o campo do endereco some: a resposta se leria nele. */
     val desafio: Boolean get() = parecido != null || outroID != null || cego != null
 
@@ -102,6 +103,13 @@ class RetratoDoEnvio(json: JSONObject) {
     val tagDoLink: Boolean = e.getBoolean("tagDoLink")
     val problemaDaTag: String? = e.opcional("problemaDaTag")
     val podeContinuar: Boolean = e.getBoolean("podeContinuar")
+    /** O botao Continuar: acende tambem com o nome da NEAR por nascer ou o nome inteiro digitado, que conferem no toque. */
+    val podeTocarContinuar: Boolean = e.optBoolean("podeTocarContinuar", podeContinuar)
+    val nomeNaoConfere: Boolean = e.optBoolean("nomeNaoConfere")
+    /** O nome da NEAR colado, com o desafio ainda por calcular: o campo fica escondido. */
+    val campoEscondido: Boolean = e.optBoolean("campoEscondido")
+    /** A tag, o memo ou o comentario tinha uma frase ou uma chave e foi apagado. */
+    val avisoDaTag: String? = e.opcional("avisoDaTag")
 
     private val d = e.optJSONObject("disponivel")
     /** O que da para gastar, pelo motor; sem ele, o saldo menos a reserva da rede. */
@@ -180,6 +188,9 @@ class ControleDoEnvio {
 
     /** Uma chamada "envio.*". Devolve se o nucleo aceitou. */
     suspend fun chamar(metodo: String, corpo: JSONObject = JSONObject()): Boolean = try {
+        // O Continuar espera as chamadas rapidas que ja estao na fila (a ultima letra, a ultima resposta do desafio): passando na
+        // frente, armava o comeco do nome da NEAR ou dizia "nao confere" a uma resposta velha (revisao dos 3 agentes, 09/11/2026).
+        if (metodo == "envio.continuar") fila.withLock { }
         val resposta = if (metodo in longas) Api.objeto(metodo, corpo) else fila.withLock { Api.objeto(metodo, corpo) }
         aplicar(resposta)
         true

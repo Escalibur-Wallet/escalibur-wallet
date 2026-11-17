@@ -88,7 +88,7 @@ struct PassphraseWalletView: View {
             }
             .navigationDestination(isPresented: $entering) {
                 // Aberta a carteira, volta de uma vez para onde o caminho comecou.
-                PassphraseEntryView(base: base) {
+                PassphraseEntryView(base: base) { _ in
                     opened = true
                     var quiet = Transaction()
                     quiet.disablesAnimations = true
@@ -111,8 +111,24 @@ struct PassphraseEntryView: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(AuthCoordinator.self) private var auth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let base: WalletMeta
-    let onDone: () -> Void
+    /// A carteira das palavras guardada aqui (Ajustes). Importando, nao ha: as palavras estao so na memoria da tela.
+    let base: WalletMeta?
+    /// Recebe a carteira com passphrase aberta.
+    let onDone: (WalletMeta) -> Void
+    /// Importando: o voltar leva de volta a conferencia dos enderecos, onde as palavras esperam.
+    var onBack: (() -> Void)? = nil
+    /// O nome que o campo Nome traz; sem ele, o da carteira das palavras com "com passphrase".
+    var suggestedName: String? = nil
+    /// Importando: abre a carteira com passphrase das palavras na memoria (`addImportedPassphraseWallet`), sem a
+    /// carteira das palavras no cofre (revisao dos 3 agentes, 08/11/2026).
+    var opening: ((SecureBytes, String, Credential) async throws -> WalletMeta)? = nil
+
+    /// Importando, a passphrase com caractere invisivel abre so depois de o dono dizer que ela e de outra carteira: uma nova
+    /// assim nao se escreve igual no papel (revisao de seguranca, 08/11/2026).
+    @State private var confirmInvisible = false
+    @State private var invisibleAccepted = false
+
+    private var defaultName: String { suggestedName ?? base.map { String(localized: "\($0.name) com passphrase") } ?? "" }
 
     @State private var passphrase = SecureBytes(capacity: PassphraseLimit.fieldCapacity)
     @State private var passphraseLength = 0
@@ -133,7 +149,7 @@ struct PassphraseEntryView: View {
 
     var body: some View {
         if let fresh {
-            PassphraseUsageView(wallet: fresh.wallet, previous: fresh.previous, onUse: onDone) {
+            PassphraseUsageView(wallet: fresh.wallet, previous: fresh.previous, onUse: { onDone(fresh.wallet) }) {
                 passphraseLength = 0
                 againLength = 0
                 cipher.clearAll()
@@ -161,13 +177,14 @@ struct PassphraseEntryView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.bottom, Space.md)
                 Text("Passphrase").typeStyle(.note).foregroundStyle(Palette.inkSoft)
+                // Sair do app zera os dois campos: nada depois desta tela manda comparar em outro app (revisao, 08/11/2026).
                 PasswordBox(buffer: passphrase, length: $passphraseLength, placeholder: String(localized: "Passphrase"), reveal: $revealPassphrase,
-                            glyphs: glyphs(0, count: passphraseLength))
+                            glyphs: glyphs(0, count: passphraseLength), wipesOnLeave: true)
                 // A repeticao so aparece quando a primeira comeca a ser digitada (pedido do dono,
                 // 16/10/2026). O campo inteiro nasce dos pixels (pedido do dono, 24/10/2026).
                 if passphraseLength > 0 || againLength > 0 {
                     PasswordBox(buffer: again, length: $againLength, placeholder: String(localized: "Repita a passphrase"), reveal: $revealPassphrase,
-                                onSubmit: { Task { await create() } }, glyphs: glyphs(1, count: againLength))
+                                onSubmit: { Task { await create() } }, glyphs: glyphs(1, count: againLength), wipesOnLeave: true)
                         .id("repita")
                         .transition(repeatTransition)
                     if PassphraseLimit.overflows(passphraseLength) || PassphraseLimit.overflows(againLength) {
@@ -229,9 +246,34 @@ struct PassphraseEntryView: View {
         .background(Palette.void.ignoresSafeArea())
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(onBack != nil)
+        .toolbar {
+            if let onBack {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { onBack() } label: {
+                        Image(systemName: "chevron.backward").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.inkSoft)
+                    }
+                    // Abrindo, o voltar espera: sair no meio deixava a carteira com passphrase criada sem a busca de movimento.
+                    .disabled(working)
+                    .accessibilityLabel("Voltar")
+                }
+            }
+        }
         .guardedAgainstCapture()
-        .onAppear { if name.isEmpty { name = String(localized: "\(base.name) com passphrase") } }
-        .onChange(of: passphraseLength) { _, _ in cipher.seal(0, buffer: passphrase) }
+        .onAppear { if name.isEmpty { name = defaultName } }
+        .onChange(of: passphraseLength) { _, _ in
+            cipher.seal(0, buffer: passphrase)
+            invisibleAccepted = false
+        }
+        .whiteAlert("Caractere invisível na passphrase", isPresented: $confirmInvisible) {
+            Button("Seguir assim") {
+                invisibleAccepted = true
+                Task { await create() }
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("A passphrase tem um caractere invisível ou um espaço diferente do espaço comum. Se ela é de outra carteira, siga. Se é nova, escreva de novo: no papel ela não se escreve igual.")
+        }
         .onChange(of: againLength) { _, _ in cipher.seal(1, buffer: again) }
         .onDisappear {
             passphrase.wipe()
@@ -267,15 +309,27 @@ struct PassphraseEntryView: View {
             message = PassphraseLimit.message
             return
         }
-        guard PassphraseWalletView.isWritable(passphrase) else {
-            message = String(localized: "A passphrase tem um caractere invisível ou um espaço diferente do espaço comum. Escreva de novo, só com letras, números, símbolos e espaço comum: é o que dá para anotar no papel.")
-            return
+        // Para criar uma nova, o que o papel nao mostra e recusado. Importando, a passphrase pode ja existir em outra carteira:
+        // recusar deixava o dono sem a carteira dele, e o app pergunta antes (revisao, 08/11/2026).
+        if !PassphraseWalletView.isWritable(passphrase) {
+            guard opening != nil else {
+                message = String(localized: "A passphrase tem um caractere invisível ou um espaço diferente do espaço comum. Escreva de novo, só com letras, números, símbolos e espaço comum: é o que dá para anotar no papel.")
+                return
+            }
+            guard invisibleAccepted else {
+                confirmInvisible = true
+                return
+            }
+            // O aceite vale esta vez so: outra passphrase colada com o mesmo tamanho pergunta de novo (revisao, 08/11/2026).
+            invisibleAccepted = false
         }
         // Criar e uma porta de chute: a passphrase certa reabre a carteira que ja existe, e o
         // app diz isso. Toda criacao conta (revisao de seguranca de 16/10/2026), numa espera
         // mais curta que zera depois de um dia sem tentar: e por aqui que o dono que esqueceu
-        // a passphrase tenta lembrar (pedido do dono, 25/10/2026).
-        if let wait = PassphraseGate.shared.begin(session, wallet: base.id, creation: true) {
+        // a passphrase tenta lembrar (pedido do dono, 25/10/2026). Importando, quem digita acabou de digitar as palavras,
+        // e com elas chuta fora do aparelho de qualquer jeito: nao ha porta.
+        let gated = opening == nil ? base : nil
+        if let gated, let wait = PassphraseGate.shared.begin(session, wallet: gated.id, creation: true) {
             message = wait
             return
         }
@@ -285,36 +339,51 @@ struct PassphraseEntryView: View {
         let copy = SecureBytes(capacity: passphrase.count)
         passphrase.withUnsafeBytes { copy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
         defer { copy.wipe() }
-        let title = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
-        let walletName = title.isEmpty ? String(localized: "\(base.name) com passphrase") : title
+        // O mesmo saneamento dos outros nomes: sem controle, sem caractere invisivel, ate 40 (revisao, 08/11/2026).
+        let title = Envelope.sanitize(name, limit: 40)
+        let walletName = title.isEmpty ? defaultName : title
         let before = Set(session.metadata.wallets.map(\.id))
         let previous = session.metadata.selectedWalletID
+        // A rodada do dia para: a carteira com passphrase e a de base nao sao consultadas juntas (rodada 1 da auditoria 8). Nada
+        // e poupado, nem a primeira conferencia de uma recem-importada (rodada 5).
+        session.pauseControlChecks(hidden: true)
         do {
-            guard let opened = try await auth.retrying(reason: String(localized: "Abrir a carteira com passphrase"), { credential in
-                try await session.addPassphraseWallet(base: base, passphrase: copy, name: walletName, credential: credential)
+            guard let opened = try await auth.retrying(reason: String(localized: "Abrir a carteira com passphrase"), { [opening, base] credential in
+                if let opening { return try await opening(copy, walletName, credential) }
+                guard let base else { throw WalletError.notPhraseWallet }
+                return try await session.addPassphraseWallet(base: base, passphrase: copy, name: walletName, credential: credential)
             }) else {
-                PassphraseGate.shared.refund(session, wallet: base.id, creation: true)
+                if let gated { PassphraseGate.shared.refund(session, wallet: gated.id, creation: true) }
+                // Desistiu do PIN: a rodada do dia da base, pausada, volta (rodada 6 da auditoria 8).
+                session.rescheduleControlChecks()
                 return
             }
             // Conta na espera, sem o aviso de passphrase errada: aqui nada errou.
-            PassphraseGate.shared.failed(session, wallet: base.id, warn: false, creation: true)
+            if let gated { PassphraseGate.shared.failed(session, wallet: gated.id, warn: false, creation: true) }
             passphrase.wipe()
             again.wipe()
             // A mesma frase com a mesma passphrase e a mesma carteira: ela ja estava aqui.
+            // A Tron dela conferida ja, nova ou reaberta, mesmo que o dono abra sem esperar a busca (o golpe da "frase com
+            // saldo", revisao de 08/11/2026).
+            _ = session.checkTronControl(opened.id)
+            session.checkForeignControl(opened.id)
+            _ = session.checkTONVersion(opened.id)
             if before.contains(opened.id) {
                 toasts.show(String(localized: "Esta carteira já está aberta, como \(opened.name). Ela passa a ser a carteira em uso."))
-                onDone()
+                onDone(opened)
                 return
             }
             // Nova neste iPhone: antes de abrir, o app procura movimento nela (pedido do dono, 25/10/2026).
             withAnimation(Motion.fade) { fresh = (opened, previous) }
         } catch let error as WalletError {
             // Nada foi criado nem reaberto: a tentativa volta.
-            PassphraseGate.shared.refund(session, wallet: base.id, creation: true)
+            if let gated { PassphraseGate.shared.refund(session, wallet: gated.id, creation: true) }
             message = error.errorDescription
+            session.rescheduleControlChecks()
         } catch {
-            PassphraseGate.shared.refund(session, wallet: base.id, creation: true)
+            if let gated { PassphraseGate.shared.refund(session, wallet: gated.id, creation: true) }
             message = AuthCoordinator.refusalMessage(error) ?? String(localized: "Não foi possível criar a carteira agora.")
+            session.rescheduleControlChecks()
         }
     }
 }
@@ -331,10 +400,13 @@ struct PassphraseUsageView: View {
     let onUse: () -> Void
     let onRetry: () -> Void
 
-    private enum Phase: Equatable { case checking, never, incomplete(String) }
+    /// `foreignTron`: na Tron, outra chave controla a conta (o golpe da "frase com saldo", revisao de 08/11/2026).
+    private enum Phase: Equatable { case checking, never, incomplete(String), foreignTron }
     @State private var phase = Phase.checking
     @State private var round = 0
     @State private var message: String?
+    /// Uma decisao so: usar e tentar outra em seguida tirava a carteira que acabou de ser usada (revisao, 08/11/2026).
+    @State private var decided = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -348,6 +420,20 @@ struct PassphraseUsageView: View {
             .multilineTextAlignment(.center)
             .padding(.top, Space.md)
             .animation(Motion.fade, value: phase)
+            // Sem movimento, a impressao digital para conferir com a carteira onde a passphrase ja era usada: a previa
+            // da importacao mostrava a da carteira com passphrase antes de 08/11/2026 (revisao dos 3 agentes).
+            if phase != .checking, phase != .foreignTron, let fingerprint = wallet.fingerprint {
+                VStack(spacing: Space.xxs) {
+                    Text("Impressão digital da carteira").typeStyle(.note).foregroundStyle(Palette.inkSoft)
+                    Text(verbatim: fingerprint.uppercased()).typeStyle(.row).foregroundStyle(Palette.ink)
+                    Text("Compare com a impressão digital da carteira onde você usava esta passphrase: igual, a passphrase está certa; diferente, esta é outra carteira.")
+                        .typeStyle(.note).foregroundStyle(Palette.inkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .multilineTextAlignment(.center)
+                .padding(.top, Space.md)
+                .accessibilityIdentifier("passphrase-digital")
+            }
             if let message {
                 Banner(kind: .failure, title: message).padding(.top, Space.md)
             }
@@ -361,6 +447,8 @@ struct PassphraseUsageView: View {
         .navigationBarTitleDisplayMode(.inline)
         // Daqui so se sai decidindo: usar a carteira ou tentar outra passphrase.
         .navigationBarBackButtonHidden(true)
+        // A impressao digital e o nome da carteira com passphrase ficam fora de captura e gravacao de tela.
+        .guardedAgainstCapture()
         .task(id: round) { await check() }
     }
 
@@ -369,6 +457,7 @@ struct PassphraseUsageView: View {
         case .checking: String(localized: "Procurando movimento")
         case .never: String(localized: "Esta carteira ainda não foi usada")
         case .incomplete: String(localized: "Nenhuma transferência até agora")
+        case .foreignTron: String(localized: "Na Tron, esta conta é controlada por outra chave")
         }
     }
 
@@ -380,25 +469,32 @@ struct PassphraseUsageView: View {
             String(localized: "Nas redes que a Escalibur lê, ela nunca recebeu nem enviou nada. Tem certeza de que a passphrase está certa? Maiúsculas, acentos e espaços contam. Se é uma carteira nova, pode usar. Outros apps podem guardar saldo em caminhos que a Escalibur não lê, como o Taproot do Bitcoin.")
         case .incomplete(let names):
             String(localized: "Nas redes que responderam, esta carteira nunca teve movimento. Não responderam agora: \(names).")
+        case .foreignTron:
+            String(localized: "É o golpe da frase com saldo: o que entrar nela, quem controla a outra chave leva. Não deposite nada nesta carteira.")
         }
     }
 
     @ViewBuilder private var buttons: some View {
         switch phase {
         case .checking:
-            TertiaryButton(title: String(localized: "Abrir sem esperar")) { onUse() }
+            TertiaryButton(title: String(localized: "Abrir sem esperar")) { use() }
                 .frame(maxWidth: .infinity)
         case .never:
             // O botao principal nao empurra para descartar: a busca nao le todo caminho que outro
             // app usa (revisao de blockchain de 26/10/2026).
-            PrimaryButton(title: String(localized: "Usar esta carteira")) { onUse() }
+            PrimaryButton(title: String(localized: "Usar esta carteira")) { use() }
             TertiaryButton(title: String(localized: "Tentar outra passphrase")) { retry() }
+                .frame(maxWidth: .infinity).padding(.top, Space.xs)
+        case .foreignTron:
+            // Nada empurra para usar: o Receber da Tron dela ja fechou, e a passphrase pode ser de outra pessoa.
+            PrimaryButton(title: String(localized: "Tentar outra passphrase")) { retry() }
+            TertiaryButton(title: String(localized: "Usar esta carteira")) { use() }
                 .frame(maxWidth: .infinity).padding(.top, Space.xs)
         case .incomplete:
             PrimaryButton(title: String(localized: "Procurar de novo")) { round += 1 }
             TertiaryButton(title: String(localized: "Tentar outra passphrase")) { retry() }
                 .frame(maxWidth: .infinity).padding(.top, Space.xs)
-            TertiaryButton(title: String(localized: "Usar esta carteira")) { onUse() }
+            TertiaryButton(title: String(localized: "Usar esta carteira")) { use() }
                 .frame(maxWidth: .infinity)
         }
     }
@@ -406,12 +502,23 @@ struct PassphraseUsageView: View {
     private func check() async {
         message = nil
         withAnimation(Motion.fade) { phase = .checking }
+        // A Tron dela, junto da busca: com outra chave no controle, a carteira nao abre sozinha. A pausa mantem as dela, que
+        // acabaram de sair, em vez de cancelar e perguntar de novo (rodada 4 da auditoria 8).
+        session.pauseControlChecks(keeping: wallet.id)
+        let tron = session.checkTronControl(wallet.id)
+        session.checkForeignControl(wallet.id)
+        _ = session.checkTONVersion(wallet.id)
         let outcome = await UsageCheck.run(wallet.accounts)
+        let foreign = await Self.tronAnswer(tron, within: .seconds(5))
         guard !Task.isCancelled else { return }
+        if foreign {
+            withAnimation(Motion.fade) { phase = .foreignTron }
+            return
+        }
         switch outcome {
         case .used:
             toasts.show(String(localized: "Esta carteira já teve movimento. Ela passa a ser a carteira em uso."))
-            onUse()
+            use()
         case .never:
             withAnimation(Motion.fade) { phase = .never }
         case .incomplete(let failed):
@@ -421,11 +528,41 @@ struct PassphraseUsageView: View {
     }
 
     /// A carteira vazia sai, e a de antes volta a ser a escolhida.
+    private func use() {
+        guard !decided else { return }
+        decided = true
+        onUse()
+    }
+
+    /// A resposta da Tron, esperada no maximo `limit` depois da busca: um provedor lento nao prende a tela. Sem resposta no
+    /// prazo, a busca segue, e a conferencia continua sozinha e marca a carteira quando chegar (o Receber da Tron fecha).
+    static func tronAnswer(_ check: Task<Bool?, Never>, within limit: Duration) async -> Bool {
+        @MainActor final class Once { var done = false }
+        let once = Once()
+        return await withCheckedContinuation { continuation in
+            Task { @MainActor in
+                let value = await check.value ?? false
+                guard !once.done else { return }
+                once.done = true
+                continuation.resume(returning: value)
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: limit)
+                guard !once.done else { return }
+                once.done = true
+                continuation.resume(returning: false)
+            }
+        }
+    }
+
     private func retry() {
+        guard !decided else { return }
+        decided = true
         do {
             try session.discardFreshPassphraseWallet(wallet.id, restoring: previous)
             onRetry()
         } catch {
+            decided = false
             message = (error as? LocalizedError)?.errorDescription
         }
     }

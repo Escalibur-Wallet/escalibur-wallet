@@ -187,7 +187,7 @@ diretivas=$(find Kit/Sources -name '*.swift' -not -path 'Kit/Sources/SwiftCrypto
 # script e workflow rastreado, e em cada chamada, e nao na linha: sem espaco antes do `<<`, numa variavel, pelo caminho
 # ou com a versao com ponto tambem conta (decima primeira passada). E nenhum .py rastreado com o nome de um modulo que o
 # Python ja tem, nem sitecustomize, usercustomize ou .pth.
-sem_isolar=$(git ls-files -z '*.sh' '*.yml' '*.yaml' | xargs -0 grep -HnE '[p]ython' | sed -E 's/[p]ython[0-9.]*"? -I([^A-Za-z0-9]|$)/X\1/g' \
+sem_isolar=$(git ls-files -z '*.sh' '*.yml' '*.yaml' | xargs -0 grep -HnE '[p]ython' | sed -E 's/[p]ython[0-9.]*"? -(IS?|SI)([^A-Za-z0-9]|$)/X\2/g' \
     | grep -E '(^|[^A-Za-z0-9_])[p]ython[0-9.]*([^A-Za-z0-9_-]|$)')
 # E nas ferramentas em Swift e no Gradle, o Python de um processo filho tambem com `-I` (decima segunda passada); o
 # pacote (`json/__init__.py`) conta pelo nome da pasta.
@@ -313,7 +313,12 @@ if blocos:
         certo &= trecho in b
     lista = re.search(r"\n        (HOME\|[^\n]*\)) ;;\n", b)
     certo &= lista is not None and lista.group(1) == ("HOME|PATH|TMPDIR|USER|LOGNAME|LANG|TERM|PWD|OLDPWD|SHLVL|_|GIT_CONFIG_NOSYSTEM|GIT_CONFIG_GLOBAL|"
-                                                    "GIT_NO_REPLACE_OBJECTS|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_0|GIT_CONFIG_VALUE_0|GIT_CONFIG_KEY_1|GIT_CONFIG_VALUE_1)")
+                                                    "GIT_NO_REPLACE_OBJECTS|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_0|GIT_CONFIG_VALUE_0|GIT_CONFIG_KEY_1|GIT_CONFIG_VALUE_1|xcrun_db)")
+    # O cache do xcrun novo e vazio em cada script (rodada 3 dos 3 agentes da checagem final de 16/11/2026): o git, o
+    # Python e o swift de /usr/bin escolhem o programa por ele.
+    for trecho in ('&& [ -n "${xcrun_db:-}" ] && [ "${xcrun_db#"$(/usr/bin/getconf DARWIN_USER_TEMP_DIR)"escalibur-xcrun.}" != "$xcrun_db" ] && [ ! -e "$xcrun_db" ] \\\n    || limpo=false\n',
+                   '    xcrun_db="$(/usr/bin/mktemp -d "$(/usr/bin/getconf DARWIN_USER_TEMP_DIR)escalibur-xcrun.XXXXXX")/xcrun_db" \\\n    /bin/bash -p "$0" "$@"\n'):
+        certo &= trecho in b
 digesto = open("tools/digesto.sh", encoding="utf-8").read()
 certo &= digesto.startswith("#!/bin/bash -p\n") and 'case "$-" in *p*) ;; *) _sem_p=; : "${_sem_p:?' in digesto \
     and "\nexport PATH=/usr/bin:/bin:/usr/sbin:/sbin\n" in digesto and digesto.find('case "$-" in *p*)') < digesto.find("main()")
@@ -636,7 +641,7 @@ lidos=$(ruby -ryaml -e '
         when Array then no.each { |item| olhar.(item, arquivo) }
         end
     end
-    ARGV.each { |arquivo| olhar.(YAML.load_file(arquivo), arquivo) }
+    ARGV.each { |arquivo| olhar.(YAML.safe_load(File.read(arquivo)), arquivo) }
     puts ruins
     exit(ruins.empty? ? 0 : 1)' .github/workflows/*.yml 2>&1)
 estranhas=$(grep -HnE '^[[:space:]-]*\?([[:space:]]|$)|"[^"]*\\[^"]*"[[:space:]]*:|^[[:space:]-]*\*[A-Za-z0-9_-]+[[:space:]]*:' .github/workflows/*.yml)
@@ -645,18 +650,58 @@ estranhas=$(grep -HnE '^[[:space:]-]*\?([[:space:]]|$)|"[^"]*\\[^"]*"[[:space:]]
 estranhas="$estranhas$(find .github/workflows -mindepth 1 \( -name '.*' -o ! -type f -o ! -name '*.yml' \) 2>/dev/null)$(find .github/actions 2>/dev/null | head -1)"
 [ -n "$achados" ] || [ -n "$lidos" ] || [ -n "$estranhas" ] && { aviso "acao de fora da GitHub ou sem SHA num workflow, chave shell ou workflow fora do *.yml"; echo "$achados$lidos$estranhas"; } \
     || ok "toda acao dos workflows vem da propria GitHub, fixada por SHA (na linha e no YAML lido), e sem shell que nao o bash"
+# Rodada 8 da auditoria 8: so ASCII que se imprime, sem tab nem CR, nos workflows. O YAML quebra linha tambem no CR e no NEL, e as
+# regras de texto so no LF: uma linha depois de um CR solto sumia de todas elas e o GitHub a rodava.
+achados=$(LC_ALL=C grep -nE '[^ -~]' .github/workflows/*.yml | cut -c1-120)
+[ -z "$achados" ] && ok "os workflows so com ASCII que se imprime (sem CR, NEL nem tab escondendo uma linha das regras)" \
+    || { aviso "workflow com CR, tab ou caractere fora do ASCII"; echo "$achados"; }
 # Exatamente os tres workflows, com os jobs de hoje e sem `name:` de job: o build da loja confia no job `verificar` do
 # verificar.yml, e um outro com esse nome passava por ele (decima segunda passada da auditoria de 03/11/2026).
 jobs_lidos=$(ruby -ryaml -e '
-    esperados = { "release.yml" => %w[assinatura verificar montar], "site.yml" => %w[montar publicar], "verificar.yml" => %w[verificar] }
+    esperados = { "release.yml" => %w[assinatura verificar montar enviar], "site.yml" => %w[montar publicar], "verificar.yml" => %w[verificar] }
     lidos = Dir.children(".github/workflows").sort
     ruins = lidos == esperados.keys.sort ? [] : ["workflows: #{lidos.inspect}"]
     esperados.each do |arquivo, jobs|
         caminho = ".github/workflows/#{arquivo}"
         next unless File.file?(caminho)
-        y = YAML.load_file(caminho)
+        y = YAML.safe_load(File.read(caminho))
         ruins << "#{arquivo}: jobs #{y["jobs"].keys.inspect}" unless y["jobs"].is_a?(Hash) && y["jobs"].keys == jobs
         (y["jobs"] || {}).each { |nome, job| ruins << "#{arquivo}: #{nome} com name" if job.is_a?(Hash) && job.key?("name") }
+        # Rodada 13 da auditoria 8: o gatilho de cada workflow e o environment de cada job fixos. Um job do site.yml com
+        # `environment: release` e um gatilho de tag chegava a chave da App Store Connect: a regra do segredo so pedia o environment.
+        gatilhos = { "release.yml" => { "push" => { "tags" => ["testflight-*", "v*"] } },
+                     "verificar.yml" => { "push" => { "branches" => ["main"] }, "pull_request" => nil, "workflow_call" => nil },
+                     "site.yml" => { "workflow_dispatch" => nil } }
+        ruins << "#{arquivo}: gatilho #{y[true].inspect}" unless y[true] == gatilhos[arquivo] && !y.key?("on")
+        # Rodada 15: o segredo pelo YAML lido, e nao so pelo texto: o escape do YAML (`\x73ecrets`, a linha quebrada com barra) e o
+        # `environment: release` dentro de um texto enganavam o awk. Qualquer chave ou valor com "secrets", fora do enviar do
+        # release (fixado por digesto), barra.
+        textos = lambda do |o, saida|
+            case o
+            when Hash then o.each { |k, v| saida << k.to_s; textos.(v, saida) }
+            when Array then o.each { |v| textos.(v, saida) }
+            else saida << o.to_s
+            end
+            saida
+        end
+        ruins << "#{arquivo}: segredo fora dos jobs" unless textos.(y.reject { |k, _| k == "jobs" }, []).grep(/secrets/i).empty?
+        (y["jobs"] || {}).each do |nome, job|
+            next if arquivo == "release.yml" && nome == "enviar"
+            ruins << "#{arquivo}: #{nome} com segredo" unless textos.(job, []).grep(/secrets/i).empty?
+        end
+        # Rodada 16: nenhuma tag no YAML (o `!!binary` escondia o texto do segredo da regra de texto).
+        com_tag = lambda { |no| (no.respond_to?(:tag) && no.tag) || (no.respond_to?(:children) && (no.children || []).any? { |c| com_tag.(c) }) }
+        ruins << "#{arquivo}: tag no YAML" if com_tag.(YAML.parse(File.read(caminho)))
+        # Rodada 14: as chaves do topo pelo texto, na ordem de hoje: o leitor de YAML junta um `on:` repetido e um `yes:` na mesma
+        # chave, e o ultimo vale.
+        topo = File.read(caminho).scan(/^[^\s#][^:]*:/)
+        ruins << "#{arquivo}: topo #{topo.inspect}" unless topo == ["name:", "on:", "permissions:", "concurrency:", "jobs:"]
+        ambientes = { ["release.yml", "enviar"] => "release",
+                      ["site.yml", "publicar"] => { "name" => "github-pages", "url" => "${{ steps.publicacao.outputs.page_url }}" } }
+        (y["jobs"] || {}).each do |nome, job|
+            next unless job.is_a?(Hash)
+            ruins << "#{arquivo}: #{nome} com environment #{job["environment"].inspect}" unless job["environment"] == ambientes[[arquivo, nome]]
+        end
     end
     puts ruins
     exit(ruins.empty? ? 0 : 1)' 2>&1)
@@ -670,11 +715,280 @@ achados=$(awk '
     /^[[:space:]]*#/ { next }
     job != "" && /^    environment:[[:space:]]*release[[:space:]]*$/ { release = 1 }
     /^[[:space:]]*secrets:/ { print FILENAME ":" FNR ": " $0; next }
-    /secrets\./ { if (job == "") print FILENAME ":" FNR ": " $0; else guardadas[++n] = FILENAME ":" FNR ": " $0 }
+    tolower($0) ~ /(^|[^a-z0-9_])secrets([^a-z0-9_]|$)/ { if (job == "") print FILENAME ":" FNR ": " $0; else guardadas[++n] = FILENAME ":" FNR ": " $0 }
     END { fecha() }
 ' .github/workflows/*.yml)
 [ -n "$achados" ] && { aviso "segredo fora de job do environment release"; echo "$achados"; } \
     || ok "segredo so em job do environment release"
+# O envio do release (rodada 1 da auditoria 8): o zip sem atributo nem link, conferido entrada por entrada antes de abrir,
+# o bundle id e os entitlements da assinatura ad hoc antes do export, e a chave fora do $RUNNER_TEMP e do ambiente dos
+# filhos. O checkout esparso traz os .entitlements que o conferidor le.
+release_sem_comentario=$(grep -vE '^[[:space:]]*#' .github/workflows/release.yml)
+# Rodada 11: o passo da tag sem os objetos de troca (`GIT_NO_REPLACE_OBJECTS`), o unico `fetch` o da tag, e a lista de
+# assinantes citada so nas seis linhas de hoje (um `git show` ou um `curl` por cima dela depois do cat-file passava).
+# Rodada 7: as regras do `||`, do `&&` e do que muda o shell sobre as linhas juntas, como o bash junta a barra no fim (o
+# `cmd |\` com `| true` na linha seguinte escapava), e o molde que fecha o `||` vale para todo `&&` tambem (o `cmd && echo`
+# engolia a falha com qualquer comando depois), salvo o `if ...; then`. E nada de `${!`, o nome da variavel montado na hora, nem
+# de `declare`, `typeset`, `printenv` e `compgen`, que montam ou leem o nome do mesmo jeito (rodada 8).
+release_junto=$(sed -e ':a' -e '/\\$/{$!N;s/\\\n[[:space:]]*//;ta' -e '}' <<<"$release_sem_comentario")
+molde_do_ou='\|\|[[:space:]]*\{ ((tail [^;]*|echo "\$[a-z]+"); )?echo "::error::[^"]*"; exit 1; \}$'
+# Rodada 3: a linha inteira (um `|| true` no fim passava), e nada que siga depois de uma falha no arquivo todo.
+# Rodada 6: nada de dois `||` na linha, de `&` em segundo plano nem `coproc`, do `&& :` que engole o teste, nem de
+# variavel que muda o shell dos passos seguintes (GITHUB_ENV, GITHUB_PATH, BASH_ENV, SHELLOPTS, BASHOPTS). E os passos
+# lidos pelo YAML, e nao so pelo texto: o `- run:` com traco, o `"run":` entre aspas e o mapa numa linha escapavam das
+# regras do `run`. Todo `run` abre com `set -euo pipefail` (so o da limpeza nao), e o YAML tem tantos `run` quantas as
+# linhas `run:` que as regras leem.
+passos_release=$(ruby -ryaml -rjson -rdigest -e '
+    y = YAML.safe_load(File.read(".github/workflows/release.yml"))
+    ruins = []
+    lidos = 0
+    (y["jobs"] || {}).each do |nome, job|
+        (job.is_a?(Hash) ? job["steps"] || [] : []).each_with_index do |passo, i|
+            next unless passo.is_a?(Hash) && passo.key?("run")
+            lidos += 1
+            corpo = passo["run"]
+            limpeza = passo["if"] == "always()" && corpo == "rm -rf \"$HOME\"/.asc.*"
+            ruins << "#{nome}, passo #{i + 1}: o run nao abre com set -euo pipefail" unless corpo.is_a?(String) && (limpeza || corpo.start_with?("set -euo pipefail\n"))
+            # Rodada 7: nada de `${{` dentro do run (a injecao classica: uma saida do montar vira comando no enviar); tudo
+            # entra pelo `env:`.
+            ruins << "#{nome}, passo #{i + 1}: ${{ dentro do run" if corpo.to_s.include?("${{")
+        end
+        # Rodada 7: so as quatro acoes de hoje, fixadas por SHA (o `actions/github-script` rodava codigo sem `run:`), e o unico
+        # workflow chamado e o verificar.yml.
+        (job.is_a?(Hash) ? job["steps"] || [] : []).each_with_index do |passo, i|
+            usa = passo.is_a?(Hash) ? passo["uses"] : nil
+            next if usa.nil?
+            ruins << "#{nome}, passo #{i + 1}: acao fora da lista (#{usa})" unless usa.is_a?(String) && usa =~ /\Aactions\/(checkout|upload-artifact|download-artifact|attest)@[0-9a-f]{40}\z/
+        end
+        ruins << "#{nome}: workflow chamado fora do verificar.yml" if job.is_a?(Hash) && job.key?("uses") && !(nome == "verificar" && job["uses"] == "./.github/workflows/verificar.yml")
+        # Rodada 8: so as variaveis de hoje no `env:` do job e dos passos (o `PATH` trocava o Python, o codesign e o shasum que
+        # o enviar chama pelo nome, como o GITHUB_PATH ja barrado).
+        conhecidas = %w[TAG VERSAO BUILD DIGESTO ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8]
+        envs = [job.is_a?(Hash) ? job["env"] : nil] + (job.is_a?(Hash) ? job["steps"] || [] : []).map { |passo| passo.is_a?(Hash) ? passo["env"] : nil }
+        envs.compact.each do |env|
+            fora = env.is_a?(Hash) ? env.keys.map(&:to_s) - conhecidas : ["(nao e mapa)"]
+            ruins << "#{nome}: env fora da lista (#{fora.join(", ")})" unless fora.empty?
+        end
+    end
+    ruins << "env no topo do workflow" if y.key?("env")
+    # Rodada 9: o `needs` de cada job fixo (sem o verificar, o montar e o enviar saiam com o verificador vermelho), e o
+    # verificar.yml, que e o portao, so com as chaves de hoje: sem `if`, `continue-on-error`, `env` nem `defaults`.
+    esperado = { "assinatura" => nil, "verificar" => "assinatura", "montar" => %w[assinatura verificar], "enviar" => %w[assinatura montar] }
+    (y["jobs"] || {}).each { |nome, job| ruins << "#{nome}: needs #{job["needs"].inspect}" if job.is_a?(Hash) && job["needs"] != esperado[nome] }
+    ruins << "release.yml: chave no topo fora da lista" unless (y.keys - ["name", true, "permissions", "concurrency", "jobs"]).empty?
+    # Rodada 9: as chaves, a maquina e as permissoes de cada job fixas: um `container` ou `services`, ou outro `runs-on` (um runner
+    # proprio), mudavam onde o job roda e com que git, gpg e Xcode, e uma permissao a mais dava escrita ao token.
+    chaves = { "assinatura" => %w[runs-on timeout-minutes permissions outputs steps], "verificar" => %w[needs permissions uses],
+               "montar" => %w[needs runs-on timeout-minutes permissions outputs env steps],
+               "enviar" => %w[needs runs-on timeout-minutes environment permissions env steps] }
+    maquina = { "assinatura" => "ubuntu-24.04", "verificar" => nil, "montar" => "macos-26", "enviar" => "macos-26" }
+    leitura = { "contents" => "read" }
+    permissoes = { "assinatura" => leitura, "verificar" => leitura, "montar" => leitura,
+                   "enviar" => { "contents" => "read", "id-token" => "write", "attestations" => "write" } }
+    (y["jobs"] || {}).each do |nome, job|
+        next unless job.is_a?(Hash) && chaves[nome]
+        ruins << "#{nome}: chaves #{(job.keys - chaves[nome]).inspect}" unless (job.keys - chaves[nome]).empty?
+        ruins << "#{nome}: runs-on #{job["runs-on"].inspect}" unless job["runs-on"] == maquina[nome]
+        ruins << "#{nome}: permissions #{job["permissions"].inspect}" unless job["permissions"] == permissoes[nome]
+        ruins << "#{nome}: environment #{job["environment"].inspect}" unless job["environment"] == (nome == "enviar" ? "release" : nil)
+    end
+    ruins << "release.yml: permissions no topo" unless y["permissions"] == leitura
+    v = YAML.safe_load(File.read(".github/workflows/verificar.yml"))
+    ruins << "verificar.yml: chave no topo fora da lista" unless v.is_a?(Hash) && (v.keys - ["name", true, "permissions", "concurrency", "jobs"]).empty?
+    ruins << "verificar.yml: permissions no topo" unless v.is_a?(Hash) && v["permissions"] == leitura
+    # Rodada 10: a acao de cada passo pelo SHA exato de hoje, e nao so pelo formato (o commit de um fork da rede do repositorio
+    # oficial resolve pelo mesmo nome); o job da assinatura com os dois passos de hoje; a linha do HEAD em cada job que le a
+    # arvore; e o corpo do verificar.yml, que e o portao: o verificador uma vez, depois da linha do HEAD, e nada que engula a
+    # falha (o `|| true` deixava o job verde com o verificador vermelho).
+    acoes = %w[actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+               actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+               actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683]
+    [["release.yml", y], ["verificar.yml", v]].each do |arquivo, w|
+        ((w.is_a?(Hash) ? w["jobs"] : nil) || {}).each do |nome, job|
+            (job.is_a?(Hash) ? job["steps"] || [] : []).each_with_index do |passo, i|
+                usa = passo.is_a?(Hash) ? passo["uses"] : nil
+                ruins << "#{arquivo}, #{nome}, passo #{i + 1}: acao fora do SHA de hoje (#{usa})" if usa && !acoes.include?(usa)
+            end
+        end
+    end
+    # Rodada 11: o passo da tag e o que roda antes do verificador no verificar.yml fixos por digesto, e nao por lista de formas (o
+    # `GITHUB_SHA=$(...)`, o `unset GIT_NO_REPLACE_OBJECTS`, o `cp /usr/bin/true tools/verific?r.sh` e o nome da variavel montado
+    # na hora passavam). Em JSON, que nao muda de formato entre versoes do Ruby. Mudou de proposito: o digesto novo entra aqui,
+    # com a revisao do passo.
+    # Rodada 12: o job da assinatura inteiro, e nao so o passo da tag: o primeiro passo podia deixar de ser o checkout e gravar um
+    # gitconfig com outro programa de assinatura, e a tag do atacante passava no `tag -v`.
+    ruins << "assinatura: o job mudou" unless Digest::SHA256.hexdigest(JSON.generate(y.dig("jobs", "assinatura"))) == "c6023443e5b19ee61ea365eb936a9fc32545c34829734f0fe149e93986dc8e70"
+    # E o enviar, o unico com a chave da App Store Connect, inteiro: um passo novo com o env dos tres segredos (o valor que a regra
+    # aceita) e um `curl` para fora passava, e roda depois da aprovacao do environment, que nao mostra o corpo dos passos.
+    ruins << "enviar: o job mudou" unless Digest::SHA256.hexdigest(JSON.generate(y.dig("jobs", "enviar"))) == "8ff17e1242029e9c3bc990e9c3e2bbe4fdc143f60e52069a3c7fe7bea6621b43"
+    antes_v = ((v.is_a?(Hash) ? v.dig("jobs", "verificar", "steps") : nil) || []).take_while { |p| !p.is_a?(Hash) || p["run"] != "./tools/verificar.sh --testes" }
+    ruins << "verificar.yml: o que roda antes do verificador mudou" unless Digest::SHA256.hexdigest(JSON.generate(antes_v)) == "7665ef81bafcf6960c4ced333d7fd04dcaebd7b8b1f4ad1d37b7706fe7268e44"
+    # Rodada 12: as outputs dos jobs e o env dos jobs e dos passos pelo valor exato de hoje (uma output trocada passava pelas
+    # regras, e so o loja.lock barrava).
+    valores = {
+        ["assinatura", "outputs"] => { "versao" => "${{ steps.tag.outputs.versao }}", "build" => "${{ steps.tag.outputs.build }}" },
+        ["montar", "outputs"] => { "digesto" => "${{ steps.pacote.outputs.digesto }}" },
+        ["montar", "env"] => { "VERSAO" => "${{ needs.assinatura.outputs.versao }}", "BUILD" => "${{ needs.assinatura.outputs.build }}" },
+        ["enviar", "env"] => { "VERSAO" => "${{ needs.assinatura.outputs.versao }}", "BUILD" => "${{ needs.assinatura.outputs.build }}",
+                               "DIGESTO" => "${{ needs.montar.outputs.digesto }}" },
+    }
+    valores.each { |(nome, chave), valor| ruins << "#{nome}: #{chave} mudou" unless y.dig("jobs", nome, chave) == valor }
+    ruins << "enviar: outputs" unless y.dig("jobs", "enviar", "outputs").nil?
+    chave_asc = { "ASC_KEY_ID" => "${{ secrets.ASC_KEY_ID }}", "ASC_ISSUER_ID" => "${{ secrets.ASC_ISSUER_ID }}", "ASC_KEY_P8" => "${{ secrets.ASC_KEY_P8 }}" }
+    (y["jobs"] || {}).each do |nome, job|
+        (job.is_a?(Hash) ? job["steps"] || [] : []).each_with_index do |passo, i|
+            next unless passo.is_a?(Hash) && passo.key?("env")
+            certo = nome == "assinatura" && i == 1 ? { "TAG" => "${{ github.ref_name }}" } : (nome == "enviar" ? chave_asc : nil)
+            ruins << "#{nome}, passo #{i + 1}: env mudou" unless passo["env"] == certo
+        end
+    end
+    cabeca = %q<[ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ] || { echo "::error::checkout fora do commit da tag"; exit 1; }>
+    passos_a = (y.dig("jobs", "assinatura", "steps") || [])
+    ruins << "assinatura: #{passos_a.size} passos" unless passos_a.size == 2
+    %w[assinatura montar enviar].each do |nome|
+        tem = (y.dig("jobs", nome, "steps") || []).any? { |p| p.is_a?(Hash) && p["run"].to_s.lines.map(&:strip).include?(cabeca) }
+        ruins << "#{nome}: sem a linha do HEAD" unless tem
+    end
+    passos_v = ((v.is_a?(Hash) ? v.dig("jobs", "verificar", "steps") : nil) || []).select { |p| p.is_a?(Hash) }
+    corpos_v = passos_v.map { |p| p["run"] }.compact
+    cabeca_v = %q<[ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ] || { echo "::error::checkout fora do commit do run"; exit 1; }>
+    ruins << "verificar.yml: o passo do verificador mudou ou saiu" unless corpos_v.count { |c| c == "./tools/verificar.sh --testes" } == 1
+    ruins << "verificar.yml: a linha do HEAD nao abre o primeiro run" unless corpos_v.first.to_s.lines.map(&:strip).reject { |l| l.start_with?("#") }.first == cabeca_v
+    ruins << "verificar.yml: o verificador antes da linha do HEAD" unless (passos_v.index { |p| p["run"].to_s.include?(cabeca_v) } || 99) < (passos_v.index { |p| p["run"] == "./tools/verificar.sh --testes" } || -1)
+    # Rodada 11: nada que mude o shell dos passos seguintes, e o verificador citado so no passo dele (o `: > tools/verificar.sh`
+    # ou o `git show` por cima dele no primeiro passo deixavam o portao verde).
+    ruins << "verificar.yml: muda o shell dos passos" if corpos_v.any? { |c| c =~ /GITHUB_ENV|GITHUB_PATH|BASH_ENV|SHELLOPTS|BASHOPTS/ }
+    ruins << "verificar.yml: o verificador citado fora do passo dele" unless corpos_v.count { |c| c.include?("verificar.sh") } == 1
+    corpos_v.each_with_index do |c, i|
+        c.to_s.lines.map(&:strip).each do |l|
+            ruins << "verificar.yml, run #{i + 1}: || fora do molde" if l.include?("||") && l !~ /\|\|\s*\{ [^{}]*; exit 1; \}\z/
+            ruins << "verificar.yml, run #{i + 1}: engole a falha" if l =~ /(\A|[;&|\s])(exit\s+0|set\s+\+|trap)(\s|;|\z)|&&\s*(:|true)(\s|;|\z)|(\A|[;|&]\s*)(true|:)\s*\z/
+        end
+    end
+    # Rodada 9: o checkout dos dois workflows so com as opcoes de hoje: um `ref:` (ou `repository:`) trazia a arvore de outra
+    # branch, e a tag era conferida contra a lista de assinantes de la.
+    [["release.yml", y], ["verificar.yml", v]].each do |arquivo, w|
+        ((w.is_a?(Hash) ? w["jobs"] : nil) || {}).each do |nome, job|
+            (job.is_a?(Hash) ? job["steps"] || [] : []).each_with_index do |passo, i|
+                next unless passo.is_a?(Hash) && passo["uses"].to_s.start_with?("actions/checkout@")
+                com = passo["with"]
+                fora = com.is_a?(Hash) ? com.keys.map(&:to_s) - %w[persist-credentials fetch-depth sparse-checkout sparse-checkout-cone-mode] : ["(sem with)"]
+                ruins << "#{arquivo}, #{nome}, passo #{i + 1}: checkout com #{fora.join(", ")}" unless fora.empty?
+                ruins << "#{arquivo}, #{nome}, passo #{i + 1}: checkout com credencial" unless com.is_a?(Hash) && com["persist-credentials"] == false
+            end
+        end
+    end
+    ((v.is_a?(Hash) ? v["jobs"] : nil) || {}).each { |nome, job| ruins << "verificar.yml, #{nome}: runs-on #{job["runs-on"].inspect}" unless job.is_a?(Hash) && job["runs-on"] == "macos-26" }
+    ((v.is_a?(Hash) ? v["jobs"] : nil) || {}).each do |nome, job|
+        fora = job.is_a?(Hash) ? job.keys - %w[runs-on timeout-minutes steps] : ["(nao e mapa)"]
+        ruins << "verificar.yml, #{nome}: #{fora.join(", ")}" unless fora.empty?
+        (job.is_a?(Hash) ? job["steps"] || [] : []).each_with_index do |passo, i|
+            fora = passo.is_a?(Hash) ? passo.keys - %w[uses with name run] : ["(nao e mapa)"]
+            ruins << "verificar.yml, #{nome}, passo #{i + 1}: #{fora.join(", ")}" unless fora.empty?
+        end
+    end
+    # Rodada 8: nada de `defaults` nem `working-directory` (desviavam o `python3 -I tools/...` relativo para outra pasta).
+    ruins << "defaults no topo do workflow" if y.key?("defaults")
+    (y["jobs"] || {}).each do |nome, job|
+        next unless job.is_a?(Hash)
+        ruins << "#{nome}: defaults" if job.key?("defaults")
+        # Rodada 8: o `if` lido pelo YAML, e nao contado no texto (o `"if": false` entre aspas e o `if : false` pulavam o passo que
+        # confere o archive). Nenhum no job, e no passo so o da limpeza.
+        ruins << "#{nome}: if no job" if job.key?("if")
+        (job["steps"] || []).each_with_index do |passo, i|
+            next unless passo.is_a?(Hash) && passo.key?("if")
+            ruins << "#{nome}, passo #{i + 1}: if fora da limpeza" unless passo["if"] == "always()" && passo["run"] == "rm -rf \"$HOME\"/.asc.*"
+        end
+        (job["steps"] || []).each_with_index { |passo, i| ruins << "#{nome}, passo #{i + 1}: working-directory" if passo.is_a?(Hash) && passo.key?("working-directory") }
+    end
+    texto = File.readlines(".github/workflows/release.yml").count { |l| l !~ /^\s*#/ && l =~ /^\s+run: / }
+    ruins << "#{lidos} run no YAML e #{texto} nas linhas que as regras leem" unless lidos == texto
+    puts ruins' 2>&1)
+[ -z "$passos_release" ] \
+    && grep -qxF '          ditto -c -k --norsrc --noextattr --noacl --keepParent EscaliburWallet.xcarchive archive.zip' <<<"$release_sem_comentario" \
+    && grep -qxF '              if not nome.startswith("EscaliburWallet.xcarchive/") or ".." in partes or "\\" in nome or "\0" in nome:' <<<"$release_sem_comentario" \
+    && grep -qxF '              elif info.create_system != 3 or not (stat.S_ISREG(modo) or stat.S_ISDIR(modo)):' <<<"$release_sem_comentario" \
+    && grep -qxF '          python3 -I "$GITHUB_WORKSPACE/tools/conferir-entitlements.py" --ad-hoc "$app"' <<<"$release_sem_comentario" \
+    && ! grep -qE 'continue-on-error|set[[:space:]]+[+]|set[[:space:]]+-o?[[:space:]]*[a-z]*[[:space:]]*\+|trap[[:space:]].*(ERR|RETURN|DEBUG)|^[[:space:]]+shell:' <<<"$release_sem_comentario" \
+    && [ -z "$(grep -E '^[[:space:]]*set[[:space:]]' <<<"$release_sem_comentario" | grep -vxE '[[:space:]]+set -euo pipefail')" ] \
+    && [ -z "$(awk 'aberto { if ($0 !~ /^[[:space:]]+set -euo pipefail$/) print NR": "$0; aberto = 0 } /^[[:space:]]+run: \|$/ { aberto = 1 }' <<<"$release_sem_comentario")" ] \
+    && [ "$(grep -cE '^[[:space:]]+if:' <<<"$release_sem_comentario")" = 1 ] \
+    && [ "$(grep -A1 -E '^[[:space:]]+if:' <<<"$release_sem_comentario" | tr -d '\n')" = '        if: always()        run: rm -rf "$HOME"/.asc.*' ] \
+    && [ -z "$(grep -E '\|\|' <<<"$release_junto" | grep -vE "$molde_do_ou")" ] \
+    && [ -z "$(grep -E '&&' <<<"$release_junto" | grep -vE '^[^;]*'"$molde_do_ou" | grep -vE '^[[:space:]]+(if|elif) [^;]*; then$')" ] \
+    && ! grep -qE '(^|[;&|[:space:]])(shopt|eval|exit[[:space:]]+0)([[:space:]]|;|$)|^[[:space:]]+run:[[:space:]]*([>]|\|[-+0-9])|[^&]&[[:space:]]*$' <<<"$release_sem_comentario" \
+    && [ -z "$(grep -E '(^|[[:space:];])trap[[:space:]]' <<<"$release_sem_comentario" | grep -vxF "          trap 'rm -rf \"\$pasta\"' EXIT")" ] \
+    && ! grep -qE '\|\|.*\|\||(^|[^&>|<])&([^&>]|$)|\bcoproc\b|GITHUB_PATH|GITHUB_ENV|BASH_ENV|SHELLOPTS|BASHOPTS|&&[[:space:]]*(:|true)([[:space:];]|$)|\$\{!|\b(declare|typeset|printenv|compgen)\b' <<<"$release_junto" \
+    && grep -qxF '          [ "$(shasum -a 256 entrada/archive.zip | cut -d'"'"' '"'"' -f1)" = "$DIGESTO" ] || { echo "::error::o archive nao e o que o build montou"; exit 1; }' <<<"$release_sem_comentario" \
+    && grep -qxF '          if [ -n "$(find archive ! -type f ! -type d -print -quit)" ]; then' <<<"$release_sem_comentario" \
+    && grep -qxF '          grep -F "  $nome" SHA256SUMS | shasum -a 256 -c -' <<<"$release_sem_comentario" \
+    && grep -qxF '          python3 -I "$GITHUB_WORKSPACE/tools/conferir-entitlements.py" "$app"' <<<"$release_sem_comentario" \
+    && grep -qF "grep -qx 'TeamIdentifier=2UNWMDD93S' <<<\"\$info\" && grep -q '^Authority=Apple Distribution: ' <<<\"\$info\"" <<<"$release_sem_comentario" \
+    && grep -qxF '          if ! git merge-base --is-ancestor "$commit" refs/remotes/origin/main; then' <<<"$release_sem_comentario" \
+    && grep -qF -- '-c gpg.minTrustLevel=fully' <<<"$release_sem_comentario" \
+    && [ "$(grep -cE '^[[:space:]]+run:' <<<"$release_sem_comentario")" = "$(( $(grep -cE '^[[:space:]]+run: \|$' <<<"$release_sem_comentario") + 1 ))" ] \
+    && [ -z "$(grep -E '(^|[;&|[:space:]{])exit([[:space:]]|;|$)' <<<"$release_sem_comentario" | grep -vE 'exit 1(;| \}|$)')" ] \
+    && grep -qxF '            App/EscaliburWallet/Resources/EscaliburWallet.entitlements' <<<"$release_sem_comentario" \
+    && grep -qxF '            App/EscaliburWidgets/EscaliburWidgets.entitlements' <<<"$release_sem_comentario" \
+    && [ "$(grep -cxF '          pasta=$(mktemp -d "$HOME/.asc.XXXXXX")' <<<"$release_sem_comentario")" = 2 ] \
+    && [ "$(grep -cxF '          unset ASC_KEY_P8' <<<"$release_sem_comentario")" = 2 ] \
+    && [ "$(grep -cxF '          [ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ] || { echo "::error::checkout fora do commit da tag"; exit 1; }' <<<"$release_sem_comentario")" = 3 ] \
+    && grep -qxF '          git cat-file blob "$GITHUB_SHA:.github/assinantes" > "$assinantes"' <<<"$release_sem_comentario" \
+    && grep -qxF '          export GIT_NO_REPLACE_OBJECTS=1' <<<"$release_sem_comentario" \
+    && grep -qF -- 'git -c gpg.ssh.program=/usr/bin/ssh-keygen -c gpg.program=/bin/false -c gpg.x509.program=/bin/false -c gpg.format=ssh' <<<"$release_sem_comentario" \
+    && [ "$(grep -cxF '          git fetch --no-tags --force origin "+refs/tags/$TAG:refs/tags/$TAG"' <<<"$release_junto")" = 1 ] \
+    && [ "$(grep -cE '[[:space:]]fetch([[:space:]]|$)' <<<"$release_junto")" = 1 ] \
+    && [ "$(grep -c 'assinantes' <<<"$release_junto")" = 6 ] \
+    && [ -z "$(grep -oE '(^|[^A-Za-z0-9_.-])git([[:space:]]+-c[[:space:]]+[^[:space:]]+)*[[:space:]]+[a-z-]+' <<<"$release_junto" | sed -E 's/.*git([[:space:]]+-c[[:space:]]+[^[:space:]]+)*[[:space:]]+//' | grep -vxE 'rev-parse|fetch|cat-file|tag|merge-base')" ] \
+    && grep -qxF '          [ "$(git rev-parse HEAD)" = "$GITHUB_SHA" ] || { echo "::error::checkout fora do commit do run"; exit 1; }' .github/workflows/verificar.yml \
+    && ! grep -qF 'RUNNER_TEMP/asc' <<<"$release_sem_comentario" \
+    && [ "$(grep -cF -- '--ad-hoc "$app"' <<<"$release_sem_comentario")" = 1 ] \
+    && [ "$(grep -cF 'xcodebuild -exportArchive' <<<"$release_sem_comentario")" = 1 ] \
+    && [ "$(grep -nF -- '--ad-hoc "$app"' <<<"$release_sem_comentario" | cut -d: -f1)" -lt "$(grep -nF 'xcodebuild -exportArchive' <<<"$release_sem_comentario" | cut -d: -f1)" ] \
+    && ok "o envio do release confere o zip, o bundle id e os entitlements antes do export, com a chave fora do archive" \
+    || { aviso "envio do release sem a conferencia do zip e dos entitlements antes do export, ou com a chave ao alcance do archive"; [ -n "$passos_release" ] && echo "$passos_release"; }
+# A Play: nada de pacote da pasta do usuario no play.py (todo import da lista fechada da biblioteca padrao, lido pela arvore
+# do Python), o script so roda isolado desde a primeira linha, e o Keychain pelo caminho inteiro do security (rodadas 1 e 2).
+imports_da_play=$(python3 -I - tools/android/play.py <<'PY'
+import ast, sys
+arvore = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+nomes = set()
+for no in ast.walk(arvore):
+    if isinstance(no, ast.Import):
+        nomes |= {apelido.name.split(".")[0] for apelido in no.names}
+    elif isinstance(no, ast.ImportFrom):
+        nomes.add("<from " + str(no.module) + " import>")
+    elif isinstance(no, ast.Call) and getattr(no.func, "id", getattr(no.func, "attr", "")) in ("__import__", "import_module", "exec", "eval", "compile", "getattr", "__getattribute__", "vars", "globals", "locals", "setattr", "delattr"):
+        nomes.add("<chamada " + getattr(no.func, "id", getattr(no.func, "attr", "")) + ">")
+    # Rodada 7: tambem pelo nome sem chamar (`f = exec; f(...)` passava).
+    elif isinstance(no, ast.Name) and no.id in ("__builtins__", "__import__", "importlib", "exec", "eval", "compile", "getattr", "vars", "globals",
+                                                 "locals", "setattr", "delattr", "breakpoint", "__loader__", "__spec__"):
+        nomes.add("<" + no.id + ">")
+    elif isinstance(no, ast.Attribute) and no.attr in ("__builtins__", "__import__", "__dict__", "__globals__", "_gcd_import", "meta_path", "path_hooks"):
+        nomes.add("<." + no.attr + ">")
+    elif isinstance(no, ast.Attribute) and isinstance(no.value, ast.Name) and no.value.id == "sys" and no.attr in ("path", "modules"):
+        nomes.add("<sys." + no.attr + ">")
+    elif isinstance(no, ast.Attribute) and no.attr == "sys":
+        nomes.add("<.sys>")
+    # Rodada 6: o loader de um modulo carrega qualquer arquivo (`type(hashlib.__loader__)("x", caminho).load_module()`);
+    # nenhum atributo `__...__`, nem os nomes da carga por loader.
+    elif isinstance(no, ast.Attribute) and (no.attr.startswith("__") or no.attr in ("load_module", "exec_module", "find_spec", "find_module", "loader", "path_importer_cache", "spec_from_file_location", "module_from_spec")):
+        nomes.add("<." + no.attr + ">")
+# Uma lista fechada, e nao a biblioteca padrao inteira: o Python 3.9 do Mac nao tem o sys.stdlib_module_names, e modulo
+# novo no play.py passa por revisao antes de entrar aqui.
+fora = sorted(nomes - {"base64", "hashlib", "json", "os", "subprocess", "sys", "time", "urllib", "zlib"})
+print("ok" if not fora else "fora da lista do play.py: " + ", ".join(fora))
+PY
+)
+[ "$imports_da_play" = "ok" ] \
+    && [ "$(head -1 tools/android/play.py)" = "#!/usr/bin/python3 -IS" ] \
+    && grep -qxF 'if __name__ == "__main__" and not (sys.flags.isolated and sys.flags.no_site):' tools/android/play.py \
+    && grep -qxF '    sys.exit("rode com /usr/bin/python3 -IS tools/android/play.py ...")' tools/android/play.py \
+    && ! grep -qF 'os.execv' tools/android/play.py \
+    && grep -qF '["/usr/bin/security", "find-generic-password", "-a", "escalibur-android", "-s", "escalibur-android-play-api", "-w"]' tools/android/play.py \
+    && grep -qF 'ESCALIBUR_UPLOAD_SENHA="$(/usr/bin/security find-generic-password -a escalibur-android -s escalibur-android-upload -w)"' tools/android/gerar-aab.sh \
+    && ok "play.py so com a biblioteca padrao e isolado desde a primeira linha, e o Keychain da Play pelo /usr/bin/security" \
+    || { aviso "play.py com pacote de fora, sem o isolamento no comeco, ou Keychain lido por outro security"; echo "$imports_da_play"; }
 
 # 4. Codigo vendorizado travado por digesto.
 secao "codigo vendorizado"
@@ -726,12 +1040,15 @@ conferir_lock modelos.lock App/EscaliburWallet/Resources/Moeda3D "moeda 3D"
 fora_do_lock=$(comm -23 <(ls App/EscaliburWallet/Resources/Moeda3D | sort) <(sed -n 's/^    "\([^"]*\)": "[0-9a-f]\{64\}".*/\1/p' modelos.lock | sort))
 [ -n "$fora_do_lock" ] && { aviso "arquivo na moeda 3D fora do modelos.lock"; echo "$fora_do_lock"; } || ok "a pasta da moeda 3D so tem o que o modelos.lock lista"
 divergentes=0
-for idioma in $(sed -n 's/^ *"\([a-z_]*\)": "[0-9a-f]*".*/\1/p' wordlists.lock); do
+for idioma in $(sed -n 's/^ *"\([a-z0-9_]*\)": "[0-9a-f]*".*/\1/p' wordlists.lock); do
     esperado=$(sed -n "s/^ *\"$idioma\": \"\([0-9a-f]*\)\".*/\1/p" wordlists.lock)
     atual=$(shasum -a 256 "$CORE/Resources/Wordlists/$idioma.txt" | cut -d' ' -f1)
     [ "$atual" != "$esperado" ] && { aviso "lista $idioma nao confere"; divergentes=$((divergentes + 1)); }
 done
-[ "$divergentes" = "0" ] && ok "as 10 listas BIP-39 conferem com wordlists.lock"
+[ "$divergentes" = "0" ] && ok "as 10 listas BIP-39 e a SLIP-39 conferem com wordlists.lock"
+# Toda lista da pasta esta no lock: a SLIP-39 fora dele passava sem conferir (revisao dos 3 agentes, 14/11/2026).
+fora_do_lock=$(comm -23 <(ls "$CORE/Resources/Wordlists" | sed 's/\.txt$//' | LC_ALL=C sort) <(sed -n 's/^ *"\([a-z0-9_]*\)": .*/\1/p' wordlists.lock | LC_ALL=C sort))
+[ -n "$fora_do_lock" ] && { aviso "lista de palavras fora do wordlists.lock"; echo "$fora_do_lock"; } || ok "toda lista de palavras da pasta esta no wordlists.lock"
 divergentes=0
 for lista in $(sed -n 's/^ *"\([a-z-]*\)": "[0-9a-f]*".*/\1/p' forca.lock); do
     esperado=$(sed -n "s/^ *\"$lista\": \"\([0-9a-f]*\)\".*/\1/p" forca.lock)
@@ -831,6 +1148,82 @@ achados=$(procurar '(Data|String|NSData|NSString)\(contentsOf:' "$CHAINS" "$KEYS
 # modulo de rede e no widget, cada leitura de arquivo e uma excecao revisada (auditoria de 31/10/2026).
 achados=$(procurar '\b(Data|String|NSData|NSString|NSArray|NSDictionary|XMLParser|NSAttributedString|UIImage|CIImage|PDFDocument)(\.init)?\(contentsOf:|\.init\(contentsOf:' "$WID" "$SHARED" "$NET" | filtrar_excecoes)
 [ -n "$achados" ] && { aviso "contentsOf: fora das leituras de arquivo revisadas"; echo "$achados"; } || ok "no modulo de rede e no widget, toda leitura por contentsOf e de arquivo local revisado"
+# As palavras saem do cofre so por AppSession.walletPhrase, e a remocao so por AppSession.remove(_:credential:): os dois
+# conferem a presenca inteira na propria operacao, e nao na tela que pede (rodada 1 da auditoria 8). No Android, o nucleo
+# pede o credencialForte em revelar, remover e abrir o envelope.
+# Rodada 2: a frase so dentro do corpo do walletPhrase, e o cofre aberto so nos lugares conhecidos (a entropia tambem da as
+# palavras); no Android, cada um dos tres metodos com o credencialForte dentro dele, e nao so tres em qualquer lugar.
+achados=$( { procurar '\.phrase[[:space:]]*\(' "$APP" | grep -vE '\bentry\.phrase\(\)|\.phrase\((let |wordCount:)' | grep -v "^$APP/App/AppSession.swift:"
+             procurar 'KeyServices[[:space:]]*\.[[:space:]]*wallets\b' "$APP" | grep -vE "^$APP/(App/AppSession|Features/Settings/HardenedModeView)\.swift:" \
+                 | grep -vE 'vault: KeyServices\.wallets[,)]'
+             procurar 'KeyServices[[:space:]]*\.[[:space:]]*wallets[[:space:]]*\.[[:space:]]*open[[:space:]]*\(' "$APP" | grep -vE "^$APP/(App/AppSession|Features/Settings/HardenedModeView)\.swift:"
+             # Rodada 4: o arquivo com as linhas juntas (a referencia partida em duas linhas), o `.self`, o apelido de tipo e a
+             # frase guardada numa variavel para chamar depois.
+             for f in $(swift_em "$APP" | grep -vE "^$APP/(App/AppSession|Features/Settings/HardenedModeView)\.swift$"); do
+                 codigo_vivo_ios "$f" | tr '\n' ' ' | sed -E 's/vault:[[:space:]]*KeyServices[[:space:]]*\.[[:space:]]*wallets[[:space:]]*[,)]//g' \
+                     | grep -qE 'KeyServices([[:space:]]*\.[[:space:]]*self)?[[:space:]]*\.[[:space:]]*wallets|typealias[^=]*=[[:space:]]*KeyServices[[:space:]]*($|[^.[:alnum:][:space:]]|[[:space:]]+[a-z])|=[[:space:]]*KeyServices([[:space:]]*\.[[:space:]]*self)?[[:space:]]*($|[^.[:alnum:][:space:]]|[[:space:]]+[a-z])' \
+                     && echo "$f: o cofre por outra referencia"
+             done
+             procurar '\b(secret|segredo|stored|original)\.phrase\b[[:space:]]*($|[^([:space:]])' "$APP"
+             # Rodada 5: a extensao do KeyServices, o tipo dele como valor e o caminho de chave, fora do arquivo dele; e o cofre
+             # passado adiante so onde ja e, contado por arquivo.
+             procurar 'extension[[:space:]]+KeyServices\b|KeyServices[[:space:]]*\.[[:space:]]*(Type|self|store)\b|\\KeyServices|\bWalletVault[[:space:]]*\(|\bKeychainStore[[:space:]]*\(' "$APP" "$WID" "$SHARED" | grep -v "^$APP/Services/KeyServices.swift:"
+             [ "$(codigo_vivo_ios "$APP/Features/Settings/ConfirmPassphraseView.swift" | grep -oE 'vault:[[:space:]]*KeyServices[[:space:]]*\.[[:space:]]*wallets' | wc -l | tr -d ' ')" = 1 ] || echo "ConfirmPassphraseView: o cofre passado adiante fora da conta"
+             [ "$(codigo_vivo_ios "$APP/Services/PassphraseGate.swift" | grep -oE 'vault:[[:space:]]*KeyServices[[:space:]]*\.[[:space:]]*wallets' | wc -l | tr -d ' ')" = 2 ] || echo "PassphraseGate: o cofre passado adiante fora da conta"
+             for f in $(swift_em "$APP" | grep -vE "^$APP/(App/AppSession|Features/Settings/HardenedModeView|Features/Settings/ConfirmPassphraseView|Services/PassphraseGate)\.swift$"); do
+                 codigo_vivo_ios "$f" | grep -qE 'vault:[[:space:]]*KeyServices' && echo "$f: o cofre passado adiante"
+             done
+             # Rodada 6: o tipo do cofre e do Keychain por qualquer referencia, com as linhas juntas (o `WalletVault.init(`,
+             # o nome partido entre linhas, o tipo guardado numa variavel), e o `KeyServices.init`; so o limite da
+             # passphrase fica de fora.
+             for f in $(swift_em "$APP" "$WID" "$SHARED" | grep -vE "^$APP/Services/KeyServices\.swift$"); do
+                 codigo_vivo_ios "$f" | tr '\n' ' ' | sed -E 's/WalletVault[[:space:]]*\.[[:space:]]*maxPassphraseBytes([^[:alnum:]_]|$)/ \1/g' \
+                     | grep -qE '\b(WalletVault|KeychainStore)\b|KeyServices[[:space:]]*\.[[:space:]]*init\b' && echo "$f: o tipo do cofre fora do KeyServices"
+             done
+             codigo_vivo_ios "$APP/App/AppSession.swift" | awk '/func walletPhrase\(/ { dentro = 1 } /\.phrase[[:space:]]*\([[:space:]]*\)/ && !dentro { print "AppSession: .phrase() fora do walletPhrase: " $0 } dentro && /^    }$/ { dentro = 0 }'
+             codigo "Kit/Sources/Android/EscaliburAndroid/Nucleo.swift" | awk '
+                 /^[[:space:]]*(case |default:)/ { if (caso != "" && !forte) print "Nucleo: sem credencialForte em " caso; caso = ""; forte = 0 }
+                 /^[[:space:]]*case / && /"(carteira\.revelar|envelope\.abrirCarteira|carteira\.remover)"/ { caso = $0 }
+                 { linha = $0; gsub(/"[^"]*"/, "", linha); if (caso != "" && linha ~ /credencialForte\(\)/) forte = 1 }
+                 END { if (caso != "" && !forte) print "Nucleo: sem credencialForte em " caso }'; } )
+[ "$(codigo_vivo_ios "$APP/App/AppSession.swift" | grep -cF 'guard credential.isFullPresence else {')" = 2 ] \
+    && [ "$(codigo_vivo_ios "$APP/App/AppSession.swift" | grep -cF 'KeyServices.wallets.open(')" = 3 ] \
+    && [ "$(codigo_vivo_ios "$APP/Features/Settings/HardenedModeView.swift" | grep -cF 'KeyServices.wallets.open(')" = 1 ] \
+    && [ "$(codigo "Kit/Sources/Android/EscaliburAndroid/Nucleo.swift" | grep -cF 'Sessao.shared.revelar(')" = 1 ] \
+    && [ "$(codigo "Kit/Sources/Android/EscaliburAndroid/Nucleo.swift" | grep -cF 'Envelopes.abrirCarteira(')" = 1 ] \
+    && codigo_vivo_ios "$APP/App/AppSession.swift" | grep -qF 'func walletPhrase(_ credential: Credential, walletID: UUID, check: SecureBytes?, fingerprint: [UInt8]?) async throws -> SecureBytes {' \
+    && codigo_vivo_ios "$APP/App/AppSession.swift" | grep -qF 'private func removeNow(_ wallet: WalletMeta) throws {' \
+    && codigo_vivo_ios "$APP/Services/AuthCoordinator.swift" | grep -qF 'if both, !attempt.isFullPresence {' \
+    && [ -z "$achados" ] \
+    && [ "$(codigo_vivo "Kit/Sources/Android/EscaliburAndroid/Nucleo.swift" | grep -cF 'try credencialForte()')" = 3 ] \
+    && [ "$(codigo "Kit/Sources/Android/EscaliburAndroid/Nucleo.swift" | grep -cF 'Sessao.shared.remover(')" = 2 ] \
+    && codigo_vivo "Kit/Sources/Android/EscaliburAndroid/App/Sessao.swift" | grep -qF 'case .pinEBiometria, .reforcado: try comChaveRaiz(credencial) { _ in }' \
+    && [ "$(codigo_vivo_ios "$APP/App/AppSession.swift" | awk '/func addWallet\(/ { dentro = 1 } dentro && /checkTronControl\(id\)|checkForeignControl\(id\)|checkTONVersion\(id\)/ { n++ } dentro && /^    }$/ { dentro = 0 } END { print n + 0 }')" = 3 ] \
+    && codigo_vivo_ios "$APP/App/AppSession.swift" | grep -qF 'if origin != .created || chosenWords, metadata.selectedWalletID == id || origin == .importedEnvelope {' \
+    && codigo_vivo "Kit/Sources/Android/EscaliburAndroid/App/Sessao.swift" | awk '/func revelar\(_ id: UUID, credencial: Credencial/ { dentro = 1 } dentro && passo == 2 { if ($0 ~ /^[[:space:]]*throw RootKeyVault\.Failure\.biometryRequired$/) achou = 1; passo = 0 } dentro && passo == 1 { passo = ($0 ~ /^[[:space:]]*credencial\.zerar\(\)$/) ? 2 : 0 } dentro && /case \.pin, \.biometria:$/ { passo = (anterior ~ /^[[:space:]]*case \.pinEBiometria, \.reforcado: break$/ && antes ~ /^[[:space:]]*switch credencial \{$/) ? 1 : 0 } dentro && /^    }$/ { exit } { antes = anterior; anterior = $0 } END { exit !achou }' \
+    && codigo_vivo "Kit/Sources/Android/EscaliburAndroid/App/Envelopes.swift" | awk '/static func abrirCarteira\(_ id: UUID, credencial: Credencial/ { dentro = 1 } dentro && passo == 2 { if ($0 ~ /^[[:space:]]*throw RootKeyVault\.Failure\.biometryRequired$/) achou = 1; passo = 0 } dentro && passo == 1 { passo = ($0 ~ /^[[:space:]]*credencial\.zerar\(\)$/) ? 2 : 0 } dentro && /case \.pin, \.biometria:$/ { passo = (anterior ~ /^[[:space:]]*case \.pinEBiometria, \.reforcado: break$/ && antes ~ /^[[:space:]]*switch credencial \{$/) ? 1 : 0 } dentro && /^    }$/ { exit } { antes = anterior; anterior = $0 } END { exit !achou }' \
+    && codigo_vivo "Kit/Sources/Android/EscaliburAndroid/App/Sessao.swift" | awk '/func remover\(_ id: UUID, credencial: Credencial\?\)/ { dentro = 1 } dentro && passo == 2 { if ($0 ~ /^[[:space:]]*throw RootKeyVault\.Failure\.biometryRequired$/) achou = 1; passo = 0 } dentro && passo == 1 { passo = ($0 ~ /^[[:space:]]*credencial\.zerar\(\)$/) ? 2 : 0 } dentro && /case \.pin, \.biometria:$/ { passo = (anterior ~ /^[[:space:]]*case \.pinEBiometria, \.reforcado: try comChaveRaiz\(credencial\) \{ _ in \}$/ && antes ~ /^[[:space:]]*switch credencial \{$/) ? 1 : 0 } dentro && /^    }$/ { exit } { antes = anterior; anterior = $0 } END { exit !achou }' \
+    && ok "ver as palavras, lacrar e remover conferem o PIN e o rosto na propria operacao, nas duas plataformas" \
+    || { aviso "palavras ou remocao sem a presenca inteira conferida na operacao"; echo "$achados"; }
+# A logo baixada so chega ao ImageIO remontada pelo StrictImage, e a de moeda nao verificada nem e baixada (auditoria 8).
+# Rodada 2: tambem o AsyncImage, o UIImage de arquivo e os provedores de dados do CoreGraphics; de fora, so as tres leituras
+# de arquivo do proprio app (a moeda 3D da abertura, o logo do widget e o do modo demo), linha por linha.
+achados=$(procurar '\b(UIImage|CIImage|NSImage)\b[[:space:]]*(\.init)?[[:space:]]*\(([[:space:]]*$|[[:space:]]*(data|contentsOfFile|contentsOf):)|\.init\(data:|\bUIImageReader\b|NSTextAttachment\([[:space:]]*data:|PDFDocument\([[:space:]]*data:|AsyncImage[[:space:]]*\(|CGImageSourceCreateWithData|CGImageSourceCreateWithURL|CGImageSourceCreateWithDataProvider|CGImageSourceCreateIncremental|pngDataProviderSource|jpegDataProviderSource' "$APP" "$WID" "$SHARED" \
+    | grep -v "^$APP/Design/CoinLogo.swift:[0-9]*:[[:space:]]*guard let source = CGImageSourceCreateWithData(data as CFData, noCache)," \
+    | grep -v "^$APP/Features/Onboarding/BitcoinCoin3D.swift:[0-9]*:[[:space:]]*guard let url = Bundle.main.url(forResource: name, withExtension: \"jpg\"), let image = UIImage(contentsOfFile: url.path)" \
+    | grep -v "^$WID/PriceWidget.swift:[0-9]*:[[:space:]]*return UIImage(contentsOfFile: url.path)$" \
+    | grep -v "^$APP/App/DebugDemo.swift:[0-9]*:[[:space:]]*logo: WidgetSnapshot.logo.flatMap { UIImage(contentsOfFile: \$0.path) })")
+[ -z "$achados" ] \
+    && codigo_vivo_ios "$APP/Design/CoinLogo.swift" | grep -qF 'guard let data = StrictImage.sanitize(received) else { return nil }' \
+    && codigo_vivo_ios "$APP/Design/CoinLogo.swift" | grep -qF 'guard !unverified, bundled == nil, let remoteURL, let data = await ImageLoader.shared.data(for: remoteURL, persist: true) else { return }' \
+    && ok "imagem da internet so pelo StrictImage, e a moeda nao verificada fica com as letras" \
+    || { aviso "imagem da internet decodificada sem o StrictImage"; echo "$achados"; }
+# A conta com outra chave no controle (EIP-7702, signatario, proxy, chave trocada) nao mostra o endereco para receber, como a
+# Tron, nas duas plataformas (auditoria 8, decisao do dono de 14/11/2026).
+codigo_vivo_ios "$APP/Services/Metadata.swift" | grep -qF '!(chain.family == .tron && tronForeignControl == true) && foreignControl(on: chain) == nil' \
+    && codigo_vivo "Kit/Sources/Android/EscaliburAndroid/App/Metadados.swift" | grep -qF '!(chain.family == .tron && tronForeignControl == true) && foreignControl(on: chain) == nil' \
+    && ok "Receber fechado em toda rede com outra chave no controle, nas duas plataformas" \
+    || aviso "Receber aberto com outra chave no controle"
 
 # 7. Plataforma.
 secao "plataforma"
@@ -944,12 +1337,24 @@ f="$APP/Features/Receive/ReceiveSheet.swift"
 # Todas as copias sao locais e a da frase e local com certeza. So o endereco de receber de uma
 # carteira sem passphrase, fora do Super Security, vai tambem para o Mac (pedido do dono, 01/11/2026;
 # auditoria de 03/11/2026): a unica copia sem localOnly e a de copyReceiveAddress, que pergunta a
-# Pasteboard.macAllowed antes.
+# Pasteboard.macAllowed antes. O unico outro uso e o clearSecret, que esvazia a area quando o Colar
+# do app traz uma frase ou uma chave (revisao dos 3 agentes, 09/11/2026): so a linha que esvazia, uma
+# vez, dentro dele.
 copias=$(grep -c 'UIPasteboard.general.setItems' "$f"); locais=$(grep -c '\.localOnly: true' "$f"); prazos=$(grep -c '\.expirationDate: Date().addingTimeInterval' "$f")
-outras=$(grep -n 'UIPasteboard' "$f" | grep -v 'UIPasteboard.general.setItems' | grep -v 'var options: \[UIPasteboard.OptionsKey: Any\]')
+# Rodada 10: tambem a leitura do numero da area (o `changeCount`, que nao avisa o colar), na copia do endereco de receber e na
+# retirada dela quando a conta deixa de receber; esvaziar, so pelo clearSecret.
+outras=$(grep -n 'UIPasteboard' "$f" | grep -v 'UIPasteboard.general.setItems' | grep -v 'var options: \[UIPasteboard.OptionsKey: Any\]' \
+    | grep -vE '^[0-9]+:        UIPasteboard\.general\.items = \[\]$' \
+    | grep -vxE '[0-9]+:        defer \{ lastReceive = \(address, UIPasteboard\.general\.changeCount\) \}' \
+    | grep -vxE '[0-9]+:        if UIPasteboard\.general\.changeCount == last\.change \{ clearSecret\(\) \}')
+esvazia=$(grep -c '^        UIPasteboard\.general\.items = \[\]$' "$f")
+# O clearSecret inteiro e so a linha que esvazia: nada de continuacao gravando outra coisa (revisao dos 3 agentes, 14/11/2026).
+esvazia_no_clear=$(awk '/static func clearSecret\(\) \{/,/^    }/' "$f" | tr '\n' '|')
+[ "$esvazia_no_clear" = "    static func clearSecret() {|        UIPasteboard.general.items = []|    }|" ] && esvazia_no_clear=1 || esvazia_no_clear=0
 endereco_local=$(awk '/static func copyReceiveAddress/,/^    }/' "$f" | grep -c 'guard macAllowed(session, hasPassphrase: hasPassphrase) else { return copyAddress(address) }')
 frase_local=$(awk '/static func copyPhrase/,/^    }/' "$f" | grep -c '\.localOnly: true')
 [ "$copias" -gt 0 ] && [ "$locais" = "$((copias - 1))" ] && [ "$endereco_local" = "1" ] && [ "$frase_local" = "1" ] && [ "$copias" = "$prazos" ] && [ -z "$outras" ] \
+    && [ "$esvazia" = "1" ] && [ "$esvazia_no_clear" = "1" ] \
     && ok "toda copia expira e e local; so o endereco de receber pode ir ao Mac" || aviso "copia sem localOnly/expiracao"
 soltos=$(procurar 'toMac|localOnly: false|\.localOnly\] = false' "$APP")
 [ -z "$soltos" ] && ok "todo endereco que vai ao Mac passa por Pasteboard.macAllowed (sem passphrase, fora do Super Security)" \
@@ -1134,7 +1539,46 @@ esperadas="CAMERA HIDE_OVERLAY_WINDOWS INTERNET POST_NOTIFICATIONS RECEIVE_BOOT_
 # Sem backup, sem texto puro, e so as autoridades do sistema.
 codigo "$AND/AndroidManifest.xml" | grep -q 'android:allowBackup="false"' && codigo "$AND/AndroidManifest.xml" | grep -q 'android:usesCleartextTraffic="false"' \
     && codigo "$AND/res/xml/rede.xml" | grep -q '<certificates src="system" />' && ! grep -q 'src="user"' "$AND/res/xml/rede.xml" \
+    && codigo "$AND/AndroidManifest.xml" | grep -qF 'android:networkSecurityConfig="@xml/rede"' \
+    && [ "$(find Android/app -path '*/build' -prune -o -name 'rede.xml' -print)" = Android/app/src/main/res/xml/rede.xml ] \
+    && ! grep -qE 'sourceSets|srcDir' Android/app/build.gradle.kts \
+    && [ "$(grep -E '^[[:space:]]*android\.builder\.sdkDownload' Android/gradle.properties)" = 'android.builder.sdkDownload=false' ] \
+    && ! grep -q -- '-Pandroid\.' tools/android/gerar-aab.sh \
     && ok "Android sem backup, sem trafego em texto puro e sem certificado instalado pelo usuario" || aviso "manifesto ou rede.xml do Android afrouxado"
+# Os tres hosts do preco de referencia da troca so com as raizes que a Cloudflare usa, nas duas plataformas e com a mesma
+# lista (checagem final de 16/11/2026, M3): uma autoridade coagida nao forja a referencia.
+python3 -I - "$APP/Resources/Info.plist" "$AND/res/xml/rede.xml" <<'PY' && ok "preco de referencia da troca com as autoridades fixadas no iPhone e no Android" || aviso "pins do preco de referencia ausentes ou diferentes entre iPhone e Android"
+import plistlib, sys, xml.etree.ElementTree as ET
+HOSTS = {"api.coingecko.com", "api.coinpaprika.com", "api.kraken.com"}
+PINS = {"hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Gc=", "Vfd95BwDeSQo+NUYxVEEIlvkOlWY2SalKK1lPhzOx78=", "QXnt2YHvdHR3tJYmQIr0Paosp6t/nggsEGD4QJZ3Q0g=",
+        "mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=", "C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=", "diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=",
+        "0cRTd+vc1hjNFlHcLgLCHXUeWqn80bNDH/bs9qMTSPo=", "oyD01TTXvpfBro3QSZc1vIlcMjrdLTiL/M9mLCPX+Zo=", "K89VOmb1cJAN3TK6bf4ezAbJGC1mLcG2Dh97dnwr3VQ=",
+        "G/ANXI8TwJTdF+AFBM8IiIUPEv0Gf6H5LA/b9guG4yE=",
+        "sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w=", "fk6IOKit1ild5647BH06ujSIq5XbCgqlbYl6ANhhi88="}
+certo = True
+ats = plistlib.load(open(sys.argv[1], "rb")).get("NSAppTransportSecurity", {})
+fixados = ats.get("NSPinnedDomains", {})
+certo &= set(fixados) == HOSTS and set(ats) == {"NSAllowsArbitraryLoads", "NSPinnedDomains"}
+for host, regra in fixados.items():
+    certo &= set(regra) == {"NSIncludesSubdomains", "NSPinnedCAIdentities"} and regra["NSIncludesSubdomains"] is False
+    certo &= [set(i) for i in regra["NSPinnedCAIdentities"]] == [{"SPKI-SHA256-BASE64"}] * len(PINS)
+    certo &= {i["SPKI-SHA256-BASE64"] for i in regra["NSPinnedCAIdentities"]} == PINS
+raiz = ET.parse(sys.argv[2]).getroot()
+configs = raiz.findall("domain-config")
+certo &= len(configs) == 1 and len(raiz.findall("debug-overrides")) == 0
+if configs:
+    c = configs[0]
+    certo &= c.get("cleartextTrafficPermitted") == "false" and not c.findall("domain-config")
+    certo &= {d.text for d in c.findall("domain")} == HOSTS and all(d.get("includeSubdomains") == "false" for d in c.findall("domain"))
+    certo &= [a.get("src") for a in c.findall("trust-anchors/certificates")] == ["system"]
+    certo &= all(a.get("overridePins") in (None, "false") for a in raiz.iter("certificates"))
+    conjuntos = c.findall("pin-set")
+    certo &= len(conjuntos) == 1 and conjuntos[0].get("expiration") is None
+    if conjuntos:
+        pins = conjuntos[0].findall("pin")
+        certo &= all(p.get("digest") == "SHA-256" for p in pins) and {p.text for p in pins} == PINS and len(pins) == len(PINS)
+sys.exit(0 if certo else 1)
+PY
 # A tela fora de captura e de recentes (so o build de depuracao, pedido pelo adb, deixa capturar).
 codigo_vivo "$AND/java/app/escalibur/wallet/MainActivity.kt" | grep -q 'FLAG_SECURE' && codigo "$AND/java/app/escalibur/wallet/MainActivity.kt" | grep -q 'BuildConfig.DEBUG && intent.getBooleanExtra("capturas"' \
     && ok "FLAG_SECURE no Android, solto so no build de depuracao" || aviso "FLAG_SECURE do Android mudou"
@@ -1333,7 +1777,7 @@ sombras=$(find Kit/Sources App -name '*.swift' -not -path 'Kit/Sources/SwiftCryp
 conferir_lock loja.lock . "scripts da loja"
 # Lido tambem como JSON, como o copia-publicada.sh le, sem chave repetida: com "arquivos" duas vezes, o sed lia uma lista e
 # o JSON outra (decima segunda passada da auditoria de 03/11/2026).
-python3 -I - <<'PY' && ok "loja.lock e um JSON sem chave repetida, com os 29 arquivos" || aviso "loja.lock com chave repetida, outra forma ou outra contagem"
+python3 -I - <<'PY' && ok "loja.lock e um JSON sem chave repetida, com os 32 arquivos" || aviso "loja.lock com chave repetida, outra forma ou outra contagem"
 import json, sys
 def sem_repetida(pares):
     if len(pares) != len({chave for chave, _ in pares}):
@@ -1343,16 +1787,38 @@ try:
     lock = json.load(open("loja.lock", encoding="utf-8"), object_pairs_hook=sem_repetida)
 except ValueError:
     sys.exit(1)
-sys.exit(0 if set(lock) == {"nota", "arquivos"} and isinstance(lock["arquivos"], dict) and len(lock["arquivos"]) == 29 else 1)
+# Rodada 15: e a contagem do copia-publicada.sh igual a do lock, lida dele, e nao so um 32 fixo nos dois lugares.
+import re
+conta = re.findall(r"len\(lock\) == ([0-9]+) and all\(", open("tools/copia-publicada.sh", encoding="utf-8").read())
+sys.exit(0 if set(lock) == {"nota", "arquivos"} and isinstance(lock["arquivos"], dict) and len(lock["arquivos"]) == 32
+         and conta == [str(len(lock["arquivos"]))] else 1)
 PY
 # Exatamente os scripts da loja, o workflow do release e o que compila o nucleo: tirar uma entrada do lock e mudar o
 # arquivo nao passa. No shell e no yml, texto entre aspas conta como vivo por desenho: o lock e o portao (sexta passada).
 # Decima passada: tambem o conferidor das flags do build, o Package.swift (que decide as flags) e o Gradle (que decide
-# as fontes do Kotlin e o R8); decima primeira: o projeto do Xcode (as chaves de ajuste, os caminhos e o esquema).
-[ "$(sed -n 's/^    "\([^"]*\)": "[0-9a-f]\{64\}".*/\1/p' loja.lock 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')" = ".github/workflows/release.yml .github/workflows/verificar.yml .xcode-version Android/app/build.gradle.kts Android/app/proguard-rules.pro Android/build.gradle.kts Android/gradle.properties Android/gradle/libs.versions.toml Android/gradle/verification-metadata.xml Android/gradle/wrapper/gradle-wrapper.jar Android/gradle/wrapper/gradle-wrapper.properties Android/settings.gradle.kts EscaliburWallet.xcodeproj/project.pbxproj EscaliburWallet.xcodeproj/project.xcworkspace/contents.xcworkspacedata EscaliburWallet.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings EscaliburWallet.xcodeproj/xcshareddata/xcschemes/EscaliburWallet.xcscheme Kit/Package.swift project.yml tools/android/compilar-nucleo.sh tools/android/gerar-aab.sh tools/android/testar-nucleo.sh tools/arquivar.sh tools/codigo.py tools/copia-publicada.sh tools/digesto.sh tools/flags-do-build.py tools/flags-do-pacote.py tools/verificar.sh tools/versoes/versoes.swift " ] \
-    && ok "loja.lock trava os scripts da loja, o release.yml, os conferidores das flags, o Package.swift, o projeto do Xcode e o Gradle" || aviso "loja.lock sem os scripts da loja, o release.yml, os conferidores das flags, o Package.swift, o projeto do Xcode ou o Gradle"
+# as fontes do Kotlin e o R8); decima primeira: o projeto do Xcode (as chaves de ajuste, os caminhos e o esquema). Rodada 1
+# da auditoria 8: o conferidor de entitlements, que roda no job do envio, o que tem a chave da App Store Connect.
+[ "$(sed -n 's/^    "\([^"]*\)": "[0-9a-f]\{64\}".*/\1/p' loja.lock 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')" = ".github/workflows/release.yml .github/workflows/site.yml .github/workflows/verificar.yml .xcode-version Android/app/build.gradle.kts Android/app/proguard-rules.pro Android/build.gradle.kts Android/gradle.properties Android/gradle/libs.versions.toml Android/gradle/verification-metadata.xml Android/gradle/wrapper/gradle-wrapper.jar Android/gradle/wrapper/gradle-wrapper.properties Android/settings.gradle.kts EscaliburWallet.xcodeproj/project.pbxproj EscaliburWallet.xcodeproj/project.xcworkspace/contents.xcworkspacedata EscaliburWallet.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings EscaliburWallet.xcodeproj/xcshareddata/xcschemes/EscaliburWallet.xcscheme Kit/Package.swift project.yml tools/android/compilar-nucleo.sh tools/android/gerar-aab.sh tools/android/play.py tools/android/testar-nucleo.sh tools/arquivar.sh tools/codigo.py tools/conferir-entitlements.py tools/copia-publicada.sh tools/digesto.sh tools/flags-do-build.py tools/flags-do-pacote.py tools/verificar.sh tools/versoes/versoes.swift " ] \
+    && ok "loja.lock trava os scripts da loja, o release.yml, os conferidores das flags, o Package.swift, o projeto do Xcode, o Gradle e o envio a Play" || aviso "loja.lock sem os scripts da loja, o release.yml, os conferidores das flags, o Package.swift, o projeto do Xcode, o Gradle ou o envio a Play"
+# A ordem das travas da loja (rodada 3 dos 3 agentes da checagem final de 16/11/2026): no gerar-aab.sh, o JDK e o SDK
+# conferidos depois dos vetores e do nucleo e antes do Gradle; no testar-nucleo.sh, o toolchain antes do swift build.
+python3 -I - <<'PY' && ok "a conferencia do JDK, do SDK e do toolchain vem antes de usa-los" || aviso "trava da loja fora de ordem"
+import sys
+g = open("tools/android/gerar-aab.sh", encoding="utf-8").read()
+t = open("tools/android/testar-nucleo.sh", encoding="utf-8").read()
+def pos(texto, trecho):
+    i = texto.find(trecho)
+    return i if i >= 0 and texto.count(trecho) == 1 else -1
+a, b, c, d = (pos(g, '"$aqui/tools/android/compilar-nucleo.sh" release --loja'), pos(g, "/usr/bin/codesign --verify --deep --strict"),
+              pos(g, "/bin/rm -rf Android/.gradle Android/.kotlin Android/build Android/app/build"), pos(g, "./gradlew -q --no-daemon"))
+e, f = pos(t, 'for binario in swift swift-build swift-driver swift-frontend clang ld.lld; do'), pos(t, '"$SWIFT" build --build-tests')
+sys.exit(0 if min(a, b, c, d, e, f) >= 0 and a < b < c < d and e < f else 1)
+PY
 origem=0
 exigidos=(
+    # Rodada 14 da auditoria 8: a contagem do loja.lock na copia limpa igual a do verificador (32): com 29 la, o build da loja
+    # parava no arquivar.sh e no gerar-aab.sh, com a mensagem de um arquivo que nao confere.
+    "tools/copia-publicada.sh|sys.exit(0 if len(lock) == 32 and all(hashlib.sha256(open(c, \"rb\").read()).hexdigest() == d for c, d in lock.items()) else 1)"
     "tools/copia-publicada.sh|git -C \"\$raiz\" fetch -q origin +refs/heads/main:refs/remotes/origin/main"
     "tools/copia-publicada.sh|git -C \"\$raiz\" ls-remote origin refs/heads/main"
     "tools/copia-publicada.sh|[ \"\$(git -C \"\$raiz\" hash-object --no-filters -- \"\$raiz/\$script\")\" = \"\$(git -C \"\$raiz\" rev-parse --verify \"\$commit:\$script\")\" ]"
@@ -1394,6 +1860,48 @@ exigidos=(
     "tools/android/gerar-aab.sh|source tools/copia-publicada.sh"
     "tools/android/gerar-aab.sh|-PcommitDeOrigem=\"\$commit\" -ParvoreDeOrigem=\"\$arvore\""
     "tools/android/gerar-aab.sh|grep -rqaF -- \"\$valor\" \"\$dex/apk\""
+    # Checagem final de 16/11/2026, M1: o JDK pelo selo da Temurin e pelo digesto, o SDK pelo digesto e o Gradle numa pasta
+    # nova a cada build, sem nada do ~/.gradle.
+    "tools/android/gerar-aab.sh|-R='identifier \"net.java.openjdk.jdk\" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = \"JCDTMS22B4\"'"
+    "tools/android/gerar-aab.sh||| { echo \"o JDK, a plataforma ou o build-tools do SDK nao sao os conferidos (selo ou digesto da arvore): nada foi montado\" >&2; exit 1; }"
+    # Revisao dos 3 agentes da checagem final: a conferencia logo antes do Gradle, com a copia limpa de novo; o ~/.android
+    # fora; o Kotlin dentro do Gradle; o nucleo do pacote igual ao do carimbo; o adb do Google; sem strip e sem baixar SDK.
+    "tools/android/gerar-aab.sh||| { echo \"a copia limpa mudou durante os vetores ou a compilacao do nucleo: nada foi montado\" >&2; exit 1; }"
+    "tools/android/gerar-aab.sh|trap '/bin/rm -rf \"\$casa_gradle\"' EXIT"
+    "tools/android/gerar-aab.sh|export GRADLE_USER_HOME=\"\$casa_gradle\" ANDROID_USER_HOME=\"\$casa_gradle/android\""
+    "tools/android/gerar-aab.sh|--dependency-verification strict -Pkotlin.compiler.execution.strategy=in-process -PcommitDeOrigem="
+    "tools/android/gerar-aab.sh|read -r carimbo_modo carimbo_commit carimbo_nucleo carimbo_libcxx < build/android-kit/origem-do-nucleo.txt"
+    "tools/android/gerar-aab.sh|[ \"\$carimbo_modo\" = release-loja ] && [ \"\$carimbo_commit\" = \"\$commit\" ] \\"
+    "tools/android/gerar-aab.sh|[ \"\$(shasum -a 256 \"\$biblioteca/libEscaliburAndroid.so\" | cut -d' ' -f1)\" = \"\$carimbo_nucleo\" ] \\"
+    "tools/android/gerar-aab.sh|&& [ \"\$(shasum -a 256 \"\$biblioteca/libc++_shared.so\" | cut -d' ' -f1)\" = \"\$carimbo_libcxx\" ] \\"
+    "tools/android/gerar-aab.sh||| { echo \"o nucleo ou a libc++ no pacote nao sao os do carimbo: nada foi entregue\" >&2; exit 1; }"
+    "tools/android/testar-nucleo.sh|-R='identifier \"adb\" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = \"EQHXZ8M8AV\"' \"\$ADB\" \\"
+    # Rodada 3: o toolchain, o Swift SDK e o NDK conferidos antes dos vetores; as pastas ignoradas antes do Gradle.
+    "tools/android/testar-nucleo.sh||| { echo \"o \$binario do toolchain nao tem a assinatura da Swift Open Source\" >&2; exit 1; }"
+    "tools/android/testar-nucleo.sh||| { echo \"o \$binario do NDK nao tem a assinatura do Google\" >&2; exit 1; }"
+    "tools/android/testar-nucleo.sh|[ \"\$(arvore \"\$TOOLCHAIN/usr\")\" = 44ce03df2d41af82411e4b180b5fb43327b8dee1a02e85b9b31ac4cea3748248 ] \\"
+    "tools/android/testar-nucleo.sh||| { echo \"o toolchain, o Swift SDK ou o NDK nao sao os conferidos (o digesto da arvore mudou)\" >&2; exit 1; }"
+    "tools/android/gerar-aab.sh|/bin/rm -rf Android/.gradle Android/.kotlin Android/build Android/app/build"
+    "tools/android/gerar-aab.sh|[ -z \"\$(git status --porcelain=v1 --untracked-files=all)\" ] \\"
+    "tools/android/gerar-aab.sh|&& [ -z \"\$(git status --porcelain=v1 --ignored=traditional --untracked-files=normal | grep -vxF -e '!! build/' -e '!! Android/app/src/main/jniLibs/' -e '!! Kit/.build/' -e '!! Kit/.swiftpm/')\" ] \\"
+    "tools/android/gerar-aab.sh|&& [ \"\$(cd Android/app/src/main/jniLibs && find . -mindepth 1 | LC_ALL=C sort | tr '\\n' ' ')\" = \"./arm64-v8a ./arm64-v8a/libEscaliburAndroid.so ./arm64-v8a/libc++_shared.so \" ] \\"
+    "tools/android/gerar-aab.sh|unzip -q \"\$apk\" 'lib/arm64-v8a/libEscaliburAndroid.so' 'lib/arm64-v8a/libc++_shared.so' -d \"\$dex/apk-lib\""
+    "tools/android/gerar-aab.sh|unzip -q \"\$aab\" 'base/lib/arm64-v8a/libEscaliburAndroid.so' 'base/lib/arm64-v8a/libc++_shared.so' -d \"\$dex/aab-lib\""
+    "tools/android/gerar-aab.sh|for biblioteca in \"\$dex/apk-lib/lib/arm64-v8a\" \"\$dex/aab-lib/base/lib/arm64-v8a\"; do"
+    "tools/android/testar-nucleo.sh||| { echo \"o adb nao tem a assinatura do Google: nada foi rodado\" >&2; exit 1; }"
+    "Android/app/build.gradle.kts|jniLibs { useLegacyPackaging = false; keepDebugSymbols += \"**/*.so\" }"
+    "tools/android/gerar-aab.sh|&& [ \"\$(arvore \"\$JAVA_HOME\")\" = 7b238c151db1ae2a3dbf86e7dd237db46e577714baad2a326ae2d0c7be5cd3d3 ]"
+    "tools/android/gerar-aab.sh|&& [ \"\$(arvore \"\$ANDROID_HOME/platforms/android-37.0\")\" = 79a0343c9b1f159b66e28adad51838ef22cc9ac47570cb3fe42a2f0ff56400eb ]"
+    "tools/android/gerar-aab.sh|&& [ \"\$(arvore \"\$ANDROID_HOME/build-tools/36.0.0\")\" = a74275b60c4b098b13049d9c3fa17d1afa5f0e23ca9f354f05a42e8c670f6790 ]"
+    "tools/android/gerar-aab.sh|export GRADLE_USER_HOME=\"\$casa_gradle\""
+    # Checagem final de 16/11/2026, M3: sem preco de referencia, a troca pede o aceite tambem com duas fontes.
+    "Kit/Sources/EscaliburEngines/EVM/EVMTradeEngine.swift|unanchored = market.reference.oracleOut == nil"
+    "Kit/Sources/EscaliburEngines/Stellar/StellarTradeEngine.swift|unanchored: marketReference.oracleOut == nil"
+    "Kit/Sources/EscaliburEngines/Stellar/StellarTradeEngine.swift|guard !quote.unanchored || request.acceptsUnanchored else {"
+    "Kit/Sources/EscaliburEngines/Stellar/StellarTradeEngine.swift|return quote.unanchored ? plan.addingWarnings([.uncomparedPrice]) : plan"
+    "Kit/Sources/EscaliburEngines/XRPL/XRPLTradeEngine.swift|unanchored: marketReference.oracleOut == nil"
+    "Kit/Sources/EscaliburEngines/XRPL/XRPLTradeEngine.swift|guard !quote.unanchored || request.acceptsUnanchored else {"
+    "Kit/Sources/EscaliburEngines/XRPL/XRPLTradeEngine.swift|return quote.unanchored ? plan.addingWarnings([.uncomparedPrice]) : plan"
     "$APP/Resources/Info.plist|<string>\$(ESCALIBUR_COMMIT)</string>"
     "$APP/Resources/Info.plist|<string>\$(ESCALIBUR_TREE)</string>"
     ".github/workflows/release.yml|ESCALIBUR_COMMIT=\"\$GITHUB_SHA\" ESCALIBUR_TREE=\"\$arvore\""
@@ -1418,17 +1926,51 @@ done
 # o teclado das palavras e o de campo de senha fecham, e o do celular nem abre (segunda passada da
 # auditoria de 03/11/2026). No 14+ quem nao se diz ferramenta nao le a tela, mas ve onde o dono toca.
 codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -q 'if (sessao.deSegredo && deFora.isNotEmpty())' \
-    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -q 'if (!bloqueado && (sistema != null || peloCelular))' \
+    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -qF 'if (!bloqueado && !deTerceiros && (sistema != null || peloCelular)) {' \
     && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoDePalavras.kt" | grep -q 'if (!demo && deFora.isNotEmpty())' \
     && codigo_vivo "$AND/java/app/escalibur/wallet/ui/Acessibilidade.kt" | grep -q 'val deFora = ligados.values.filter { info -> !doSistema(info) }' \
     && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/Segredo.kt" | grep -qF 'if (fechadoPelaAcessibilidade(segredo)) return true' \
     && [ "$(codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/Segredo.kt" | grep -cF 'if (fechadoPelaAcessibilidade(segredo)) return true')" -ge 3 ] \
-    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -qF 'val bloqueado = (campoSecreto(info) || sistema?.palavras == true) &&' \
+    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -qF 'val deSegredo = campoSecreto(info) || sistema?.palavras == true' \
+    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -qF 'val bloqueado = deSegredo && app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isNotEmpty()' \
     && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -qF 'foco.clearFocus(force = true)' \
     && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -qF 'suspeitosParaSegredo.isNotEmpty()) awaitCancellation()' \
     && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoDePalavras.kt" | grep -qF 'TecladoFechadoPelaAcessibilidade(deFora)' \
     && ok "o teclado de segredo fecha com qualquer servico de acessibilidade de fora, em qualquer Android, tambem o fisico e o que ja estava aberto" \
     || aviso "teclado de segredo aberto com servico de acessibilidade de fora"
+# A frase e a passphrase nunca vao para o teclado padrao de outro app: nem pelo Safe Keyboard desligado, nem pelo globo, nem
+# trocando o padrao no meio (auditoria 8, 14/11/2026).
+codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -qF 'val deTerceiros = deSegredo && tecladoDeTerceiros(vista.context)' \
+    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -qF 'if (nova.deSegredo && tecladoDeTerceiros(vista.context)) {' \
+    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -qF 'Settings.Secure.getUriFor(Settings.Secure.DEFAULT_INPUT_METHOD)' \
+    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/importar/Importar.kt" | grep -qF 'val tecladoDeOutroApp = app.escalibur.wallet.ui.comp.TecladoSeguro.tecladoDeTerceiros(contexto)' \
+    && ok "a frase e a passphrase nunca vao para o teclado de outro app no Android" \
+    || aviso "campo de segredo no Android sem a recusa do teclado de outro app"
+# Rodada 1 da auditoria 8: so os teclados de sistema da lista contam como do aparelho; o teclado do celular escreve no
+# campo de segredo mas nao le o que ja esta nele; e a conta de campos de segredo abertos e um contador.
+teclado="$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt"
+grep -qF 'private val tecladosDoAparelho = setOf("com.google.android.inputmethod.latin", "com.android.inputmethod.latin", "com.samsung.android.honeyboard")' "$teclado" \
+    && codigo_vivo "$teclado" | grep -qF 'if (pacote !in tecladosDoAparelho) return true' \
+    && codigo_vivo "$teclado" | grep -qF 'if (campoSecreto(atributos) || sistema?.palavras == true) {' \
+    && codigo_vivo "$teclado" | grep -qF 'SemLeitura(conexao)' \
+    && grep -vE '^[[:space:]]*//' "$teclado" | grep -qF 'androidx.core.view.inputmethod.EditorInfoCompat.setInitialSurroundingText(atributos, "")' \
+    && [ "$(codigo "$teclado" | awk '/private class SemLeitura/ { dentro = 1; next } dentro && /^    }[[:space:]]*$/ { dentro = 0 } dentro && /override fun (getTextBeforeCursor|getTextAfterCursor|getSelectedText|getExtractedText|getSurroundingText|setComposingRegion|requestCursorUpdates|performContextMenuAction|takeSnapshot|getCursorCapsMode)\(/ && /= ""[[:space:]]*$|= null[[:space:]]*$|= false[[:space:]]*$|= 0[[:space:]]*$/ { n++ } END { print n + 0 }')" = 11 ] \
+    && [ "$(codigo "$teclado" | awk '/private class SemLeitura/ { dentro = 1; next } dentro && /^    }[[:space:]]*$/ { dentro = 0 } dentro && /override fun/ { n++ } END { print n + 0 }')" = 11 ] \
+    && [ "$(codigo "$teclado" | awk '/private class SemLeitura/ { dentro = 1; next } dentro && /^    }[[:space:]]*$/ { dentro = 0 } dentro && /override fun/ { sub(/^.*override fun /, ""); sub(/\(.*/, ""); print }' | sort | tr '\n' ' ')" = "getCursorCapsMode getExtractedText getSelectedText getSurroundingText getTextAfterCursor getTextBeforeCursor performContextMenuAction requestCursorUpdates requestCursorUpdates setComposingRegion takeSnapshot " ] \
+    && [ "$(codigo_vivo "$teclado" | grep -cF 'segredosNoCelular++')" = 2 ] \
+    && ! grep -qE 'segredoNoCelular[^s]' "$teclado" \
+    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/novacarteira/NovaCarteira.kt" | grep -qF 'app.escalibur.wallet.ui.comp.TecladoSeguro.tecladoDeTerceiros(' \
+    && ok "teclado do celular so de sistema e da lista, sem ler o campo de segredo, e o contador de campos abertos" \
+    || aviso "teclado do Android sem a lista de teclados de sistema, sem a conexao que nao le ou sem o contador"
+# Android 11: o toque com janela de outro app por cima e recusado na Activity, nos dialogos e no popup (auditoria 8 e rodada 1).
+codigo_vivo "$AND/java/app/escalibur/wallet/MainActivity.kt" | grep -qF 'if (!app.escalibur.wallet.ui.comp.ToqueCoberto.recusa(evento)) return super.dispatchTouchEvent(evento)' \
+    && codigo_vivo "$AND/java/app/escalibur/wallet/MainActivity.kt" | grep -qF 'app.escalibur.wallet.ui.comp.ToqueCoberto.cancelar(evento) { super.dispatchTouchEvent(it) }' \
+    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/Janela.kt" | grep -qF 'janela.callback = ToqueCoberto.Filtro(original)' \
+    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/Janela.kt" | grep -qF 'if (!recusa(evento)) return original.dispatchTouchEvent(evento)' \
+    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/Janela.kt" | grep -qF 'if (ToqueCoberto.recusa(nativo)) evento.changes.forEach { it.consume() }' \
+    && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/Menu.kt" | grep -qF 'Modifier.recusaToqueCoberto()' \
+    && ok "no Android 11, toque com janela de outro app por cima recusado na Activity, nos dialogos e no popup" \
+    || aviso "toque coberto por outro app aceito em alguma janela do Android 11"
 # A regra confere a si mesma antes, com os casos de ataque das auditorias (terceira passada de 03/11/2026).
 janelas=$(python3 -I tools/android/janelas.py --testes 2>&1 && python3 -I tools/android/janelas.py 2>&1); codigo_janelas=$?
 [ "$codigo_janelas" = "0" ] && ok "toda janela propria do Android (dialogo, popup, menu) comeca com ProtegerJanela()" \

@@ -67,7 +67,7 @@ git push origin testflight-1.0.0-4
 - `1.0.0` tem de ser o `MARKETING_VERSION` do `project.yml` e do projeto gerado; o workflow recusa outro.
 - `4` é o número do build (`CFBundleVersion`). Vale o da tag, passado ao `xcodebuild` como `CURRENT_PROJECT_VERSION=4`; o `CURRENT_PROJECT_VERSION` do `project.yml` fica para os builds locais. A App Store Connect recusa número repetido.
 - `v1.0.0-N` segue o mesmo formato e o mesmo caminho, para quando houver build direto para a revisão. Mandar para a revisão um build que já está no TestFlight não precisa de tag nova.
-- Depois do push, o run para no job `montar` esperando o dono aprovar o environment `release` (Actions, o run, Review deployments). Só então os segredos existem para o runner.
+- Depois do push, o job `montar` faz o archive num runner sem segredo nenhum e entrega o archive, com o SHA-256 dele, ao job `enviar`. O run para no `enviar` esperando o dono aprovar o environment `release` (Actions, o run, Review deployments). Só então os segredos existem, num runner novo que não roda nada do build: do repositório, só o `ExportOptions.plist`, o `.xcode-version` e o conferidor de entitlements, num checkout esparso (auditoria 8, 14/11/2026). Antes o build e a chave dividiam o mesmo runner, e um processo deixado em segundo plano por um passo do build lia o `.p8`.
 
 ## O que o workflow prova
 

@@ -56,11 +56,14 @@ import java.nio.CharBuffer
  * e nao so o ultimo byte dele.
  */
 @Stable
-class Segredo(limpaAoSair: Boolean = false) {
+class Segredo(limpaAoSair: Boolean = false, zeraAoTravar: Boolean = false) {
     private var buffer = ByteArray(64)
     private var usados = 0
 
-    init { if (limpaAoSair) synchronized(vivos) { vivos.add(this) } }
+    init {
+        if (limpaAoSair) synchronized(vivos) { vivos.add(this) }
+        if (zeraAoTravar) synchronized(ateTravar) { ateTravar.add(this) }
+    }
 
     companion object {
         /**
@@ -73,6 +76,14 @@ class Segredo(limpaAoSair: Boolean = false) {
 
         fun limparTodos() {
             val todos = synchronized(vivos) { vivos.toList() }
+            todos.forEach { it.clearText() }
+        }
+
+        /** Os de criar e importar: ficam ao ir para o fundo, saem ao travar (como as grades, `EntradaDaFrase.zerarAoTravar`). */
+        private val ateTravar: MutableSet<Segredo> = java.util.Collections.newSetFromMap(java.util.WeakHashMap())
+
+        fun zerarAoTravar() {
+            val todos = synchronized(ateTravar) { ateTravar.toList() }
             todos.forEach { it.clearText() }
         }
     }

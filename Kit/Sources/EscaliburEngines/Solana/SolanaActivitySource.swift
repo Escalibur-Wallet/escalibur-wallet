@@ -78,7 +78,7 @@ struct SolanaActivitySource: ActivitySource {
         switch activity.direction {
         case .incoming:
             if activity.amount.isZero { return true }
-            if let counterparty = activity.counterparty, AddressPoisoning.lookalike(counterparty, among: known, chain: .solana) != nil {
+            if let counterparty = activity.counterparty, AddressPoisoning.lookalike(counterparty, among: known, chain: .solana, forHiding: true) != nil {
                 return true
             }
             return false

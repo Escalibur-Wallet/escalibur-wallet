@@ -23,12 +23,15 @@ set -euo pipefail
 # que nenhuma funcao troca. Fora da lista, o script nasce de novo com o ambiente limpo: a pasta do usuario pelo servico de
 # diretorio (e nao pelo HOME), o PATH do sistema, que o SIP protege, e o git sem configuracao de fora, sem fsmonitor e sem
 # hooks. CDPATH, as variaveis do Perl, do compilador e do Java ficam todas de fora.
+# O git, o Python, o swift e o xcodebuild de /usr/bin escolhem o programa de verdade pelo cache do xcrun, que fica
+# na pasta temporaria do usuario: cada script comeca com um cache novo e vazio (xcrun_db), resolvido de novo pelo Xcode,
+# que e do root (checagem final de 16/11/2026, rodada 3 dos 3 agentes).
 case "$-" in *p*) ;; *) _sem_p=; : "${_sem_p:?rode pelo caminho do script, e nao por bash script}" ;; esac
 casa=$(/usr/bin/dscl . -read "/Users/$(/usr/bin/id -un)" NFSHomeDirectory | /usr/bin/sed -n 's/^NFSHomeDirectory: //p')
 limpo=true
 for variavel in $(compgen -e); do
     case "$variavel" in
-        HOME|PATH|TMPDIR|USER|LOGNAME|LANG|TERM|PWD|OLDPWD|SHLVL|_|GIT_CONFIG_NOSYSTEM|GIT_CONFIG_GLOBAL|GIT_NO_REPLACE_OBJECTS|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_0|GIT_CONFIG_VALUE_0|GIT_CONFIG_KEY_1|GIT_CONFIG_VALUE_1) ;;
+        HOME|PATH|TMPDIR|USER|LOGNAME|LANG|TERM|PWD|OLDPWD|SHLVL|_|GIT_CONFIG_NOSYSTEM|GIT_CONFIG_GLOBAL|GIT_NO_REPLACE_OBJECTS|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_0|GIT_CONFIG_VALUE_0|GIT_CONFIG_KEY_1|GIT_CONFIG_VALUE_1|xcrun_db) ;;
         *) limpo=false ;;
     esac
 done
@@ -36,12 +39,15 @@ done
     && [ "${TMPDIR:-}" = "$(/usr/bin/getconf DARWIN_USER_TEMP_DIR)" ] \
     && [ "${GIT_CONFIG_NOSYSTEM:-}" = 1 ] && [ "${GIT_CONFIG_GLOBAL:-}" = /dev/null ] && [ "${GIT_NO_REPLACE_OBJECTS:-}" = 1 ] \
     && [ "${GIT_CONFIG_COUNT:-}" = 2 ] && [ "${GIT_CONFIG_KEY_0:-}" = core.fsmonitor ] && [ "${GIT_CONFIG_VALUE_0:-}" = false ] \
-    && [ "${GIT_CONFIG_KEY_1:-}" = core.hooksPath ] && [ "${GIT_CONFIG_VALUE_1:-}" = /dev/null ] || limpo=false
+    && [ "${GIT_CONFIG_KEY_1:-}" = core.hooksPath ] && [ "${GIT_CONFIG_VALUE_1:-}" = /dev/null ] \
+    && [ -n "${xcrun_db:-}" ] && [ "${xcrun_db#"$(/usr/bin/getconf DARWIN_USER_TEMP_DIR)"escalibur-xcrun.}" != "$xcrun_db" ] && [ ! -e "$xcrun_db" ] \
+    || limpo=false
 [ -n "$casa" ] || { echo "a pasta do usuario nao veio do servico de diretorio" >&2; exit 1; }
 $limpo || exec /usr/bin/env -i HOME="$casa" USER="$(/usr/bin/id -un)" LOGNAME="$(/usr/bin/id -un)" \
     PATH=/usr/bin:/bin:/usr/sbin:/sbin TMPDIR="$(/usr/bin/getconf DARWIN_USER_TEMP_DIR)" LANG=en_US.UTF-8 TERM="${TERM:-dumb}" \
     GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 GIT_CONFIG_COUNT=2 \
     GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=false GIT_CONFIG_KEY_1=core.hooksPath GIT_CONFIG_VALUE_1=/dev/null \
+    xcrun_db="$(/usr/bin/mktemp -d "$(/usr/bin/getconf DARWIN_USER_TEMP_DIR)escalibur-xcrun.XXXXXX")/xcrun_db" \
     /bin/bash -p "$0" "$@"
 cd "$(dirname "$0")/../.."
 K=$PWD
@@ -75,7 +81,57 @@ P=$K/$PASTA/out/Products/$([ "$CONFIG" = release ] && echo Release || echo Debug
 TESTES=("${@:-EscaliburCoreTests EscaliburChainsTests EscaliburNetworkTests}")
 read -r -a TESTES <<< "${TESTES[*]}"
 
+# O adb e o do Google (revisao dos 3 agentes da checagem final de 16/11/2026): no gerar-aab.sh ele roda antes da
+# conferencia do JDK e do SDK.
+/usr/bin/codesign --verify --strict \
+    -R='identifier "adb" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "EQHXZ8M8AV"' "$ADB" \
+    || { echo "o adb nao tem a assinatura do Google: nada foi rodado" >&2; exit 1; }
 "$ADB" get-state > /dev/null || { echo "nenhum Android no adb (ligue o emulador)" >&2; exit 1; }
+
+# O toolchain Swift, o Swift SDK e o NDK conferidos antes de rodar, como no compilar-nucleo.sh, e nao so depois dele: no
+# gerar-aab.sh os vetores rodam primeiro, e um binario trocado rodaria aqui sem conferencia nenhuma (checagem final de
+# 16/11/2026, rodada 3 dos 3 agentes). Os digestos so nos vetores da loja (o mesmo nucleo otimizado), como la.
+TOOLCHAIN=~/Library/Developer/Toolchains/swift-6.4.1-RELEASE.xctoolchain
+NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64"
+for binario in swift swift-build swift-driver swift-frontend clang ld.lld; do
+    codesign --verify --strict -R='anchor apple generic and certificate leaf[subject.OU] = "V9AUD2URP3"' "$TOOLCHAIN/usr/bin/$binario" 2>/dev/null \
+        || { echo "o $binario do toolchain nao tem a assinatura da Swift Open Source" >&2; exit 1; }
+done
+for binario in clang ld.lld llvm-strip; do
+    codesign --verify --strict -R='anchor apple generic and certificate leaf[subject.OU] = "EQHXZ8M8AV"' "$NDK_BIN/bin/$binario" 2>/dev/null \
+        || { echo "o $binario do NDK nao tem a assinatura do Google" >&2; exit 1; }
+done
+arvore() {
+    python3 -I - "$1" <<'PY'
+import hashlib, os, sys
+raiz = sys.argv[1]
+entradas = []
+for pasta, subpastas, arquivos in os.walk(raiz):
+    for nome in subpastas + arquivos:
+        caminho = os.path.join(pasta, nome)
+        relativo = os.path.relpath(caminho, raiz)
+        if "__pycache__" in relativo.split(os.sep) or nome.endswith(".pyc"):
+            continue
+        if os.path.islink(caminho):
+            entradas.append(f"L {relativo} {os.readlink(caminho)}")
+        elif os.path.isfile(caminho):
+            h = hashlib.sha256()
+            with open(caminho, "rb") as arquivo:
+                for bloco in iter(lambda: arquivo.read(1 << 20), b""):
+                    h.update(bloco)
+            entradas.append(f"F {relativo} {os.stat(caminho).st_mode & 0o7777:o} {h.hexdigest()}")
+total = hashlib.sha256()
+for entrada in sorted(entradas):
+    total.update(entrada.encode("utf-8", "surrogateescape") + b"\n")
+print(total.hexdigest())
+PY
+}
+if [ "$CONFIG" = release ]; then
+    [ "$(arvore "$TOOLCHAIN/usr")" = 44ce03df2d41af82411e4b180b5fb43327b8dee1a02e85b9b31ac4cea3748248 ] \
+        && [ "$(arvore ~/Library/org.swift.swiftpm/swift-sdks/swift-6.4.1-RELEASE_android.artifactbundle)" = 938fe76a23621545eac3c4ed89652def09a23e34c87229ecb8c8b4a12ab70972 ] \
+        && [ "$(arvore "$NDK_BIN")" = 7a6b0d0cca6c0efbf81f23f6f30b78cb921fd8970c023b9411402a9ef3ed8dfe ] \
+        || { echo "o toolchain, o Swift SDK ou o NDK nao sao os conferidos (o digesto da arvore mudou)" >&2; exit 1; }
+fi
 
 (cd Kit && env -i HOME="$HOME" PATH="$PATH" TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)" ESCALIBUR_ANDROID=1 \
     ANDROID_NDK_HOME="$ANDROID_NDK_HOME" "$SWIFT" build --build-tests --swift-sdk swift-6.4.1-RELEASE_android -c "$CONFIG" \

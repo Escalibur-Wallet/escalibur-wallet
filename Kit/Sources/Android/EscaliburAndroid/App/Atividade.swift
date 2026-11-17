@@ -101,8 +101,61 @@ final class Atividade: @unchecked Sendable {
     static let leiturasParalelas = 4
     static let esperas: [UInt64] = [2, 5]
 
-    func esquecer() {
+    /// Os envios feitos agora por este app que a leitura da rede ainda nao trouxe, por carteira: aparecem ja em "Pendentes" e
+    /// saem quando a leitura traz o mesmo envio, ou depois de um dia (o sentHere do iOS, pedido do dono de 08/11/2026).
+    private var enviadosAqui: [UUID: [ActivityEntry]] = [:]
+    /// Na TON e na Aptos, as leituras que nao podem fechar um envio daqui, por carteira: as que ja fecharam um (uma leitura
+    /// fecha um envio so, tambem nas chamadas seguintes) e as que ja estavam la quando o envio saiu (um envio igual de antes).
+    /// Sai junto com o ultimo envio daqui da carteira (o claimedReads do iOS, revisao dos 3 agentes, 08/11/2026).
+    private var leiturasTomadas: [UUID: Set<String>] = [:]
+
+    func anotarEnviado(_ entrada: ActivityEntry, carteira: UUID) {
+        // Travado no meio do envio, ou com a carteira apagada: nada fica na memoria. De novo depois de anotar: o travar e o remover
+        // mudam a fase e a lista antes de chamar o esquecer, entao a linha anotada entre a primeira conferencia e o esquecer sai aqui.
+        func aindaAqui() -> Bool { Sessao.shared.fase == .unlocked && Sessao.shared.metadata.wallets.contains { $0.id == carteira } }
+        guard aindaAqui() else { return }
+        let mostrada = trava.withLock { () -> Bool in
+            if carteiraID == carteira, let familia = Chain.find(entrada.chainID)?.family, familia == .ton || familia == .aptos {
+                leiturasTomadas[carteira, default: []].formUnion((porRede[entrada.chainID] ?? []).map(\.id))
+            }
+            enviadosAqui[carteira, default: []].removeAll { $0.hash.lowercased() == entrada.hash.lowercased() }
+            enviadosAqui[carteira, default: []].append(entrada)
+            return carteiraID == carteira
+        }
+        guard aindaAqui() else {
+            trava.withLock { enviadosAqui[carteira]?.removeAll { $0.hash.lowercased() == entrada.hash.lowercased() } }
+            return
+        }
+        if mostrada { emitir() }
+    }
+
+    /// A rede respondeu sobre um envio feito aqui: a linha muda de situacao ate a leitura da rede trazer a de verdade.
+    func assentarEnviado(hash: String, carteira: UUID, situacao: ActivityEntry.Status) {
+        let mudou = trava.withLock { () -> Bool in
+            guard let indice = enviadosAqui[carteira]?.firstIndex(where: { $0.hash.lowercased() == hash.lowercased() }),
+                  let velha = enviadosAqui[carteira]?[indice] else { return false }
+            enviadosAqui[carteira]?[indice] = ActivityEntry(
+                id: velha.id, chainID: velha.chainID, direction: velha.direction, asset: velha.asset, amount: velha.amount,
+                counterparty: velha.counterparty, date: velha.date, status: situacao, fee: velha.fee, hash: velha.hash, suspicious: false
+            )
+            return true
+        }
+        if mudou { emitir() }
+    }
+
+    func esquecer(carteira: UUID? = nil) {
         trava.withLock {
+            // Os envios feitos aqui saem junto: travar ou apagar nao deixa endereco nenhum na memoria. Ao remover uma carteira,
+            // so os dela, como o forget do iOS: o envio pendente da outra continua em "Pendentes" (revisao dos 3 agentes,
+            // 08/11/2026). A leitura em curso e sempre a da carteiraID: de outra, nao ha nada a parar.
+            if let carteira {
+                enviadosAqui[carteira] = nil
+                leiturasTomadas[carteira] = nil
+                guard carteira == carteiraID else { return }
+            } else {
+                enviadosAqui = [:]
+                leiturasTomadas = [:]
+            }
             carteiraID = nil
             porRede = [:]
             falhas = []
@@ -122,6 +175,12 @@ final class Atividade: @unchecked Sendable {
         let recebidoSimbolo: String?, recebidoCoingecko: String?, recebidoCasas: Int?, recebidoQuantidade: String?, recebidoCustom: Bool
         let explorador: String, urlDoExplorador: String?
         let conferivel: Bool
+        /// O "Para" de um envio que este app mesmo fez (`sentTo`), confirmado e sem marca de suspeito: so ele copia, e o que
+        /// copia e o endereco que o envio gravou, nao o texto do indexador (o copyableRecipient do iOS, pedido do dono de
+        /// 08/11/2026). Um envio falso do envenenamento nunca passou pelo envio.
+        let paraCopiar: String?
+        /// A rede tem tag ou memo, que nao vai junto ao copiar.
+        let comTag: Bool
     }
 
     struct SemHistorico: Encodable { let rede: String; let nome: String; let coingecko: String; let explorador: String; let url: String? }
@@ -163,7 +222,34 @@ final class Atividade: @unchecked Sendable {
     private func retrato(_ wallet: WalletMeta) -> Retrato {
         let saldos = Saldos.shared
         return trava.withLock {
-            let todos = porRede.values.flatMap { $0 }
+            var todos = porRede.values.flatMap { $0 }
+            let lidos = Set(todos.map { $0.hash.lowercased() })
+            let umDia = Date().addingTimeInterval(-24 * 3600)
+            // Cada movimentacao lida responde por um envio daqui no maximo: dois envios iguais seguidos sao duas linhas.
+            var tomadas = leiturasTomadas[wallet.id] ?? []
+            // As leituras sao da carteiraID: com outra carteira ja escolhida e a dela ainda nao carregada, as linhas locais
+            // ficam como estao (uma transferencia entre duas carteiras do dono tem o mesmo hash), como o shownWalletID do iOS.
+            if carteiraID == wallet.id {
+            enviadosAqui[wallet.id] = enviadosAqui[wallet.id]?.filter { local in
+                guard !lidos.contains(local.hash.lowercased()), local.date > umDia else { return false }
+                // So pelo hash: a regra de valor escondia um envio diferente de mesmo valor (dois pagamentos de 100 USDT seguidos).
+                // Na TON e na Aptos, o hash que a leitura traz nao e o do envio: o mesmo envio pela rede, ativo, valor, destino e
+                // hora, de uma leitura que nao e suspeita (revisao dos 3 agentes, 08/11/2026).
+                guard let chain = Chain.find(local.chainID), chain.family == .ton || chain.family == .aptos,
+                      let para = local.counterparty, let chave = Address.canonicalRecipient(para, chain: chain) else { return true }
+                let igual = todos.first { lido in
+                    !tomadas.contains(lido.id) && lido.chainID == local.chainID && lido.direction == .sent && !lido.suspicious
+                        && lido.asset?.id == local.asset?.id && lido.amount == local.amount
+                        && lido.date >= local.date.addingTimeInterval(-120) && lido.date <= local.date.addingTimeInterval(24 * 3600)
+                        && lido.counterparty.flatMap { Address.canonicalRecipient($0, chain: chain) } == chave
+                }
+                guard let igual else { return true }
+                tomadas.insert(igual.id)
+                return false
+            }
+            leiturasTomadas[wallet.id] = enviadosAqui[wallet.id]?.isEmpty == false ? tomadas : nil
+            todos += enviadosAqui[wallet.id] ?? []
+            }
             let itens = todos.filter { !$0.suspicious }.sorted { $0.date > $1.date }.compactMap { item(wallet, $0) }
             // Redes sem historico publico: so as em que a carteira tem saldo.
             let sem = indisponiveis.filter { saldos.saldo($0.chain, carteira: wallet.id)?.holdings.contains { !$0.amount.isZero } == true }
@@ -194,8 +280,18 @@ final class Atividade: @unchecked Sendable {
             recebidoSimbolo: entrada.receivedAsset?.symbol, recebidoCoingecko: entrada.receivedAsset?.coingeckoID, recebidoCasas: entrada.receivedAsset?.decimals,
             recebidoQuantidade: entrada.receivedAmount?.decimalString, recebidoCustom: entrada.receivedAsset?.origin != nil,
             explorador: chain.explorerName, urlDoExplorador: chain.explorerURL(tx: entrada.hash)?.absoluteString,
-            conferivel: entrada.direction == .received && chain.family == .evm && entrada.status == .confirmed
+            conferivel: entrada.direction == .received && chain.family == .evm && entrada.status == .confirmed,
+            paraCopiar: Self.paraCopiar(entrada, chain: chain), comTag: chain.destinationTag != .none
         )
+    }
+
+    /// A mesma conta pela identidade da rede (caixa, forma crua ou amigavel da TON), devolvendo o endereco gravado no envio.
+    private static func paraCopiar(_ entrada: ActivityEntry, chain: Chain) -> String? {
+        guard entrada.direction == .sent, !entrada.suspicious, entrada.status == .confirmed, let para = entrada.counterparty,
+              let enviados = Sessao.shared.metadata.sentTo[chain.id], let chave = Address.canonicalRecipient(para, chain: chain),
+              // Nunca o endereco de uma conta deste celular com outra chave no controle (revisao dos tres agentes de 15/11/2026).
+              Sessao.shared.metadata.wallets.donaMarcada(de: para, on: chain) == nil else { return nil }
+        return enviados.first { Address.canonicalRecipient($0, chain: chain) == chave }
     }
 
     private func emitir() {

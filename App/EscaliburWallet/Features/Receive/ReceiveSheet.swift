@@ -1,6 +1,7 @@
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import EscaliburChains
+import EscaliburEngines
 import EscaliburNetwork
 import SwiftUI
 import UIKit
@@ -29,6 +30,12 @@ enum QRCode {
 /// contam o que o dono faz (auditoria de 03/11/2026). A frase so passa por aqui depois da tela de
 /// aviso (`CopyPhraseSheet`, pedido do dono de 15/10/2026), vale 1 minuto e nunca sai do iPhone.
 enum Pasteboard {
+    /// O Colar do app trouxe uma frase ou uma chave: a area de transferencia esvazia, para a copia nao seguir no Universal
+    /// Clipboard ate o Mac nem num gerenciador de copias (revisao dos 3 agentes, 09/11/2026).
+    static func clearSecret() {
+        UIPasteboard.general.items = []
+    }
+
     /// Qualquer endereco, contrato ou hash: so no iPhone.
     static func copyAddress(_ address: String) {
         UIPasteboard.general.setItems([[UTType.utf8PlainText.identifier: address]], options: [
@@ -39,10 +46,23 @@ enum Pasteboard {
     /// O endereco de receber de uma carteira: vai tambem para o Mac so sem passphrase e fora do Super
     /// Security (`macAllowed`). E a unica copia sem o `localOnly` (o `verificar.sh` confere).
     @MainActor static func copyReceiveAddress(_ address: String, hasPassphrase: Bool?, session: AppSession) {
+        defer { lastReceive = (address, UIPasteboard.general.changeCount) }
         guard macAllowed(session, hasPassphrase: hasPassphrase) else { return copyAddress(address) }
         UIPasteboard.general.setItems([[UTType.utf8PlainText.identifier: address]], options: [
             .expirationDate: Date().addingTimeInterval(120),
         ])
+    }
+
+    /// O endereco de receber copiado por ultimo, e o numero da area de transferencia logo depois (rodada 10 da auditoria 8).
+    @MainActor private static var lastReceive: (address: String, change: Int)?
+
+    /// O endereco de receber copiado sai antes do prazo quando a conta dele deixa de receber (a marca de outra chave que chegou
+    /// depois da copia, a troca da TON para a W5), se a copia ainda e a nossa: ler o numero nao avisa o colar (rodada 10).
+    /// `nil`: qualquer endereco (apagar tudo).
+    @MainActor static func withdrawReceive(ifAmong addresses: Set<String>?) {
+        guard let last = lastReceive, addresses?.contains(last.address) ?? true else { return }
+        lastReceive = nil
+        if UIPasteboard.general.changeCount == last.change { clearSecret() }
     }
 
     /// O endereco de receber desta carteira pode ir para o Mac: sem passphrase e fora do Super Security.
@@ -76,6 +96,12 @@ struct ReceiveSheet: View {
     @Environment(\.displayScale) private var displayScale
     let preselected: Asset?
 
+    /// A rede ja liberada para mostrar o endereco: depois da conferencia da abertura, ou dos 3 s sem ela (rodadas 2 e 3 da
+    /// auditoria 8). Sem liberacao, nada de endereco: antes, ele aparecia um quadro antes de a conferencia comecar, e de novo
+    /// a cada troca de rede.
+    @State private var releasedChain: String?
+    /// O "Tentar de novo" da rede que ainda nao respondeu: a conferencia roda outra vez.
+    @State private var controlAttempt = 0
     @State private var query = ""
     @State private var backingUp = false
     /// A rede trocada no seletor da tela do endereco, por moeda.
@@ -223,6 +249,8 @@ struct ReceiveSheet: View {
             SheetHeader(title: String(localized: "Receber"), close: { dismiss() },
                         extra: ("plus", String(localized: "Adicionar moeda pelo contrato"), "receber-adicionar", { adding = AddPick(preset: nil) }))
             SearchField(prompt: String(localized: "Buscar qualquer moeda"), text: $query, surface: Palette.rail)
+                // Um teto acima de qualquer chave: a conferencia do segredo roda no desenho da tela, e a busca para em 60.
+                .onChange(of: query) { _, new in if new.count > 128 { query = String(new.prefix(128)) } }
                 .padding(.horizontal, Space.gutter).padding(.top, Space.md)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -281,6 +309,8 @@ struct ReceiveSheet: View {
             }
         case .phrase?:
             searchNote(String(localized: "Isto parece o começo das palavras de uma carteira, e a busca não saiu do iPhone. As palavras só se digitam ao importar uma carteira."))
+        case .privateKey?:
+            searchNote(String(localized: "Isto parece uma chave privada, e a busca não saiu do iPhone. Não mostre essa chave a ninguém."))
         case .loading?, .retrying?, nil:
             sectionTitle(String(localized: "Mais moedas, fora da lista verificada"))
             ForEach(0..<3, id: \.self) { _ in placeholderRow }
@@ -602,23 +632,143 @@ struct ReceiveSheet: View {
     private func addressContent(asset: Asset, chain: Chain, siblings: [Asset], key: String,
                                 catalog: (coin: CatalogCoin, network: CatalogCoin.Network)? = nil,
                                 moreNetworks: ReceiveCoin? = nil) -> some View {
-        if wallet.map({ !$0.receives(on: chain) }) == true {
-            tronForeignBlocked
-        } else {
-            addressBody(asset: asset, chain: chain, siblings: siblings, key: key, catalog: catalog, moreNetworks: moreNetworks)
+        Group {
+            if let mark = wallet?.foreignControl(on: chain) {
+                foreignBlocked(mark, chain: chain)
+            } else if wallet.map({ !$0.receives(on: chain) }) == true {
+                tronForeignBlocked()
+            } else if let wallet, let owner = session.markedElsewhere(wallet, on: chain) {
+                // O mesmo endereco em outra carteira deste aparelho, com a marca: a so de observacao dele tambem nao mostra
+                // (pedido do dono, 15/11/2026, a forma mais segura).
+                if let mark = owner.foreignControl(on: chain) { foreignBlocked(mark, chain: chain, owner: owner) } else { tronForeignBlocked(owner: owner) }
+            } else if wallet?.isWatchOnly == false && (releasedChain != releaseKey(chain) || wallet?.controlChecked(on: chain) == false) {
+                // So a rede ja lida mostra o endereco: sem resposta, ele espera a conferencia, em vez de aparecer depois dos 3 s
+                // (pedido do dono, 15/11/2026, a forma mais segura).
+                checkingControl(waited: releasedChain == releaseKey(chain), chain: chain)
+            } else {
+                addressBody(asset: asset, chain: chain, siblings: siblings, key: key, catalog: catalog, moreNetworks: moreNetworks)
+            }
+        }
+        // A hora do deposito: a rede desta conta conferida de novo ao abrir, sem esperar a do destravar (auditoria 8,
+        // 14/11/2026). A marca que entra ou sai muda a tela sozinha. O endereco espera ate 3 s pela resposta, para nao ser
+        // copiado antes de uma marca nova chegar; sem rede, aparece depois disso (rodada 2).
+        .task(id: "\(releaseKey(chain))#\(controlAttempt)") {
+            guard let id = wallet?.id, wallet?.isWatchOnly == false else { return }
+            let key = releaseKey(chain)
+            let check: Task<Bool, Never>
+            if chain.family == .tron {
+                let tron = session.checkTronControl(id)
+                // Cancelada, nil: o endereco espera os 3 s, como nas outras redes (rodada 4 da auditoria 8).
+                check = Task { await tron.value != nil }
+            } else {
+                // Numa EVM, tambem as outras EVM marcadas: a marca de uma fecha todas, e so ela sendo conferida a tira.
+                let marked = chain.family == .evm
+                    ? Set((wallet?.foreignControl ?? [:]).keys.filter { Chain.find($0)?.family == .evm }) : []
+                check = session.checkForeignControl(id, chains: marked.union([chain.id]))
+            }
+            let release = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
+                releasedChain = key
+            }
+            // Trocada a rede (ou fechada a tela), a liberacao desta nao vale mais.
+            let applied = await withTaskCancellationHandler { await check.value } onCancel: { release.cancel() }
+            guard !Task.isCancelled else {
+                release.cancel()
+                return
+            }
+            // A conferencia cancelada (a pausa) nao libera na hora: o endereco espera os 3 s (rodada 4 da auditoria 8).
+            guard applied else {
+                // A tela trocada (a chave nova) ou coberta nessa espera cancela a liberacao velha, que gravaria por cima da nova
+                // (rodada 11 da auditoria 8).
+                await withTaskCancellationHandler { await release.value } onCancel: { release.cancel() }
+                return
+            }
+            release.cancel()
+            releasedChain = key
         }
     }
 
-    /// A conta da Tron desta carteira tem outra chave no controle, visto na importacao
-    /// (revisao da auditoria 4, C7-05): o endereco nao aparece.
-    private var tronForeignBlocked: some View {
+    /// A rede e o endereco que a conta tem agora: a troca da TON para a W5 com a tela aberta volta a esperar a conferencia, como na
+    /// abertura, e a W5 nao aparece antes da marca dela chegar (rodada 10 da auditoria 8).
+    private func releaseKey(_ chain: Chain) -> String {
+        "\(chain.id)|\(wallet?.account(chain)?.address ?? "")"
+    }
+
+    /// Enquanto a conferencia da abertura nao volta. `waited`: passaram os 3 s e a rede desta conta ainda nao foi lida.
+    private func checkingControl(waited: Bool, chain: Chain) -> some View {
+        VStack(spacing: Space.sm) {
+            if preselected != nil { HStack { Spacer(); closeButton } }
+            Spacer()
+            ProgressView().tint(Palette.inkSoft)
+            Text("Conferindo esta conta na rede").typeStyle(.body).foregroundStyle(Palette.inkSoft)
+            if session.metadata.settings.disabledChainIDs.contains(chain.id) {
+                // A rede desligada nao e consultada: a conferencia nunca chegaria, e o "Tentar de novo" nao faria nada.
+                Text("Ligue a rede \(chain.name) nos Ajustes para o app conferir de novo.")
+                    .typeStyle(.body).foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if waited {
+                Text("A rede ainda não respondeu. O endereço aparece depois que esta conta for conferida.")
+                    .typeStyle(.body).foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                SecondaryButton(title: String(localized: "Tentar de novo")) {
+                    releasedChain = nil
+                    controlAttempt += 1
+                }
+                .padding(.top, Space.xs)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Space.gutter).padding(.top, Space.md)
+        .accessibilityIdentifier("receber-conferindo")
+    }
+
+    /// Outra chave, conta ou contrato no controle desta conta nesta rede (auditoria 8, 14/11/2026): o endereco nao aparece,
+    /// como na Tron. O aviso diz o que foi visto e o que fazer.
+    /// `owner`: a outra carteira deste aparelho com o mesmo endereco, onde a marca foi vista.
+    private func foreignBlocked(_ mark: ForeignControl, chain: Chain, owner: WalletMeta? = nil) -> some View {
+        VStack(alignment: .leading, spacing: Space.sm) {
+            if preselected != nil { HStack { Spacer(); closeButton } }
+            Text(chain.name).typeStyle(.title).foregroundStyle(Palette.ink)
+            Text(mark.message).typeStyle(.body).foregroundStyle(Palette.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            if let owner { markedElsewhereNote(owner) }
+            // A marca de outra rede EVM: o dono fica sabendo onde tirar a delegacao (rodada 3 da auditoria 8).
+            if let origin = (owner ?? wallet)?.foreignControlOrigin(on: chain), origin != chain {
+                Text("Vista na rede \(origin.name). O endereço e a chave são os mesmos em todas as redes EVM.").typeStyle(.body).foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                // A rede desligada nao e consultada, e a marca dela nunca sairia (rodada 4 da auditoria 8).
+                if session.metadata.settings.disabledChainIDs.contains(origin.id) {
+                    Text("Ligue a rede \(origin.name) nos Ajustes para o app conferir de novo.").typeStyle(.body).foregroundStyle(Palette.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Text("Por isso o app não mostra este endereço.").typeStyle(.body).foregroundStyle(Palette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+        .padding(.horizontal, Space.gutter).padding(.top, Space.md)
+        .accessibilityIdentifier("receber-outra-chave")
+    }
+
+    private func markedElsewhereNote(_ owner: WalletMeta) -> some View {
+        Text("Este endereço também está na carteira \(owner.name), e lá a rede mostrou outra chave no controle.")
+            .typeStyle(.body).foregroundStyle(Palette.inkSoft)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// A conta da Tron desta carteira tem outra chave no controle, visto na importacao ou ao abrir com passphrase
+    /// (revisao da auditoria 4, C7-05; 08/11/2026): o endereco nao aparece.
+    private func tronForeignBlocked(owner: WalletMeta? = nil) -> some View {
         VStack(alignment: .leading, spacing: Space.sm) {
             if preselected != nil { HStack { Spacer(); closeButton } }
             Text("Esta conta na Tron é controlada por outra chave").typeStyle(.title).foregroundStyle(Palette.ink)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Quando esta carteira foi importada, a rede mostrou outra chave no controle da conta na Tron. É o golpe da frase com saldo: o que entrar nela, quem controla essa chave leva. Por isso o app não mostra este endereço.")
+            Text("Quando esta carteira abriu neste aparelho, a rede mostrou outra chave no controle da conta na Tron. É o golpe da frase com saldo: o que entrar nela, quem controla essa chave leva. Por isso o app não mostra este endereço.")
                 .typeStyle(.body).foregroundStyle(Palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
+            if let owner { markedElsewhereNote(owner) }
             Spacer()
         }
         .padding(.horizontal, Space.gutter).padding(.top, Space.md)
@@ -701,7 +851,6 @@ struct ReceiveSheet: View {
                         .padding(.top, Space.md)
                         .accessibilityIdentifier("receber-observacao")
                 }
-
                 qrPlate(address: address, chain: chain, asset: asset).padding(.top, Space.lg)
                 addressNetworkMenu(asset: asset, chain: chain, siblings: siblings, key: key).padding(.top, Space.md)
 
@@ -733,8 +882,11 @@ struct ReceiveSheet: View {
                 }
 
                 CopyButton {
+                    // Conferido na carteira gravada, na hora do toque, e o visto so no ok (rodada 10 da auditoria 8), como o Android.
+                    guard let id = session.selectedWallet?.id, session.copyableAddress(id, chains: [chain]) == address else { return false }
                     Pasteboard.copyReceiveAddress(address, hasPassphrase: session.selectedWallet?.hasPassphrase, session: session)
                     toasts.show(String(localized: "Endereço copiado. Depois de colar, confira o endereço inteiro, inclusive o meio."))
+                    return true
                 }
                 .padding(.top, Space.lg)
                 // O Compartilhar do sistema tem o Copiar, sem prazo e sem o localOnly: some quando o

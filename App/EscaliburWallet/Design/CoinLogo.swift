@@ -1,4 +1,5 @@
 import EscaliburChains
+import EscaliburCore
 import EscaliburNetwork
 import SwiftUI
 import ImageIO
@@ -15,14 +16,11 @@ struct CoinLogo: View {
     var networkCount: Int = 1
     var remoteURL: URL? = nil
     var ringColor: Color = Palette.void
-    /// Token fora da lista (custom ou descoberto): nunca o logo que o proprio token
-    /// declara, e as letras so em ASCII, brancas no cinza escuro. O logo de um token de
-    /// golpe e parte da isca.
+    /// Token fora da lista (custom ou descoberto): nunca uma logo de fora, so as letras em ASCII, brancas no cinza escuro.
+    /// O logo de um token de golpe e parte da isca, e quem cria o token escolhe o arquivo (auditoria 8).
     var unverified: Bool = false
-    /// O token cuja logo vem pelo contrato exato (`TokenLogoResolver`: repositorio da
-    /// Trust Wallet, depois o CoinGecko). Vale tambem para token fora da lista: segue o
-    /// contrato, nao o nome, e o golpe que copia o nome do USDT nao tem o contrato do
-    /// USDT. Suspeito nunca recebe.
+    /// O token da lista cuja logo vem pelo contrato exato (`TokenLogoResolver`: repositorio da Trust Wallet, depois o
+    /// CoinGecko), quando o app nao tem a dela. O token fora da lista nao usa mais: fica com as letras.
     var logoAsset: Asset? = nil
 
     @State private var remote: UIImage?
@@ -46,6 +44,10 @@ struct CoinLogo: View {
         }
         .accessibilityHidden(true)
         .task(id: logoAsset?.id ?? remoteURL?.absoluteString) {
+            // Token nao conferido: nada baixado nem aberto, so as letras, como no Android. Quem cria o token escolhe a logo, e a
+            // logo e aberta pelo ImageIO no processo que assina: com uma falha nova dele, mandar umas unidades do token e
+            // esperar o dono abrir "Outros tokens" era um caminho ate a chave (auditoria 8, 14/11/2026).
+            guard !unverified else { return }
             if let logoAsset {
                 guard bundled == nil, let url = await TokenLogoResolver.shared.logo(for: logoAsset),
                       let data = await ImageLoader.shared.data(for: url) else { return }
@@ -62,13 +64,7 @@ struct CoinLogo: View {
 
     @ViewBuilder
     private var base: some View {
-        if unverified, logoAsset != nil, let remote {
-            Image(uiImage: remote)
-                .resizable()
-                .interpolation(.high)
-                .scaledToFit()
-                .clipShape(Circle())
-        } else if unverified {
+        if unverified {
             let letters = TokenGlyph.letters(symbol)
             Circle().fill(Palette.control)
                 .overlay {
@@ -140,14 +136,16 @@ struct NetworkBadge: View {
 }
 
 /// Abre uma logo baixada da internet sem confiar nela: o decodificador de imagem roda
-/// no mesmo processo que assina (auditoria 3, B4). So PNG ou JPEG pelo tipo que o ImageIO
-/// le no arquivo (nao so os bytes magicos), uma imagem so, ate 2048 px de lado, e reduzida
-/// para no maximo 256 px antes de virar imagem na tela.
+/// no mesmo processo que assina (auditoria 3, B4). Antes do ImageIO, o arquivo e remontado em Swift so com o que desenha
+/// a imagem (`StrictImage`, auditoria 8): sem EXIF, XMP, perfil de cor nem bloco que o leitor nao conhece. Depois, so PNG
+/// ou JPEG pelo tipo que o ImageIO le no arquivo, uma imagem so, ate 2048 px de lado, e reduzida para no maximo 256 px
+/// antes de virar imagem na tela.
 enum SafeImage {
     static let maxSide = 2048
     static let maxPixel = 256
 
-    static func decode(_ data: Data) -> UIImage? {
+    static func decode(_ received: Data) -> UIImage? {
+        guard let data = StrictImage.sanitize(received) else { return nil }
         let noCache = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, noCache),
               CGImageSourceGetCount(source) == 1,

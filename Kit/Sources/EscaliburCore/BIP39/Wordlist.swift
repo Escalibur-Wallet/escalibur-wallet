@@ -271,7 +271,9 @@ public final class WordlistStore: @unchecked Sendable {
         if let slip39Loaded { return slip39Loaded }
 
         guard
-            let url = bundle.url(forResource: "slip39", withExtension: "txt"),
+            // Na pasta das listas, como as do BIP-39 (sem a pasta, o arquivo nunca era achado).
+            let url = bundle.url(forResource: "slip39", withExtension: "txt", subdirectory: "Wordlists")
+                ?? bundle.url(forResource: "slip39", withExtension: "txt"),
             let data = try? Data(contentsOf: url)
         else {
             throw WordlistError.corruptSLIP39

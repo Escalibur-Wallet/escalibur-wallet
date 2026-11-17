@@ -19,7 +19,7 @@ android {
         minSdk = 30
         targetSdk = 36
         // De 1001 em diante: os builds do Android nunca usam um numero de build do iOS.
-        versionCode = 1011
+        versionCode = 1012
         versionName = "1.0.1"
         // O commit publicado de onde o app saiu e a arvore dele, que o gerar-aab.sh passa (-PcommitDeOrigem,
         // -ParvoreDeOrigem) de uma copia limpa da main do GitHub: a tela de Ajustes mostra o commit, e a arvore
@@ -78,7 +78,10 @@ android {
     packaging {
         // As bibliotecas nativas ficam descomprimidas e alinhadas no APK (o carregador le
         // direto dele), e o .so do nucleo ja vem sem simbolos de depuracao.
-        jniLibs { useLegacyPackaging = false }
+        // Sem strip: o AGP rodaria o llvm-strip de um NDK da pasta do SDK, que ninguem confere, sobre o nucleo e a
+        // libc++, que ja saem enxutos do NDK r30 conferido; o gerar-aab.sh confere os dois no pacote pelo carimbo
+        // (revisao dos 3 agentes da checagem final de 16/11/2026).
+        jniLibs { useLegacyPackaging = false; keepDebugSymbols += "**/*.so" }
     }
 
     androidResources {

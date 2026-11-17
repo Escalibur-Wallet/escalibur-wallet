@@ -22,8 +22,8 @@ enum ReceiptAccounts {
         for wallet in session.metadata.wallets where !wallet.isWatchOnly && !wallet.hasPassphrase && wallet.hasBackup {
             for account in wallet.accounts {
                 guard let chain = Chain.all.first(where: { $0.id == account.chainID }), !disabled.contains(chain.id) else { continue }
-                // A conta da Tron com outra chave no controle nao recebe por caminho nenhum.
-                if chain.family == .tron, wallet.tronForeignControl == true { continue }
+                // A conta com outra chave no controle (a da Tron, e a das outras redes desde a auditoria 8) nao recebe por caminho nenhum.
+                guard wallet.receives(on: chain) else { continue }
                 let addresses = Self.addresses(for: account, chain: chain, usage: wallet.utxoUsage[chain.id])
                 guard seen["\(chain.id)|\(account.address)"] == nil else { continue }
                 seen["\(chain.id)|\(account.address)"] = out.count
@@ -53,8 +53,13 @@ enum ReceiptAccounts {
     /// endereco.
     @MainActor
     static func signature(_ session: AppSession) -> String {
+        // Os enderecos e as marcas entram pelo digesto: a conta TON que passa para a W5, ou uma marca que entra ou sai, regrava o
+        // arquivo na hora, e nao so no proximo destravar (auditoria 8, 14/11/2026).
         let wallets = session.metadata.wallets.map { wallet in
-            "\(wallet.id):\(wallet.accounts.count):\(wallet.hasBackup):" + wallet.utxoUsage.map { "\($0.key)\($0.value.receiveUsed)/\($0.value.changeUsed)" }.sorted().joined()
+            let accounts = wallet.accounts.map { "\($0.chainID)=\($0.address)" }.sorted().joined(separator: ";")
+            let marks = (wallet.foreignControl ?? [:]).keys.sorted().joined(separator: ";") + (wallet.tronForeignControl == true ? ";tron" : "")
+            let digest = Hex.encode(Array(Hash.sha256(Array((accounts + "|" + marks).utf8)).prefix(8)))
+            return "\(wallet.id):\(digest):\(wallet.hasBackup):" + wallet.utxoUsage.map { "\($0.key)\($0.value.receiveUsed)/\($0.value.changeUsed)" }.sorted().joined()
         }
         return wallets.joined(separator: ",") + "|" + session.metadata.settings.disabledChainIDs.sorted().joined(separator: ",")
     }

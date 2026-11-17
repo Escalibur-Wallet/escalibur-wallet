@@ -172,6 +172,7 @@ public enum TronPlanError: Error, Equatable, Sendable {
     case zeroAmount
     case amountTooLarge
     case memoTooLong(maxBytes: Int)
+    case memoHasSecret
     case insufficientTRX(needed: BigUInt, available: BigUInt)
     case insufficientUSDT(needed: BigUInt, available: BigUInt)
     /// Tem USDT e nenhum TRX: nao da para pagar a energy, e a Escalibur nao paga.
@@ -219,6 +220,8 @@ public enum TronPlanError: Error, Equatable, Sendable {
             return kitText("Valor acima do que a rede aceita.")
         case .memoTooLong(let max):
             return kitText("O memo passa de \(max) bytes.")
+        case .memoHasSecret:
+            return kitText("O memo tem uma frase ou uma chave de carteira. Ele fica público na rede: apague e não envie.")
         case .insufficientTRX(let needed, let available):
             return kitText("Saldo insuficiente. Este envio precisa de \(TronFormat.trx(needed)) com as taxas, e a conta tem \(TronFormat.trx(available)).")
         case .insufficientUSDT(let needed, let available):
@@ -463,6 +466,8 @@ public enum TronPlanner {
     }
 
     static func encodeMemo(_ memo: String?) throws -> [UInt8] {
+        // O memo fica publico na rede: com uma frase ou uma chave, nada e montado (como o comentario da TON).
+        if let memo, PrivateKeyGuard.publicTextHasSecret(memo) { throw TronPlanError.memoHasSecret }
         let bytes = Array((memo ?? "").utf8)
         guard bytes.count <= maxMemoBytes else { throw TronPlanError.memoTooLong(maxBytes: maxMemoBytes) }
         return bytes

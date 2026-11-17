@@ -134,59 +134,49 @@ struct UpdateRequiredView: View {
     let onLater: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                // A seta num circulo simples, sem o anel de pixels (pedido do dono, 05/11/2026).
-                Circle().fill(Palette.control)
-                    .frame(width: 72, height: 72)
-                    .overlay {
-                        Image(systemName: "arrow.down")
-                            .font(.system(size: 26, weight: .semibold))
-                            .foregroundStyle(Palette.accent)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, Space.xl)
-                    .accessibilityHidden(true)
-                Text(mandatory ? String(localized: "Atualização obrigatória") : String(localized: "Atualização"))
-                    .typeStyle(.note).fontWeight(.semibold)
-                    .foregroundStyle(Palette.ink)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, Space.lg)
-                Text("Esta versão está desatualizada")
-                    .typeStyle(.title).foregroundStyle(Palette.ink)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("versao-desatualizada")
-                    .padding(.top, Space.xs)
-                Text(mandatory
-                     ? String(localized: "A versão \(version) da Escalibur já está na App Store, confirmada pela lista assinada da Escalibur. Esta atualização é obrigatória: atualize para continuar usando o app.")
-                     : String(localized: "A versão \(version) da Escalibur já está na App Store, confirmada pela lista assinada da Escalibur. Atualize para continuar com as correções mais recentes."))
-                    .typeStyle(.body).foregroundStyle(Palette.inkSoft)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, Space.base)
-                HStack(alignment: .center, spacing: Space.md) {
-                    CipherEmblem(size: 76, symbol: "lock.fill", tint: Palette.success)
-                    VStack(alignment: .leading, spacing: Space.xxs) {
-                        Text("Seus fundos estão seguros").typeStyle(.row).foregroundStyle(Palette.ink)
-                        Text("Atualizar não pede suas palavras e mantém suas carteiras como estão.")
-                            .typeStyle(.note).foregroundStyle(Palette.inkSoft)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+        // O conteudo no meio do espaco acima dos botoes (pedido do dono, 15/11/2026); com letra grande, rola.
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    // A seta num circulo simples, sem o anel de pixels (pedido do dono, 05/11/2026).
+                    Circle().fill(Palette.control)
+                        .frame(width: 72, height: 72)
+                        .overlay {
+                            Image(systemName: "arrow.down")
+                                .font(.system(size: 26, weight: .semibold))
+                                .foregroundStyle(Palette.accent)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .accessibilityHidden(true)
+                    Text(mandatory ? String(localized: "Atualização obrigatória") : String(localized: "Atualização"))
+                        .typeStyle(.note).fontWeight(.semibold)
+                        .foregroundStyle(Palette.ink)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, Space.lg)
+                    Text("Esta versão está desatualizada")
+                        .typeStyle(.title).foregroundStyle(Palette.ink)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier("versao-desatualizada")
+                        .padding(.top, Space.xs)
+                    // Sem citar a lista assinada no texto (pedido do dono, 15/11/2026).
+                    Text(mandatory
+                         ? String(localized: "A versão \(version) da Escalibur já está na App Store. Esta atualização é obrigatória: atualize para continuar usando o app.")
+                         : String(localized: "A versão \(version) da Escalibur já está na App Store. Atualize para continuar com as correções mais recentes."))
+                        .typeStyle(.body).foregroundStyle(Palette.inkSoft)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, Space.base)
                 }
-                .padding(Space.md)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Palette.body, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-                .accessibilityElement(children: .combine)
-                .padding(.top, Space.lg)
+                .padding(.horizontal, Space.gutter)
+                .padding(.vertical, Space.lg)
+                .frame(minHeight: proxy.size.height)
             }
-            .padding(.horizontal, Space.gutter)
-            .padding(.bottom, Space.lg)
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom) {
             ActionFooter {
                 PrimaryButton(title: String(localized: "Atualizar agora")) { onUpdate() }

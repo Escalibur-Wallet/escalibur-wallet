@@ -1,5 +1,4 @@
 https://196.rpc.thirdweb.com
-https://1rpc.io
 https://42220.rpc.thirdweb.com
 https://9745.rpc.thirdweb.com
 https://aggregator-api.kyberswap.com
@@ -30,7 +29,6 @@ https://arb1.arbitrum.io
 https://arbitrum-one-rpc.publicnode.com
 https://arbitrum.blockscout.com
 https://arbitrum.drpc.org
-https://arbitrum.meowrpc.com
 https://asset-hub-polkadot-rpc.n.dwellir.com
 https://assets.coingecko.com
 https://avalanche-c-chain-rpc.publicnode.com
@@ -47,7 +45,6 @@ https://bsc-dataseed1.ninicoin.io
 https://bsc-rpc.publicnode.com
 https://celo-rpc.publicnode.com
 https://celo.blockscout.com
-https://cloudflare-eth.com
 https://coin-images.coingecko.com
 https://dogecoin.atomicwallet.io
 https://escalibur-wallet.github.io
@@ -70,6 +67,7 @@ https://linea.drpc.org
 https://litecoin.atomicwallet.io
 https://litecoinspace.org
 https://mainnet.base.org
+https://mainnet.gateway.tenderly.co
 https://mainnet.optimism.io
 https://mainnet.unichain.org
 https://mempool.emzy.de
@@ -78,6 +76,7 @@ https://near.drpc.org
 https://open-api.de1.exchange
 https://optimism-rpc.publicnode.com
 https://optimism.drpc.org
+https://optimism.gateway.tenderly.co
 https://plasma.gateway.tenderly.co
 https://polkadot-asset-hub-public-sidecar.parity-chains.parity.io
 https://polkadot-asset-hub-rpc.polkadot.io
@@ -85,9 +84,11 @@ https://polygon-bor-rpc.publicnode.com
 https://polygon-mainnet.g.alchemy.com
 https://polygon.blockscout.com
 https://polygon.drpc.org
+https://polygon.gateway.tenderly.co
 https://public.rpc.solanavibestation.com
 https://raw.githubusercontent.com
 https://rpc-asset-hub-polkadot.luckyfriday.io
+https://rpc-bsc.48.club
 https://rpc-mainnet.suiscan.xyz
 https://rpc.flashbots.net
 https://rpc.intea.rs

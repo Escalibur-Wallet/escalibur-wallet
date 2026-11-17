@@ -46,7 +46,7 @@ public actor NEARReader {
         let hosts = (providers.map(\.baseURL) + [history] + [tokens].compactMap { $0 }).compactMap(\.host)
         self.transport = PacedTransport(base: transport, intervals: Dictionary(hosts.map { ($0, pacing) }, uniquingKeysWith: { a, _ in a }))
         self.providers = providers
-        self.pool = ProviderPool(providers)
+        self.pool = ProviderPool(providers, draws: transport.drawsProviders)
         self.historyURL = history
         self.tokensURL = tokens
     }
@@ -99,14 +99,64 @@ public actor NEARReader {
 
     struct OptionalAccount: Equatable, Sendable { let value: NEARAccountState? }
 
+    /// Outra chave de acesso total na conta do dono (`view_access_key_list`), alem da chave da frase: ela assina tudo,
+    /// ate tirar a do dono. Dois provedores no mesmo bloco final; a conta que ainda nao existe nao tem (auditoria 8,
+    /// 14/11/2026). A chave de chamada de funcao (a que um app da NEAR pede para um contrato) nao move o saldo, e fica de fora.
+    /// Tambem o contrato instalado na conta (`code_hash` diferente do vazio, no mesmo bloco): com a chave de acesso total, o
+    /// atacante instala um contrato com uma retirada aberta e apaga a chave dele, e a lista de chaves passa a mostrar so a do
+    /// dono (rodada 1 da auditoria 8). Por `Quorum.firm`; com `everyone`, todos os provedores iguais. Nil quando nada decide.
+    public func foreignFullAccessKeys(owner: NEARAccountID, publicKey: [UInt8], everyone: Bool = false) async throws -> Bool? {
+        guard publicKey.count == 32 else { throw ReaderError.invalidInput("publicKey") }
+        // Para tirar a marca (`everyone`), cada dono no bloco final dele, e nao no fixado por dois (rodada 2 da auditoria 8).
+        let at: String? = everyone ? nil : Base58.bitcoin.encode(try await checkpoint().hash)
+        let mine = "ed25519:" + Base58.bitcoin.encode(publicKey)
+        return try await Quorum.firm(await live(), pool: pool, everyone: everyone) { provider in
+            try await self.ensureNetwork(provider)
+            if let account = try await self.account(provider, owner.text, at: at), account.codeHash != Self.emptyCodeHash || account.globalContract {
+                return true
+            }
+            do {
+                var params: [String: StrictJSON] = ["request_type": .string("view_access_key_list"), "account_id": .string(owner.text)]
+                params[at == nil ? "finality" : "block_id"] = .string(at ?? "final")
+                let result = try await self.call(provider, "query", .object(params))
+                return try Self.parseForeignFullAccess(result, mine: mine, at: at)
+            } catch RPCFailure.error(let cause, _) where cause == "UNKNOWN_ACCOUNT" {
+                return false
+            } catch RPCFailure.error(let cause, _) {
+                throw ReaderError.providerError(code: ReaderError.sanitized(cause))
+            }
+        }
+    }
+
+    /// O `code_hash` da conta sem contrato: 32 bytes zero (em base58, "11111111111111111111111111111111").
+    static let emptyCodeHash = [UInt8](repeating: 0, count: 32)
+
+    /// Alguma chave `FullAccess` que nao e a da frase.
+    static func parseForeignFullAccess(_ result: StrictJSON, mine: String, at block: String?) throws -> Bool {
+        let path = "view_access_key_list"
+        try checkBlock(result, block, path)
+        return try result.field("keys", path).array(path + ".keys").contains { entry in
+            let key = try entry.field("public_key", path + ".keys").string(path + ".keys.public_key")
+            let permission = try entry.field("access_key", path + ".keys").field("permission", path + ".keys.access_key")
+            guard case .string(let text) = permission, text == "FullAccess" else { return false }
+            return key != mine
+        }
+    }
+
     /// O final mais baixo de dois provedores, e o hash dele igual em dois.
+    /// Quantos blocos finais as duas pontas podem diferir.
+    static let maxHeadGap: UInt64 = 30
+
     func checkpoint() async throws -> NEARCheckpoint {
         let providers = await live()
         let heads = try await Quorum.collect(providers, pool: pool, count: 2) { provider in
             try await self.ensureNetwork(provider)
             return try Self.header(try await self.call(provider, "block", .object(["finality": .string("final")]))).height
         }
-        guard let height = heads.map(\.value).min() else { throw ReaderError.notEnoughProviders(needed: 2, got: 0) }
+        guard let height = heads.map(\.value).min(), let high = heads.map(\.value).max() else { throw ReaderError.notEnoughProviders(needed: 2, got: 0) }
+        // As duas pontas perto uma da outra (30 blocos, uns 18 s com os blocos de 600 ms): o menor de dois sem limite deixava um no fixar um bloco antigo (rodada 1
+        // da auditoria 8).
+        guard high - height <= Self.maxHeadGap else { throw ReaderError.providersDisagree(field: "block") }
         let hash = try await Quorum.agree(providers, pool: pool, field: "checkpoint") { provider in
             try await self.ensureNetwork(provider)
             let header = try Self.header(try await self.call(provider, "block", .object(["block_id": .int(height)])))
@@ -241,13 +291,24 @@ public actor NEARReader {
         let readings = try await Quorum.collect(await live(), pool: pool, count: 2) { provider in
             try await self.transactionStatus(provider, id: id, signer: entry.signer)
         }.map(\.value)
-        if let first = readings.first, let agreed = first, readings.allSatisfy({ $0 == agreed }) { return agreed }
-        if readings.contains(where: { $0 != nil }) { return .pending }
-        let height = try await Quorum.first(await live(), pool: pool) { provider in
-            try Self.header(try await self.call(provider, "block", .object(["finality": .string("final")]))).height
+        if let first = readings.first, let agreed = first, readings.allSatisfy({ $0 == agreed }) {
+            // A falha leva o dono a reenviar: todos os donos que respondem, e pelo menos tres (rodada 2 da auditoria 8).
+            guard case .failed = agreed else { return agreed }
+            let all = await Quorum.everyoneSays(first, await live(), pool: pool) { provider in
+                try await self.transactionStatus(provider, id: id, signer: entry.signer)
+            }
+            return all ? agreed : .pending
         }
-        if entry.height > 0, height > entry.height + NEARRules.validityBlocks { return .failed(reason: "expired") }
-        return .notFound
+        if readings.contains(where: { $0 != nil }) { return .pending }
+        // Vencida: cada dono, no bloco final dele, ja passou da validade e nao conhece a transacao. Antes, a altura vinha de um
+        // so, sempre o primeiro da lista (rodada 2).
+        guard entry.height > 0 else { return .notFound }
+        let gone = await Quorum.everyoneSays(true, await live(), pool: pool) { provider -> Bool in
+            let height = try Self.header(try await self.call(provider, "block", .object(["finality": .string("final")]))).height
+            guard height > entry.height + NEARRules.validityBlocks else { return false }
+            return try await self.transactionStatus(provider, id: id, signer: entry.signer) == nil
+        }
+        return gone ? .failed(reason: "expired") : .notFound
     }
 
     /// `nil`: o no nao conhece a transacao. `.pending` enquanto nao e final.

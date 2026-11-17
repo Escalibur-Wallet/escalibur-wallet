@@ -64,8 +64,8 @@ public actor TONReader {
     ) {
         // toncenter e tonapi sem chave: 1 requisicao por segundo por IP em cada uma.
         self.transport = PacedTransport(base: transport, intervals: ["toncenter.com": 1.05, "tonapi.io": 1.05])
-        self.rpcPool = ProviderPool(rpc)
-        self.apiPool = ProviderPool(api)
+        self.rpcPool = ProviderPool(rpc, draws: transport.drawsProviders)
+        self.apiPool = ProviderPool(api, draws: transport.drawsProviders)
         self.apiProviders = api
     }
 
@@ -206,6 +206,68 @@ public actor TONReader {
 
     /// So o provedor da tonapi, a segunda fonte de cada leitura em par.
     private var tonapiProviders: [Provider] { apiProviders.filter { $0.name == "tonapi" } }
+
+    /// A carteira ja teve movimento: implantada, com saldo de TON ou com USDT. O estado e o saldo com a toncenter e a tonapi de
+    /// acordo; o USDT pela carteira jetton calculada aqui. Para a descoberta da W5 na importacao (auditoria 8, 14/11/2026).
+    public func hasActivity(_ address: TONAddress) async throws -> Bool {
+        let account = try await agreedAccount(address)
+        if account.status != .uninitialized || !account.balance.isZero { return true }
+        return try await !jettonState(owner: address).balance.isZero
+    }
+
+    /// Outro contrato com poder sobre a carteira do dono: o plugin da V4R2 (`get_plugin_list`, a assinatura que puxa TON
+    /// sozinha) ou a extensao da W5 (`get_extensions`, que manda mensagens no lugar da chave). A toncenter e a tonapi de
+    /// acordo; a carteira ainda nao implantada nao tem nenhum. Pilha num formato que a leitura nao conhece e erro, e nada
+    /// muda na carteira (auditoria 8, 14/11/2026).
+    public func foreignExtensions(address: TONAddress, version: TONWalletVersion) async throws -> Bool {
+        let method = version == .v5r1 ? "get_extensions" : "get_plugin_list"
+        guard try await agreedAccount(address).status == .active else { return false }
+        return try await agreedTwice { try await self.extensionsPair(address, method: method) }
+    }
+
+    private func extensionsPair(_ address: TONAddress, method: String) async throws -> Bool {
+        let transport = self.transport
+        let tonapi = tonapiProviders
+        async let center: Bool = Quorum.first(await rpcPool.available(), pool: rpcPool) { provider in
+            let stack = try Self.toncenterStack(try await self.rpc(provider, "runGetMethod", [
+                "address": .string(address.raw), "method": .string(method), "stack": .array([]),
+            ]), method: method)
+            guard let first = stack.first else { throw ReaderError.malformed(field: method + ".stack") }
+            return try Self.stackHasEntries(first, method)
+        }
+        async let api: Bool = Quorum.first(tonapi, pool: apiPool) { provider in
+            let url = provider.baseURL.adding(path: "blockchain/accounts/" + address.raw + "/methods/" + method)
+            let stack = try Self.tonapiStack(StrictJSON.parse(try await transport.send(.get(url))), method: method)
+            guard let first = stack.first else { throw ReaderError.malformed(field: method + ".stack") }
+            return try Self.stackHasEntries(first, method)
+        }
+        let (a, b) = try await (center, api)
+        guard a == b else { throw ReaderError.providersDisagree(field: method) }
+        return a
+    }
+
+    /// O primeiro item da pilha tem algo: lista ou tupla com elementos, ou uma celula (o dicionario da W5). Vazio: `null`,
+    /// lista ou tupla sem elementos. A toncenter da `["tipo", valor]`; a tonapi, `{"type": ...}`.
+    static func stackHasEntries(_ item: StrictJSON, _ path: String) throws -> Bool {
+        if let pair = item.arrayValue {
+            guard pair.count == 2 else { throw ReaderError.malformed(field: path) }
+            switch try pair[0].string(path) {
+            case "null": return false
+            case "cell": return true
+            case "list", "tuple":
+                let elements = try pair[1].field("elements", path).array(path + ".elements")
+                return !elements.isEmpty
+            default: throw ReaderError.malformed(field: path)
+            }
+        }
+        switch try item.field("type", path).string(path + ".type") {
+        case "null", "nan": return false
+        case "cell": return true
+        case "tuple":
+            return !(try item.field("tuple", path).array(path + ".tuple")).isEmpty
+        default: throw ReaderError.malformed(field: path)
+        }
+    }
 
     /// As duas APIs leem em momentos um pouco diferentes, e uma carteira que acabou de
     /// enviar (ou de ser ativada) muda entre as leituras: diferenca na primeira vez rele
@@ -443,6 +505,7 @@ public actor TONReader {
 
     static func commentCell(_ comment: String?) throws -> TONCell? {
         guard let comment, !comment.isEmpty else { return nil }
+        guard comment.utf8.count <= TONComment.maxBytes else { throw ReaderError.invalidInput("comentario") }
         do { return try TONComment.cell(comment) } catch { throw ReaderError.invalidInput("comentario") }
     }
 

@@ -51,7 +51,7 @@ public actor SuiReader {
         // entre chamadas ao mesmo host, e o 429 repete uma vez.
         let hosts = (providers.map(\.baseURL) + [graphQL].compactMap { $0 }).compactMap(\.host)
         self.transport = PacedTransport(base: transport, intervals: Dictionary(hosts.map { ($0, pacing) }, uniquingKeysWith: { a, _ in a }))
-        self.pool = ProviderPool(providers)
+        self.pool = ProviderPool(providers, draws: transport.drawsProviders)
         self.providers = providers
         self.graphQL = graphQL
     }
@@ -174,13 +174,25 @@ public actor SuiReader {
                 try await self.call(provider, "sui.rpc.v2.LedgerService/BatchGetTransactions", Self.lookupRequest(digest)), digest: digest
             )
         }.map(\.value)
+        // A falha e a vencida levam a reenviar: so com todos os donos dizendo o mesmo, pelo menos tres (`Quorum.everyoneSays`).
+        let lookup: @Sendable (Provider) async throws -> Lookup = { provider in
+            try await self.ensureMainnet(provider)
+            return try Self.parseTransactionLookup(
+                try await self.call(provider, "sui.rpc.v2.LedgerService/BatchGetTransactions", Self.lookupRequest(digest)), digest: digest
+            )
+        }
         switch (readings[0], readings[1]) {
         case (.found(let a, let checkpointA), .found(let b, let checkpointB)) where a == b && checkpointA != nil && checkpointB != nil:
-            return a ? .confirmed(block: min(checkpointA ?? 0, checkpointB ?? 0), confirmations: nil) : .failed(reason: "execution")
+            if a { return .confirmed(block: min(checkpointA ?? 0, checkpointB ?? 0), confirmations: nil) }
+            guard await Quorum.everyoneSays(readings[0], await pool.available(), pool: pool, lookup) else { return .pending }
+            return .failed(reason: "execution")
         case (.found, _), (_, .found):
             return .pending
         case (.notFound, .notFound):
-            if let validUntilEpoch, try await currentEpoch() > validUntilEpoch { return .failed(reason: "expired") }
+            if let validUntilEpoch, try await currentEpoch() > validUntilEpoch {
+                guard await Quorum.everyoneSays(Lookup.notFound, await pool.available(), pool: pool, lookup) else { return .pending }
+                return .failed(reason: "expired")
+            }
             return .notFound
         }
     }

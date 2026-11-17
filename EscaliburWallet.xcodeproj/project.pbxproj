@@ -42,6 +42,7 @@
 		2ADDAFAC91F93366C64CECDF /* Format.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E6EBFF95E21A9523382BC5 /* Format.swift */; };
 		2D73A0117C1A454535DEA85B /* WalletOrbit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E8104D596BB55DD5566A8B0 /* WalletOrbit.swift */; };
 		2F43A198D344541A40E5319D /* SecurityLookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E119F488090F7749AAE25376 /* SecurityLookTests.swift */; };
+		2F748EFDF942FF5DDE03E763 /* ChallengeFieldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 692B688A59CEF504D7775B4F /* ChallengeFieldTests.swift */; };
 		31BF7E0264D1196F10A0DBCA /* voz-frase.m4a in Resources */ = {isa = PBXBuildFile; fileRef = C9A0D213F5797560FD754C92 /* voz-frase.m4a */; };
 		3224655BA39539ADC2CA9754 /* HardenedFaceChangeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96197DCB91CA48A99968D013 /* HardenedFaceChangeView.swift */; };
 		32C85CC66E71ADDE142F2B2C /* OpenEnvelopeFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 782DB62D8556B5675B57F47E /* OpenEnvelopeFlow.swift */; };
@@ -325,6 +326,7 @@
 		634FB486C1AC19A1DC738122 /* AddWalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddWalletView.swift; sourceTree = "<group>"; };
 		64EDC4BD05696FA0BB3FB2BA /* OrderProgressViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrderProgressViews.swift; sourceTree = "<group>"; };
 		676F5C1C45D103AD6705CD95 /* ReceiptWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptWatchView.swift; sourceTree = "<group>"; };
+		692B688A59CEF504D7775B4F /* ChallengeFieldTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChallengeFieldTests.swift; sourceTree = "<group>"; };
 		6945FCBC3A685B0E6536BD02 /* LegalDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalDocumentView.swift; sourceTree = "<group>"; };
 		6D617C492A3C4BE1F041C725 /* catalogo-moedas.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "catalogo-moedas.json"; sourceTree = "<group>"; };
 		70EDC973CC393015723C0488 /* HardenedModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardenedModeView.swift; sourceTree = "<group>"; };
@@ -861,6 +863,7 @@
 		E2F45D4F18929752144D2A39 /* EscaliburWalletTests */ = {
 			isa = PBXGroup;
 			children = (
+				692B688A59CEF504D7775B4F /* ChallengeFieldTests.swift */,
 				EF8F61687E90B12A2151DEC8 /* EnvelopeCipherCardTests.swift */,
 				257E1C63C5F4FC66E542B13F /* ImportPipelineTests.swift */,
 				916F3B8A91333FB80F918ED9 /* LimitPriceTextTests.swift */,
@@ -1172,6 +1175,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2F748EFDF942FF5DDE03E763 /* ChallengeFieldTests.swift in Sources */,
 				95162F26E032C805F7080A78 /* EnvelopeCipherCardTests.swift in Sources */,
 				F31E9A19BDD8A75BEFD422B9 /* ImportPipelineTests.swift in Sources */,
 				34D036DCABA04A85524FBFCD /* LimitPriceTextTests.swift in Sources */,
@@ -1363,7 +1367,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_ENHANCED_SECURITY = YES;
@@ -1524,7 +1528,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_ENHANCED_SECURITY = YES;

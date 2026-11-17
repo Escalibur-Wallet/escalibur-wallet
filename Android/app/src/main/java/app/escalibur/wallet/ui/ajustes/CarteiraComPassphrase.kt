@@ -48,6 +48,8 @@ import app.escalibur.wallet.nucleo.FalhaDoNucleo
 import app.escalibur.wallet.ui.App
 import app.escalibur.wallet.ui.Autorizacao
 import app.escalibur.wallet.ui.Carteira
+import app.escalibur.wallet.ui.Credencial
+import app.escalibur.wallet.ui.comp.Confirmacao
 import app.escalibur.wallet.ui.Formato
 import app.escalibur.wallet.ui.comp.Avisos
 import app.escalibur.wallet.ui.comp.BotaoPrimario
@@ -68,6 +70,9 @@ import app.escalibur.wallet.ui.tema.Paleta
 import app.escalibur.wallet.ui.tema.Raio
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import app.escalibur.wallet.ui.comp.TelaComBarra
@@ -141,7 +146,7 @@ fun FluxoDaCarteiraComPassphrase(base: Carteira) {
                 CabecalhoDeFolha("", null, aoVoltar = { passo = "explicacao" })
                 Box(Modifier.weight(1f)) { VerificacaoDoAparelho(t("Deslize para digitar a passphrase"), criando = false) { passo = "digitar" } }
             }
-            "digitar" -> DigitarPassphrase(base) { passo = "checagem" }
+            "digitar" -> DigitarPassphrase(base, aoVoltar = { passo = "checagem" })
         }
     }
 }
@@ -156,14 +161,27 @@ private fun PontoDaPassphrase(icone: ImageVector, texto: String) {
     }
 }
 
-/** O ultimo passo: os dois campos da passphrase e o nome da carteira nova. */
+/** A conferencia da Tron esperada fora da tela: a resposta recarrega o estado, mesmo que a tela ja tenha fechado. */
+private val escopoDaTron = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+/**
+ * O ultimo passo: os dois campos da passphrase e o nome da carteira nova. Vindo da importacao (`abrirCom`), a carteira
+ * das palavras nao esta no cofre: as palavras estao na memoria da tela de importar, e so a carteira com passphrase e
+ * gravada (revisao dos 3 agentes, 08/11/2026); `aoTerminar` recebe o id dela.
+ */
 @Composable
-private fun androidx.compose.foundation.layout.ColumnScope.DigitarPassphrase(base: Carteira, aoVoltar: () -> Unit) {
+internal fun androidx.compose.foundation.layout.ColumnScope.DigitarPassphrase(
+    base: Carteira?, aoVoltar: (() -> Unit)?, nomeSugerido: String? = null,
+    abrirCom: (suspend (credencial: Credencial, passphrase: ByteArray, nome: String) -> JSONObject)? = null,
+    aoTerminar: ((oculta: String) -> Unit)? = null,
+) {
     val escopo = rememberCoroutineScope()
-    val passphrase = remember { Segredo() }
-    val repeticao = remember { Segredo() }
+    // Sair do app zera os dois campos: nada depois desta tela manda comparar em outro app (revisao, 08/11/2026).
+    val passphrase = remember { Segredo(limpaAoSair = true) }
+    val repeticao = remember { Segredo(limpaAoSair = true) }
     var revelar by remember { mutableStateOf(false) }
-    var nome by remember { mutableStateOf(t("%@ com passphrase", base.nome)) }
+    val nomePadrao = nomeSugerido ?: base?.let { t("%@ com passphrase", it.nome) } ?: ""
+    var nome by remember { mutableStateOf(nomePadrao) }
     var mensagem by remember { mutableStateOf<String?>(null) }
     var trabalhando by remember { mutableStateOf(false) }
     /** A carteira nova neste celular (id e a escolhida antes), enquanto o app procura movimento nela. */
@@ -175,9 +193,23 @@ private fun androidx.compose.foundation.layout.ColumnScope.DigitarPassphrase(bas
         }
     }
 
+    fun terminar(oculta: String) {
+        if (aoTerminar != null) return aoTerminar(oculta)
+        Navegacao.fecharTudo()
+        Navegacao.aba = Aba.carteira
+    }
+    // Abrindo, o voltar espera: sair no meio deixava a carteira com passphrase criada sem a busca de movimento.
+    if (aoVoltar != null) BackHandler { if (!trabalhando) aoVoltar() }
+    /** Importando, a passphrase com caractere invisivel abre so depois de o dono dizer que ela e de outra carteira: uma nova
+     * assim nao se escreve igual no papel (revisao de seguranca, 08/11/2026). O aceite vale para a tentativa seguinte so. */
+    var confirmarInvisivel by remember { mutableStateOf(false) }
+    var aceitouInvisivel by remember { mutableStateOf(false) }
+
     fun abrir() {
         if (trabalhando || passphrase.text.isEmpty()) return
         mensagem = null
+        val aceitou = aceitouInvisivel
+        aceitouInvisivel = false
         val a = passphrase.bytes()
         val b = repeticao.bytes()
         val iguais = a.isNotEmpty() && java.security.MessageDigest.isEqual(a, b)
@@ -189,28 +221,44 @@ private fun androidx.compose.foundation.layout.ColumnScope.DigitarPassphrase(bas
         }
         trabalhando = true
         val titulo = nome.filter { !it.isISOControl() && Character.getType(it) != Character.FORMAT.toInt() }.trim().take(40)
-            .ifEmpty { t("%@ com passphrase", base.nome) }
+            .ifEmpty { nomePadrao }
         escopo.launch {
             try {
+                // Antes do PIN: o nucleo diz se ela tem o que o papel nao mostra.
+                if (abrirCom != null && !aceitou &&
+                    !Api.comSegredo("passphrase.escrevivel", JSONObject(), a.copyOf()).optBoolean("escrevivel", true)) {
+                    confirmarInvisivel = true
+                    return@launch
+                }
                 val aberta = Autorizacao.tentando(t("Abrir a carteira com passphrase")) { credencial ->
-                    Api.comSegredo("carteira.abrirComPassphrase", JSONObject().put("base", base.id).put("nome", titulo).put("credencial", credencial.json()),
-                                   *credencial.partes(a.copyOf()))
+                    abrirCom?.invoke(credencial, a.copyOf(), titulo)
+                        ?: Api.comSegredo("carteira.abrirComPassphrase", JSONObject().put("base", base?.id).put("nome", titulo).put("credencial", credencial.json()),
+                                          *credencial.partes(a.copyOf()))
                 } ?: return@launch
                 passphrase.clearText()
                 repeticao.clearText()
                 App.recarregar()
+                // A Tron dela conferida, nova ou reaberta (o golpe da "frase com saldo"): a resposta recarrega o estado, e os
+                // atalhos de copiar deixam de mostrar a Tron marcada, mesmo com "Abrir sem esperar" (revisao, 08/11/2026).
+                val aberto = aberta.getJSONObject("carteira").getString("id")
+                escopoDaTron.launch {
+                    runCatching { Api.objeto("carteira.esperarTron", JSONObject().put("id", aberto)) }
+                    App.recarregar()
+                }
                 // A mesma frase com a mesma passphrase e a mesma carteira: ela ja estava aqui.
                 if (aberta.optBoolean("jaAberta")) {
                     Avisos.mostrar(t("Esta carteira já está aberta, como %@. Ela passa a ser a carteira em uso.", aberta.getJSONObject("carteira").getString("nome")))
-                    Navegacao.fecharTudo()
-                    Navegacao.aba = Aba.carteira
+                    terminar(aberta.getJSONObject("carteira").getString("id"))
                     return@launch
                 }
                 // Nova neste celular: antes de abrir, o app procura movimento nela (pedido do dono, 25/10/2026).
                 nova = aberta.getJSONObject("carteira").getString("id") to aberta.optString("anterior").ifEmpty { null }
             } catch (falha: FalhaDoNucleo) {
                 mensagem = when (falha.codigo) {
-                    "sessao.passphraseLonga" -> t("A passphrase passou do tamanho máximo: até 256 caracteres sem acento, menos com acento. Encurte para seguir.")
+                    "sessao.passphraseLonga", "passphrase.longa" -> t("A passphrase passou do tamanho máximo: até 256 caracteres sem acento, menos com acento. Encurte para seguir.")
+                    // Importando: as palavras na memoria nao sao mais as da conferencia (a tela saiu e voltou).
+                    "importacao.mudou", "frase.invalida" -> t("A carteira mudou desde a conferência dos endereços. Nada foi guardado: comece de novo.")
+                    "sessao.jaImportada" -> t("Esta carteira já está neste app, com o nome %@.", falha.dados.optString("nome"))
                     "sessao.passphraseInvisivel" -> t("A passphrase tem um caractere invisível ou um espaço diferente do espaço comum. Escreva de novo, só com letras, números, símbolos e espaço comum: é o que dá para anotar no papel.")
                     // Na porta de criar nada esta errado: toda passphrase abre uma carteira.
                     "passphrase.espera" -> t("Muitas tentativas seguidas. Tente de novo às %@.", Formato.relogio(Date(falha.dados.optDouble("ate", 0.0).toLong())))
@@ -223,14 +271,25 @@ private fun androidx.compose.foundation.layout.ColumnScope.DigitarPassphrase(bas
         }
     }
 
+    if (confirmarInvisivel) {
+        Confirmacao(
+            t("Caractere invisível na passphrase"),
+            t("A passphrase tem um caractere invisível ou um espaço diferente do espaço comum. Se ela é de outra carteira, siga. Se é nova, escreva de novo: no papel ela não se escreve igual."),
+            t("Seguir assim"),
+            aoConfirmar = {
+                confirmarInvisivel = false
+                aceitouInvisivel = true
+                abrir()
+            },
+            aoCancelar = { confirmarInvisivel = false },
+            destrutiva = false,
+        )
+    }
     nova?.let { (id, anterior) ->
-        BuscaDeMovimento(id, anterior, aoUsar = {
-            Navegacao.fecharTudo()
-            Navegacao.aba = Aba.carteira
-        }) { nova = null }
+        BuscaDeMovimento(id, anterior, aoUsar = { terminar(id) }) { nova = null }
         return
     }
-    CabecalhoDeFolha("", null, aoVoltar = aoVoltar)
+    CabecalhoDeFolha("", null, aoVoltar = if (trabalhando) null else aoVoltar)
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md),
            verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
         // O selo das telas onde se digita um segredo.
@@ -283,6 +342,13 @@ private fun androidx.compose.foundation.layout.ColumnScope.BuscaDeMovimento(
     var fase by remember { mutableStateOf("procurando") }
     var falharam by remember { mutableStateOf("") }
     var mensagem by remember { mutableStateOf<String?>(null) }
+    /** Uma decisao so: usar e tentar outra em seguida tirava a carteira que acabou de ser usada (revisao, 08/11/2026). */
+    var decidido by remember { mutableStateOf(false) }
+    fun usar() {
+        if (decidido) return
+        decidido = true
+        aoUsar()
+    }
     // Daqui so se sai decidindo: usar a carteira ou tentar outra passphrase.
     BackHandler {}
     LaunchedEffect(rodada) {
@@ -290,10 +356,11 @@ private fun androidx.compose.foundation.layout.ColumnScope.BuscaDeMovimento(
         mensagem = null
         fase = try {
             val resposta = Api.objeto("carteira.usoDaPassphrase", JSONObject().put("id", id))
-            when (resposta.optString("resultado")) {
+            // Na Tron, outra chave no controle: a carteira nao abre sozinha (o golpe da "frase com saldo", revisao de 08/11/2026).
+            if (resposta.optBoolean("tronOutraChave")) "tron" else when (resposta.optString("resultado")) {
                 "usada" -> {
                     Avisos.mostrar(t("Esta carteira já teve movimento. Ela passa a ser a carteira em uso."))
-                    aoUsar()
+                    usar()
                     return@LaunchedEffect
                 }
                 "nunca" -> "nunca"
@@ -309,12 +376,15 @@ private fun androidx.compose.foundation.layout.ColumnScope.BuscaDeMovimento(
     }
 
     fun tentarOutra() {
+        if (decidido) return
+        decidido = true
         escopo.launch {
             try {
                 Api.objeto("carteira.descartarPassphrase", JSONObject().put("id", id).apply { anterior?.let { put("anterior", it) } })
                 App.recarregar()
                 aoTentarOutra()
             } catch (falha: FalhaDoNucleo) {
+                decidido = false
                 mensagem = Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível apagar a carteira deste celular agora. Ela continua aqui; tente de novo.")
             }
         }
@@ -322,6 +392,8 @@ private fun androidx.compose.foundation.layout.ColumnScope.BuscaDeMovimento(
 
     val (titulo, detalhe) = when (fase) {
         "procurando" -> t("Procurando movimento") to t("Conferindo as redes desta carteira, uma a uma. Leva alguns segundos.")
+        "tron" -> t("Na Tron, esta conta é controlada por outra chave") to
+            t("É o golpe da frase com saldo: o que entrar nela, quem controla a outra chave leva. Não deposite nada nesta carteira.")
         "nunca" -> t("Esta carteira ainda não foi usada") to t("Nas redes que a Escalibur lê, ela nunca recebeu nem enviou nada. Tem certeza de que a passphrase está certa? Maiúsculas, acentos e espaços contam. Se é uma carteira nova, pode usar. Outros apps podem guardar saldo em caminhos que a Escalibur não lê, como o Taproot do Bitcoin.")
         else -> t("Nenhuma transferência até agora") to
             if (falharam.isEmpty()) t("Não foi possível procurar movimento agora. Confira a internet e procure de novo.")
@@ -332,20 +404,35 @@ private fun androidx.compose.foundation.layout.ColumnScope.BuscaDeMovimento(
         ArteDaBusca(fase != "procurando")
         Text(titulo, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.md))
         Text(detalhe, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
+        // Sem movimento, a impressao digital para conferir com a carteira onde a passphrase ja era usada: a previa da
+        // importacao mostrava a da carteira com passphrase antes de 08/11/2026 (revisao dos 3 agentes).
+        val digital = App.estado.carteiras.firstOrNull { it.id == id }?.digital
+        if (fase != "procurando" && fase != "tron" && digital != null) {
+            Text(t("Impressão digital da carteira"), style = estilo(Tipo.nota), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
+                 modifier = Modifier.padding(top = Espaco.md))
+            Text(digital.uppercase(), style = estilo(Tipo.linha), color = Paleta.tinta, textAlign = TextAlign.Center)
+            Text(t("Compare com a impressão digital da carteira onde você usava esta passphrase: igual, a passphrase está certa; diferente, esta é outra carteira."), style = estilo(Tipo.nota),
+                 color = Paleta.tintaApagada, textAlign = TextAlign.Center)
+        }
         mensagem?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
     }
     Rodape {
         when (fase) {
-            "procurando" -> BotaoTerciario(t("Abrir sem esperar"), Modifier.fillMaxWidth()) { aoUsar() }
+            "procurando" -> BotaoTerciario(t("Abrir sem esperar"), Modifier.fillMaxWidth()) { usar() }
+            // Nada empurra para usar: o Receber da Tron dela ja fechou, e a passphrase pode ser de outra pessoa.
+            "tron" -> {
+                BotaoPrimario(t("Tentar outra passphrase")) { tentarOutra() }
+                BotaoTerciario(t("Usar esta carteira"), Modifier.fillMaxWidth().padding(top = Espaco.xs)) { usar() }
+            }
             "nunca" -> {
                 // O botao principal nao empurra para descartar: a busca nao le todo caminho que outro app usa.
-                BotaoPrimario(t("Usar esta carteira")) { aoUsar() }
+                BotaoPrimario(t("Usar esta carteira")) { usar() }
                 BotaoTerciario(t("Tentar outra passphrase"), Modifier.fillMaxWidth().padding(top = Espaco.xs)) { tentarOutra() }
             }
             else -> {
                 BotaoPrimario(t("Procurar de novo")) { rodada++ }
                 BotaoTerciario(t("Tentar outra passphrase"), Modifier.fillMaxWidth().padding(top = Espaco.xs)) { tentarOutra() }
-                BotaoTerciario(t("Usar esta carteira"), Modifier.fillMaxWidth()) { aoUsar() }
+                BotaoTerciario(t("Usar esta carteira"), Modifier.fillMaxWidth()) { usar() }
             }
         }
     }

@@ -130,6 +130,11 @@ class Movimento(j: JSONObject) {
     val explorador: String = j.getString("explorador")
     val urlDoExplorador: String? = j.opcional("urlDoExplorador")
     val conferivel: Boolean = j.optBoolean("conferivel")
+    /** O "Para" de um envio deste app, confirmado e sem marca de suspeito: so ele copia, e o que copia e o endereco que o
+     * envio gravou, nao o texto do indexador (pedido do dono, 08/11/2026). */
+    val paraCopiar: String? = j.opcional("paraCopiar")
+    /** A rede tem tag ou memo, que nao vai junto ao copiar. */
+    val comTag: Boolean = j.optBoolean("comTag")
 
     val falhou: Boolean get() = situacao == "falhou"
     val zero: Boolean get() = quantidade.trimStart('0').isEmpty()
@@ -524,12 +529,20 @@ fun DetalheDaAtividade(m: Movimento) {
                     Fato(t("Taxa da rede")) { Text(Formato.cripto(taxa, m.casasNativas, m.simboloNativo, Formato.EstiloCripto.cheio), style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1) }
                 }
             }
-            // Sem copiar: o endereco de quem mandou pode ser isca.
+            // Sem copiar, salvo o "Para" de um envio deste app (`paraCopiar`): o endereco do historico pode ser isca (secao 4.10).
             m.contraparte?.let { contraparte ->
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.base),
                        verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                     Text(if (m.direcao == "received") t("De") else t("Para"), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
-                    EnderecoEmBlocos(contraparte)
+                    // Com o copiar, a tela mostra o que vai ser copiado: na TON, o indexador traz a forma crua, e o envio, a amigavel.
+                    EnderecoEmBlocos(m.paraCopiar ?: contraparte)
+                    m.paraCopiar?.let { para ->
+                        Acao(t("Copiar endereço"), Icones.copiar) {
+                            Transferencia.copiar(contexto, para)
+                            // Nas redes com tag ou memo, ela nao vai junto: o deposito numa corretora sem ela fica sem dono.
+                            Avisos.mostrar(if (m.comTag) t("Endereço copiado. A tag ou o memo não vai junto: confira com quem recebe.") else t("Endereço copiado"))
+                        }
+                    }
                 }
             }
             // O identificador da transacao, para copiar ou abrir no explorador da rede.

@@ -91,6 +91,16 @@ struct WatchAddressView: View {
                 .submitLabel(.next)
                 .onSubmit { focus = .name }
                 .accessibilityIdentifier("campo-endereco")
+                // Digitada ou colada pelo menu do campo, a frase ou a chave sai na hora, como no botao Colar (revisao dos 3
+                // agentes, 09/11/2026).
+                .onChange(of: address) { old, new in
+                    let text = new.trimmingCharacters(in: .whitespacesAndNewlines)
+                    // Colado pelo menu do sistema: com um segredo, a area de transferencia esvazia tambem.
+                    if new.count > old.count + 1, PrivateKeyGuard.clipboardHasSecret(text, on: nil) { Pasteboard.clearSecret() }
+                    guard let message = PhraseGuard.secretMessage(text, on: nil) else { return }
+                    address = ""
+                    error = message
+                }
                 // O toque que foca o campo fica so na area do texto: na linha inteira, ele tomava
                 // o toque do Colar do sistema, que entao nao colava (relato do dono, 01/11/2026).
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
@@ -99,9 +109,11 @@ struct WatchAddressView: View {
             if address.isEmpty {
                 AppPasteButton { pasted in
                     let text = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
-                    // A senha de uma carteira colada aqui nunca vira campo de endereco.
-                    address = PhraseGuard.looksLikePhrase(text) ? "" : text
-                    if address.isEmpty, !text.isEmpty { error = PhraseGuard.message }
+                    // A senha de uma carteira (ou a chave) colada aqui nunca vira campo de endereco, e sai da area de transferencia.
+                    let message = PhraseGuard.secretMessage(text, on: nil)
+                    address = message == nil ? text : ""
+                    if PrivateKeyGuard.clipboardHasSecret(text, on: nil) { Pasteboard.clearSecret() }
+                    if let message { error = message }
                     focus = nil
                 }
                 .labelStyle(.titleAndIcon)
@@ -200,7 +212,8 @@ struct WatchAddressView: View {
     }
 
     private func save() {
-        guard let chain = detected, case .success(let destination) = Address.validate(address, for: chain) else { return }
+        guard PhraseGuard.secretMessage(address, on: nil) == nil,
+              let chain = detected, case .success(let destination) = Address.validate(address, for: chain) else { return }
         // Endereco M da Stellar e um cliente dentro de uma conta: o saldo e o da conta base.
         let watched = chain.family == .stellar ? (StellarMuxedAccount(address: destination.address)?.account.address ?? destination.address) : destination.address
         do {

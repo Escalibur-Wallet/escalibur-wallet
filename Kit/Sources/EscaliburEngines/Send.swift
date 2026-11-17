@@ -30,6 +30,10 @@ public protocol SendEngine: Sendable {
     /// O que a rede diz da transacao desta conta com este nonce (`EVMReader.Sighting`): vista por dois
     /// operadores, desconhecida de dois, ou parcial. nil sem resposta, ou onde a rede nao tem fila de nonces.
     func sighting(_ id: String, chain: Chain, from: String, nonce: UInt64) async -> EVMReader.Sighting?
+
+    /// Quantas transacoes desta conta ja entraram num bloco (`EVMReader.minedNonce`), igual em dois operadores. nil sem
+    /// resposta, ou onde a rede nao tem fila de nonces.
+    func minedNonce(chain: Chain, from: String) async -> UInt64?
 }
 
 public struct SendRequest: Sendable {
@@ -112,7 +116,8 @@ extension PendingNonceQueue {
 /// transacao viva:
 /// - sai a transacao confirmada ou falha num bloco;
 /// - a que a rede nao conhece depois do prazo de propagacao (recusada ou descartada) sai junto com toda a
-///   fila acima dela, e o proximo plano reusa o nonce (so uma das duas executaria);
+///   fila acima dela, e o proximo plano reusa o nonce (so uma das duas executaria), salvo a de nonce ja
+///   minerado, que sai sozinha (bug de 14/11/2026);
 /// - so se pergunta pela de cima quando todas as de baixo foram vistas: uma transacao publica empilhada
 ///   sobre uma privada ainda nao minerada fica parada no no, sem propagar, e pareceria perdida;
 /// - os 30 minutos so tiram a que a rede nao conhece; a conhecida fica ate sair num bloco;
@@ -172,8 +177,9 @@ public enum NonceQueuePruning {
 
     /// `settled`: a rede ja confirmou ou recusou num bloco. `known`: o que a rede diz da transacao. Vista so com
     /// dois operadores (`seen`); a que so um conhece, ou sem resposta, fica sem contar como vista e, depois dos
-    /// 30 minutos, segue a regra da desconhecida (quinta passada da auditoria de 03/11/2026).
-    public static func pruned(_ entries: [Entry], now: Date = Date(), settled: @Sendable (Entry) async -> Bool,
+    /// 30 minutos, segue a regra da desconhecida (quinta passada da auditoria de 03/11/2026). `minedNonce`: quantas
+    /// transacoes da conta ja entraram num bloco (`EVMReader.minedNonce`); a entrada abaixo dele sai sem perguntar mais.
+    public static func pruned(_ entries: [Entry], now: Date = Date(), minedNonce: UInt64? = nil, settled: @Sendable (Entry) async -> Bool,
                               known: @Sendable (Entry) async -> EVMReader.Sighting?) async -> Result {
         var gone = Set<String>()
         var seen = Set<String>()
@@ -186,6 +192,15 @@ public enum NonceQueuePruning {
         // o proximo quando a de baixo voltasse, com ela viva (oitava e nona passadas de 03/11/2026).
         var lowerDeadline = Date.distantPast
         for entry in entries.sorted(by: { $0.nonce < $1.nonce }) {
+            // Nonce ja gasto num bloco, por ela ou por outra com o mesmo nonce (a mesma frase em outro aparelho): nenhuma
+            // transacao com ele entra de novo. O recibo da antiga pode nao existir mais nos provedores (a publicnode o
+            // apaga depois de uns 2 dias), e ela ficava vista e presa para sempre (bug de 14/11/2026). So depois de 30
+            // minutos: o recibo nunca some antes disso, e o prazo cobre a reorganizacao e o par que infla o nonce contra
+            // um honesto (revisao dos tres agentes de 14/11/2026).
+            if let minedNonce, entry.nonce < minedNonce, now.timeIntervalSince(entry.sentAt) > staleAfter {
+                gone.insert(entry.hash)
+                continue
+            }
             if await settled(entry) {
                 gone.insert(entry.hash)
                 continue
@@ -206,6 +221,14 @@ public enum NonceQueuePruning {
             let soltaAgora = entry.heldAt != nil && entry.releasedAt == nil && lowerDeadline != .distantFuture
             let base = soltaAgora ? now : max(entry.sentAt, entry.heldAt ?? entry.sentAt, entry.releasedAt ?? entry.sentAt)
             let deadline = max(base.addingTimeInterval(entry.wasSeen ? seenStaleAfter : staleAfter), lowerDeadline)
+            // Sumiu da rede, mas com o nonce ja gasto num bloco por outra transacao (a mesma frase em outro aparelho): sai
+            // sozinha. As de cima seguem validas, porque o nonce de baixo delas ja foi usado; levar todas fazia o plano
+            // seguinte reusar o nonce de uma viva (revisao dos tres agentes de 14/11/2026). A vencida abaixo dele ja saiu
+            // pela regra do nonce minerado, porque o prazo e de pelo menos 30 minutos.
+            if lowerSeen, answer == .unknown, age > grace(privateRoute: entry.privateRoute), let minedNonce, entry.nonce < minedNonce {
+                gone.insert(entry.hash)
+                continue
+            }
             if lowerSeen, answer == .unknown, age > grace(privateRoute: entry.privateRoute) {
                 lostFrom = entry.nonce
             } else if now > deadline {
@@ -341,4 +364,6 @@ extension SendEngine {
     public func usage(after plan: SigningPlan, current: UTXOUsage?) -> UTXOUsage? { nil }
 
     public func sighting(_ id: String, chain: Chain, from: String, nonce: UInt64) async -> EVMReader.Sighting? { nil }
+
+    public func minedNonce(chain: Chain, from: String) async -> UInt64? { nil }
 }

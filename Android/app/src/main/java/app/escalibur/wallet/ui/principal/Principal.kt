@@ -119,7 +119,9 @@ object Navegacao {
      * Uma tela aberta. `posicao` vai de 1 (fora: a direita, se empurrada; embaixo, se coberta ou
      * folha) a 0 (no lugar).
      */
-    class Entrada(val modo: Modo, val media: Boolean = false, val tela: @Composable () -> Unit) {
+    /** `rolaNaMedia`: na altura media, o dedo rola o conteudo, e a folha so cresce pela alca ou pelo cabecalho (o
+     * seletor de carteiras com muitas carteiras, pedido do dono de 08/11/2026). */
+    class Entrada(val modo: Modo, val media: Boolean = false, val rolaNaMedia: Boolean = false, val tela: @Composable () -> Unit) {
         val posicao = Animatable(1f)
         var saindo by mutableStateOf(false)
         /** A folha na altura media (metade da tela) ou ja puxada para cima. */
@@ -139,7 +141,7 @@ object Navegacao {
     fun cobrir(tela: @Composable () -> Unit) { sobre.add(Entrada(Modo.coberta, tela = tela)) }
 
     /** A folha: sobe de baixo, e o que fica atras recua. */
-    fun folha(media: Boolean = false, tela: @Composable () -> Unit) { sobre.add(Entrada(Modo.folha, media, tela)) }
+    fun folha(media: Boolean = false, tela: @Composable () -> Unit) { sobre.add(Entrada(Modo.folha, media, tela = tela)) }
 
     /** A de cima, entre todas: a que o voltar fecha. */
     val doTopo: Entrada? get() = sobre.lastOrNull { !it.saindo } ?: pilha.lastOrNull { !it.saindo }
@@ -356,8 +358,8 @@ private fun Folha(entrada: Navegacao.Entrada, deCima: Navegacao.Entrada?, largur
     val arraste = remember(entrada) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // Na altura media, o dedo subindo leva a folha para o alto primeiro.
-                if (available.y < -2f && !entrada.alta && entrada.posicao.value <= 0f) {
+                // Na altura media, o dedo subindo leva a folha para o alto primeiro (a que rola na media, nao).
+                if (available.y < -2f && !entrada.alta && !entrada.rolaNaMedia && entrada.posicao.value <= 0f) {
                     entrada.alta = true
                     return Offset(0f, available.y)
                 }
@@ -422,12 +424,12 @@ private fun Folha(entrada: Navegacao.Entrada, deCima: Navegacao.Entrada?, largur
  * e chama `aoFechar`. `conteudo` recebe o `fechar`, que tambem sai deslizando.
  */
 @Composable
-fun FolhaDoIos(aoFechar: () -> Unit, media: Boolean = false, conteudo: @Composable (fechar: () -> Unit) -> Unit) {
+fun FolhaDoIos(aoFechar: () -> Unit, media: Boolean = false, rolaNaMedia: Boolean = false, conteudo: @Composable (fechar: () -> Unit) -> Unit) {
     val atual = rememberUpdatedState(conteudo)
     val aoFecharAtual = rememberUpdatedState(aoFechar)
     val entrada = remember {
         lateinit var esta: Navegacao.Entrada
-        esta = Navegacao.Entrada(Navegacao.Modo.folha, media) { atual.value { esta.saindo = true } }
+        esta = Navegacao.Entrada(Navegacao.Modo.folha, media, rolaNaMedia) { atual.value { esta.saindo = true } }
         esta.aoSair = { aoFecharAtual.value() }
         esta
     }

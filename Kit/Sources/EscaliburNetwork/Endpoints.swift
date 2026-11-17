@@ -18,9 +18,8 @@ public enum Endpoints {
     public static let evm: [String: [ProviderPool.Provider]] = [
         "ethereum": [
             .init(name: "publicnode", baseURL: url("https://ethereum-rpc.publicnode.com")),
-            .init(name: "cloudflare", baseURL: url("https://cloudflare-eth.com")),
+            .init(name: "tenderly", baseURL: url("https://mainnet.gateway.tenderly.co")),
             .init(name: "drpc", baseURL: url("https://eth.drpc.org")),
-            .init(name: "1rpc", baseURL: url("https://1rpc.io/eth")),
         ],
         "arbitrum": [
             .init(name: "arbitrum", baseURL: url("https://arb1.arbitrum.io/rpc")),
@@ -36,16 +35,18 @@ public enum Endpoints {
             .init(name: "optimism", baseURL: url("https://mainnet.optimism.io")),
             .init(name: "publicnode", baseURL: url("https://optimism-rpc.publicnode.com")),
             .init(name: "drpc", baseURL: url("https://optimism.drpc.org")),
+            .init(name: "tenderly", baseURL: url("https://optimism.gateway.tenderly.co")),
         ],
         "polygon": [
             .init(name: "publicnode", baseURL: url("https://polygon-bor-rpc.publicnode.com")),
             .init(name: "drpc", baseURL: url("https://polygon.drpc.org")),
-            .init(name: "1rpc", baseURL: url("https://1rpc.io/matic")),
+            .init(name: "tenderly", baseURL: url("https://polygon.gateway.tenderly.co")),
         ],
         "bnb": [
             .init(name: "bnbchain", baseURL: url("https://bsc-dataseed.bnbchain.org")),
             .init(name: "publicnode", baseURL: url("https://bsc-rpc.publicnode.com")),
-            .init(name: "1rpc", baseURL: url("https://1rpc.io/bnb")),
+            .init(name: "defibit", baseURL: url("https://bsc-dataseed1.defibit.io"), operatorName: "bnbchain"),
+            .init(name: "48club", baseURL: url("https://rpc-bsc.48.club")),
         ],
         "avalanche": [
             .init(name: "avax", baseURL: url("https://api.avax.network/ext/bc/C/rpc")),
@@ -424,8 +425,7 @@ public enum Endpoints {
     /// `eth_chainId` 0x38, nonce `pending` e `eth_feeHistory` conferidos em 25/09/2026.
     public static let evmContingency: [String: [ProviderPool.Provider]] = [
         "bnb": [
-            .init(name: "defibit", baseURL: url("https://bsc-dataseed1.defibit.io")),
-            .init(name: "ninicoin", baseURL: url("https://bsc-dataseed1.ninicoin.io")),
+            .init(name: "ninicoin", baseURL: url("https://bsc-dataseed1.ninicoin.io"), operatorName: "bnbchain"),
         ],
     ]
 
@@ -483,12 +483,10 @@ public enum Endpoints {
         "ethereum": [
             .init(name: "publicnode", baseURL: url("https://ethereum-rpc.publicnode.com")),
             .init(name: "drpc", baseURL: url("https://eth.drpc.org")),
-            .init(name: "1rpc", baseURL: url("https://1rpc.io/eth")),
         ],
         "arbitrum": [
             .init(name: "publicnode", baseURL: url("https://arbitrum-one-rpc.publicnode.com")),
-            .init(name: "1rpc", baseURL: url("https://1rpc.io/arb")),
-            .init(name: "meowrpc", baseURL: url("https://arbitrum.meowrpc.com")),
+            .init(name: "arbitrum", baseURL: url("https://arb1.arbitrum.io/rpc")),
         ],
         "base": [
             .init(name: "base", baseURL: url("https://mainnet.base.org")),
@@ -507,7 +505,8 @@ public enum Endpoints {
         "bnb": [
             .init(name: "bnbchain", baseURL: url("https://bsc-dataseed.bnbchain.org")),
             .init(name: "publicnode", baseURL: url("https://bsc-rpc.publicnode.com")),
-            .init(name: "1rpc", baseURL: url("https://1rpc.io/bnb")),
+            .init(name: "defibit", baseURL: url("https://bsc-dataseed1.defibit.io"), operatorName: "bnbchain"),
+            .init(name: "48club", baseURL: url("https://rpc-bsc.48.club")),
         ],
         "avalanche": [],
         "plasma": [

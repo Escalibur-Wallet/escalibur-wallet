@@ -90,6 +90,11 @@ internal fun LazyListScope.secaoDaBusca(busca: BuscaDaTroca, termo: String, list
                 NotaDaBusca(t("Isto parece o começo das palavras de uma carteira, e a busca não saiu do celular. As palavras só se digitam ao importar uma carteira."))
             }
         }
+        r.optString("estado") == "chave" -> item {
+            Box(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md)) {
+                NotaDaBusca(t("Isto parece uma chave privada, e a busca não saiu do celular. Não mostre essa chave a ninguém."))
+            }
+        }
         else -> {
             val achados = r.getJSONArray("resultados").objetos()
                 .map { ResultadoDaBusca(it.getString("id"), it.getString("simbolo"), it.getString("nome"), if (it.has("posicao")) it.getInt("posicao") else null) }

@@ -42,7 +42,7 @@ enum Ativos {
         var token: Token?
         var opcoes: [Opcao] = []
         /// "vazio", "enderecoInvalido", "codigoInvalido", "redeSemCustom", "naoToken", "listada",
-        /// "jaNaCarteira", "naoAchado", "emissor".
+        /// "jaNaCarteira", "naoAchado", "emissor", "segredo" (a frase ou a chave no campo, com o aviso em `mensagem`).
         var problema: String?
         var redeNome: String?
         var simboloListado: String?
@@ -213,6 +213,8 @@ enum Ativos {
     /// a que tem o token. Mais de uma (o mesmo endereco em varias EVM), o dono escolhe.
     static func encontrar(_ bruto: String) async -> Resposta {
         let texto = bruto.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Nada com cara de segredo vai a rede: o encontrar le o contrato em todas as redes da carteira (como no iOS).
+        if Envio.ehSegredo(texto, rede: nil) { return Resposta(problema: "segredo", mensagem: Envio.avisoDoSegredo(texto)) }
         var listada: Resposta?
         var candidatos: [(Chain, Asset.Kind)] = []
         for rede in redes() where !CustomToken.usesIssuer(rede) {
@@ -267,6 +269,10 @@ enum Ativos {
             guard alvo != nil else { return Resposta(problema: "emissor") }
         }
         guard let rede = alvo else { return Resposta(problema: "emissor") }
+        for campo in [endereco, codigo, emissor] {
+            let texto = campo.trimmingCharacters(in: .whitespacesAndNewlines)
+            if Envio.ehSegredo(texto, rede: rede) { return Resposta(problema: "segredo", mensagem: Envio.avisoDoSegredo(texto, rede: rede)) }
+        }
         let kind: Asset.Kind
         do {
             kind = CustomToken.usesIssuer(rede)

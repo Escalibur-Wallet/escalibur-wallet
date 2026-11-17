@@ -104,16 +104,56 @@ object TecladoSeguro {
     /**
      * O teclado do celular nao veio com o aparelho (SwiftKey baixado, teclado com nuvem, um malicioso):
      * as flags de "sem aprendizado" sao so um pedido, e ele le o campo inteiro. Na duvida, conta como
-     * de terceiros.
+     * de terceiros. Desde a rodada 1 da auditoria 8, so os teclados desta lista, instalados no sistema, contam como do
+     * aparelho: nas ROMs que trazem de fabrica um teclado com previsao pela nuvem, ele tambem e de sistema.
      */
-    private fun tecladoDeTerceiros(contexto: Context): Boolean = runCatching {
+    fun tecladoDeTerceiros(contexto: Context): Boolean = runCatching {
         val atual = Settings.Secure.getString(contexto.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD) ?: return true
         val pacote = ComponentName.unflattenFromString(atual)?.packageName ?: return true
+        if (pacote !in tecladosDoAparelho) return true
         contexto.packageManager.getApplicationInfo(pacote, 0).flags and ApplicationInfo.FLAG_SYSTEM == 0
     }.getOrDefault(true)
 
+    /** O Gboard, o teclado do Android aberto e o da Samsung: os de sistema que nao mandam o que se digita para a nuvem. */
+    private val tecladosDoAparelho = setOf("com.google.android.inputmethod.latin", "com.android.inputmethod.latin", "com.samsung.android.honeyboard")
+
+    /**
+     * A conexao de um campo de segredo para o teclado do celular: ele escreve, mas nao le o que ja esta no campo. Um teclado
+     * trocado no meio recebe a conexao antes de o `ContentObserver` fechar o campo, e lia o que ja tinha sido digitado (rodada 1).
+     * O texto inicial do `EditorInfo` sai junto, la em cima (rodada 2).
+     */
+    private class SemLeitura(alvo: android.view.inputmethod.InputConnection) : android.view.inputmethod.InputConnectionWrapper(alvo, false) {
+        override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence = ""
+        override fun getTextAfterCursor(n: Int, flags: Int): CharSequence = ""
+        override fun getSelectedText(flags: Int): CharSequence? = null
+        override fun getExtractedText(request: android.view.inputmethod.ExtractedTextRequest?, flags: Int): android.view.inputmethod.ExtractedText? = null
+        override fun getSurroundingText(beforeLength: Int, afterLength: Int, flags: Int): android.view.inputmethod.SurroundingText? = null
+        // E os caminhos de lado: marcar o texto como composicao e pedir a posicao do cursor (o CursorAnchorInfo traz a
+        // composicao), copiar pelo menu de contexto (a palavra ia para a area de transferencia, que o teclado le), o retrato do
+        // campo e o modo de maiuscula (rodada 3 da auditoria 8).
+        override fun setComposingRegion(start: Int, end: Int): Boolean = false
+        override fun requestCursorUpdates(cursorUpdateMode: Int): Boolean = false
+        override fun requestCursorUpdates(cursorUpdateMode: Int, cursorUpdateFilter: Int): Boolean = false
+        override fun performContextMenuAction(id: Int): Boolean = false
+        override fun takeSnapshot(): android.view.inputmethod.TextSnapshot? = null
+        override fun getCursorCapsMode(reqModes: Int): Int = 0
+    }
+
     var sessao by mutableStateOf<Sessao?>(null)
         private set
+
+    /** Quantos campos de segredo (senha, ou as palavras) estao agora no teclado do celular: o teclado padrao que muda no meio e
+     * conferido. Um contador, e nao uma marca: o fim de uma sessao anterior, noutra janela, nao zera a de agora (rodada 1). */
+    private var segredosNoCelular = 0
+
+    /**
+     * O teclado padrao do celular e de outro app (`tecladoDeTerceiros`): a frase e a passphrase nunca vao para ele, nem pelo
+     * globo, nem com o Safe Keyboard desligado (auditoria 8, 14/11/2026). Antes so o campo de senha era barrado, e o das
+     * palavras pelo celular ia para qualquer teclado; no iPhone, todo teclado de terceiro e recusado.
+     */
+    fun avisarTecladoDeTerceiros() {
+        app.escalibur.wallet.ui.comp.Avisos.mostrar(t("O teclado padrão deste celular é de outro app, ou manda o que se digita para a nuvem, e receberia cada letra. As palavras da carteira e a passphrase ficam no Safe Keyboard. Para digitar palavras em japonês, chinês ou coreano, use como padrão o teclado do Google (Gboard) ou o da Samsung, nas configurações."))
+    }
 
     /** Os campos que trazem o proprio teclado do celular (as palavras com o globo) passam direto. */
     class PedidoDoSistema(val pedido: PlatformTextInputMethodRequest, val palavras: Boolean) : PlatformTextInputMethodRequest by pedido
@@ -178,6 +218,21 @@ object TecladoSeguro {
         // teclado do celular a sessao nem existe (o pedido ao sistema nao volta), e conferir o campo deixava o
         // teclado aberto (terceira e quarta passadas da auditoria de 03/11/2026).
         val deFora = app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isNotEmpty()
+        // O teclado padrao trocado com um segredo no teclado do celular (pelo seletor de teclados do sistema): se o novo e
+        // de outro app, o campo perde o foco e o teclado fecha antes da proxima letra (auditoria 8, 14/11/2026).
+        DisposableEffect(vista) {
+            val resolver = vista.context.contentResolver
+            val observador = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean) {
+                    if (segredosNoCelular <= 0 || !tecladoDeTerceiros(vista.context)) return
+                    foco.clearFocus(force = true)
+                    vista.context.getSystemService(InputMethodManager::class.java)?.hideSoftInputFromWindow(vista.windowToken, 0)
+                    avisarTecladoDeTerceiros()
+                }
+            }
+            resolver.registerContentObserver(Settings.Secure.getUriFor(Settings.Secure.DEFAULT_INPUT_METHOD), false, observador)
+            onDispose { resolver.unregisterContentObserver(observador) }
+        }
         LaunchedEffect(deFora) {
             if (!deFora) return@LaunchedEffect
             foco.clearFocus(force = true)
@@ -205,7 +260,14 @@ object TecladoSeguro {
                         val conexao = original.createInputConnection(atributos)
                         atributos.imeOptions = atributos.imeOptions or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
                         if (sistema?.palavras == true) atributos.inputType = atributos.inputType or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-                        conexao
+                        if (campoSecreto(atributos) || sistema?.palavras == true) {
+                            // O Compose poe o texto do campo no EditorInfo (initialSurroundingText), que o teclado le ao abrir;
+                            // o Android so o apaga em campo de senha, e o das palavras e de texto (rodada 2 da auditoria 8).
+                            androidx.core.view.inputmethod.EditorInfoCompat.setInitialSurroundingText(atributos, "")
+                            SemLeitura(conexao)
+                        } else {
+                            conexao
+                        }
                     }
                     val info = EditorInfo()
                     val conexao = original.createInputConnection(info)
@@ -213,10 +275,17 @@ object TecladoSeguro {
                     // de terceiros, nunca. Campo de senha com um servico de acessibilidade de fora ligado:
                     // nenhum teclado, nem o do celular (segunda passada da auditoria de 03/11/2026).
                     // O campo das palavras pelo celular tambem e de segredo, mesmo sem o tipo senha (terceira passada).
-                    val bloqueado = (campoSecreto(info) || sistema?.palavras == true) &&
-                        app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isNotEmpty()
-                    val peloCelular = !App.estado.tecladoProprio && !(campoSecreto(info) && tecladoDeTerceiros(vista.context))
-                    if (!bloqueado && (sistema != null || peloCelular)) proximo.startInputMethod(semAprendizado)
+                    val deSegredo = campoSecreto(info) || sistema?.palavras == true
+                    val bloqueado = deSegredo && app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isNotEmpty()
+                    // O campo das palavras pelo celular tambem nunca vai para um teclado de outro app: no lugar dele, o Safe
+                    // Keyboard, com o aviso (auditoria 8, 14/11/2026).
+                    val deTerceiros = deSegredo && tecladoDeTerceiros(vista.context)
+                    if (deTerceiros && sistema?.palavras == true) avisarTecladoDeTerceiros()
+                    val peloCelular = !App.estado.tecladoProprio && !deTerceiros
+                    if (!bloqueado && !deTerceiros && (sistema != null || peloCelular)) {
+                        if (deSegredo) segredosNoCelular++
+                        try { proximo.startInputMethod(semAprendizado) } finally { if (deSegredo) segredosNoCelular-- }
+                    }
                     val nova = Sessao(layout(info), conexao, info, janela, palavras = sistema?.palavras == true)
                     sessao = nova
                     try {
@@ -227,8 +296,14 @@ object TecladoSeguro {
                     // O globo foi tocado: confere de novo, porque um servico de fora pode ter ligado enquanto o Safe
                     // Keyboard estava aberto. Bloqueado, o teclado do celular nao abre.
                     if (nova.deSegredo && app.escalibur.wallet.ui.Acessibilidade.suspeitosParaSegredo.isNotEmpty()) awaitCancellation()
+                    // E o teclado padrao, que pode ser de outro app: o globo nao leva a frase para ele (auditoria 8).
+                    if (nova.deSegredo && tecladoDeTerceiros(vista.context)) {
+                        avisarTecladoDeTerceiros()
+                        awaitCancellation()
+                    }
                     pedidosDoCelular++
-                    proximo.startInputMethod(semAprendizado)
+                    if (nova.deSegredo) segredosNoCelular++
+                    try { proximo.startInputMethod(semAprendizado) } finally { if (nova.deSegredo) segredosNoCelular-- }
                 },
                 content = conteudo,
             )

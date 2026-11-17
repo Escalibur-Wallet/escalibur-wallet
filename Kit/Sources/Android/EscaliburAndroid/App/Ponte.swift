@@ -36,6 +36,9 @@ final class Ponte: @unchecked Sendable {
     /// e nunca depois que a pessoa mexeu na rede ou na moeda.
     private var sugeridaPara: UUID?
     private var manual = false
+    /// O destino (carteira e rede) ja conferido na rede nesta escolha, para a outra chave no controle (rodada 2 da auditoria 8),
+    /// como no iOS: a ponte e uma hora de deposito.
+    private var destinoConferido: String?
 
     // MARK: A revisao
 
@@ -182,10 +185,36 @@ final class Ponte: @unchecked Sendable {
     /// As opcoes da ponte para o pedido `pedida` (a `chave` que a interface viu). A resposta de um
     /// pedido que ja mudou nao entra.
     func cotar(_ pedida: String) async {
+        // O destino conferido na rede uma vez por escolha, antes da primeira cotacao (rodada 2 da auditoria 8).
+        let aConferir = trava.withLock { () -> (UUID, Chain, Set<String>)? in
+            guard let carteira, !carteira.isWatchOnly, destinoConferido != "\(carteira.id.uuidString)|\(para.id)" else { return nil }
+            // Numa EVM, tambem as outras EVM marcadas, como o Receber (rodada 3 da auditoria 8).
+            let marcadas = para.family == .evm ? Set((carteira.foreignControl ?? [:]).keys.filter { Chain.find($0)?.family == .evm }) : []
+            return (carteira.id, para, marcadas)
+        }
+        if let (id, rede, marcadas) = aConferir {
+            var aplicada = true
+            if rede == .tron {
+                aplicada = await Sessao.shared.conferirTron(id).value != nil
+            } else {
+                aplicada = await Sessao.shared.conferirControle(id, redes: marcadas.union([rede.id])).value
+            }
+            // Cancelada no meio (a pausa), ou sem ler a rede, a proxima cotacao confere de novo (rodada 4 da auditoria 8; 15/11/2026),
+            // como no iOS.
+            if aplicada, Sessao.shared.metadata.wallets.first(where: { $0.id == id })?.controlChecked(on: rede) == true {
+                trava.withLock { destinoConferido = "\(id.uuidString)|\(rede.id)" }
+            }
+        }
         let preparo = trava.withLock { () -> (BridgeIntent?, String?)? in
             acompanharCarteira()
             guard etapa == .formulario, pedida == chave, let carteira, !carteira.isWatchOnly, let quantidade, !quantidade.isZero,
                   let conta = carteira.account(de), let dono = try? EVMAddress(conta.address) else { return nil }
+            // A conta desta carteira na rede de destino com outra chave ou contrato no controle nao recebe nem pela ponte
+            // (auditoria 8, 14/11/2026), como no iOS.
+            if let marca = carteira.foreignControl(on: para) { return (nil, marca.message) }
+            // A rede de destino ainda nao lida para outra chave no controle tambem nao recebe, como o Receber (pedido do dono,
+            // 15/11/2026, a forma mais segura), como no iOS.
+            guard carteira.controlChecked(on: para) else { return (nil, Textos.t("Esta conta ainda não foi conferida nesta rede. Tente de novo em instantes.")) }
             // Na Tron, quem recebe e a conta Tron desta carteira.
             var tron: TronAddress?
             if para == .tron {
@@ -321,9 +350,9 @@ final class Ponte: @unchecked Sendable {
                 etapa = .revisao
             }
         } catch {
-            if (error as? SendEngineError)?.isLocalNonceQueueAhead == true {
-                FilaDeNonces.esquecer(carteira: carteira.id, rede: origem, endereco: conta.address)
-            }
+            // A fila a frente da rede nao e apagada aqui: a poda de antes do plano ja tira, no prazo dela, a transacao que a rede
+            // descartou. Apagar tudo numa leitura so (dois nos atrasados logo depois de uma confirmacao) fazia o plano seguinte reusar
+            // o nonce de uma transacao viva, como a troca pela rota privada (auditoria 8, 14/11/2026).
             trava.withLock {
                 guard rodada == numero, etapa == .montando else { return }
                 falhaDaMontagem = (error as? LocalizedError)?.errorDescription ?? Textos.t("Não foi possível montar agora. Tente de novo.")
@@ -359,6 +388,19 @@ final class Ponte: @unchecked Sendable {
             guard etapa == .revisao, let plano, let cotada else { return nil }
             guard confere(plano, cotada: cotada) else {
                 erroDaRevisao = Textos.t("O plano montado não confere com a ponte pedida. Nada foi assinado.")
+                return nil
+            }
+            // O destino de novo ate a assinatura: a marca de outra chave que chegou depois da cotacao barra a ponte (rodada 2 da
+            // auditoria 8), como no iOS.
+            // Pela carteira e pelo destino do plano, e nao pelos do formulario (rodada 6).
+            let dona = Sessao.shared.metadata.wallets.first { $0.id == plano.walletID }
+            if let dona, !dona.recebe(on: cotada.intent.to.chain) {
+                erroDaRevisao = dona.foreignControl(on: cotada.intent.to.chain)?.message ?? Textos.t("Esta conta na Tron é controlada por outra chave")
+                return nil
+            }
+            // E so com a rede de destino lida (15/11/2026), como no iOS.
+            if let dona, !dona.controlChecked(on: cotada.intent.to.chain) {
+                erroDaRevisao = Textos.t("Esta conta ainda não foi conferida nesta rede. Tente de novo em instantes.")
                 return nil
             }
             if plano.isExpired() {
@@ -397,6 +439,19 @@ final class Ponte: @unchecked Sendable {
         let assinado = try PortaDaPassphrase.assinar(plano, carteira: dona, digitada: passphrase, folga: folga, credencial: credencial)
         // Travou entre assinar e enviar: nada sai (ver o envio). Destravado, o dono envia de novo.
         guard Sessao.shared.fase == .unlocked else { throw Sessao.Falha.travada }
+        // A marca de outra chave no destino que chegou durante a biometria da assinatura: nada sai (rodada 4 da auditoria 8),
+        // como no iOS.
+        // Pelo destino do plano assinado, e nao pelo do formulario, que pode ter mudado (rodada 5).
+        let destino = cotada.intent.to.chain
+        if let atual = Sessao.shared.metadata.wallets.first(where: { $0.id == plano.walletID }), !atual.recebe(on: destino) {
+            trava.withLock { erroDaRevisao = atual.foreignControl(on: destino)?.message ?? Textos.t("Esta conta na Tron é controlada por outra chave") }
+            return
+        }
+        // E so com a rede de destino lida (15/11/2026), como a cotacao e o iOS.
+        if let atual = Sessao.shared.metadata.wallets.first(where: { $0.id == plano.walletID }), !atual.controlChecked(on: destino) {
+            trava.withLock { erroDaRevisao = Textos.t("Esta conta ainda não foi conferida nesta rede. Tente de novo em instantes.") }
+            return
+        }
         await transmitir(assinado, plano: plano, cotada: cotada, numero: numero)
     }
 
@@ -756,8 +811,12 @@ final class Ponte: @unchecked Sendable {
             enderecos: review.lines.filter(\.verbatim).map { Troca.Estado.Linha(rotulo: $0.label, valor: $0.value) },
             linhas: review.lines.filter { !$0.verbatim }.map { Troca.Estado.Linha(rotulo: $0.label, valor: $0.value) }
                 + [Troca.Estado.Linha(rotulo: Textos.t("Carteira"), valor: carteira?.name ?? "")],
-            avisos: review.warnings.map { Envio.textoDoAviso($0, chain: plano.chain, tipo: .tag) },
-            transacoes: review.transactionCount, nota: Textos.t("Não feche o app até terminar."), erro: erroDaRevisao
+            // Outra chave ou contrato no controle desta conta vem primeiro (auditoria 8, 14/11/2026): a operacao segue, com o aviso.
+            avisos: (carteira?.foreignControl(on: plano.chain).map { [$0.message] } ?? [])
+                + review.warnings.map { Envio.textoDoAviso($0, chain: plano.chain, tipo: .tag) },
+            transacoes: review.transactionCount, nota: Textos.t("Não feche o app até terminar."), erro: erroDaRevisao,
+            // A ponte fecha pelo erro da revisao (o destino marcado ou nao lido), e nao por aqui.
+            fechada: nil
         )
     }
 

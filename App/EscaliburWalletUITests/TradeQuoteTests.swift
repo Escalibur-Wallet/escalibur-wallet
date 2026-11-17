@@ -56,7 +56,7 @@ final class TradeQuoteTests: XCTestCase {
         app.launch()
         let consent = app.buttons["aceite-sem-comparacao"]
         XCTAssertTrue(consent.waitForExistence(timeout: 60), "a cotacao sem comparacao nao chegou")
-        let warning = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Um'")).firstMatch
+        let warning = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Não há preço de referência do mercado para comparar com esta cotação. Um'")).firstMatch
         XCTAssertTrue(warning.exists)
         let review = app.buttons["Revisar troca"]
         XCTAssertTrue(review.waitForExistence(timeout: 10))

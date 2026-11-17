@@ -62,6 +62,14 @@ enum Envelopes {
     /// e testava passphrases fora do aparelho.
     static func abrirCarteira(_ id: UUID, credencial: Credencial, passphraseDigitada: SecureBytes?) throws -> String {
         defer { passphraseDigitada?.wipe() }
+        // A presenca inteira conferida aqui, na operacao, e nao so no despachante: um metodo novo que chamasse esta funcao com
+        // o PIN ou a biometria sozinhos lia as palavras (rodada 4 da auditoria 8), como o `walletPhrase` do iOS.
+        switch credencial {
+        case .pinEBiometria, .reforcado: break
+        case .pin, .biometria:
+            credencial.zerar()
+            throw RootKeyVault.Failure.biometryRequired
+        }
         encerrar()
         guard let wallet = Sessao.shared.metadata.wallets.first(where: { $0.id == id }), !wallet.isWatchOnly else {
             credencial.zerar()

@@ -92,18 +92,23 @@ public struct EVMTradeEngine: TradeEngine {
         _ set: TradeQuoteSet, context: EVMTradeContext, market: EVMTradeMarket, request: TradeRequest
     ) async throws -> (quote: TradeQuote, net: TradeSignedAmount, ranked: [TradeCandidate]) {
         // O minimo ancorado fora do provedor: preco de referencia, ou duas cotacoes e a maior
-        // estimativa entre elas. Sem nenhum dos dois, a fonte unica segue marcada como sem
+        // estimativa entre elas. Sem preco de referencia, a troca segue marcada como sem
         // comparacao e so revisa com o aceite do dono, que ve o minimo que vai receber; a carteira
-        // nao recusa por preco nesse caso (pedido do dono, 05/11/2026). Todas aparecem como
-        // alternativa; so as ancoradas podem ser a escolhida (sem comparacao, so elas aparecem).
+        // nao recusa por preco nesse caso (pedido do dono, 05/11/2026). Com duas fontes tambem:
+        // quem esta no caminho com certificado valido, ou so derruba o oraculo, alinha as cotacoes
+        // de todos os agregadores, e a ancora de uma na outra nao percebe (checagem final de
+        // 16/11/2026, M3). Todas aparecem como alternativa; so as ancoradas podem ser a escolhida
+        // (com uma fonte so e sem referencia, so elas aparecem).
         let quotes = set.ranked.map(\.quote)
-        var unanchored = false
+        var unanchored = false, singleSource = false
         let anchored: [ValidatedTradeQuote]
         do {
             anchored = try TradeValidator.anchored(quotes, market: market.reference)
+            unanchored = market.reference.oracleOut == nil
         } catch TradeRefusal.noPriceAnchor {
             anchored = try TradeValidator.unanchored(quotes, market: market.reference)
             unanchored = true
+            singleSource = true
         }
         let eligible = Set(anchored.map(\.provider))
 
@@ -122,7 +127,7 @@ public struct EVMTradeEngine: TradeEngine {
         }
         let quote = EVMTradeQuoteMapping.quote(
             sell: request.sell, buy: request.buy, amountIn: request.amountIn, legs: legs, ranked: ranked, allowances: allowances,
-            costs: costs, chain: chain, unanchored: unanchored, alternativesFrom: unanchored ? eligible : nil
+            costs: costs, chain: chain, unanchored: unanchored, alternativesFrom: singleSource ? eligible : nil
         )
         var guaranteed = BigUInt()
         var cost = BigUInt()

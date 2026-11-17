@@ -266,6 +266,30 @@ func pkcs1(doPKCS8 der: Data) -> Data? {
     return elemento(0x04).map { Data(b[$0]) }
 }
 
+/// O JSON da conta de servico da Play, como o tools/android/play.py le: do Keychain (o JSON em base64, servico
+/// escalibur-android-play-api, conta escalibur-android), pelo /usr/bin/security; do arquivo antigo, com aviso, ate o dono
+/// passar a chave para la. Antes, so o arquivo: com a chave no Keychain e o arquivo apagado, o liberar-android parava
+/// (rodada 2 da auditoria 8). A saida do security nunca e impressa.
+func contaDaPlay(_ arquivo: URL) -> Data? {
+    let processo = Process()
+    processo.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+    processo.arguments = ["find-generic-password", "-a", "escalibur-android", "-s", "escalibur-android-play-api", "-w"]
+    let saida = Pipe()
+    processo.standardOutput = saida
+    processo.standardError = FileHandle.nullDevice
+    if (try? processo.run()) != nil {
+        let lido = saida.fileHandleForReading.readDataToEndOfFile()
+        processo.waitUntilExit()
+        if processo.terminationStatus == 0, let texto = String(data: lido, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let dados = Data(base64Encoded: texto) {
+            return dados
+        }
+    }
+    guard let dados = try? Data(contentsOf: arquivo) else { return nil }
+    FileHandle.standardError.write(Data("aviso: a chave da Play ainda esta em arquivo; passe-a para o Keychain (ver o topo do tools/android/play.py) e apague o arquivo\n".utf8))
+    return dados
+}
+
 /// O build na Play, so lendo (abre uma edicao, le a faixa e os pacotes e descarta a edicao), com a conta de servico do
 /// tools/android/play.py. Recusa, dizendo por que: o lancamento fora de 100% (fracao ou paises), o pacote na Play que nao e o
 /// que este Mac enviou (`~/.escalibur/android/enviados.json`, gravado pelo play.py no envio) e um versionCode mais novo na
@@ -273,10 +297,10 @@ func pkcs1(doPKCS8 der: Data) -> Data? {
 /// processo filho roda com `-I`, que deixa de fora o PyJWT instalado na pasta do usuario. A chave nunca e impressa.
 func conferirNaPlay(_ build: String, autorizados: Set<String>) {
     let arquivo = pasta.appendingPathComponent("android/play-api.json")
-    guard let dados = try? Data(contentsOf: arquivo), let conta = try? JSONSerialization.jsonObject(with: dados) as? [String: Any],
+    guard let dados = contaDaPlay(arquivo), let conta = try? JSONSerialization.jsonObject(with: dados) as? [String: Any],
           let email = conta["client_email"] as? String, let pem = conta["private_key"] as? String,
           let idDaChave = conta["private_key_id"] as? String, let enderecoDoToken = conta["token_uri"] as? String else {
-        sair("sem a conta de servico da Play em \(arquivo.path)")
+        sair("sem a conta de servico da Play no Keychain (servico escalibur-android-play-api) nem em \(arquivo.path)")
     }
     let base64 = pem.split(separator: "\n").filter { !$0.hasPrefix("-----") }.joined()
     let atributos = [kSecAttrKeyType: kSecAttrKeyTypeRSA, kSecAttrKeyClass: kSecAttrKeyClassPrivate] as CFDictionary

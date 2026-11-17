@@ -87,6 +87,9 @@ public enum TONPlanError: Error, Equatable, Sendable {
     /// Espaco no comeco ou no fim: invisivel na revisao, e a exchange que usa o
     /// comentario como memo nao reconhece "123 " como "123".
     case commentHasSurroundingSpaces
+    /// O comentario tem uma frase ou uma chave de carteira: ele vai a rede ja na estimativa da taxa e, enviado, fica publico
+    /// para sempre (revisao dos 3 agentes, 09/11/2026).
+    case commentHasSecret
     /// Caminho com indice nao endurecido: Ed25519 (SLIP-10) nao deriva.
     case invalidPath
 }
@@ -312,9 +315,10 @@ public enum TONPlanner {
     /// Comentario vazio vira nenhum; o resto passa inteiro ou e recusado. Nada e
     /// corrigido em silencio: o comentario e o memo da exchange, e o que sai tem de ser
     /// exatamente o que o dono viu.
-    static func checkedComment(_ comment: String?) throws -> String? {
+    public static func checkedComment(_ comment: String?) throws -> String? {
         guard let comment, !comment.isEmpty else { return nil }
         guard comment.utf8.count <= TONComment.maxBytes else { throw TONPlanError.commentTooLong(maxBytes: TONComment.maxBytes) }
+        guard !PrivateKeyGuard.publicTextHasSecret(comment) else { throw TONPlanError.commentHasSecret }
         for scalar in comment.unicodeScalars {
             // Controle (C0, DEL, C1) e formato (Cf: direcao de texto, espaco de
             // largura zero, BOM, marca de hifen suave).

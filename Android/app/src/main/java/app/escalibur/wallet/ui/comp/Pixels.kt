@@ -363,11 +363,12 @@ fun BotaoDeSegurar(titulo: String, modifier: Modifier = Modifier, segundos: Floa
  * movimento reduzido, so troca o icone e o texto.
  */
 @Composable
-fun BotaoDeCopiar(titulo: String, feito: String, modifier: Modifier = Modifier, acao: () -> Unit) {
+fun BotaoDeCopiar(titulo: String, feito: String, modifier: Modifier = Modifier, acao: suspend () -> Boolean) {
     val haptico = LocalHapticFeedback.current
     val escopo = rememberCoroutineScope()
     val parado = movimentoReduzido()
     var copiado by remember { mutableStateOf(false) }
+    var conferindo by remember { mutableStateOf(false) }
     var toques by remember { mutableIntStateOf(0) }
     var volta by remember { mutableStateOf<Job?>(null) }
     val pulo = remember { Animatable(1f) }
@@ -380,18 +381,26 @@ fun BotaoDeCopiar(titulo: String, feito: String, modifier: Modifier = Modifier, 
             .graphicsLayer { val e = if (parado) 1f else pulo.value * (if (apertado) 0.985f else 1f); scaleX = e; scaleY = e }
             .clip(CircleShape).background(if (apertado) Paleta.acentoApertado else Paleta.acento)
             .clickable(interacao, indication = null, role = Role.Button) {
-                acao()
-                toques++
-                haptico.performHapticFeedback(HapticFeedbackType.Confirm)
-                copiado = true
-                volta?.cancel()
-                volta = escopo.launch { delay(2000); copiado = false }
-                if (!parado) {
-                    escopo.launch {
-                        pulo.animateTo(1f, keyframes { durationMillis = 540; 0.96f at 80; 1.025f at 260; 1f at 540 })
+                if (conferindo) return@clickable
+                conferindo = true
+                escopo.launch {
+                    // O visto e a vibracao so depois do ok de quem copia: a recusa (a conferencia no nucleo) nao diz "copiado"
+                    // (rodada 10 da auditoria 8).
+                    val ok = acao()
+                    conferindo = false
+                    if (!ok) return@launch
+                    toques++
+                    haptico.performHapticFeedback(HapticFeedbackType.Confirm)
+                    copiado = true
+                    volta?.cancel()
+                    volta = escopo.launch { delay(2000); copiado = false }
+                    if (!parado) {
+                        escopo.launch {
+                            pulo.animateTo(1f, keyframes { durationMillis = 540; 0.96f at 80; 1.025f at 260; 1f at 540 })
+                        }
+                        escopo.launch { faixa.snapTo(-1f); faixa.animateTo(1f, tween(650, easing = FastOutSlowInEasing)); faixa.snapTo(-1f) }
+                        escopo.launch { quique.snapTo(0.6f); quique.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 500f)) }
                     }
-                    escopo.launch { faixa.snapTo(-1f); faixa.animateTo(1f, tween(650, easing = FastOutSlowInEasing)); faixa.snapTo(-1f) }
-                    escopo.launch { quique.snapTo(0.6f); quique.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 500f)) }
                 }
             },
         contentAlignment = Alignment.Center,

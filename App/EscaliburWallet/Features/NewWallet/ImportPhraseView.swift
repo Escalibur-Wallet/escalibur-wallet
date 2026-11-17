@@ -134,6 +134,11 @@ struct ImportPhraseView: View {
     @State private var confirmClear = false
     /// A carteira ja montada, esperando o dono conferir os enderecos.
     @State private var pending: (secret: WalletSecret, preview: ImportPreview)?
+    /// Com o interruptor da passphrase, depois do PIN: a tela da passphrase por cima da conferencia, com as palavras
+    /// so na memoria (pedido do dono, 08/11/2026), e o nome que a carteira com passphrase recebe. A carteira das
+    /// palavras nunca vai ao cofre (revisao dos 3 agentes, 08/11/2026).
+    @State private var passphraseStep = false
+    @State private var hiddenName = ""
     /// O dono tocou no globo do teclado proprio: nesta tela, o teclado do iPhone.
     @State private var systemKeyboard = false
     @State private var keyboardInfo = false
@@ -155,6 +160,10 @@ struct ImportPhraseView: View {
     private var ownKeyboard: Bool { (session.ownKeyboardOn || verify != nil || isFirstImport) && (!systemKeyboard || session.hardenedModeOn) }
     /// Esta e a primeira carteira do app (ainda nao ha nenhuma).
     private var isFirstImport: Bool { session.metadata.wallets.isEmpty }
+    /// A passphrase digitada nesta tela: so conferindo a copia de uma carteira que tem uma.
+    private var typesPassphraseHere: Bool { usesPassphrase && verify != nil }
+    /// Importando com o interruptor ligado: a passphrase fica para a tela dela, depois do PIN.
+    private var passphraseLater: Bool { usesPassphrase && verify == nil && choose == nil }
 
     /// Todas as listas, sem acento nas latinas: com o teclado proprio, "abaco" acha "ábaco".
     private var suggestions: [String] { WordLexicon.completions(typed, preferring: wordLanguages, limit: 4) }
@@ -168,9 +177,18 @@ struct ImportPhraseView: View {
         // formulario, e a troca para a conferencia apagava o segredo recem-montado; o
         // Guardar recebia uma carteira vazia (entropia com tamanho fora do padrao).
         ZStack {
-            if let pending {
-                ImportPreviewView(preview: pending.preview, hasPassphrase: pending.secret.passphrase.count > 0, saving: working,
-                                  onSave: { foreign in Task { await save(tronForeign: foreign) } }, onBack: discardPending)
+            if passphraseStep, let pending {
+                // A mesma tela da passphrase dos Ajustes. O voltar leva a conferencia, com as palavras ainda na memoria;
+                // so a carteira com passphrase e gravada, numa vez so.
+                let words = pending.secret, count = entry.count, fingerprint = pending.preview.fingerprint
+                // Ao sair, o onDisappear da tela de importar zera as palavras.
+                PassphraseEntryView(base: nil, onDone: { _ in onFinished() }, onBack: { passphraseStep = false }, suggestedName: hiddenName, opening: { [session] passphrase, name, credential in
+                    try await session.addImportedPassphraseWallet(words: words, passphrase: passphrase, name: name, wordCount: count,
+                                                                  expectedWordsFingerprint: fingerprint, credential: credential)
+                })
+            } else if let pending {
+                ImportPreviewView(preview: pending.preview, hasPassphrase: pending.secret.passphrase.count > 0, passphraseNext: passphraseLater,
+                                  saving: working, onSave: { foreign, evm in Task { await save(tronForeign: foreign, evmForeign: evm) } }, onBack: discardPending)
                     .guardedAgainstCapture()
             } else {
                 form
@@ -188,12 +206,24 @@ struct ImportPhraseView: View {
         .onDisappear {
             pending?.secret.wipe()
             entry.wipe()
+            cipher.clearAll()
             passphrase.wipe()
             passphraseAgain.wipe()
+            // A rodada do dia segura pela previa com a passphrase depois volta quando a importacao fecha (rodada 8 da auditoria 8).
+            session.resumeControlChecks()
         }
         // Na conferencia do Super Security, as palavras digitadas saem ao sair do app (05/11/2026). Criar e importar ficam: a
         // previa manda comparar os enderecos noutro app.
         .onReceive(NotificationCenter.default.publisher(for: SecureInputField.wipeAll)) { _ in if verify != nil { entry.wipe() } }
+        // Travar zera as palavras na hora, tambem na tela da passphrase: suspenso, o onDisappear so viria na volta (revisao dos
+        // 3 agentes, 08/11/2026). O Android zera as grades e os campos pelo `zerarAoTravar`.
+        .onReceive(NotificationCenter.default.publisher(for: AppSession.didLock)) { _ in
+            discardPending()
+            entry.wipe()
+            typed = ""
+            passphrase.wipe()
+            passphraseAgain.wipe()
+        }
     }
 
     private var form: some View {
@@ -275,8 +305,15 @@ struct ImportPhraseView: View {
                                 Text("Esta carteira usa passphrase").typeStyle(.body).foregroundStyle(Palette.ink)
                             }
                             .tint(Palette.accent)
+                            // O interruptor so liga: a passphrase vem depois do PIN, na tela dela (pedido do dono, 08/11/2026).
+                            if usesPassphrase {
+                                Text("Depois de conferir os endereços, você digita a passphrase numa tela só dela.")
+                                    .typeStyle(.note).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
-                        if usesPassphrase {
+                        // Os campos so na conferencia de uma copia, que confere a passphrase junto.
+                        if typesPassphraseHere {
                             Text("Com a passphrase errada, a carteira abre vazia e sem aviso nenhum. Por isso ela é digitada duas vezes. Segure o dedo num campo para conferir as duas.")
                                 .typeStyle(.note).foregroundStyle(Palette.inkSoft).padding(.top, Space.xs)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -742,7 +779,7 @@ struct ImportPhraseView: View {
         }
         switch verdict {
         case .valid(let language):
-            if usesPassphrase {
+            if typesPassphraseHere {
                 let same = Hash.constantTimeEqual(passphrase, passphraseAgain)
                 guard same, passphraseLength > 0 else {
                     message = String(localized: "As duas versões da passphrase não conferem.")
@@ -759,7 +796,7 @@ struct ImportPhraseView: View {
             defer { working = false }
             do {
                 let pass = SecureBytes(capacity: PassphraseLimit.fieldCapacity)
-                if usesPassphrase { passphrase.withUnsafeBytes { pass.append(contentsOf: $0.bindMemory(to: UInt8.self)) } }
+                if typesPassphraseHere { passphrase.withUnsafeBytes { pass.append(contentsOf: $0.bindMemory(to: UInt8.self)) } }
                 let secret = try WalletSecret.from(phrase: phrase, language: language, passphrase: pass)
                 phrase.wipe()
                 // Conferindo uma copia: a frase vai para quem pediu, sem conferencia de
@@ -769,6 +806,7 @@ struct ImportPhraseView: View {
                     return
                 }
                 do {
+                    passphraseStep = false
                     pending = (secret, try await ImportPreview.make(secret))
                 } catch {
                     secret.wipe()
@@ -793,17 +831,41 @@ struct ImportPhraseView: View {
     }
 
     /// Guarda depois da conferencia. A RK so existe dentro de `addWallet`.
-    private func save(tronForeign: Bool) async {
-        guard let pending else { return }
+    private func save(tronForeign: Bool, evmForeign: (chain: Chain, control: ForeignControl)? = nil) async {
+        // Um toque so: o segundo abria outra folha de PIN por cima da primeira (revisao, 08/11/2026).
+        guard !working, let pending else { return }
         working = true
         defer { working = false }
         do {
             let name = session.metadata.wallets.isEmpty ? String(localized: "Carteira principal") : String(localized: "Carteira \(session.metadata.wallets.count + 1)")
             let words = entry.count
-            // Desistiu da confirmacao: a conferencia dos enderecos continua na tela.
+            // Com o interruptor, o PIN so confirma que e o dono (pedido do dono, 08/11/2026): nada vai ao cofre, e a tela
+            // da passphrase abre com as palavras na memoria. Desistiu da confirmacao: a conferencia continua na tela.
+            if passphraseLater {
+                guard try await auth.retrying(reason: String(localized: "Importar com a senha da carteira"), { credential in
+                    try await session.confirmPresence(credential)
+                }) != nil else { return }
+                // A conferencia saiu durante o PIN ("Voltar e conferir"): nada segue daqui (revisao, 08/11/2026).
+                guard let current = self.pending, current.secret.entropy === pending.secret.entropy else { return }
+                // As palavras ja aqui (a digital e os enderecos da previa): o nome da carteira delas, como pelos Ajustes.
+                let known = session.metadata.wallets.first { wallet in
+                    !wallet.isWatchOnly && !wallet.hasPassphrase && wallet.fingerprint?.uppercased() == pending.preview.fingerprint.uppercased()
+                        && !pending.preview.addresses.isEmpty
+                        && pending.preview.addresses.allSatisfy { item in wallet.account(item.chain)?.address == item.address }
+                }
+                hiddenName = String(localized: "\(known?.name ?? name) com passphrase")
+                // A grade sai da memoria: a passphrase so precisa da frase ja montada, e voltar ate as palavras pede
+                // digitar de novo, sem elas a mostra na grade (revisao de seguranca, 08/11/2026).
+                entry.wipe()
+                cipher.clearAll()
+                typed = ""
+                passphraseStep = true
+                return
+            }
             guard try await auth.retrying(reason: String(localized: "Guardar a carteira importada neste iPhone"), { credential in
                 try await session.addWallet(secret: pending.secret, name: name, origin: .importedPhrase, wordCount: words,
                                             backupConfirmed: true, tronForeignControl: tronForeign,
+                                            foreignControl: evmForeign.map { [$0.chain.id: $0.control] },
                                             expectedFingerprint: pending.preview.fingerprint, credential: credential)
             }) != nil else { return }
             self.pending = nil
@@ -831,6 +893,8 @@ struct ImportPhraseView: View {
     private func discardPending() {
         pending?.secret.wipe()
         pending = nil
+        passphraseStep = false
+        cipher.clearAll()
     }
 }
 

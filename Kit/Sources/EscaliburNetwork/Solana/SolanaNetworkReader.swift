@@ -22,7 +22,7 @@ public actor SolanaNetworkReader {
 
     public init(client: HTTPClient = .shared, providers: [ProviderPool.Provider] = Endpoints.solana) {
         self.client = client
-        self.pool = ProviderPool(providers)
+        self.pool = ProviderPool(providers, draws: client.drawsProviders)
     }
 
     // MARK: Chamadas
@@ -107,7 +107,7 @@ public actor SolanaNetworkReader {
     public func finalizedBlockHeights() async throws -> [UInt64] {
         let client = self.client
         var heights = [UInt64]()
-        for provider in await pool.available() where heights.count < 2 {
+        for provider in pool.consensusOrder(await pool.available()) where heights.count < 2 {
             do {
                 let epoch: RPCEpochInfo = try await SolanaRPC.call(
                     provider.baseURL, "getEpochInfo", [.object(["commitment": .string("finalized")])], client: client
@@ -216,7 +216,8 @@ public actor SolanaNetworkReader {
         _ read: @escaping @Sendable (ProviderPool.Provider) async throws -> T, merge: (T, T) throws -> T
     ) async throws -> T {
         var answers = [T]()
-        for provider in await pool.available() where answers.count < 2 {
+        // Os dois donos sorteados a cada pergunta, como no consenso das outras redes (rodada 1 da auditoria 8).
+        for provider in pool.consensusOrder(await pool.available()) where answers.count < 2 {
             do {
                 answers.append(try await read(provider))
                 await pool.reportSuccess(provider)
@@ -246,6 +247,55 @@ public actor SolanaNetworkReader {
         try await onTwo({ provider in
             try SolanaAccountParser.destination(try await self.accountInfo(address, at: provider), address: address)
         }, merge: Self.mergeDestination)
+    }
+
+    /// Outro controle sobre a conta do dono na Solana (rodada 1 da auditoria 8): a conta de sistema entregue a um programa
+    /// (`Assign`: o programa debita o SOL que entrar; o envio ja recusa, `ownerAssignedToProgram`) e, nas contas de token do
+    /// USDC e do USDT, o dono trocado (`SetAuthority`), um delegado (`Approve`) ou uma autoridade de fechamento: o que entrar
+    /// ali sai para outro. Dois provedores de acordo (`onTwo`); discordando, erro, e a marca fica como estava.
+    /// `everyone`: a conta ja tem a marca, e "limpa" so vale com todos os donos que respondem, e nao dois (rodada 1).
+    public func foreignControl(owner: SolanaPublicKey, everyone: Bool = false) async throws -> Bool {
+        let mints = TokenRegistry.tokens.filter { $0.chainID == Chain.solana.id && ["USDC", "USDT"].contains($0.symbol) }
+            .compactMap { asset -> SolanaPublicKey? in
+                guard case .token(let mint) = asset.kind else { return nil }
+                return try? SolanaPublicKey(base58: mint)
+            }
+        let atas = try mints.map { try SolanaAssociatedToken.address(owner: owner, mint: $0, tokenProgram: .token, allowOwnerOffCurve: false) }
+        let read: @Sendable (ProviderPool.Provider) async throws -> Bool = { provider in
+            if let account = try await self.accountInfo(owner, at: provider), account.owner != SolanaAccountParser.systemProgram { return true }
+            for ata in atas {
+                guard let account = try await self.accountInfo(ata, at: provider) else { continue }
+                if SolanaAccountParser.tokenControlChanged(account, owner: owner) { return true }
+            }
+            return false
+        }
+        guard everyone else {
+            return try await onTwo(read, merge: { a, b in
+                guard a == b else { throw SolanaInconsistentResponse(reason: "outro controle diferente nos dois provedores") }
+                return a
+            })
+        }
+        var answers = [Bool]()
+        var operators = Set<String>()
+        for provider in pool.consensusOrder(await pool.available()) where !operators.contains(provider.operatorName) {
+            // Cancelada, para, e a consulta cortada nao conta contra o operador (rodada 3 da auditoria 8).
+            guard !Task.isCancelled else { break }
+            do {
+                answers.append(try await read(provider))
+                operators.insert(provider.operatorName)
+                await pool.reportSuccess(provider)
+            } catch let error as SolanaAccountParseError {
+                throw error
+            } catch {
+                if !Task.isCancelled { await pool.reportFailure(provider) }
+            }
+        }
+        // Cancelada no meio, nao decide com quem respondeu antes (rodada 4). Pelo menos tres donos, ou todos os da lista, se
+        // forem menos (rodada 2 da auditoria 8).
+        if Task.isCancelled { throw CancellationError() }
+        guard answers.count >= Quorum.floorOfEveryone(pool) else { throw ConsensusFailure(answers: answers.count) }
+        guard answers.allSatisfy({ $0 == answers[0] }) else { throw SolanaInconsistentResponse(reason: "outro controle diferente entre os provedores") }
+        return answers[0]
     }
 
     /// O ATA de `owner` para o mint: existe? E de quem diz ser? Dois provedores.

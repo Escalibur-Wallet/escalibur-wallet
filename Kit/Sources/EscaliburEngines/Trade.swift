@@ -86,16 +86,21 @@ public struct TradeQuote: Sendable, Equatable {
     public let execution: Execution
     /// So em ordem grande, quando dividir no tempo rende um minimo melhor.
     public let parts: Parts?
-    /// Sem preco de referencia do mercado agora, e so uma fonte cotou: o preco nao teve com o que
-    /// ser comparado (`TradeValidator.unanchored`). A tela avisa e so revisa depois de o dono marcar
-    /// que entende o risco, e o plano recusa sem esse aceite (pedido do dono, 05/11/2026).
+    /// Sem preco de referencia do mercado agora: o preco nao foi comparado com o mercado, com uma
+    /// fonte so (`TradeValidator.unanchored`) ou com duas ancoradas uma na outra (checagem final de
+    /// 16/11/2026, M3). A tela avisa e so revisa depois de o dono marcar que entende o risco, e o
+    /// plano recusa sem esse aceite (pedido do dono, 05/11/2026).
     public let unanchored: Bool
+    /// Sem comparacao e com uma fonte so (as diretas, que saem do mesmo RPC, contam como uma): o
+    /// rotulo da rota diz "sem comparação" em vez de "o melhor entre N" (rodada 3 dos 3 agentes da
+    /// checagem final de 16/11/2026). Na Stellar e no XRPL, `providersCompared` ja e 1.
+    public let singleSource: Bool
 
     public init(
         sell: Asset, buy: Asset, amountIn: BigUInt, expectedOut: BigUInt, minimumOut: BigUInt,
         priceImpactPercent: Double?, networkFees: [NetworkFee], providerFeeNote: String?, legs: [Leg],
         alternatives: [Alternative], providersCompared: Int, needsApproval: Bool, expiresAt: Date,
-        execution: Execution = .transactions, parts: Parts? = nil, unanchored: Bool = false
+        execution: Execution = .transactions, parts: Parts? = nil, unanchored: Bool = false, singleSource: Bool = false
     ) {
         self.sell = sell
         self.buy = buy
@@ -113,6 +118,7 @@ public struct TradeQuote: Sendable, Equatable {
         self.execution = execution
         self.parts = parts
         self.unanchored = unanchored
+        self.singleSource = singleSource
     }
 
     /// A taxa de rede na moeda do dono, pelos precos que o app tem. nil sem estimativa ou
@@ -179,7 +185,7 @@ public struct TradeQuote: Sendable, Equatable {
             alternatives: others.sorted { $0.out > $1.out }, providersCompared: providersCompared,
             // Outro provedor, outro contrato que gasta: a autorizacao pode faltar. A revisao diz.
             needsApproval: needsApproval || sell.kind != .native, expiresAt: expiresAt, execution: .transactions, parts: nil,
-            unanchored: unanchored
+            unanchored: unanchored, singleSource: singleSource
         )
     }
 }

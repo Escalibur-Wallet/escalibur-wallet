@@ -243,7 +243,8 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
             senha.clearText()
             repeticao.clearText()
             arquivo?.fill(0)
-            EnvelopeCompartilhado.apagar(contexto)
+            // A copia que foi para a folha de compartilhar nao sai aqui: a tela fecha ao travar, e o app escolhido ainda pode
+            // estar lendo. Cada copia sai no prazo dela (`EnvelopeCompartilhado.enviar`) e na varredura de cada abertura.
             CoroutineScope(Dispatchers.IO).launch { runCatching { Api.objeto("envelope.encerrar") } }
         }
     }
@@ -477,7 +478,10 @@ fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
             "lacrando", "feito" -> {
                 CabecalhoDeFolha("", { fechar() })
                 LacreEmCena(passo == "feito", parte, inicioDoLacre, segundos, nomeDoArquivo, fraca,
-                            aoEnviar = { arquivo?.let { Ciclo.abrindoSeletor(); EnvelopeCompartilhado.enviar(contexto, it, nomeDoArquivo) } }) {
+                            // A folha de compartilhar leva para outro app (o WhatsApp, o e-mail): sair por ela e sair do app, e a
+                            // trava automatica vale como em qualquer saida. Antes ela contava como o seletor de arquivos, e o app
+                            // ficava aberto por ate 10 minutos com o dono em outro app (auditoria 8, 14/11/2026).
+                            aoEnviar = { arquivo?.let { EnvelopeCompartilhado.enviar(contexto, it, nomeDoArquivo) } }) {
                     Ciclo.abrindoSeletor()
                     salvar.launch(nomeDoArquivo)
                 }
@@ -797,7 +801,7 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
     LaunchedEffect(Ciclo.vinda, trabalhando) {
         if (Ciclo.vinda != vindaVista && !trabalhando) {
             vindaVista = Ciclo.vinda
-            if (passo == "aberto" || passo == "previa" || passo == "palavras") {
+            if (passo == "aberto" || passo == "previa" || passo == "palavras" || passo == "checagem") {
                 if (passo == "palavras") runCatching { Api.objeto("carteira.descartarRascunho") }
                 aberto = null
                 previa = null
@@ -957,6 +961,18 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
         }
         return
     }
+    // A checagem do aparelho antes do "Só ver as palavras", como no Ver as palavras (pedido do dono, 15/11/2026), como no iOS. Cada
+    // toque confere de novo; o voltar leva ao envelope aberto.
+    if (passo == "checagem") {
+        BackHandler { passo = "aberto" }
+        Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
+            CabecalhoDeFolha("", { passo = "aberto" })
+            VerificacaoDoAparelho(t("Deslize para ver as palavras"), criando = false, ciencia = t("Estou ciente de que este celular falhou na verificação de integridade e de que ver as palavras aqui pode expor a carteira. Quero seguir mesmo assim.")) {
+                escopo.launch { passo = if (runCatching { Api.objeto("envelope.verPalavras") }.isSuccess) "palavras" else "aberto" }
+            }
+        }
+        return
+    }
     if (passo == "palavras") {
         val dados = aberto
         BackHandler { aoCancelar() }
@@ -1050,11 +1066,7 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
                 }
                 Rodape {
                     BotaoPrimario(t("Importar esta carteira"), ligado = bloqueado == false, carregando = trabalhando) { mostrarPrevia() }
-                    BotaoSecundario(t("Só ver as palavras"), Modifier.padding(top = Espaco.sm)) {
-                        escopo.launch {
-                            if (runCatching { Api.objeto("envelope.verPalavras") }.isSuccess) passo = "palavras"
-                        }
-                    }
+                    BotaoSecundario(t("Só ver as palavras"), Modifier.padding(top = Espaco.sm)) { passo = "checagem" }
                 }
             }
         }
@@ -1099,10 +1111,24 @@ object EnvelopeCompartilhado {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         runCatching { contexto.startActivity(Intent.createChooser(envio, null, escolhido.intentSender)) }
+        // A copia sai sozinha no prazo, mesmo com a tela fechada pela trava: o app escolhido le o arquivo depois que o dono
+        // escolhe o contato, e apagar ao travar quebrava o envio. Ela e cifrada, fica no cache do app e so o app escolhido
+        // pode ler (auditoria 8, 14/11/2026).
+        val apagar = Runnable { runCatching { arquivo.delete() } }
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(apagar, PRAZO_DA_COPIA)
     }
+
+    /** Quanto a copia compartilhada fica para o app escolhido ler. */
+    private const val PRAZO_DA_COPIA = 10 * 60 * 1000L
 
     fun apagar(contexto: Context) {
         runCatching { pasta(contexto).deleteRecursively() }
+    }
+
+    /** So as copias com mais que o prazo. */
+    fun apagarVelhas(contexto: Context) {
+        val limite = System.currentTimeMillis() - PRAZO_DA_COPIA
+        runCatching { pasta(contexto).listFiles()?.filter { it.lastModified() < limite }?.forEach { it.delete() } }
     }
 }
 

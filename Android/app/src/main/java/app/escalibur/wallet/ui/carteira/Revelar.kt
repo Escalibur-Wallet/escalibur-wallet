@@ -52,6 +52,7 @@ import app.escalibur.wallet.ui.importar.CampoSecreto
 import app.escalibur.wallet.ui.novacarteira.ConferirPalavras
 import app.escalibur.wallet.ui.novacarteira.GravarPalavras
 import app.escalibur.wallet.ui.novacarteira.Trabalhando
+import app.escalibur.wallet.ui.novacarteira.VerificacaoDoAparelho
 import app.escalibur.wallet.ui.t
 import app.escalibur.wallet.ui.tema.Altura
 import app.escalibur.wallet.ui.tema.Espaco
@@ -81,7 +82,9 @@ fun FluxoDeRevelar(carteira: Carteira, copia: Boolean, aoFechar: () -> Unit) {
     var erro by remember { mutableStateOf<String?>(null) }
 
     fun fechar() {
-        CoroutineScope(Dispatchers.IO).launch { runCatching { App.aplicar(Api.objeto("carteira.terminarRevelacao", JSONObject().put("id", carteira.id))) } }
+        // Na principal, como todo `App.aplicar`: o contador da geracao do estado so muda numa thread (rodada 13). O pedido vai ao
+        // nucleo no IO de qualquer jeito.
+        CoroutineScope(Dispatchers.Main).launch { runCatching { App.aplicar(Api.objeto("carteira.terminarRevelacao", JSONObject().put("id", carteira.id))) } }
         aoFechar()
     }
     DisposableEffect(Unit) {
@@ -128,6 +131,7 @@ fun FluxoDeRevelar(carteira: Carteira, copia: Boolean, aoFechar: () -> Unit) {
     BackHandler {
         when (etapa) {
             "conferir" -> etapa = "palavras"
+            "checagem" -> etapa = "aviso"
             else -> fechar()
         }
     }
@@ -136,8 +140,21 @@ fun FluxoDeRevelar(carteira: Carteira, copia: Boolean, aoFechar: () -> Unit) {
             Spacer(Modifier.height(Altura.barra))
             when (etapa) {
                 "aviso" -> Box(Modifier.weight(1f)) {
-                    AvisoAntesDasPalavras(erro, abrindo) { abrir() }
+                    AvisoAntesDasPalavras(erro, abrindo) {
+                        erro = null
+                        etapa = "checagem"
+                    }
                     if (abrindo) Trabalhando(t("Abrindo as palavras"))
+                }
+                // A checagem do aparelho entre o "estou ciente" e o PIN, como antes de digitar ou de gerar as palavras
+                // (pedido do dono, 15/11/2026). Volta ao aviso, onde o "Abrindo" e o motivo de uma recusa aparecem, e o
+                // proximo "Ver as palavras" confere de novo.
+                "checagem" -> Box(Modifier.weight(1f)) {
+                    VerificacaoDoAparelho(t("Deslize para ver as palavras"), criando = false,
+                        ciencia = t("Estou ciente de que este celular falhou na verificação de integridade e de que ver as palavras aqui pode expor a carteira. Quero seguir mesmo assim.")) {
+                        etapa = "aviso"
+                        abrir()
+                    }
                 }
                 // So as palavras: a passphrase nunca aparece, nem na carteira que tem uma (pedido do dono,
                 // 01/11/2026). Ela fica no nucleo so para conferir o que o dono digita.
@@ -153,9 +170,13 @@ fun FluxoDeRevelar(carteira: Carteira, copia: Boolean, aoFechar: () -> Unit) {
                 "passphrase" -> ConferirPassphrase(carteira, comRascunho = !soAPassphrase) { fechar() }
             }
         }
-        val voltar = etapa == "conferir"
+        val voltar = etapa == "conferir" || etapa == "checagem"
         BotaoDeCanto(if (voltar) Icones.voltar else Icones.fechar, if (voltar) t("Voltar") else t("Fechar"), Modifier.padding(start = Espaco.xs)) {
-            if (voltar) etapa = "palavras" else fechar()
+            when (etapa) {
+                "conferir" -> etapa = "palavras"
+                "checagem" -> etapa = "aviso"
+                else -> fechar()
+            }
         }
     }
 }

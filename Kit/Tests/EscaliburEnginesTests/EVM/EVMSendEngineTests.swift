@@ -315,10 +315,10 @@ struct EVMSendEngineTests {
         await #expect(throws: SendEngineError.self) { _ = try await Self.engine(lying).broadcast([signed], chain: .ethereum) }
     }
 
-    @Test("Status: recibo igual em dois provedores e confirmado; revertido vira falha com taxa cobrada")
+    @Test("Status: recibo igual em tres operadores e confirmado; revertido vira falha com taxa cobrada, com o recibo em tres")
     func status() async throws {
         let hash = "0x16d93ffd559e10c60889377e1279bee7d2ec9de72051185807869fcad7510cfc"
-        let status = await Self.engine(try F.transport()).status(hash, chain: .ethereum)
+        let status = await Self.engine(try F.transport(), providers: testProviders("a", "b", "c")).status(hash, chain: .ethereum)
         guard case .confirmed(let detail) = status else { Issue.record("esperava confirmado: \(status)"); return }
         #expect(detail?.hasPrefix("Confirmado na rede") == true)
 
@@ -326,8 +326,10 @@ struct EVMSendEngineTests {
         let receipt = String(decoding: try EVMFixtures.data("eth_getTransactionReceipt-binance8"), as: UTF8.self)
             .replacingOccurrences(of: "\"status\":\"0x1\"", with: "\"status\":\"0x0\"")
         reverted.prepend { call in call.method == "eth_getTransactionReceipt" ? Data(receipt.utf8) : nil }
-        #expect(await Self.engine(reverted).status(hash, chain: .ethereum)
+        #expect(await Self.engine(reverted, providers: testProviders("a", "b", "c")).status(hash, chain: .ethereum)
             == .failed(reason: "A transação entrou na rede, mas o contrato recusou. A taxa da rede foi cobrada."))
+        // Com o recibo em dois operadores so, a falha ainda nao vale: o dono nao reenvia por dois (auditoria 8, 14/11/2026).
+        #expect(await Self.engine(reverted).status(hash, chain: .ethereum) == .pending)
         // Hash malformado ou rede errada: pendente, nunca "confirmado".
         #expect(await Self.engine(try F.transport()).status("0x12", chain: .ethereum) == .pending)
         #expect(await Self.engine(try F.transport()).status(hash, chain: .base) == .pending)

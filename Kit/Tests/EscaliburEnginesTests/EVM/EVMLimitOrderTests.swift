@@ -89,7 +89,8 @@ struct EVMLimitOrderTests {
     @Test("Autorizacao revertida na cadeia: a ordem nao vai para a CoW")
     func prerequisiteFailed() async throws {
         let cow = FakeCoW()
-        let engine = H.engine(cow: cow, sources: [], transport: try H.baseTransport(receiptStatus: "0x0"))
+        // A falha pede o recibo em tres operadores (auditoria 8, 14/11/2026).
+        let engine = H.engine(cow: cow, sources: [], transport: try H.baseTransport(receiptStatus: "0x0"), providers: testProviders("a", "b", "c"))
         let plan = try await engine.planLimitOrder(Self.request())
         await #expect(throws: SendEngineError.message("A autorização da ordem falhou na rede. A ordem não foi enviada.")) {
             _ = try await engine.submit(try EVMTestAccounts.sign(plan), plan: plan)

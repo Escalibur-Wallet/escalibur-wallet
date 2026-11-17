@@ -51,9 +51,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,6 +72,7 @@ import app.escalibur.wallet.nucleo.Api
 import app.escalibur.wallet.ui.App
 import app.escalibur.wallet.ui.Carteira
 import app.escalibur.wallet.ui.carteira.CopiaAgora
+import app.escalibur.wallet.ui.carteira.enderecoParaCopiar
 import app.escalibur.wallet.ui.carteira.SeloDeToken
 import app.escalibur.wallet.ui.comp.Avisos
 import app.escalibur.wallet.ui.comp.BotaoPrimario
@@ -96,6 +100,10 @@ import org.json.JSONObject
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Um ativo que a carteira recebe numa rede (o `Receber.Ativo` do nucleo). */
 data class AtivoRecebivel(
@@ -301,6 +309,11 @@ private fun Escolha(moedas: List<MoedaRecebivel>, aoEscolherResultado: (Resultad
                     r.optString("estado") == "frase" -> item {
                         Box(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md)) {
                             NotaDaBusca(t("Isto parece o começo das palavras de uma carteira, e a busca não saiu do celular. As palavras só se digitam ao importar uma carteira."))
+                        }
+                    }
+                    r.optString("estado") == "chave" -> item {
+                        Box(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md)) {
+                            NotaDaBusca(t("Isto parece uma chave privada, e a busca não saiu do celular. Não mostre essa chave a ninguém."))
                         }
                     }
                     else -> {
@@ -520,25 +533,97 @@ private fun TelaDoEndereco(
     aoTrocar: (AtivoRecebivel) -> Unit, aoVoltar: () -> Unit,
 ) {
     val contexto = LocalContext.current
-    var dados by remember(ativo.id) { mutableStateOf<JSONObject?>(null) }
-    LaunchedEffect(ativo.id) {
-        val pedido = JSONObject().put("ativo", ativo.id)
-        // A moeda da busca nao esta na lista da carteira: o endereco e o da conta na rede dela.
-        if (catalogo != null) pedido.put("rede", ativo.rede)
+    val escopo = rememberCoroutineScope()
+    // O endereco que a conta tem agora: a troca da TON para a W5 com a tela aberta volta a esperar a conferencia, como na
+    // abertura, e a W5 nao aparece antes da marca dela chegar (rodada 10 da auditoria 8), como no iOS.
+    val enderecoAtual = App.estado.carteira?.endereco(ativo.rede)
+    var dados by remember(ativo.id, enderecoAtual) { mutableStateOf<JSONObject?>(null) }
+    // O "Tentar de novo" da rede que ainda nao respondeu: a conferencia roda outra vez (15/11/2026), como no iOS.
+    var tentativa by remember(ativo.id, enderecoAtual) { mutableIntStateOf(0) }
+    // A moeda da busca nao esta na lista da carteira: o endereco e o da conta na rede dela.
+    val pedido = remember(ativo.id) { JSONObject().put("ativo", ativo.id).also { if (catalogo != null) it.put("rede", ativo.rede) } }
+    LaunchedEffect(ativo.id, enderecoAtual, tentativa) {
+        // A hora do deposito: a rede desta conta conferida de novo ao abrir, sem esperar a do destravar, como o iOS
+        // (auditoria 8, 14/11/2026). O endereco espera ate 3 s pela resposta, para nao ser copiado antes de uma marca nova
+        // chegar; sem rede, aparece depois disso, e a conferencia segue (rodada 2). Conferida, o endereco volta com o aviso
+        // (ou sem ele) e a marca da Tron que vale agora.
+        val inicio = android.os.SystemClock.elapsedRealtime()
+        val conferencia = async { runCatching { Api.objeto("receber.conferirControle", JSONObject().put("rede", ativo.rede)) } }
+        val resultado = withTimeoutOrNull(3_000) { conferencia.await() }
+        // A conferencia que nao foi ate o fim (a pausa) nao libera na hora: o endereco espera os 3 s (rodada 4), como no iOS.
+        if (resultado?.isFailure == true) delay((3_000 - (android.os.SystemClock.elapsedRealtime() - inicio)).coerceAtLeast(0))
         dados = runCatching { Api.objeto("receber.endereco", pedido) }.getOrNull()
+        // A marca de outra conferencia (a completa da importacao) chega com a tela aberta: o endereco e lido de novo, e a tela
+        // fecha como no iOS, que le a sessao a cada desenho (rodada 9). Ja agora, sem esperar a conferencia desta tela, que pode
+        // levar dezenas de segundos; a primeira emissao le uma vez logo depois de mostrar (rodada 10).
+        launch {
+            // Tambem a marca do mesmo endereco em outra carteira deste celular, e a rede lida (15/11/2026).
+            snapshotFlow {
+                App.estado.carteira?.let { listOf(ativo.rede in it.outroControle, it.tronOutraChave, ativo.rede in it.marcadaEmOutra, ativo.rede in it.naoLidas) }
+            }.collect {
+                runCatching { Api.objeto("receber.endereco", pedido) }.getOrNull()?.let { dados = it }
+            }
+        }
+        if (conferencia.await().isSuccess) {
+            runCatching { Api.objeto("receber.endereco", pedido) }.getOrNull()?.let { dados = it }
+        }
     }
-    val info = dados ?: return
+    val info = dados ?: run {
+        // Com a barra, para voltar ou fechar enquanto confere (rodada 3 da auditoria 8).
+        TelaComBarra(aoVoltar = if (direto) null else aoVoltar, fundo = Paleta.corpo,
+                     acoes = if (direto) ({ BotaoDoGrupo(Icones.fechar, t("Fechar"), Paleta.tintaSuave) { Navegacao.fechar() } }) else null) { espaco ->
+            Box(Modifier.fillMaxSize().padding(espaco), contentAlignment = Alignment.Center) {
+                Text(t("Conferindo esta conta na rede"), style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
+            }
+        }
+        return
+    }
     val endereco = info.getString("endereco")
     val existe = info.getBoolean("existe")
     // Aberta direto (sem a lista antes): so o fechar no alto, como no iOS; senao, o voltar de vidro.
     TelaComBarra(aoVoltar = if (direto) null else aoVoltar, fundo = Paleta.corpo,
                  acoes = if (direto) ({ BotaoDoGrupo(Icones.fechar, t("Fechar"), Paleta.tintaSuave) { Navegacao.fechar() } }) else null) { espaco ->
     Column(Modifier.fillMaxSize().padding(espaco)) {
+        // O mesmo endereco em outra carteira deste celular, onde a marca foi vista (15/11/2026), como no iOS.
+        val outraCarteira = info.opcional("outraCarteira")
         if (info.getBoolean("tronOutraChave")) {
             Column(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
                 Text(t("Esta conta na Tron é controlada por outra chave"), style = estilo(Tipo.titulo), color = Paleta.tinta)
-                Text(t("Quando esta carteira foi importada, a rede mostrou outra chave no controle da conta na Tron. É o golpe da frase com saldo: o que entrar nela, quem controla essa chave leva. Por isso o app não mostra este endereço."),
+                Text(t("Quando esta carteira abriu neste aparelho, a rede mostrou outra chave no controle da conta na Tron. É o golpe da frase com saldo: o que entrar nela, quem controla essa chave leva. Por isso o app não mostra este endereço."),
                      style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
+                outraCarteira?.let { Text(t("Este endereço também está na carteira %@, e lá a rede mostrou outra chave no controle.", it), style = estilo(Tipo.corpo), color = Paleta.tintaSuave) }
+            }
+            return@Column
+        }
+        // Outra chave, conta ou contrato no controle desta conta nesta rede (auditoria 8, 14/11/2026): o endereco nem sai do
+        // nucleo, e a tela diz o que foi visto, como a da Tron e como no iOS.
+        info.opcional("outroControle")?.let { aviso ->
+            Column(Modifier.padding(horizontal = Espaco.margem).padding(top = Espaco.md), verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                Text(ativo.redeNome, style = estilo(Tipo.titulo), color = Paleta.tinta)
+                Text(aviso, style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
+                outraCarteira?.let { Text(t("Este endereço também está na carteira %@, e lá a rede mostrou outra chave no controle.", it), style = estilo(Tipo.corpo), color = Paleta.tintaSuave) }
+                Text(t("Por isso o app não mostra este endereço."), style = estilo(Tipo.corpo), color = Paleta.tinta)
+            }
+            return@Column
+        }
+        // So a rede ja lida mostra o endereco: sem resposta, ele espera a conferencia, em vez de aparecer depois dos 3 s (pedido do
+        // dono, 15/11/2026, a forma mais segura), como no iOS. O endereco nem sai do nucleo.
+        if (info.optBoolean("naoLida") || endereco.isEmpty()) {
+            Column(Modifier.fillMaxSize().padding(horizontal = Espaco.margem), horizontalAlignment = Alignment.CenterHorizontally,
+                   verticalArrangement = Arrangement.spacedBy(Espaco.sm, Alignment.CenterVertically)) {
+                Text(t("Conferindo esta conta na rede"), style = estilo(Tipo.corpo), color = Paleta.tintaSuave)
+                if (info.optBoolean("desligada")) {
+                    // A rede desligada nao e consultada: a conferencia nunca chegaria, e o "Tentar de novo" nao faria nada.
+                    Text(t("Ligue a rede %@ nos Ajustes para o app conferir de novo.", ativo.redeNome), style = estilo(Tipo.corpo),
+                         color = Paleta.tintaSuave, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                } else {
+                    Text(t("A rede ainda não respondeu. O endereço aparece depois que esta conta for conferida."), style = estilo(Tipo.corpo),
+                         color = Paleta.tintaSuave, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    BotaoSecundario(t("Tentar de novo"), Modifier.padding(top = Espaco.xs)) {
+                        dados = null
+                        tentativa += 1
+                    }
+                }
             }
             return@Column
         }
@@ -589,16 +674,25 @@ private fun TelaDoEndereco(
                 )
             }
             BotaoDeCopiar(t("Copiar endereço"), t("Endereço copiado"), Modifier.padding(top = Espaco.lg)) {
-                Transferencia.copiar(contexto, endereco)
+                // Conferido no nucleo na hora do toque, na carteira gravada (rodada 9 da auditoria 8), como o Copiar endereco. A
+                // recusa nao acende o "copiado" (rodada 10).
+                val carteira = App.estado.carteira?.id
+                if (carteira == null || enderecoParaCopiar(carteira, listOf(ativo.rede)) != endereco) return@BotaoDeCopiar false
+                Transferencia.copiarEndereco(contexto, endereco, carteira, ativo.rede)
                 Avisos.mostrar(t("Endereço copiado. Depois de colar, confira o endereço inteiro, inclusive o meio."))
+                true
             }
             // O Compartilhar do sistema tem o Copiar, sem prazo e sem a marca de sensivel: some na carteira com
             // passphrase e no Super Security, como no iOS (segunda passada da auditoria de 03/11/2026).
             val podeCompartilhar = App.estado.carteira?.temPassphrase == false && !App.estado.reforcado
             if (podeCompartilhar) {
                 BotaoSecundario(t("Compartilhar"), Modifier.padding(top = Espaco.sm)) {
-                    val envio = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, endereco)
-                    contexto.startActivity(Intent.createChooser(envio, null))
+                    val carteira = App.estado.carteira?.id
+                    escopo.launch {
+                        if (carteira == null || enderecoParaCopiar(carteira, listOf(ativo.rede)) != endereco) return@launch
+                        val envio = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, endereco)
+                        contexto.startActivity(Intent.createChooser(envio, null))
+                    }
                 }
             }
         }

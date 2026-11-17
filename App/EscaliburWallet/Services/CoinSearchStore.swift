@@ -1,3 +1,4 @@
+import EscaliburChains
 import EscaliburCore
 import EscaliburNetwork
 import Foundation
@@ -22,6 +23,8 @@ final class CoinSearchStore {
         case failed
         /// Parece o comeco das palavras de uma carteira: a busca nao saiu do iPhone.
         case phrase
+        /// Parece uma chave privada: a busca nao saiu do iPhone.
+        case privateKey
     }
 
     private(set) var searches: [String: Status] = [:]
@@ -41,7 +44,30 @@ final class CoinSearchStore {
         query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    func status(_ query: String) -> Status? { searches[Self.key(query)] }
+    /// O texto que pode ser um segredo, com a resposta da lista embarcada: um lugar so, que a proxima busca troca e o travar
+    /// apaga. No dicionario, ele ficava ate o app fechar (revisao dos 3 agentes, 09/11/2026).
+    private var barred: (key: String, status: Status)?
+    private var lockObserver: NSObjectProtocol?
+
+    private init() {
+        lockObserver = NotificationCenter.default.addObserver(forName: AppSession.didLock, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.barred = nil }
+        }
+    }
+
+    /// O segredo nunca entra no dicionario (ficava la, como chave, ate o app fechar): o estado dele e calculado na hora.
+    func status(_ query: String) -> Status? {
+        if PrivateKeyGuard.looksLikePrivateKey(query) { return .privateKey }
+        let key = Self.key(query)
+        if Self.looksLikePhrase(key) { return .phrase }
+        if CoinCatalog.mayCarrySecret(Self.typed(query)) { return barred?.key == key ? barred?.status : nil }
+        return searches[key]
+    }
+
+    /// O texto como foi digitado, sem passar para minusculas: a porta do `CoinCatalog` olha as maiusculas.
+    static func typed(_ query: String) -> String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     /// Chamada pela tela a cada mudanca do texto, dentro de uma tarefa que o SwiftUI
     /// cancela quando o texto muda de novo: a espera curta antes de perguntar evita uma
@@ -49,10 +75,18 @@ final class CoinSearchStore {
     func search(_ query: String) async {
         let key = Self.key(query)
         guard key.count >= 2 else { return }
-        if Self.looksLikePhrase(key) {
-            searches[key] = .phrase
+        // A chave privada colada na busca tambem nao vai ao CoinGecko, e nada dela fica guardado (revisao dos 3 agentes,
+        // 09/11/2026). O `CoinCatalog.search` tem a porta de novo, para as duas plataformas.
+        if Self.looksLikePhrase(key) || PrivateKeyGuard.looksLikePrivateKey(query) { return }
+        // O que pode ser um segredo (um pedaco longo, 64 hexadecimais, o comeco de uma chave) nao sai do iPhone e nao entra no
+        // dicionario: so a lista embarcada responde.
+        if CoinCatalog.mayCarrySecret(Self.typed(query)) {
+            barred = (key, .loading)
+            let local = await localSearch(key)
+            if barred?.key == key { barred = (key, .loaded(local)) }
             return
         }
+        barred = nil
         if case .loaded? = searches[key] { return }
         searches[key] = .loading
         try? await Task.sleep(for: .milliseconds(350))
@@ -69,7 +103,7 @@ final class CoinSearchStore {
                     return
                 }
             }
-            if let found = try? await CoinCatalog.search(key) {
+            if let found = try? await CoinCatalog.search(Self.typed(query)) {
                 // Resposta do CoinPaprika (o CoinGecko em pausa) ou nada achado: a lista
                 // embarcada primeiro, que tem as moedas pequenas que o CoinPaprika nao tem.
                 let reserve = found.isEmpty || found.contains { $0.id.hasPrefix(CoinCatalog.paprikaPrefix) }

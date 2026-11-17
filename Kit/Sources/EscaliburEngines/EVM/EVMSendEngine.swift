@@ -253,6 +253,11 @@ public struct EVMSendEngine: SendEngine {
         return try? await reader.sighting(id, chain: chain, from: from, nonce: nonce)
     }
 
+    public func minedNonce(chain: Chain, from: String) async -> UInt64? {
+        guard chain.id == self.chain.id, let account = try? EVMAddress(from) else { return nil }
+        return try? await reader.minedNonce(chain: chain, account: account)
+    }
+
     /// Confirmado so com dois provedores de acordo no recibo (o leitor exige).
     static func transferStatus(_ status: TransactionStatus) -> TransferStatus {
         switch status {

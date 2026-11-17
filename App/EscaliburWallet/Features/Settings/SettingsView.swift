@@ -289,8 +289,21 @@ struct WalletSettingsView: View {
                                 // A conta da Tron tem outra chave no controle, visto na importacao:
                                 // o endereco nao aparece nem copia (segunda revisao, C7-05).
                                 SettingsRow(icon: "exclamationmark.octagon", title: String(localized: "Tron: controlada por outra chave"), valueColor: Palette.down, chevron: false)
+                            } else if let chain = Chain.find(account.chainID), wallet.foreignControl(on: chain) != nil || session.markedElsewhere(wallet, on: chain) != nil {
+                                // Outra chave, conta ou contrato no controle nesta rede, nesta carteira ou em outra com o mesmo endereco:
+                                // o endereco tambem nao copia (auditoria 8; a outra carteira desde 15/11/2026).
+                                SettingsRow(icon: "exclamationmark.octagon", title: String(localized: "\(chain.name): outra chave no controle"), valueColor: Palette.down, chevron: false)
+                            } else if let chain = Chain.find(account.chainID), !wallet.isWatchOnly, !wallet.controlChecked(on: chain),
+                                      session.metadata.settings.disabledChainIDs.contains(chain.id) {
+                                // A rede desligada nao e conferida: diz isso, em vez de "ainda nao conferida" para sempre (15/11/2026).
+                                SettingsRow(icon: "pause.circle", title: chain.name, value: String(localized: "Desligada"), chevron: false)
+                            } else if let chain = Chain.find(account.chainID), !wallet.isWatchOnly, !wallet.controlChecked(on: chain) {
+                                // A rede ainda nao lida para outra chave no controle: o endereco copia depois (pedido do dono, 15/11/2026).
+                                SettingsRow(icon: "hourglass", title: String(localized: "\(chain.name): ainda não conferida"), chevron: false)
                             } else if let chain = Chain.find(account.chainID) {
                                 Button {
+                                    // Conferido na carteira gravada, na hora do toque (rodada 9 da auditoria 8).
+                                    guard session.copyableAddress(wallet.id, chains: [chain]) == account.address else { return }
                                     Pasteboard.copyReceiveAddress(account.address, hasPassphrase: wallet.hasPassphrase, session: session)
                                     toasts.show(String(localized: "Endereço copiado."))
                                 } label: {
@@ -346,11 +359,9 @@ struct WalletSettingsView: View {
     }
 
     private func rename(_ wallet: WalletMeta) {
-        var updated = wallet
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        updated.name = String(trimmed.prefix(40))
-        session.update(updated)
+        session.rename(wallet.id, to: String(trimmed.prefix(40)))
     }
 
     private func remove() async {
@@ -483,7 +494,7 @@ struct SecuritySettingsView: View {
                 .padding(.top, Space.lg)
                 Text(addressError ?? (session.hardenedModeOn
                      ? String(localized: "No Super Security, a conferência do endereço fica sempre ligada.")
-                     : String(localized: "Todo envio para fora das suas carteiras pede os 6 últimos caracteres do endereço de destino, lidos de onde você copiou.")))
+                     : String(localized: "Todo envio para fora das suas carteiras pede os 6 últimos caracteres do endereço de destino, ou o nome inteiro de uma conta NEAR, lidos de onde você copiou.")))
                     .typeStyle(.note).foregroundStyle(addressError == nil ? Palette.inkMuted : Palette.down)
                     .padding(.horizontal, Space.gutter).padding(.top, Space.xs)
                     .fixedSize(horizontal: false, vertical: true)
@@ -991,19 +1002,20 @@ enum WalletRemoval {
 
     /// Devolve se removeu.
     static func remove(_ wallet: WalletMeta, session: AppSession, auth: AuthCoordinator, toasts: ToastCenter) async -> Bool {
-        if !wallet.isWatchOnly {
-            do {
-                guard try await auth.perform(session, reason: String(localized: "Remover \(wallet.name) deste iPhone"), presence: .pinAndBiometry, { _ in true }) == true else { return false }
-            } catch {
-                if let message = AuthCoordinator.refusalMessage(error) { toasts.show(message) }
-                return false
-            }
-        }
         do {
-            try session.remove(wallet)
-            return true
+            if wallet.isWatchOnly {
+                try await session.remove(wallet, credential: nil)
+                return true
+            }
+            // A presenca inteira e conferida tambem dentro da remocao, com a credencial (rodada 1 da auditoria 8).
+            return try await auth.retrying(reason: String(localized: "Remover \(wallet.name) deste iPhone"), presence: .pinAndBiometry) {
+                try await session.remove(wallet, credential: $0)
+            } != nil
+        } catch let error as RootKeyVault.Failure {
+            if let message = AuthCoordinator.refusalMessage(error) { toasts.show(message) }
+            return false
         } catch {
-            toasts.show(error.localizedDescription)
+            toasts.show(AuthCoordinator.refusalMessage(error) ?? error.localizedDescription)
             return false
         }
     }

@@ -196,7 +196,7 @@ struct EVMCoWSwapTests {
         let quote = try await engine.quote(F.request())
         #expect(quote.execution == .transactions && quote.parts == nil)
         let request = TradeRequest(walletID: UUID(), chain: .base, account: try EVMTestAccounts.testAccount(on: .base), sell: F.usdc,
-                                   buy: .native(.base), amountIn: F.amount, slippageBasisPoints: 50, inParts: true)
+                                   buy: .native(.base), amountIn: F.amount, slippageBasisPoints: 50, inParts: true, acceptsUnanchored: true)
         await #expect(throws: SendEngineError.message("A cotação não corresponde a esta troca. Atualize a cotação e revise de novo.")) {
             _ = try await engine.plan(request, quote: quote)
         }

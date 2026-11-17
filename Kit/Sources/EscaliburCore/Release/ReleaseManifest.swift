@@ -160,13 +160,17 @@ public struct ReleaseManifest: Sendable, Equatable {
         guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else { throw Failure.malformed }
         let signed = Data(envelope.manifesto.utf8)
         var valid = Set<String>()
+        // O limiar conta chaves, e nao nomes: a mesma chave publicada com dois nomes (o apelido antigo de uma chave do
+        // Mac, por exemplo) fechava sozinha um limiar de dois (auditoria 8, 14/11/2026).
+        var distinct = Set<Data>()
         for signature in envelope.assinaturas {
             guard let key = keys[signature.chave], let raw = Data(base64Encoded: signature.p256),
                   let ecdsa = try? P256.Signing.ECDSASignature(rawRepresentation: raw),
                   key.isValidSignature(ecdsa, for: signed) else { continue }
             valid.insert(signature.chave)
+            distinct.insert(key.rawRepresentation)
         }
-        guard threshold > 0, valid.count >= threshold else { throw Failure.notEnoughSignatures }
+        guard threshold > 0, distinct.count >= threshold else { throw Failure.notEnoughSignatures }
         guard let body = try? JSONDecoder().decode(Body.self, from: signed) else { throw Failure.malformed }
         guard body.formato == 1 else { throw Failure.unknownFormat }
         guard body.app == app else { throw Failure.wrongApp }

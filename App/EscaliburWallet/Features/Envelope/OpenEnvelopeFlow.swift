@@ -1,3 +1,4 @@
+import EscaliburChains
 import EscaliburCore
 import EscaliburKeys
 import SwiftUI
@@ -65,6 +66,8 @@ struct OpenEnvelopeFlow: View {
     @State private var error: String?
     @State private var opened: Envelope.Contents?
     @State private var revealDraft: PhraseDraft?
+    /// A checagem do aparelho antes do "Só ver as palavras", como no Ver as palavras (pedido do dono, 15/11/2026).
+    @State private var checkingReveal = false
     @State private var importing = false
     /// Super Security em "Bloquear as carteiras": importar recusa antes do PIN; so ver as palavras continua.
     @State private var wordsBlocked = false
@@ -76,11 +79,17 @@ struct OpenEnvelopeFlow: View {
             Group {
                 if let pending {
                     ImportPreviewView(preview: pending.preview, hasPassphrase: pending.secret.passphrase.count > 0, source: .envelope, saving: importing,
-                                      onSave: { foreign in Task { await save(tronForeign: foreign) } }, onBack: discardPending)
+                                      onSave: { foreign, evm in Task { await save(tronForeign: foreign, evmForeign: evm) } }, onBack: discardPending)
                 } else if let revealDraft, let opened {
                     // So as palavras: a passphrase do envelope nunca aparece (pedido do dono, 01/11/2026).
                     RecordWordsView(draft: revealDraft, walletName: opened.label.isEmpty ? String(localized: "Envelope") : opened.label) {
                         close()
+                    }
+                } else if checkingReveal, let opened {
+                    DeviceCheckView(slideTitle: String(localized: "Deslize para ver as palavras"),
+                                    consent: String(localized: "Estou ciente de que este iPhone falhou na verificação de integridade e de que ver as palavras aqui pode expor a carteira. Quero seguir mesmo assim.")) {
+                        checkingReveal = false
+                        reveal(opened, words: Self.wordCount(opened))
                     }
                 } else if opening || opened != nil {
                     openStage
@@ -90,7 +99,7 @@ struct OpenEnvelopeFlow: View {
                     chooseView
                 }
             }
-            .padding(.horizontal, revealDraft == nil ? Space.gutter : 0)
+            .padding(.horizontal, revealDraft == nil && !checkingReveal ? Space.gutter : 0)
             .padding(.top, Space.md)
             .padding(.bottom, Space.xs)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -230,7 +239,8 @@ struct OpenEnvelopeFlow: View {
         Spacer()
         PrimaryButton(title: String(localized: "Importar esta carteira"), enabled: !wordsBlocked, loading: importing) { Task { await importWallet(contents, words: words) } }
             .task { wordsBlocked = session.addingWordsBlocked }
-        SecondaryButton(title: String(localized: "Só ver as palavras")) { reveal(contents, words: words) }.padding(.top, Space.sm)
+        // Cada toque confere o aparelho de novo antes das palavras (15/11/2026).
+        SecondaryButton(title: String(localized: "Só ver as palavras")) { checkingReveal = true }.padding(.top, Space.sm)
     }
 
     // MARK: Acoes
@@ -369,7 +379,7 @@ struct OpenEnvelopeFlow: View {
     }
 
     /// Guarda depois da conferencia dos enderecos.
-    private func save(tronForeign: Bool) async {
+    private func save(tronForeign: Bool, evmForeign: (chain: Chain, control: ForeignControl)? = nil) async {
         guard let pending else { return }
         importing = true
         defer {
@@ -385,6 +395,7 @@ struct OpenEnvelopeFlow: View {
                 // de uma versao anterior entra marcada, como a da carteira de origem.
                 try await session.addWallet(secret: pending.secret, name: pending.name, origin: .importedEnvelope,
                                             wordCount: pending.words, backupConfirmed: true, select: first, tronForeignControl: tronForeign,
+                                            foreignControl: evmForeign.map { [$0.chain.id: $0.control] },
                                             passphraseConfirmed: passphraseChecked, legacyCardano: legacyEnvelope,
                                             expectedFingerprint: pending.preview.fingerprint, credential: credential)
             }) != nil else { return }
@@ -413,6 +424,7 @@ struct OpenEnvelopeFlow: View {
 
     private func forgetOpened() {
         forgetWhenDone = false
+        checkingReveal = false
         cipher.clearAll()
         password.wipe()
         passwordLength = 0

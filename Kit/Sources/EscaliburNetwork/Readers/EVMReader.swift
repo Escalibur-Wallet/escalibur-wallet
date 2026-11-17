@@ -230,6 +230,38 @@ public actor EVMReader {
         return try await hasCode(chain, address, block: pin, pool: pool, providers: providers)
     }
 
+    /// O codigo de uma conta da carteira na rede. A conta de uma frase nao tem codigo; com a delegacao EIP-7702
+    /// (`0xef0100` e o endereco do contrato, 23 bytes), quem controla o contrato pode mover o que entrar nela sem a
+    /// assinatura do dono: e o golpe da "frase com saldo" na EVM depois do Pectra, e o sinal de uma frase vazada.
+    public enum AccountCode: Sendable, Equatable {
+        case none
+        case delegation(EVMAddress)
+        case contract
+    }
+
+    /// `eth_getCode` da conta do dono no bloco fixado (auditoria 8, 14/11/2026), por `Quorum.firm`: dois de acordo sem contra,
+    /// ou, com `everyone` (para tirar uma marca), todos os operadores iguais, cada um no bloco mais novo dele (rodada 2: o bloco
+    /// fixado por dois combinados podia ser de antes da delegacao). Nil quando nada decide.
+    public func accountCode(chain: Chain, account: EVMAddress, everyone: Bool = false) async throws -> AccountCode? {
+        let (pool, providers) = try await eligible(chain)
+        let pin = everyone ? "latest" : try await pinnedBlock(chain, pool: pool, providers: providers)
+        let transport = self.transport
+        let code = try await Quorum.firm(providers, pool: pool, everyone: everyone) { provider in
+            try await self.verify(provider, chain: chain)
+            return try await Self.call(transport, provider.baseURL, "eth_getCode", [.string(account.checksummed), .string(pin)])
+                .hexData("eth_getCode")
+        }
+        return code.map(Self.classify)
+    }
+
+    static func classify(code: [UInt8]) -> AccountCode {
+        if code.isEmpty { return .none }
+        if code.count == 23, code.starts(with: [0xef, 0x01, 0x00]), let delegate = EVMAddress(bytes: Array(code[3...])) {
+            return .delegation(delegate)
+        }
+        return .contract
+    }
+
     /// O que um provedor respondeu ao `eth_call` da transacao exata.
     enum CallOutcome: Sendable, Equatable {
         case returned([UInt8])
@@ -326,39 +358,160 @@ public actor EVMReader {
         return try tally.receipt(chainID: chain.id, id: signed.id)
     }
 
-    /// `eth_getTransactionReceipt` em dois provedores. Confirmado (ou falho) so quando
-    /// os dois tem o recibo no mesmo bloco; com um so, pendente.
+    /// `eth_getTransactionReceipt` com as testemunhas (`witnessed`). Sucesso: o recibo que decide (`Quorum.decided`, com
+    /// quem disse `null` e nao viu a transacao no mesmo bloco contando contra), com tres operadores atras dele (`vouched`):
+    /// com dois, os dois que combinam davam por confirmada a transacao recem-minerada enquanto o honesto falhava (pedido do
+    /// dono, 15/11/2026, a forma mais segura, no lugar de conferir o `receiptsRoot`, que tambem dependeria do cabecalho de
+    /// tres). Falha: o recibo de tres, nenhum recibo diferente e nenhuma testemunha contra, porque a falha forjada leva o dono
+    /// a reenviar e pagar duas vezes. No resto, pendente.
     public func status(of hash: String, chain: Chain) async throws -> TransactionStatus {
         guard let bytes = Hex.decode(hash), bytes.count == 32, hash.hasPrefix("0x") else { throw ReaderError.invalidInput("hash") }
         let (pool, providers) = try await eligible(chain)
         let transport = self.transport
-        // Nem todo RPC guarda indice de transacoes (a Cloudflare devolve `null` para
-        // recibos antigos): com um recibo e um `null`, pergunta ao proximo.
-        let (answers, lastError) = await Quorum.gather(providers, pool: pool, count: providers.count, firstWave: 2, until: { values in
-            let found: [Receipt] = values.compactMap { $0 }
-            return Self.agreeingReceipt(found) != nil || (values.count >= 2 && found.isEmpty)
-        }) { (provider: Provider) async throws -> Receipt? in
+        let gathered = try await witnessed(hash, chain: chain, providers: providers, pool: pool, needs: { _ in Self.moneyVotes }) {
+            provider -> Receipt? in
             try await self.verify(provider, chain: chain)
             return try Self.parseReceipt(try await Self.call(transport, provider.baseURL, "eth_getTransactionReceipt", [.string(hash)]))
         }
+        guard case .found(let receipts, let testimonies, let silent, let support) = gathered else {
+            if case .nothing(let unknown) = gathered, unknown { return .notFound }
+            return .pending
+        }
+        // Contra: a testemunha que nao viu a transacao no bloco do recibo e o `null` sem testemunha (a que falhou, um 429).
+        // Senao, dois operadores fora do primeiro par aproveitavam a falha passageira de um honesto para forjar o
+        // "confirmado" de uma pendente (revisao dos tres agentes de 14/11/2026); a leitura seguinte resolve o honesto.
+        let against: (Receipt) -> Int = { receipt in
+            silent - testimonies.count + testimonies.filter { !$0.places(block: receipt.block, blockHash: receipt.blockHash) }.count
+        }
+        guard let receipt = Quorum.decided(receipts, against: against),
+              Self.vouched(receipts: receipts.filter({ $0 == receipt }).count,
+                           placing: (testimonies + support).filter({ $0.places(block: receipt.block, blockHash: receipt.blockHash) }).count) else {
+            return .pending
+        }
+        // A falha: alem disso, o mesmo recibo em tres operadores, todos os recibos iguais e todo `null` explicado por uma
+        // testemunha que viu a transacao no mesmo bloco, porque a falha forjada leva o dono a reenviar e pagar duas vezes.
+        // A testemunha nao conta como voto: ela ve o bloco, e nao o status (auditoria 8, 14/11/2026).
+        guard receipt.success else {
+            let failed = receipts.count >= Self.moneyVotes && receipts.allSatisfy({ $0 == receipt }) && against(receipt) == 0
+            return failed ? .failed(reason: "reverted") : .pending
+        }
+        // A ponta de dois operadores, a menor: as confirmacoes que a tela mostra nao vem de um so (rodada 1 da auditoria 8).
+        let head = try await Quorum.collect(providers, pool: pool, count: 2) { provider in
+            try await Self.call(transport, provider.baseURL, "eth_blockNumber", []).quantity("eth_blockNumber")
+        }.map(\.value).min() ?? 0
+        let confirmations = head >= BigUInt(receipt.block) ? (head - BigUInt(receipt.block)).uint64.map { $0 + 1 } : 0
+        return .confirmed(block: receipt.block, confirmations: confirmations)
+    }
+
+    /// Recibos iguais de operadores diferentes que um veredito que move dinheiro pede: a falha (o dono reenvia) e o
+    /// recebimento conferido (quem vendeu entrega). Com dois, o par sorteado decidia sozinho (auditoria 8, 14/11/2026).
+    public static let moneyVotes = 3
+
+    /// Tres operadores atras do recibo que confirma: tres recibos iguais, ou dois e a testemunha de um terceiro que ve a
+    /// transacao no mesmo bloco (a publicnode apaga o recibo de mais de uns 2 dias e segue devolvendo a transacao; sem isso, a
+    /// ponte e o envio de dias atras ficavam em andamento para sempre). O honesto que falha nao testemunha: dois que combinam
+    /// nao confirmam sozinhos a transacao recem-minerada (15/11/2026).
+    static func vouched(receipts: Int, placing: Int) -> Bool {
+        receipts >= moneyVotes || (receipts >= 2 && receipts + placing >= moneyVotes)
+    }
+
+    /// O que um provedor que respondeu sem recibo sabe da transacao pelo hash: nao existe para ele, ainda sem bloco, ou
+    /// num bloco (com o hash do bloco e a transacao).
+    enum Inclusion: Sendable {
+        case unknown
+        case waiting
+        case mined(block: UInt64, blockHash: String, tx: StrictJSON)
+
+        /// A testemunha viu a transacao neste bloco.
+        func places(block: UInt64, blockHash: String) -> Bool {
+            if case .mined(let seen, let hash, _) = self { return seen == block && hash == blockHash }
+            return false
+        }
+    }
+
+    /// O resultado de perguntar algo tirado do recibo (`fetch`), com as testemunhas de quem respondeu sem recibo.
+    enum Witnessed<T: Sendable>: Sendable {
+        /// Ninguem tem o recibo e nenhuma testemunha viu a transacao num bloco. `unknown`: todas que responderam nao a
+        /// conhecem (e alguma respondeu).
+        case nothing(unknown: Bool)
+        /// Os valores encontrados, o que disse cada testemunha que respondeu e quantos responderam sem recibo (`silent`).
+        /// Quem chama conta contra o `null` cuja testemunha falhou (`silent - testimonies.count`), no sucesso e na falha.
+        /// `support`: o que disseram pelo hash os operadores cujo recibo falhou (o 403 da publicnode na OP, um 429, o
+        /// disjuntor), com algum recibo ja achado. So completam os tres atras do recibo (`vouched`) e nunca contam contra
+        /// (revisao dos tres agentes de 15/11/2026).
+        case found([T], testimonies: [Inclusion], silent: Int, support: [Inclusion])
+    }
+
+    /// Pergunta `fetch` aos provedores (revisao dos tres agentes de 14/11/2026). A primeira volta para quando o valor
+    /// decide sem nenhum `null`, ou com dois `null`: a transacao pendente nao vai a todos os operadores (o hash com o IP).
+    /// Com algum `null` e algum valor, pergunta a todos, para que dois operadores que forjam nao decidam antes do honesto
+    /// de baixo ser ouvido. Cada um que disse `null` testemunha pelo hash (so ele, que ja viu o hash): nem todo RPC
+    /// guarda indice de transacoes antigas (medido em 14/11/2026, a publicnode apaga o recibo depois de uns 2 dias, mas
+    /// ainda devolve a transacao com o bloco), e antes os dois `null` davam a transacao antiga por pendente para sempre,
+    /// e a fila de nonces travava a conta ("Uma transacao anterior com ETH...", bug de 14/11/2026). So `null` na
+    /// primeira volta: com alguma testemunha que viu a transacao num bloco, os outros sao perguntados; senao, para ali.
+    ///
+    /// `needs`: quantos recibos iguais o valor que decide pede antes de a volta parar. Dois no comum; tres no veredito que
+    /// move dinheiro (a falha, que leva a reenviar; o recebimento conferido, que leva a entregar o que foi vendido), para
+    /// que o par sorteado na primeira onda nao decida sozinho (auditoria 8, 14/11/2026).
+    func witnessed<T: Sendable & Equatable>(_ hash: String, chain: Chain, providers: [Provider], pool: ProviderPool,
+                                             needs: @escaping @Sendable (T) -> Int = { _ in 2 },
+                                             _ fetch: @escaping @Sendable (Provider) async throws -> T?) async throws -> Witnessed<T> {
+        let first = await Quorum.gather(providers, pool: pool, count: providers.count, firstWave: 2, until: { values in
+            let found = values.compactMap { $0 }
+            if found.isEmpty { return values.count >= 2 }
+            guard found.count == values.count, let best = Quorum.decided(found) else { return false }
+            return found.filter { $0 == best }.count >= needs(best)
+        }, fetch)
+        var answers = first.answers
         guard answers.count >= 2 else {
-            if answers.isEmpty, let lastError { throw lastError }
+            if answers.isEmpty, let lastError = first.lastError { throw lastError }
             throw ReaderError.notEnoughProviders(needed: 2, got: answers.count)
         }
-        let found: [Receipt] = answers.compactMap { $0.value }
-        if let receipt = Self.agreeingReceipt(found) {
-            guard receipt.success else { return .failed(reason: "reverted") }
-            let head = try await Quorum.first(providers, pool: pool) { provider in
-                try await Self.call(transport, provider.baseURL, "eth_blockNumber", []).quantity("eth_blockNumber")
+        var silent = answers.filter { $0.value == nil }.map(\.provider)
+        var testimonies = await inclusions(hash, chain: chain, asking: silent, pool: pool)
+        if answers.allSatisfy({ $0.value == nil }) {
+            guard testimonies.contains(where: { if case .mined = $0 { return true } else { return false } }) else {
+                return .nothing(unknown: !testimonies.isEmpty && testimonies.allSatisfy { if case .unknown = $0 { return true } else { return false } })
             }
-            let confirmations = head >= BigUInt(receipt.block) ? (head - BigUInt(receipt.block)).uint64.map { $0 + 1 } : 0
-            return .confirmed(block: receipt.block, confirmations: confirmations)
+            let asked = Set(answers.map(\.provider.operatorName))
+            let rest = providers.filter { !asked.contains($0.operatorName) }
+            let more = await Quorum.gather(rest, pool: pool, count: rest.count, firstWave: 2, fetch).answers
+            answers += more
+            let quiet = more.filter { $0.value == nil }.map(\.provider)
+            silent += quiet
+            testimonies += await inclusions(hash, chain: chain, asking: quiet, pool: pool)
         }
-        if !found.isEmpty { return .pending }
-        let known = try await Quorum.first(providers, pool: pool) { provider in
-            try await Self.call(transport, provider.baseURL, "eth_getTransactionByHash", [.string(hash)])
+        // Algum recibo achado: quem falhou no recibo testemunha pelo hash. A transacao esta num bloco, e o hash ja nao e so
+        // deste aparelho (revisao dos tres agentes de 15/11/2026).
+        var support: [Inclusion] = []
+        if answers.contains(where: { $0.value != nil }) {
+            let answered = Set(answers.map(\.provider.operatorName))
+            let failed = providers.filter { !answered.contains($0.operatorName) }
+            support = await inclusions(hash, chain: chain, asking: failed, pool: pool)
         }
-        return known.isNull ? .notFound : .pending
+        return .found(answers.compactMap(\.value), testimonies: testimonies, silent: silent.count, support: support)
+    }
+
+    /// O que cada provedor pedido diz da transacao pelo hash (`Inclusion`), em paralelo. O que falha nao entra aqui;
+    /// quem chama conta contra o `null` sem testemunha (`silent - testimonies.count`).
+    func inclusions(_ hash: String, chain: Chain, asking providers: [Provider], pool: ProviderPool) async -> [Inclusion] {
+        guard !providers.isEmpty else { return [] }
+        let transport = self.transport
+        let id = hash.lowercased()
+        return await Quorum.gather(providers, pool: pool, count: providers.count) { provider -> Inclusion in
+            try await self.verify(provider, chain: chain)
+            let tx = try await Self.call(transport, provider.baseURL, "eth_getTransactionByHash", [.string(hash)])
+            if tx.isNull { return .unknown }
+            guard (try? tx.field("hash", "tx").string("tx.hash"))?.lowercased() == id else {
+                throw ReaderError.responseMismatch(field: "eth_getTransactionByHash")
+            }
+            guard let number = tx.optionalField("blockNumber") else { return .waiting }
+            guard let block = try number.quantity("tx.blockNumber").uint64,
+                  let blockHash = try tx.optionalField("blockHash")?.hexData("tx.blockHash"), blockHash.count == 32
+            else { throw ReaderError.malformed(field: "tx.blockHash") }
+            return .mined(block: block, blockHash: Hex.encode(blockHash), tx: tx)
+        }.answers.map(\.value)
     }
 
     /// O que a rede diz de uma transacao deste aparelho, pela fila de nonces (quinta passada da auditoria de
@@ -398,7 +551,7 @@ public actor EVMReader {
 
     /// O resultado de conferir na rede um recebimento que o indexador mostrou.
     public enum IncomingCheck: Sendable, Equatable {
-        /// Dois RPCs tem o mesmo recibo de sucesso, com o valor chegando a esta conta.
+        /// Tres operadores tem o mesmo recibo de sucesso, com o valor chegando a esta conta.
         case confirmed(confirmations: UInt64)
         /// Ainda sem recibo nos RPCs (o indexador pode estar a frente, ou inventando).
         case notFound
@@ -409,7 +562,7 @@ public actor EVMReader {
         case unverifiable
     }
 
-    /// Confere em dois RPCs um recebimento do historico (auditoria 3, M2): o indexador
+    /// Confere em tres operadores um recebimento do historico (auditoria 3, M2): o indexador
     /// e um so, e um indexador comprometido poderia mostrar "+5.000 USDT, confirmada"
     /// que nunca chegou. Token: o recibo tem de ter o `Transfer` do contrato para esta
     /// conta com o valor exato. Moeda nativa: a transacao vai para esta conta com o valor
@@ -419,13 +572,18 @@ public actor EVMReader {
         let (pool, providers) = try await eligible(chain)
         let transport = self.transport
         struct Seen: Sendable, Equatable {
-            let receipt: Receipt?
+            let receipt: Receipt
             let delivered: Bool
         }
-        let seen = try await Quorum.agree(providers, pool: pool, field: "incoming") { provider -> Seen in
+        // Sem recibo e `nil`, que nao vota. Quem o disse testemunha pelo hash (`witnessed`): o recibo que decide tem de
+        // estar no bloco que ele viu e, na moeda da rede, a transacao dele tem de dizer o mesmo do destino e do valor; a
+        // testemunha que diz outra coisa conta contra. Sem isso, dois operadores forjavam o recebimento de um hash que nem
+        // existe, ou o de uma transacao antiga antes do honesto de baixo ser ouvido (revisao dos tres agentes de 14/11/2026).
+        let gathered = try await witnessed(hash, chain: chain, providers: providers, pool: pool,
+                                           needs: { $0.receipt.success && $0.delivered ? Self.moneyVotes : 2 }) { provider -> Seen? in
             try await self.verify(provider, chain: chain)
             let raw = try await Self.call(transport, provider.baseURL, "eth_getTransactionReceipt", [.string(hash)])
-            guard let receipt = try Self.parseReceipt(raw) else { return Seen(receipt: nil, delivered: false) }
+            guard let receipt = try Self.parseReceipt(raw) else { return nil }
             let delivered: Bool
             if let contract {
                 delivered = Self.receiptTransfers(raw, contract: contract, to: owner, amount: amount)
@@ -437,12 +595,34 @@ public actor EVMReader {
             }
             return Seen(receipt: receipt, delivered: delivered)
         }
-        guard let receipt = seen.receipt else { return .notFound }
+        guard case .found(let values, let testimonies, let silent, _) = gathered else { return .notFound }
+        // Contra: o `null` sem testemunha e a testemunha que diz outra coisa (como no `status`).
+        let against: (Seen) -> Int = { seen in
+            silent - testimonies.count + testimonies.filter { testimony in
+                guard testimony.places(block: seen.receipt.block, blockHash: seen.receipt.blockHash) else { return true }
+                guard contract == nil, case .mined(_, _, let tx) = testimony else { return false }
+                let to = try? tx.optionalField("to").map { try Self.address($0, "tx.to") } ?? nil
+                let value = try? tx.field("value", "tx").quantity("tx.value")
+                return (to == owner && value == amount) != seen.delivered
+            }.count
+        }
+        // Recibos diferentes: discordancia. Recibos iguais que so a testemunha segura (um no atrasado numa rede de tres):
+        // ainda nao conferido, e a tela tenta de novo.
+        guard let seen = Quorum.decided(values, against: against) else {
+            if values.contains(where: { $0 != values[0] }) { throw ReaderError.providersDisagree(field: "incoming") }
+            return .notFound
+        }
+        let receipt = seen.receipt
         guard receipt.success else { return .mismatch }
         guard seen.delivered else { return contract == nil ? .unverifiable : .mismatch }
-        let head = try await Quorum.first(providers, pool: pool) { provider in
+        // O "conferido" leva quem vendeu a entregar: o mesmo recibo em tres operadores, e nao so no par sorteado. Sem o
+        // terceiro (um fora do ar, ou o que nao guarda recibos antigos), fica sem conferir agora (auditoria 8, 14/11/2026).
+        let votes = values.filter { $0 == seen }.count
+        guard votes >= Self.moneyVotes else { throw ReaderError.notEnoughProviders(needed: Self.moneyVotes, got: votes) }
+        // A ponta de dois operadores, a menor: as confirmacoes que a tela mostra nao vem de um so (rodada 1 da auditoria 8).
+        let head = try await Quorum.collect(providers, pool: pool, count: 2) { provider in
             try await Self.call(transport, provider.baseURL, "eth_blockNumber", []).quantity("eth_blockNumber")
-        }
+        }.map(\.value).min() ?? 0
         let confirmations = head >= BigUInt(receipt.block) ? (head - BigUInt(receipt.block)).uint64.map { $0 + 1 } ?? 0 : 0
         return .confirmed(confirmations: confirmations)
     }
@@ -469,16 +649,23 @@ public actor EVMReader {
     public struct ReceiptLogs: Sendable, Equatable {
         public let success: Bool
         public let block: UInt64
+        /// O hash do bloco, que a testemunha de fora do par confere (`inclusion`).
+        public let blockHash: String
         public let logs: [TradeSimulatedLog]
     }
 
     /// O recibo e os logs de uma transacao, em dois RPCs concordando; `nil` se ainda nao
     /// ha recibo. A ponte confere por aqui o evento de entrega no destino.
-    public func receiptLogs(chain: Chain, hash: String) async throws -> ReceiptLogs? {
+    /// `votes`: recibos iguais de operadores diferentes que o valor pede. Tres (`moneyVotes`) no que leva o dono a refazer ou a
+    /// dar por chegado: o "devolvido" e o "entregue" do Across (rodada 1 da auditoria 8). No resto, dois e tres operadores atras
+    /// do recibo, como o `status(of:)` (`vouched`, 15/11/2026).
+    public func receiptLogs(chain: Chain, hash: String, votes: Int = 2) async throws -> ReceiptLogs? {
         guard let bytes = Hex.decode(hash), bytes.count == 32, hash.hasPrefix("0x") else { throw ReaderError.invalidInput("hash") }
         let (pool, providers) = try await eligible(chain)
         let transport = self.transport
-        return try await Quorum.agree(providers, pool: pool, field: "receipt-logs") { provider -> ReceiptLogs? in
+        // Sem recibo e `nil`, que nao vota: dois nos sem indice antigo deixavam a ponte em andamento para sempre. Quem o
+        // disse testemunha pelo hash (`witnessed`), e a que nao viu a transacao no bloco do recibo conta contra.
+        let gathered = try await witnessed(hash, chain: chain, providers: providers, pool: pool, needs: { _ in max(votes, Self.moneyVotes) }) { provider -> ReceiptLogs? in
             try await self.verify(provider, chain: chain)
             let raw = try await Self.call(transport, provider.baseURL, "eth_getTransactionReceipt", [.string(hash)])
             guard let receipt = try Self.parseReceipt(raw) else { return nil }
@@ -487,8 +674,22 @@ public actor EVMReader {
                 let topics = try log.field("topics", "log").array("log.topics").map { try $0.hexData("log.topic") }
                 return TradeSimulatedLog(address: address, topics: topics, data: try log.field("data", "log").hexData("log.data"))
             }
-            return ReceiptLogs(success: receipt.success, block: receipt.block, logs: logs)
+            return ReceiptLogs(success: receipt.success, block: receipt.block, blockHash: receipt.blockHash, logs: logs)
         }
+        guard case .found(let values, let testimonies, let silent, let support) = gathered else { return nil }
+        let against: (ReceiptLogs) -> Int = { logs in
+            silent - testimonies.count + testimonies.filter { !$0.places(block: logs.block, blockHash: logs.blockHash) }.count
+        }
+        if let logs = Quorum.decided(values, against: against) {
+            let count = values.filter { $0 == logs }.count
+            let placing = (testimonies + support).filter { $0.places(block: logs.block, blockHash: logs.blockHash) }.count
+            guard count >= votes, votes >= Self.moneyVotes || Self.vouched(receipts: count, placing: placing) else {
+                throw ReaderError.notEnoughProviders(needed: max(votes, Self.moneyVotes), got: count + placing)
+            }
+            return logs
+        }
+        if values.contains(where: { $0 != values[0] }) { throw ReaderError.providersDisagree(field: "receipt-logs") }
+        return nil
     }
 
     // MARK: Historico
@@ -591,7 +792,7 @@ public actor EVMReader {
 
     private func pool(_ key: String, _ providers: [Provider]) -> ProviderPool {
         if let existing = pools[key] { return existing }
-        let created = ProviderPool(providers)
+        let created = ProviderPool(providers, draws: transport.drawsProviders)
         pools[key] = created
         return created
     }
@@ -741,6 +942,33 @@ public actor EVMReader {
             }
             return nonce
         }.map(\.value)
+    }
+
+    /// Quantas transacoes da conta ja entraram num bloco ate o bloco fixado (`eth_getTransactionCount` nele), igual em
+    /// dois operadores. E estado, e nao indice de transacoes: todo no completo responde, ate pela transacao de meses
+    /// atras. A poda da fila de nonces da por resolvida toda entrada abaixo dele (revisao dos tres agentes de 14/11/2026).
+    public func minedNonce(chain: Chain, account: EVMAddress) async throws -> UInt64 {
+        let (pool, providers) = try await eligible(chain)
+        let pin = try await pinnedBlock(chain, pool: pool, providers: providers)
+        let transport = self.transport
+        // O primeiro par de acordo decide. Se ele discordar, todos respondem e vale o menor valor com dois votos: dois
+        // operadores fora do primeiro par nao inflam o nonce contra um honesto (revisao dos tres agentes de 14/11/2026).
+        let (answers, lastError) = await Quorum.gather(providers, pool: pool, count: providers.count, firstWave: 2, until: { values in
+            values.count == 2 && values[0] == values[1]
+        }) { (provider: Provider) async throws -> UInt64 in
+            try await self.verify(provider, chain: chain)
+            let result = try await Self.call(transport, provider.baseURL, "eth_getTransactionCount", [.string(account.checksummed), .string(pin)])
+            guard let nonce = try result.quantity("eth_getTransactionCount").uint64 else {
+                throw ReaderError.implausibleValue(field: "eth_getTransactionCount")
+            }
+            return nonce
+        }
+        let values = answers.map(\.value)
+        guard let mined = values.filter({ value in values.filter { $0 == value }.count >= 2 }).min() else {
+            if answers.isEmpty, let lastError { throw lastError }
+            throw ReaderError.providersDisagree(field: "eth_getTransactionCount")
+        }
+        return mined
     }
 
     private func feeReadings(_ chain: Chain, pool: ProviderPool, providers: [Provider]) async throws -> (BigUInt, EVMPriorityFees) {
@@ -926,13 +1154,6 @@ public actor EVMReader {
         let success: Bool
     }
 
-    /// Dois recibos iguais (mesmo bloco, mesmo hash de bloco, mesmo status).
-    static func agreeingReceipt(_ receipts: [Receipt]) -> Receipt? {
-        for (index, receipt) in receipts.enumerated() where receipts[(index + 1)...].contains(receipt) {
-            return receipt
-        }
-        return nil
-    }
 
     /// Recibo ou `nil` (ainda sem bloco).
     static func parseReceipt(_ result: StrictJSON) throws -> Receipt? {

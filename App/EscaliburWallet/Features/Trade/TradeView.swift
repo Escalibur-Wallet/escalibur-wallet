@@ -678,7 +678,7 @@ struct TradeView: View {
         if model.inParts, quote.parts != nil { return String(localized: "Em partes pela CoW, conforme chega liquidez") }
         if quote.execution == .order { return String(localized: "Leilão da CoW, o melhor entre \(quote.providersCompared)") }
         // Sem comparacao, "o melhor entre" sugeriria a comparacao que o aviso nega (revisao de 05/11/2026).
-        if quote.unanchored, quote.legs.count == 1 { return String(localized: "\(quote.legs[0].provider), sem comparação") }
+        if quote.unanchored, quote.legs.count == 1, quote.singleSource || quote.providersCompared == 1 { return String(localized: "\(quote.legs[0].provider), sem comparação") }
         if let chosen = model.chosenProvider, chosen.pair == model.pairKey, quote.legs.first?.provider == chosen.provider {
             return String(localized: "\(chosen.provider), escolhido por você")
         }
@@ -786,7 +786,7 @@ struct TradeView: View {
     private func unanchoredLine(_ quote: TradeQuote) -> some View {
         let waiting = model.recalculating || (model.exactOut && model.solving)
         return VStack(alignment: .leading, spacing: Space.xs) {
-            Text("Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Um preço manipulado não seria percebido pela carteira.")
+            Text("Não há preço de referência do mercado para comparar com esta cotação. Um preço manipulado não seria percebido pela carteira.")
                 .typeStyle(.note).foregroundStyle(Palette.caution).fixedSize(horizontal: false, vertical: true)
             // O aceite grava a cotacao desenhada: uma recotacao que chegou depois do desenho nao leva o toque.
             ConsentCheckbox(checked: Binding(get: { model.acceptsUnanchored },
@@ -798,7 +798,7 @@ struct TradeView: View {
                                                  model.acceptedUnanchored = (model.pairKey, quote.amountIn, terms.inParts, quote.minimumOut(inParts: terms.inParts))
                                                  model.unanchoredDropNotice = false
                                              }),
-                            text: String(localized: "Entendo que agora só há uma fonte de cotação independente e que o preço pode estar manipulado."))
+                            text: String(localized: "Entendo que agora não há preço de referência do mercado e que o preço pode estar manipulado."))
                 .disabled(waiting)
                 .accessibilityIdentifier("aceite-sem-comparacao")
             if model.unanchoredDropNotice {
@@ -1772,6 +1772,8 @@ struct TokenPickerSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             SheetHeader(title: String(localized: "Escolher token")) { dismiss() }
             TextField("", text: $query, prompt: (catalogChains.isEmpty ? Text("Buscar por nome") : Text("Buscar qualquer moeda")).foregroundColor(Palette.inkDead))
+                // Um teto acima de qualquer chave: a conferencia do segredo roda no desenho da tela, e a busca para em 60.
+                .onChange(of: query) { _, new in if new.count > 128 { query = String(new.prefix(128)) } }
                 .typeStyle(.body).foregroundStyle(Palette.ink)
                 .padding(.horizontal, Space.md).frame(height: 44)
                 .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.rail))
@@ -1888,6 +1890,8 @@ struct TokenPickerSheet: View {
             }
         case .phrase?:
             searchNote(String(localized: "Isto parece o começo das palavras de uma carteira, e a busca não saiu do iPhone. As palavras só se digitam ao importar uma carteira."))
+        case .privateKey?:
+            searchNote(String(localized: "Isto parece uma chave privada, e a busca não saiu do iPhone. Não mostre essa chave a ninguém."))
         case .loading?, .retrying?, nil:
             section(String(localized: "Mais moedas, fora da lista verificada"))
             ForEach(0..<3, id: \.self) { _ in

@@ -174,6 +174,24 @@ struct EVMReaderTests {
         }
     }
 
+    @Test("Nonce minerado: no bloco fixado, igual em dois operadores; um que infla nao decide (revisao de 14/11/2026)")
+    func minedNonce() async throws {
+        let plain = try Self.transport()
+        #expect(try await Self.reader(plain).minedNonce(chain: .ethereum, account: Self.owner) == 20_629)
+        // Ponta gravada 0x18da4d3, recuo de 1 bloco na Ethereum: a leitura vai no 0x18da4d2, nunca em "latest" ou "pending".
+        let tags = plain.requests.compactMap { request -> String? in
+            let body = request.body.flatMap { try? StrictJSON.parse($0) }
+            guard FixtureTransport.method(body) == "eth_getTransactionCount" else { return nil }
+            return try? FixtureTransport.params(body)[1].string("block")
+        }
+        #expect(!tags.isEmpty && tags.allSatisfy { $0 == "0x18da4d2" })
+
+        let inflated = try Self.transport(overrides: ["b.test": ["eth_getTransactionCount": rpcResult("\"0x9999\"")]])
+        #expect(try await Self.reader(inflated, providers: ["a", "b", "c"]).minedNonce(chain: .ethereum, account: Self.owner) == 20_629)
+        let alone = try Self.transport(overrides: ["b.test": ["eth_getTransactionCount": rpcResult("\"0x9999\"")]])
+        await #expect(throws: ReaderError.self) { _ = try await Self.reader(alone).minedNonce(chain: .ethereum, account: Self.owner) }
+    }
+
     @Test("Saldo diferente nos dois provedores, e sem terceiro: erro de consenso")
     func balanceDisagreement() async throws {
         let transport = try Self.transport(overrides: ["b.test": ["eth_getBalance": rpcResult("\"0x1\"")]])
@@ -385,25 +403,134 @@ struct EVMReaderTests {
         #expect(Set(sentTo) == ["relay1.test", "relay2.test"])
     }
 
-    @Test("Recibo gravado: confirmado com dois provedores; um `null` pergunta ao terceiro")
+    @Test("Recibo gravado: confirmado com tres operadores atras; um `null` pergunta ao proximo e testemunha pelo hash")
     func receiptStatus() async throws {
         let hash = "0x16d93ffd559e10c60889377e1279bee7d2ec9de72051185807869fcad7510cfc"
-        let confirmed = try await Self.reader(try Self.transport()).status(of: hash, chain: .ethereum)
+        let confirmed = try await Self.reader(try Self.transport(), providers: ["a", "b", "c"]).status(of: hash, chain: .ethereum)
         // Bloco 0x18d8cd2 = 26.053.842; ponta gravada 0x18da4d3 = 26.059.987.
         #expect(confirmed == .confirmed(block: 26_053_842, confirmations: 6_146))
+        // Dois recibos e o terceiro fora do ar: pendente, porque dois que combinam nao confirmam sozinhos (15/11/2026).
+        let two = try await Self.reader(try Self.transport(), providers: ["a", "b"]).status(of: hash, chain: .ethereum)
+        #expect(two == .pending)
 
         let null = try ReaderFixtures.data("evm", "eth_getTransactionReceipt-cloudflare-null")
-        let third = try Self.transport(overrides: ["b.test": ["eth_getTransactionReceipt": null]])
+        let mined = Self.byHash(blockNumber: "\"0x18d8cd2\"")
+        let third = try Self.transport(overrides: ["b.test": ["eth_getTransactionReceipt": null, "eth_getTransactionByHash": mined]])
         let viaThird = try await Self.reader(third, providers: ["a", "b", "c"]).status(of: hash, chain: .ethereum)
         #expect(viaThird == .confirmed(block: 26_053_842, confirmations: 6_146))
+        // A testemunha viu outro bloco: pendente.
+        let elsewhere = try Self.transport(overrides: ["b.test": ["eth_getTransactionReceipt": null,
+                                                                   "eth_getTransactionByHash": Self.byHash(blockNumber: "\"0x18d8cd3\"")]])
+        #expect(try await Self.reader(elsewhere, providers: ["a", "b", "c"]).status(of: hash, chain: .ethereum) == .pending)
 
         let onlyOne = try Self.transport(overrides: ["b.test": ["eth_getTransactionReceipt": null]])
         #expect(try await Self.reader(onlyOne).status(of: hash, chain: .ethereum) == .pending)
+
+        // Transacao de dias atras: os dois primeiros sem indice (a publicnode depois de uns 2 dias, medido em 14/11/2026),
+        // mas com a transacao num bloco; os dois de baixo com o recibo. Antes os dois `null` davam pendente para sempre.
+        let old = try Self.transport(overrides: ["a.test": ["eth_getTransactionReceipt": null, "eth_getTransactionByHash": mined],
+                                                 "b.test": ["eth_getTransactionReceipt": null, "eth_getTransactionByHash": mined]])
+        let viaLower = try await Self.reader(old, providers: ["a", "b", "c", "d"]).status(of: hash, chain: .ethereum)
+        #expect(viaLower == .confirmed(block: 26_053_842, confirmations: 6_146))
 
         let failed = try ReaderFixtures.json("evm", "eth_getTransactionReceipt-binance8").field("result", "$")
         guard case .object(var fields) = failed else { return }
         fields["status"] = .string("0x0")
         #expect(try EVMReader.parseReceipt(.object(fields))?.success == false)
+    }
+
+    /// `eth_getTransactionByHash` com o bloco (`"0x..."`, e o hash do bloco do recibo gravado) ou ainda sem (`null`).
+    static func byHash(blockNumber: String) -> Data {
+        let blockHash = blockNumber == "null" ? "null" : "\"0x6b3aaa705937ac5ac59e8368f6fdc53f79ab365ae3824665f202a294e9cd38e9\""
+        return Data(#"{"jsonrpc":"2.0","id":1,"result":{"hash":"0x16d93ffd559e10c60889377e1279bee7d2ec9de72051185807869fcad7510cfc","blockNumber":\#(blockNumber),"blockHash":\#(blockHash)}}"#.utf8)
+    }
+
+    static func receiptAsked(_ transport: FixtureTransport, host: String) -> Bool {
+        transport.requests.contains { $0.url.host == host && FixtureTransport.method($0.body.flatMap { try? StrictJSON.parse($0) }) == "eth_getTransactionReceipt" }
+    }
+
+    @Test("Dois `null` com a transacao ainda sem bloco, ou sem ela: para ali, sem levar o hash aos outros (revisao de 14/11/2026)")
+    func pendingStopsAtTwoNulls() async throws {
+        let hash = "0x16d93ffd559e10c60889377e1279bee7d2ec9de72051185807869fcad7510cfc"
+        let null = try ReaderFixtures.data("evm", "eth_getTransactionReceipt-cloudflare-null")
+        let noReceipt: [String: Data] = ["eth_getTransactionReceipt": null]
+        let waiting = try Self.transport(overrides: ["a.test": noReceipt.merging(["eth_getTransactionByHash": Self.byHash(blockNumber: "null")]) { $1 },
+                                                     "b.test": noReceipt])
+        #expect(try await Self.reader(waiting, providers: ["a", "b", "c", "d"]).status(of: hash, chain: .ethereum) == .pending)
+        #expect(!Self.receiptAsked(waiting, host: "c.test") && !Self.receiptAsked(waiting, host: "d.test"))
+
+        let gone = try Self.transport(overrides: ["a.test": noReceipt.merging(["eth_getTransactionByHash": Self.noTx]) { $1 },
+                                                  "b.test": noReceipt])
+        #expect(try await Self.reader(gone, providers: ["a", "b", "c", "d"]).status(of: hash, chain: .ethereum) == .notFound)
+        #expect(!Self.receiptAsked(gone, host: "c.test"))
+    }
+
+    @Test("Falha so sem recibo diferente; sucesso com dois a mais que os contra (revisao de 14/11/2026)")
+    func conflictingReceipts() async throws {
+        let hash = "0x16d93ffd559e10c60889377e1279bee7d2ec9de72051185807869fcad7510cfc"
+        let real = String(decoding: try ReaderFixtures.data("evm", "eth_getTransactionReceipt-binance8"), as: UTF8.self)
+        let forged = Data(real.replacingOccurrences(of: "\"status\":\"0x1\"", with: "\"status\":\"0x0\"").utf8)
+        // O honesto responde primeiro; os dois de baixo forjam o mesmo recibo de falha: nao decide.
+        let lying = try Self.transport(overrides: ["b.test": ["eth_getTransactionReceipt": forged], "c.test": ["eth_getTransactionReceipt": forged]])
+        #expect(try await Self.reader(lying, providers: ["a", "b", "c"]).status(of: hash, chain: .ethereum) == .pending)
+        // Um mentiroso so: com quatro operadores, os tres honestos decidem; com tres, ele segura (pela contagem nao ha
+        // como saber quem mente).
+        let one = try Self.transport(overrides: ["b.test": ["eth_getTransactionReceipt": forged]])
+        #expect(try await Self.reader(one, providers: ["a", "b", "c", "d"]).status(of: hash, chain: .ethereum)
+            == .confirmed(block: 26_053_842, confirmations: 6_146))
+        #expect(try await Self.reader(one, providers: ["a", "b", "c"]).status(of: hash, chain: .ethereum) == .pending)
+        // Falha honesta contra um mentiroso que diz sucesso: nao decide (a falha so com todos iguais).
+        let honestFail = try Self.transport(overrides: ["a.test": ["eth_getTransactionReceipt": forged], "c.test": ["eth_getTransactionReceipt": forged]])
+        #expect(try await Self.reader(honestFail, providers: ["a", "b", "c"]).status(of: hash, chain: .ethereum) == .pending)
+    }
+
+    @Test("Pendente no mempool: o `null` honesto testemunha, e dois recibos de falha forjados nao decidem (revisao de 14/11/2026)")
+    func forgedFailureOfPending() async throws {
+        let hash = "0x16d93ffd559e10c60889377e1279bee7d2ec9de72051185807869fcad7510cfc"
+        let null = try ReaderFixtures.data("evm", "eth_getTransactionReceipt-cloudflare-null")
+        let real = String(decoding: try ReaderFixtures.data("evm", "eth_getTransactionReceipt-binance8"), as: UTF8.self)
+        let forged = Data(real.replacingOccurrences(of: "\"status\":\"0x1\"", with: "\"status\":\"0x0\"").utf8)
+        let transport = try Self.transport(overrides: [
+            "a.test": ["eth_getTransactionReceipt": null, "eth_getTransactionByHash": Self.byHash(blockNumber: "null")],
+            "b.test": ["eth_getTransactionReceipt": forged], "c.test": ["eth_getTransactionReceipt": forged],
+        ])
+        #expect(try await Self.reader(transport, providers: ["a", "b", "c", "d"]).status(of: hash, chain: .ethereum) == .pending)
+    }
+
+    @Test("Um `null` sozinho conta contra, e nao veta: com quatro, os tres honestos decidem; com tres, segura (14/11/2026)")
+    func loneNullCountsAgainst() async throws {
+        let hash = "0x16d93ffd559e10c60889377e1279bee7d2ec9de72051185807869fcad7510cfc"
+        let null = try ReaderFixtures.data("evm", "eth_getTransactionReceipt-cloudflare-null")
+        let waiting = try Self.transport(overrides: ["b.test": ["eth_getTransactionReceipt": null,
+                                                                 "eth_getTransactionByHash": Self.byHash(blockNumber: "null")]])
+        #expect(try await Self.reader(waiting, providers: ["a", "b", "c", "d"]).status(of: hash, chain: .ethereum)
+            == .confirmed(block: 26_053_842, confirmations: 6_146))
+        #expect(try await Self.reader(waiting, providers: ["a", "b", "c"]).status(of: hash, chain: .ethereum) == .pending)
+        // A testemunha que falha (sem `eth_getTransactionByHash` gravado) conta contra: com tres, pendente (a leitura
+        // seguinte resolve); com quatro, os tres honestos decidem.
+        let silentFail = try Self.transport(overrides: ["b.test": ["eth_getTransactionReceipt": null]])
+        #expect(try await Self.reader(silentFail, providers: ["a", "b", "c"]).status(of: hash, chain: .ethereum) == .pending)
+        #expect(try await Self.reader(silentFail, providers: ["a", "b", "c", "d"]).status(of: hash, chain: .ethereum)
+            == .confirmed(block: 26_053_842, confirmations: 6_146))
+    }
+
+    @Test("Falha so com todo `null` explicado, e o honesto de baixo e ouvido antes de decidir (14/11/2026)")
+    func failureNeedsEveryone() async throws {
+        let hash = "0x16d93ffd559e10c60889377e1279bee7d2ec9de72051185807869fcad7510cfc"
+        let null = try ReaderFixtures.data("evm", "eth_getTransactionReceipt-cloudflare-null")
+        let real = String(decoding: try ReaderFixtures.data("evm", "eth_getTransactionReceipt-binance8"), as: UTF8.self)
+        let forged = Data(real.replacingOccurrences(of: "\"status\":\"0x1\"", with: "\"status\":\"0x0\"").utf8)
+        // O honesto de cima disse `null` e a testemunha dele falhou (um 429): os dois de baixo nao forjam a falha.
+        let quiet = try Self.transport(overrides: ["a.test": ["eth_getTransactionReceipt": null],
+                                                   "b.test": ["eth_getTransactionReceipt": forged], "c.test": ["eth_getTransactionReceipt": forged]])
+        #expect(try await Self.reader(quiet, providers: ["a", "b", "c"]).status(of: hash, chain: .ethereum) == .pending)
+        // Transacao antiga: a testemunha honesta confirma o bloco, dois forjam a falha e o quarto, honesto, e ouvido.
+        let old = try Self.transport(overrides: [
+            "a.test": ["eth_getTransactionReceipt": null, "eth_getTransactionByHash": Self.byHash(blockNumber: "\"0x18d8cd2\"")],
+            "b.test": ["eth_getTransactionReceipt": forged], "c.test": ["eth_getTransactionReceipt": forged],
+        ])
+        #expect(try await Self.reader(old, providers: ["a", "b", "c", "d"]).status(of: hash, chain: .ethereum) == .pending)
+        #expect(Self.receiptAsked(old, host: "d.test"))
     }
 
     // MARK: Fila de nonces

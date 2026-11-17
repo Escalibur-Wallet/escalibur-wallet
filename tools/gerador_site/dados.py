@@ -292,7 +292,7 @@ def grupos_de_hosts():
 DESCRICAO_TRAVA = {
     "secp256k1.lock": "libsecp256k1 do bitcoin-core, a curva das assinaturas de Bitcoin, Ethereum, XRP Ledger e Tron. Compilada do fonte.",
     "argon2.lock": "Argon2 de referência, a derivação de chave do PIN e do envelope. Compilado do fonte.",
-    "wordlists.lock": "As listas oficiais de palavras do BIP-39, uma por idioma.",
+    "wordlists.lock": "As listas oficiais de palavras do BIP-39, uma por idioma, e a do SLIP-39.",
     "forca.lock": "As listas de frequência do medidor de força da senha do envelope (zxcvbn-ts, MIT).",
     "recuperacao.lock": "O decifrador de referência do envelope e a especificação do formato, usados nos testes.",
     "modelos.lock": "As texturas da moeda 3D do tour, recortadas de “Bit Coin”, de marcio3d (CC BY 4.0).",

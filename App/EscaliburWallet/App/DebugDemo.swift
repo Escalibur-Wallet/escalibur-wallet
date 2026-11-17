@@ -263,6 +263,19 @@ enum DebugDemo {
                 session.metadata.settings.confirmEveryAddress = true
                 try? session.persist()
                 Task { @MainActor in await settle(); router.present(.send(nil)) }
+            // `-tela envio-conferir-near`: "Conferir o endereco em todo envio" ligada e o envio da NEAR aberto, para digitar um
+            // nome letra a letra (revisao dos 3 agentes, 09/11/2026).
+            case "envio-conferir-near":
+                session.metadata.settings.confirmEveryAddress = true
+                try? session.persist()
+                Task { @MainActor in
+                    // O envio abre com o saldo da NEAR ja lido, como no `envio-revisao-near`.
+                    for _ in 0..<40 {
+                        if let near = Chain.all.first(where: { $0.id == "near" }), portfolio?.balance(near)?.holdings.isEmpty == false { break }
+                        try? await Task.sleep(for: .seconds(1))
+                    }
+                    if let near = Chain.all.first(where: { $0.id == "near" }) { router.present(.send(.native(near))) }
+                }
             // `-tela envio-revisao-near`: espera o saldo da NEAR chegar, para a revisao ter o ativo.
             case "envio-revisao-near":
                 Task { @MainActor in
@@ -338,7 +351,7 @@ struct DemoEnvelopes: ViewModifier {
                 NavigationStack { DebugDemo.screen == "bloqueio" ? AnyView(AutoLockView()) : AnyView(SecuritySettingsView()) }
             }
             // `-tela passphrase-repita`: o campo de repetir a passphrase aparecendo.
-            .fullScreenCover(item: $passphraseEntry) { wallet in NavigationStack { PassphraseEntryView(base: wallet) { passphraseEntry = nil } } }
+            .fullScreenCover(item: $passphraseEntry) { wallet in NavigationStack { PassphraseEntryView(base: wallet) { _ in passphraseEntry = nil } } }
             .fullScreenCover(item: $usageWallet) { wallet in
                 NavigationStack { PassphraseUsageView(wallet: wallet, previous: nil, onUse: { usageWallet = nil }, onRetry: { usageWallet = nil }) }
             }

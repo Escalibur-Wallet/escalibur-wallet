@@ -605,13 +605,8 @@ struct SealEnvelopeFlow: View {
             }
             defer { typed?.wipe() }
             let check = typed
-            let opened: SecureBytes? = try await auth.perform(session, reason: String(localized: "Lacrar a senha de \(wallet.name) num envelope"), presence: .pinAndBiometry) { rk in
-                let secret = try KeyServices.wallets.open(walletID: id, rk: rk)
-                defer { secret.wipe() }
-                if let check, try PassphraseProof.check(secret, typed: check, fingerprint: fingerprint, cardanoPublicKey: nil) == .mismatch {
-                    throw Signer.Failure.passphraseMismatch
-                }
-                return try secret.phrase()
+            let opened: SecureBytes? = try await auth.retrying(reason: String(localized: "Lacrar a senha de \(wallet.name) num envelope"), presence: .pinAndBiometry) {
+                try await session.walletPhrase($0, walletID: id, check: check, fingerprint: fingerprint)
             }
             guard let result = opened else {
                 if check != nil { PassphraseGate.shared.refund(session, wallet: id) }
@@ -764,9 +759,7 @@ struct SealEnvelopeFlow: View {
 
     /// O arquivo saiu do app: a data de "lacrado" vai para a carteira, que Ajustes mostra.
     private func markDelivered() {
-        var updated = session.metadata.wallets.first { $0.id == wallet.id } ?? wallet
-        updated.envelopeSealedAt = .now
-        session.update(updated)
+        session.update(wallet.id) { $0.envelopeSealedAt = .now }
     }
 
     private func close() {

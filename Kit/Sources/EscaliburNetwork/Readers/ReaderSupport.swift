@@ -153,6 +153,13 @@ public struct ReaderRequest: Sendable, Hashable {
 
 public protocol ReaderTransport: Sendable {
     func send(_ request: ReaderRequest) async throws -> Data
+    /// O consenso sorteia a ordem dos donos (`ProviderPool.consensusOrder`). So a rede de verdade: um transporte de
+    /// teste fica na ordem da lista, para o teste saber quem e perguntado.
+    var drawsProviders: Bool { get }
+}
+
+public extension ReaderTransport {
+    var drawsProviders: Bool { false }
 }
 
 extension HTTPClient: ReaderTransport {
@@ -189,6 +196,9 @@ typealias Provider = ProviderPool.Provider
 /// conta: o provedor esta de pe, a pergunta e que nao tinha resposta.
 enum Quorum {
     static func record(_ error: Error, _ provider: Provider, _ pool: ProviderPool) async {
+        // A consulta cancelada por quem pediu (a pausa da rodada, a tela que fechou) nao e falha do operador: contada, tirava
+        // da lista por 5 min um operador que respondia (rodada 3 da auditoria 8).
+        guard !Task.isCancelled else { return }
         switch error {
         case is HTTPClient.Failure, ReaderError.malformed, ReaderError.wrongNetwork, ReaderError.responseMismatch:
             await pool.reportFailure(provider)
@@ -218,7 +228,8 @@ enum Quorum {
     /// Respostas de ate `count` provedores de donos diferentes, na ordem de preferencia. A primeira
     /// onda pergunta a `firstWave` provedores em paralelo (padrao: `count`); as seguintes,
     /// a um de cada vez. Provedor que falha e trocado pelo proximo da lista; `until`
-    /// encerra antes quando as respostas ja bastam.
+    /// encerra antes quando as respostas ja bastam. A ordem dos donos e sorteada a cada
+    /// pergunta na rede de verdade (`ProviderPool.consensusOrder`).
     static func gather<T: Sendable>(
         _ providers: [Provider], pool: ProviderPool, count: Int, firstWave: Int? = nil,
         until done: @Sendable ([T]) -> Bool = { _ in false },
@@ -226,9 +237,10 @@ enum Quorum {
     ) async -> (answers: [(provider: Provider, value: T)], lastError: Error?) {
         var answers: [(provider: Provider, value: T)] = []
         var lastError: Error?
-        var remaining = providers[...]
+        var remaining = pool.consensusOrder(providers)[...]
         var first = true
-        while !remaining.isEmpty {
+        // Cancelada, nao pergunta a mais ninguem (rodada 3 da auditoria 8).
+        while !remaining.isEmpty, !Task.isCancelled {
             let size = first ? (firstWave ?? count) : (firstWave == nil ? max(1, count - answers.count) : 1)
             first = false
             let wave = Array(remaining.prefix(max(1, size)))
@@ -297,6 +309,67 @@ enum Quorum {
         if answers.isEmpty, let lastError { throw lastError }
         if answers.count < 2 { throw ReaderError.notEnoughProviders(needed: 2, got: answers.count) }
         throw ReaderError.providersDisagree(field: field)
+    }
+
+    /// Para o que poe ou tira uma marca de outra chave no controle (rodada 1 da auditoria 8). Os dois primeiros de acordo
+    /// decidem; discordando, pergunta a todos e vale so o que `decided` decide, com margem: no `agree`, o primeiro par igual
+    /// decidia, e com um honesto e dois mentindo ([H, M, M]) os dois venciam. `everyone`: pergunta a todos sempre e so devolve
+    /// o valor que todos deram, para tirar uma marca, que reabre o deposito. Nil quando nada decide.
+    static func firm<T: Sendable & Equatable>(
+        _ providers: [Provider], pool: ProviderPool, everyone: Bool = false, _ operation: @escaping @Sendable (Provider) async throws -> T
+    ) async throws -> T? {
+        if everyone { return try await unanimous(providers, pool: pool, operation) }
+        let (answers, lastError) = await gather(providers, pool: pool, count: providers.count, firstWave: 2, until: { values in
+            values.count >= 2 && values.allSatisfy { $0 == values[0] }
+        }, operation)
+        let values = answers.map(\.value)
+        if answers.isEmpty, let lastError { throw lastError }
+        guard values.count >= 2 else { throw ReaderError.notEnoughProviders(needed: 2, got: values.count) }
+        return decided(values)
+    }
+
+    /// Para tirar uma marca de outra chave, que reabre o deposito: todos os donos que respondem dizem o mesmo, e pelo menos
+    /// tres (ou todos os donos da lista, se forem menos). Com dois, os honestos derrubados no caminho deixavam dois combinados
+    /// tirarem a marca (rodada 2 da auditoria 8). Quem chama le cada dono na propria ponta, e nao num bloco fixado por dois:
+    /// dois combinados fixavam um bloco de antes da delegacao, e ate os honestos diziam "limpa" nele. Nil quando nao fecha.
+    static func unanimous<T: Sendable & Equatable>(
+        _ providers: [Provider], pool: ProviderPool, _ operation: @escaping @Sendable (Provider) async throws -> T
+    ) async throws -> T? {
+        let (answers, lastError) = await gather(providers, pool: pool, count: providers.count, operation)
+        // Cancelada no meio, nao decide com quem respondeu antes: o que discordaria pode ter ficado de fora (rodada 4).
+        if Task.isCancelled { return nil }
+        if answers.isEmpty, let lastError { throw lastError }
+        guard answers.count >= floorOfEveryone(pool), answers.allSatisfy({ $0.value == answers[0].value }) else { return nil }
+        return answers[0].value
+    }
+
+    /// Quantos donos "todos" tem de ser, no minimo: tres, ou todos os da lista, se forem menos (e nunca menos de dois).
+    static func floorOfEveryone(_ pool: ProviderPool) -> Int {
+        min(3, max(2, Set(pool.providers.map(\.operatorName)).count))
+    }
+
+    /// O veredito negativo que leva o dono a reenviar (a falha, a vencida), fora da EVM: todos os donos que responderem dizem
+    /// o mesmo, e pelo menos tres (ou todos os donos da lista, se forem menos). Com o par sorteado a cada consulta, uma tela que
+    /// pergunta em laco acabava caindo num par combinado, e a falha forjada de dois valia (rodada 1 da auditoria 8).
+    static func everyoneSays<T: Sendable & Equatable>(
+        _ expected: T, _ providers: [Provider], pool: ProviderPool, _ operation: @escaping @Sendable (Provider) async throws -> T
+    ) async -> Bool {
+        let (answers, _) = await gather(providers, pool: pool, count: providers.count, firstWave: 2, operation)
+        // Cancelada no meio, nao diz "todos" com quem respondeu antes (rodada 4 da auditoria 8).
+        if Task.isCancelled { return false }
+        return answers.count >= floorOfEveryone(pool) && answers.allSatisfy { $0.value == expected }
+    }
+
+    /// O valor que decide: o mais votado, com pelo menos dois votos e dois a mais que todos os contra somados (os outros
+    /// valores e o que `against` conta, por exemplo a testemunha que nao viu a transacao no bloco dele). Com quatro
+    /// operadores, um que mente sozinho nao segura a resposta (`[A, B, A, A]` decide A); dois mentindo contra um honesto
+    /// que respondeu nao decidem (`[R, F, F]`). Com tres, um que diverge segura: ali nao ha como saber quem mente pela
+    /// contagem (revisao dos tres agentes de 14/11/2026).
+    static func decided<T: Equatable>(_ values: [T], against: (T) -> Int = { _ in 0 }) -> T? {
+        let votes = values.map { value in values.filter { $0 == value }.count }
+        guard let top = votes.indices.max(by: { votes[$0] < votes[$1] }) else { return nil }
+        let best = values[top]
+        return votes[top] >= 2 && votes[top] >= values.count - votes[top] + against(best) + 2 ? best : nil
     }
 }
 
@@ -375,6 +448,8 @@ struct PacedTransport: ReaderTransport {
         self.intervals = intervals
         self.retryDelay = retryDelay
     }
+
+    var drawsProviders: Bool { base.drawsProviders }
 
     func send(_ request: ReaderRequest) async throws -> Data {
         let interval = request.url.host.flatMap { intervals[$0] } ?? 0

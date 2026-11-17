@@ -21,7 +21,7 @@ public struct StellarReader: Sendable {
 
     public init(transport: ChainReaderTransport = HTTPReaderTransport(), providers: [ProviderPool.Provider] = Endpoints.stellar) {
         self.transport = transport
-        self.pool = ProviderPool(providers)
+        self.pool = ProviderPool(providers, draws: transport.drawsProviders)
     }
 
     /// Uma rota tem no maximo 5 ativos intermediarios (limite do protocolo, `path<5>`).
@@ -42,7 +42,8 @@ public struct StellarReader: Sendable {
 
     /// Os dois primeiros provedores, cada um com a sua resposta ou o seu erro.
     private func both<T: Sendable>(_ operation: @escaping @Sendable (ProviderPool.Provider) async throws -> T) async throws -> [T] {
-        let providers = Array(pool.providers.prefix(2))
+        // Dois donos sorteados a cada pergunta na rede de verdade, como no consenso das outras redes (auditoria 8).
+        let providers = Array(pool.consensusOrder(pool.providers).prefix(2))
         guard providers.count == 2 else { throw ChainReaderError.notEnoughSources(needed: 2, got: providers.count) }
         let results = try await ReaderConcurrency.map(providers, limit: 2) { provider -> T? in try? await operation(provider) }
         for (provider, result) in zip(providers, results) {
@@ -68,6 +69,28 @@ public struct StellarReader: Sendable {
             return .missing
         }
         return .found(try Self.state(record, expected: id), data: record.data)
+    }
+
+    /// Outra chave entre os assinantes da conta do dono, com peso (a frase nao assina sozinha, ou outra assina junto):
+    /// dois provedores de acordo; `nil` quando discordam. Conta que ainda nao existe nao tem (auditoria 8, 14/11/2026).
+    public func foreignSigners(_ id: StellarAccountID) async throws -> Bool? {
+        let answers = try await both { provider -> Bool in
+            let record: HorizonAccount
+            do {
+                record = try await self.get(HorizonAccount.self, provider, "accounts/\(id.address)")
+            } catch HTTPClient.Failure.status(404) {
+                return false
+            }
+            guard record.accountId == id.address else { throw ChainReaderError.mismatchedResponse }
+            // O Horizon traz os assinantes de toda conta: sem o campo, a resposta nao diz, e nao e "limpa" (rodada 2 da auditoria 8).
+            guard record.signers != nil else { throw ChainReaderError.malformedResponse(field: "signers") }
+            return Self.hasForeignSigner(record, account: id.address)
+        }
+        return answers[0] == answers[1] ? answers[0] : nil
+    }
+
+    static func hasForeignSigner(_ record: HorizonAccount, account: String) -> Bool {
+        (record.signers ?? []).contains { $0.key != account && $0.weight > 0 }
     }
 
     static func state(_ record: HorizonAccount, expected: StellarAccountID) throws -> StellarAccountState {
@@ -463,9 +486,16 @@ struct HorizonAccount: Decodable, Sendable {
     let numSponsored: UInt32
     let balances: [Balance]
     let data: [String: String]
+    /// Quem assina pela conta: a propria chave e as que o dono (ou quem tinha a frase) acrescentou.
+    let signers: [Signer]?
+
+    struct Signer: Decodable, Sendable {
+        let key: String
+        let weight: UInt32
+    }
 
     enum CodingKeys: String, CodingKey {
-        case sequence, balances, data
+        case sequence, balances, data, signers
         case accountId = "account_id"
         case subentryCount = "subentry_count"
         case numSponsoring = "num_sponsoring"

@@ -216,6 +216,12 @@ fun AdicionarMoedaCustom(inicial: String? = null, rede: String? = null, codigoIn
         opcoes = r.optJSONArray("opcoes").objetos()
         if (opcoes.isNotEmpty()) return
         val rede = r.optString("redeNome")
+        // A frase ou a chave no campo: ele esvazia, com o aviso (como no iOS).
+        if (r.optString("problema") == "segredo") {
+            endereco = ""
+            codigo = ""
+            emissor = ""
+        }
         erro = when (r.optString("problema")) {
             "redeSemCustom" -> t("A rede %@ ainda não aceita moeda custom.", rede)
             "vazio" -> t("Cole o endereço do token.")
@@ -247,6 +253,18 @@ fun AdicionarMoedaCustom(inicial: String? = null, rede: String? = null, codigoIn
     }
 
     LaunchedEffect(Unit) { if (inicial != null) ler() }
+    // A frase ou a chave colada ou digitada sai do campo na hora, com o aviso, como no observar (revisao dos 3 agentes, 09/11/2026).
+    suspend fun conferirCampo(texto: String, limpar: () -> Unit) {
+        if (texto.isBlank()) return
+        val resposta = runCatching { Api.objeto("texto.campo", JSONObject().put("texto", texto).apply { if (rede != null) put("rede", rede) }) }.getOrNull() ?: return
+        if (resposta.optBoolean("segredo")) {
+            limpar()
+            erro = resposta.optString("aviso")
+        }
+    }
+    LaunchedEffect(endereco) { conferirCampo(endereco) { endereco = "" } }
+    LaunchedEffect(codigo) { conferirCampo(codigo) { codigo = "" } }
+    LaunchedEffect(emissor) { conferirCampo(emissor) { emissor = "" } }
     val conferindo = token
     TelaComBarra(null, titulo = if (conferindo == null) t("Adicionar moeda") else t("Conferir moeda"), fundo = Paleta.vazio) { espaco ->
         Column(Modifier.fillMaxSize().acimaDoTeclado().verticalScroll(rolagem).padding(espaco).padding(horizontal = Espaco.margem).padding(top = Espaco.sm, bottom = Espaco.xl)) {
@@ -268,14 +286,14 @@ fun AdicionarMoedaCustom(inicial: String? = null, rede: String? = null, codigoIn
                 Text(t("Moeda emitida"), style = estilo(Tipo.cabecalho), color = Paleta.tinta)
                 Text(t("No XRP Ledger e na Stellar, a moeda é o código mais o emissor. A rede sai do emissor: r... é XRP Ledger, G... é Stellar."),
                      style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xxs))
-                CampoDaMoeda(t("Código da moeda"), codigo, "USD, SOLO, AQUA...", Modifier.padding(top = Espaco.md)) { codigo = it; erro = null }
-                CampoDaMoeda(t("Emissor"), emissor, t("Endereço r... ou G..."), Modifier.padding(top = Espaco.md)) { emissor = it; erro = null }
+                CampoDaMoeda(t("Código da moeda"), codigo, "USD, SOLO, AQUA...", rede, Modifier.padding(top = Espaco.md)) { codigo = it; erro = null }
+                CampoDaMoeda(t("Emissor"), emissor, t("Endereço r... ou G..."), rede, Modifier.padding(top = Espaco.md)) { emissor = it; erro = null }
                 BotaoTerciario(t("Voltar para o contrato"), Modifier.padding(top = Espaco.xs)) { emitida = false; erro = null }
             } else {
                 Text(t("Contrato do token"), style = estilo(Tipo.cabecalho), color = Paleta.tinta)
                 Text(t("Cole o endereço do contrato. A Escalibur acha a rede da moeda sozinha."), style = estilo(Tipo.nota), color = Paleta.tintaSuave,
                      modifier = Modifier.padding(top = Espaco.xxs))
-                CampoDaMoeda(t("Contrato"), endereco, "0x..., T..., EQ...", Modifier.padding(top = Espaco.md)) { endereco = it; erro = null }
+                CampoDaMoeda(t("Contrato"), endereco, "0x..., T..., EQ...", rede, Modifier.padding(top = Espaco.md)) { endereco = it; erro = null }
                 BotaoTerciario(t("É uma moeda do XRP Ledger ou da Stellar?"), Modifier.padding(top = Espaco.xs)) { emitida = true; erro = null; opcoes = emptyList() }
                 if (opcoes.size > 1) {
                     Text(t("Este contrato existe em mais de uma rede. Escolha a da moeda:"), style = estilo(Tipo.nota), color = Paleta.tintaSuave,
@@ -297,7 +315,8 @@ fun AdicionarMoedaCustom(inicial: String? = null, rede: String? = null, codigoIn
 
 /** Um campo da moeda: o rotulo em cima, o texto em letra de endereco e o colar dentro enquanto vazio. */
 @Composable
-private fun CampoDaMoeda(rotulo: String, texto: String, dica: String, modifier: Modifier = Modifier, aoMudar: (String) -> Unit) {
+private fun CampoDaMoeda(rotulo: String, texto: String, dica: String, rede: String?, modifier: Modifier = Modifier, aoMudar: (String) -> Unit) {
+    val escopo = rememberCoroutineScope()
     val contexto = LocalContext.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
         Text(rotulo, style = estilo(Tipo.nota), color = Paleta.tintaSuave)
@@ -318,7 +337,11 @@ private fun CampoDaMoeda(rotulo: String, texto: String, dica: String, modifier: 
                     Modifier.height(30.dp).clip(CircleShape).background(Paleta.controle).clickable {
                         val gerente = contexto.getSystemService(android.content.ClipboardManager::class.java)
                         runCatching { gerente.primaryClip?.getItemAt(0)?.text?.toString() }.getOrNull()
-                            ?.trim()?.takeIf { it.isNotEmpty() }?.let(aoMudar)
+                            ?.trim()?.takeIf { it.isNotEmpty() }?.let { colado ->
+                                // A frase ou a chave sai tambem da area de transferencia (como no iOS).
+                                escopo.launch { app.escalibur.wallet.ui.enviar.limparSeSegredo(gerente, colado, rede) }
+                                aoMudar(colado)
+                            }
                     }.padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {

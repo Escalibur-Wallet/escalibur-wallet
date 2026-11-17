@@ -76,6 +76,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import app.escalibur.wallet.nucleo.Api
+import app.escalibur.wallet.ui.receber.opcional
 import app.escalibur.wallet.ui.App
 import app.escalibur.wallet.ui.Carteira
 import app.escalibur.wallet.ui.comp.Avisos
@@ -232,7 +233,8 @@ fun SeletorDeCarteiras(aoFechar: () -> Unit) {
     val haptico = LocalHapticFeedback.current
     val estado = App.estado
     var renomeando by remember { mutableStateOf<Carteira?>(null) }
-    var copiando by remember { mutableStateOf<Carteira?>(null) }
+    // So o id: a folha le a carteira do estado a cada desenho, e a marca que chega com ela aberta tira o endereco (rodada 8).
+    var copiando by remember { mutableStateOf<String?>(null) }
     // A linha com o apagar a mostra, e a carteira no popup de apagar.
     var aberta by remember { mutableStateOf<String?>(null) }
     var apagando by remember { mutableStateOf<Carteira?>(null) }
@@ -243,7 +245,8 @@ fun SeletorDeCarteiras(aoFechar: () -> Unit) {
         controleDaFolha.fechar()
     }
 
-    FolhaDoIos(aoFechar = { aoFechar(); controleDaFolha.depois?.invoke(); controleDaFolha.depois = null }, media = true) { fecharFolha ->
+    // Na metade da tela, a lista rola; a folha cresce pela alca ou pelo cabecalho (pedido do dono, 08/11/2026).
+    FolhaDoIos(aoFechar = { aoFechar(); controleDaFolha.depois?.invoke(); controleDaFolha.depois = null }, media = true, rolaNaMedia = true) { fecharFolha ->
         controleDaFolha.fechar = fecharFolha
         // O fundo da folha de copiar endereco (pedido do dono, 24/10/2026).
         Column(Modifier.fillMaxSize().background(Paleta.vazio).navigationBarsPadding()) {
@@ -276,7 +279,7 @@ fun SeletorDeCarteiras(aoFechar: () -> Unit) {
                         // 24/10/2026): com a passphrase ou as palavras sem conferir, o saldo recebido
                         // num endereco que talvez nao se reabra se perde. A de so observar copia sempre.
                         if (carteira.contas.isNotEmpty() && (carteira.temCopia || carteira.observacao)) {
-                            Box(Modifier.size(width = 36.dp, height = Altura.toque).clickable { copiando = carteira }, contentAlignment = Alignment.Center) {
+                            Box(Modifier.size(width = 36.dp, height = Altura.toque).clickable { copiando = carteira.id }, contentAlignment = Alignment.Center) {
                                 Icone(Icones.copiar, Paleta.tintaSuave, tamanho = 17.dp, descricao = t("Copiar endereço de %@", carteira.nome))
                             }
                         }
@@ -304,7 +307,7 @@ fun SeletorDeCarteiras(aoFechar: () -> Unit) {
             if (confirmou) escopo.launch { RemocaoDeCarteira.remover(carteira) }
         }
     }
-    copiando?.let { carteira -> CopiarEndereco(carteira) { copiando = null } }
+    copiando?.let { id -> estado.carteiras.firstOrNull { it.id == id }?.let { carteira -> CopiarEndereco(carteira) { copiando = null } } }
 }
 
 @Composable
@@ -344,6 +347,14 @@ private fun Renomear(carteira: Carteira, aoFechar: () -> Unit) {
  * endereco), e cada rede com endereco proprio, com o icone, o nome e o comeco e o fim do endereco.
  * Copiar marca o visto, fecha e mostra o aviso.
  */
+/**
+ * O endereco que pode ser copiado agora, conferido no nucleo na hora do toque e na carteira gravada: a tela pode estar um passo
+ * atras da marca de outra chave (rodada 8 da auditoria 8). Nulo quando alguma das redes tem a marca, ou o endereco mudou.
+ */
+suspend fun enderecoParaCopiar(carteira: String, redes: List<String>): String? = runCatching {
+    Api.objeto("carteira.enderecoParaCopiar", JSONObject().put("id", carteira).put("redes", JSONArray(redes))).opcional("endereco")
+}.getOrNull()
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CopiarEndereco(carteira: Carteira, aoFechar: () -> Unit) {
@@ -353,25 +364,47 @@ fun CopiarEndereco(carteira: Carteira, aoFechar: () -> Unit) {
     // A lista das redes EVM aberta, e o endereco que acabou de ser copiado.
     var abertas by remember { mutableStateOf(false) }
     var copiado by remember { mutableStateOf<String?>(null) }
+    var conferindo by remember { mutableStateOf(false) }
     val redes = Redes.todas
-    val evm = redes.filter { it.familia == "evm" && carteira.endereco(it.id) != null }
+    // O endereco EVM e o mesmo em todas as redes EVM: com outra chave ou contrato no controle em qualquer uma, o atalho de
+    // "todas as redes EVM" sai, e o Receber de cada rede diz qual recebe (auditoria 8, 14/11/2026), como no iOS.
+    // So o que copia agora: a rede ja lida para outra chave no controle, e nenhum endereco que outra carteira deste celular tem
+    // marcado (pedido do dono, 15/11/2026, a forma mais segura), como no iOS. O toque confere de novo no nucleo.
+    // So as redes ligadas: a desligada nao e conferida, e seguraria para sempre a linha das EVM (revisao dos tres agentes de
+    // 15/11/2026), como no iOS.
+    val desligadas = App.estado.redesDesligadas
+    val todasEvm = redes.filter { it.familia == "evm" && carteira.endereco(it.id) != null && it.id !in desligadas }
+        .takeIf { lista -> lista.none { it.id in carteira.outroControle || it.id in carteira.marcadaEmOutra } } ?: emptyList()
+    val evm = todasEvm.takeIf { lista -> lista.none { it.id in carteira.naoLidas } } ?: emptyList()
+    var pendente = todasEvm.isNotEmpty() && evm.isEmpty()
     val outras = buildList {
         val vistos = evm.mapNotNull { carteira.endereco(it.id) }.toMutableSet()
         for (rede in redes) {
-            if (rede.familia == "evm") continue
+            if (rede.familia == "evm" || rede.id in desligadas) continue
             // A conta da Tron com outra chave no controle fica de fora (auditoria de 31/10/2026).
             if (rede.familia == "tron" && carteira.tronOutraChave) continue
+            if (rede.id in carteira.outroControle || rede.id in carteira.marcadaEmOutra) continue
             val endereco = carteira.endereco(rede.id) ?: continue
+            if (rede.id in carteira.naoLidas) {
+                pendente = true
+                continue
+            }
             if (vistos.add(endereco)) add(rede to endereco)
         }
     }
 
-    fun copiar(titulo: String, endereco: String) {
-        if (copiado != null) return
-        Transferencia.copiar(contexto, endereco)
-        copiado = endereco
-        controleDaFolha.depois = { Avisos.mostrar(t("Endereço %@ copiado. Depois de colar, confira o endereço inteiro, inclusive o meio.", titulo)) }
+    fun copiar(titulo: String, endereco: String, redes: List<String>) {
+        if (copiado != null || conferindo) return
+        conferindo = true
         escopo.launch {
+            // Conferido no nucleo na hora do toque: com a marca que acabou de chegar, nada copia, e a linha sai com o estado novo.
+            // O visto so depois do ok (rodada 9).
+            val ok = enderecoParaCopiar(carteira.id, redes) == endereco
+            conferindo = false
+            if (!ok) return@launch
+            copiado = endereco
+            Transferencia.copiarEndereco(contexto, endereco, carteira.id, redes.first())
+            controleDaFolha.depois = { Avisos.mostrar(t("Endereço %@ copiado. Depois de colar, confira o endereço inteiro, inclusive o meio.", titulo)) }
             delay(450)
             controleDaFolha.fechar()
         }
@@ -411,7 +444,7 @@ fun CopiarEndereco(carteira: Carteira, aoFechar: () -> Unit) {
                                     Text(carteira.curto(evm.first().id) ?: "", style = estilo(Tipo.nota), color = Paleta.tintaSuave, maxLines = 1)
                                 }
                             }
-                            Box(Modifier.size(Altura.toque).clickable { copiar(titulo, endereco) }, contentAlignment = Alignment.Center) {
+                            Box(Modifier.size(Altura.toque).clickable { copiar(titulo, endereco, evm.map { it.id }) }, contentAlignment = Alignment.Center) {
                                 MarcaDeCopiar(copiado == endereco, t("Copiar endereço %@", titulo))
                             }
                         }
@@ -436,7 +469,7 @@ fun CopiarEndereco(carteira: Carteira, aoFechar: () -> Unit) {
                 for ((rede, endereco) in outras) {
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo)
-                            .clickable { copiar(rede.nome, endereco) }.padding(horizontal = Espaco.md),
+                            .clickable { copiar(rede.nome, endereco, listOf(rede.id)) }.padding(horizontal = Espaco.md),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
                     ) {
                         Box(Modifier.size(48.dp, 36.dp), contentAlignment = Alignment.CenterStart) {
@@ -449,6 +482,10 @@ fun CopiarEndereco(carteira: Carteira, aoFechar: () -> Unit) {
                         Spacer(Modifier.width(Espaco.xs))
                         MarcaDeCopiar(copiado == endereco, null)
                     }
+                }
+                if (pendente) {
+                    Text(t("As redes que o app ainda não conferiu aparecem aqui depois da conferência."), style = estilo(Tipo.nota),
+                         color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.xs))
                 }
             }
         }

@@ -175,6 +175,8 @@ class RetratoDaTroca(json: JSONObject) {
         val transacoes: Int = j.getInt("transacoes")
         val nota: String = j.getString("nota")
         val erro: String? = j.opcional("erro")
+        /** A troca e a ordem limite numa conta que nao recebe: o motivo, e o confirmar apagado (15/11/2026). */
+        val fechada: String? = j.opcional("fechada")
     }
 
     class Resultado(val id: String?, val explorador: String, val url: String?, val situacao: String, val detalhe: String?, val ordem: Boolean,

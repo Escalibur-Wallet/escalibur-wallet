@@ -117,6 +117,12 @@ final class AuthCoordinator {
         guard var attempt = await credential(reason: reason, forcePIN: presence != .either, notice: both ? Self.bothNotice : nil, faceFirst: true) else { return nil }
         while true {
             if both, case .pin(let pin) = attempt { attempt = .pinAndBiometry(pin, reason: reason) }
+            // O que pede os dois (ver as palavras, lacrar, remover, desligar o Face ID) so segue com a presenca inteira, conferida
+            // aqui, num lugar so, e nao em cada tela: o rosto sozinho nunca chega a operacao (auditoria 8, 14/11/2026).
+            if both, !attempt.isFullPresence {
+                attempt.wipe()
+                throw RootKeyVault.Failure.biometryRequired
+            }
             var notice: String?
             var error: String?
             do {

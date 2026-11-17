@@ -96,6 +96,18 @@ struct WalletMeta: Codable, Equatable, Hashable {
     /// (05/11/2026): a digitada tambem nao assina nesta versao, e a tela diz isso em vez de contar erro.
     var passphraseUnverified: Bool?
     var tronForeignControl: Bool?
+    /// Outra chave, conta ou contrato no controle das contas da carteira, por rede (`ForeignControl`; auditoria 8,
+    /// 14/11/2026), fora a Tron, que tem a marca propria: o `foreignControl` do iOS. O Receber da rede mostra o aviso, a conta
+    /// sai de Minhas carteiras e a revisao avisa. Opcional para os metadados antigos.
+    var foreignControl: [String: ForeignControl]?
+    /// A ultima conferencia de todas as redes (`ForeignControlCheck`): a do destravar espera um dia.
+    var foreignControlCheckedAt: Date?
+    /// As redes em que a outra chave no controle ja foi lida de verdade, como no iOS (rodada 6 da auditoria 8).
+    var foreignControlRead: Set<String>?
+    /// Criada aqui com as palavras escolhidas pelo dono: conferida como a importada (rodada 6 da auditoria 8), como no iOS.
+    var chosenWords: Bool?
+    /// A versao da carteira TON ja conferida (`TONDiscovery`), como no iOS: uma vez por carteira.
+    var tonVersionChecked: Bool?
     var envelopeSealedAt: Date?
     var lastRevealedAt: Date?
     var hiddenAssetIDs: Set<String> = []
@@ -108,6 +120,72 @@ struct WalletMeta: Codable, Equatable, Hashable {
     var wordCount: Int? { if case .phrase(let count) = kind { return count }; return nil }
 
     func account(_ chain: Chain) -> DerivedAccount? { accounts.first { $0.chainID == chain.id } }
+    /// Outra chave, conta ou contrato no controle da conta desta rede (fora a Tron, que tem a marca propria). Numa rede EVM,
+    /// tambem a marca de outra rede EVM: o endereco e a chave sao os mesmos em todas (rodada 2 da auditoria 8), como no iOS.
+    func foreignControl(on chain: Chain) -> ForeignControl? {
+        if let own = foreignControl?[chain.id] { return own }
+        guard chain.family == .evm, let marks = foreignControl else { return nil }
+        return marks.keys.sorted().lazy.filter { Chain.find($0)?.family == .evm }.first.flatMap { marks[$0] }
+    }
+    /// Ja conferida para outra chave no controle, ou criada aqui; a importada nunca conferida nao conta como sua no envio
+    /// (rodada 5 da auditoria 8), como no iOS.
+    /// Por rede: a sem outra chave para ler conta direto, e a com leitura so depois de lida (rodada 6), como no iOS.
+    func controlChecked(on chain: Chain) -> Bool {
+        (origin == .created && chosenWords != true) || !ForeignControlCheck.reads(chain) || foreignControlRead?.contains(chain.id) == true
+    }
+    /// A rede onde a marca de `foreignControl(on:)` foi vista: a propria, ou, numa EVM, a outra EVM marcada (rodada 3).
+    func foreignControlOrigin(on chain: Chain) -> Chain? {
+        if foreignControl?[chain.id] != nil { return chain }
+        guard chain.family == .evm, let marks = foreignControl else { return nil }
+        return marks.keys.sorted().lazy.compactMap { Chain.find($0) }.first { $0.family == .evm }
+    }
+    /// A carteira recebe nesta rede (o `receives(on:)` do iOS): nem a conta da Tron com outra chave, nem, desde a auditoria 8
+    /// (14/11/2026, pela regra do dono de sempre a forma mais segura), a de qualquer rede com outra chave ou contrato no controle.
+    func recebe(on chain: Chain) -> Bool {
+        !(chain.family == .tron && tronForeignControl == true) && foreignControl(on: chain) == nil
+    }
+}
+
+extension Array where Element == WalletMeta {
+    /// Outra carteira deste aparelho com o mesmo endereco nesta rede, e nele a marca de outra chave no controle: a so de
+    /// observacao desse endereco (ou outra carteira com ele) tambem nao recebe por ele (pedido do dono, 15/11/2026, a forma mais
+    /// segura), como o `markedElsewhere` do iOS.
+    func marcadaEmOutra(_ carteira: WalletMeta, on chain: Chain) -> WalletMeta? {
+        guard let endereco = carteira.account(chain)?.address else { return nil }
+        return donaMarcada(de: endereco, on: chain, exceto: carteira.id)
+    }
+
+    /// Como o endereco esta gravado em cada carteira deste aparelho com a mesma conta (`Address.canonicalRecipient`; numa EVM, em
+    /// qualquer EVM), mais ele mesmo: a copia da TON so de observacao em EQ ou crua sai junto com a marca (revisao dos tres
+    /// agentes de 15/11/2026), como o `addressForms` do iOS.
+    func formas(de endereco: String, on chain: Chain) -> Set<String> {
+        guard let alvo = Address.canonicalRecipient(endereco, chain: chain) else { return [endereco] }
+        var saida: Set<String> = [endereco]
+        for conta in flatMap(\.accounts) {
+            guard let outra = Chain.find(conta.chainID) else { continue }
+            let mesma = chain.family == .evm
+                ? outra.family == .evm && conta.address.lowercased() == alvo
+                : outra.id == chain.id && Address.canonicalRecipient(conta.address, chain: chain) == alvo
+            if mesma { saida.insert(conta.address) }
+        }
+        return saida
+    }
+
+    /// A carteira deste aparelho dona de `endereco` nesta rede, com a marca de outra chave no controle nela (`recebe`): receber
+    /// nesse endereco, ou enviar para ele de outra carteira, e depositar numa conta que quem controla a outra chave leva
+    /// (15/11/2026), como o `markedOwner` do iOS. Pela identidade canonica (`Address.canonicalRecipient`): a TON so de observacao
+    /// fica gravada como foi digitada. Numa EVM, o endereco de qualquer EVM, como a marca.
+    func donaMarcada(de endereco: String, on chain: Chain, exceto: UUID? = nil) -> WalletMeta? {
+        guard let alvo = Address.canonicalRecipient(endereco, chain: chain) else { return nil }
+        let evm = chain.family == .evm
+        return first { outra in
+            guard outra.id != exceto, !outra.recebe(on: chain) else { return false }
+            if evm {
+                return outra.accounts.contains { Chain.find($0.chainID)?.family == .evm && $0.address.lowercased() == alvo }
+            }
+            return outra.account(chain).flatMap { Address.canonicalRecipient($0.address, chain: chain) } == alvo
+        }
+    }
 }
 
 struct Contact: Codable, Equatable, Hashable {

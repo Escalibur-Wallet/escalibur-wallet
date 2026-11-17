@@ -954,6 +954,16 @@ final class Troca: @unchecked Sendable {
             trava.withLock { falhou(Textos.t("Esta carteira não tem conta nesta rede.")) }
             return
         }
+        // A rede da conta conferida de novo antes, como o Receber a cada abertura: a compra chegaria nesta conta (15/11/2026, e a
+        // revisao dos tres agentes), como no iOS. Numa EVM, tambem as outras EVM marcadas, como o Receber e a ponte.
+        if !operacao.cancela, !carteira.isWatchOnly {
+            if rede == .tron {
+                _ = await Sessao.shared.conferirTron(carteira.id).value
+            } else {
+                let marcadas = rede.family == .evm ? Set((carteira.foreignControl ?? [:]).keys.filter { Chain.find($0)?.family == .evm }) : []
+                _ = await Sessao.shared.conferirControle(carteira.id, redes: marcadas.union([rede.id])).value
+            }
+        }
         // A fila de nonces EVM desta conta, sem o que a rede ja confirmou, entra no pedido: o
         // planejador sabe o que este aparelho ja transmitiu.
         await FilaDeNonces.podar(carteira: carteira.id, rede: rede, endereco: conta.address)
@@ -998,9 +1008,9 @@ final class Troca: @unchecked Sendable {
                 etapa = .revisao
             }
         } catch {
-            if (error as? SendEngineError)?.isLocalNonceQueueAhead == true {
-                FilaDeNonces.esquecer(carteira: carteira.id, rede: rede, endereco: conta.address)
-            }
+            // A fila a frente da rede nao e apagada aqui: a poda de antes do plano ja tira, no prazo dela, a transacao que a rede
+            // descartou. Apagar tudo numa leitura so (dois nos atrasados logo depois de uma confirmacao) fazia o plano seguinte reusar
+            // o nonce de uma transacao viva, como a troca pela rota privada (auditoria 8, 14/11/2026).
             trava.withLock {
                 guard rodada == numero, etapa == .montando else { return }
                 falhou((error as? LocalizedError)?.errorDescription ?? Textos.t("Não foi possível montar agora. Tente de novo."))
@@ -1057,7 +1067,7 @@ final class Troca: @unchecked Sendable {
     /// pede a passphrase.
     func assinar(_ credencial: Credencial, passphrase: SecureBytes?, folga: Int?) async throws {
         defer { passphrase?.wipe() }
-        let preparo = trava.withLock { () -> (SigningPlan, any TradeEngine, Int, Bool, Bool, Asset?)? in
+        let preparo = trava.withLock { () -> (SigningPlan, any TradeEngine, Int, Bool, Asset?)? in
             erroDaRevisao = nil
             guard etapa == .revisao, let plano, let atual, let motor = TradeEngines.engine(for: plano.chain) else { return nil }
             guard confere(plano) else {
@@ -1067,11 +1077,11 @@ final class Troca: @unchecked Sendable {
             if plano.isExpired() {
                 self.plano = nil
                 etapa = .montando
-                return (plano, motor, rodada, true, atual.cancela, atual.vendido)
+                return (plano, motor, rodada, true, atual.vendido)
             }
-            return (plano, motor, rodada, false, atual.cancela, atual.vendido)
+            return (plano, motor, rodada, false, atual.vendido)
         }
-        guard let (plano, motor, numero, vencido, cancela, vendido) = preparo else {
+        guard let (plano, motor, numero, vencido, vendido) = preparo else {
             credencial.zerar()
             return
         }
@@ -1086,6 +1096,12 @@ final class Troca: @unchecked Sendable {
             return
         }
         let dona = Sessao.shared.metadata.wallets.first { $0.id == plano.walletID }
+        // A conta que deixou de receber depois da revisao (a marca que chegou com a tela aberta): nada e assinado.
+        if let motivo = Troca.contaFechada(dona, plano) {
+            credencial.zerar()
+            trava.withLock { erroDaRevisao = motivo }
+            return
+        }
         // Ate a assinatura: outra transacao desta conta pode ter saido depois da revisao.
         if let conta = dona?.account(plano.chain),
            let motivo = FilaDeNonces.motivoDoBloqueio(carteira: plano.walletID, rede: plano.chain, endereco: conta.address, ativo: vendido,
@@ -1099,8 +1115,9 @@ final class Troca: @unchecked Sendable {
         guard SigningSelfTest.passed(for: plano) else { credencial.zerar(); throw SigningSelfTest.Failure() }
         // Carteira com passphrase: ela nunca fica salva, e sai zerada logo depois de assinar (pedido do dono,
         // 05/11/2026; ver `PortaDaPassphrase.assinar`). Cancelar uma ordem tambem assina, e sem a passphrase o
-        // cofre nao tem como.
-        let assinado = try PortaDaPassphrase.assinar(plano, carteira: dona, digitada: passphrase, folga: cancela ? nil : folga, credencial: credencial)
+        // cofre nao tem como; a folga vale nele como no envio e na troca (pedido do dono, 08/11/2026): so comeca depois de
+        // a passphrase conferir, e a biometria ou o PIN continuam.
+        let assinado = try PortaDaPassphrase.assinar(plano, carteira: dona, digitada: passphrase, folga: folga, credencial: credencial)
         // Travou entre assinar e enviar: nada sai (ver o envio). Destravado, o dono envia de novo.
         guard Sessao.shared.fase == .unlocked else { throw Sessao.Falha.travada }
         await transmitir(assinado, plano: plano, motor: motor, numero: numero)
@@ -1747,6 +1764,8 @@ final class Troca: @unchecked Sendable {
             let transacoes: Int
             let nota: String
             let erro: String?
+            /// A troca e a ordem limite numa conta que nao recebe: o motivo, e o confirmar apagado (`Troca.contaFechada`).
+            let fechada: String?
         }
         /// Os textos de cada etapa, pelo que a revisao assina: troca, ordem limite ou cancelamento.
         struct Frases: Encodable {
@@ -1968,7 +1987,7 @@ final class Troca: @unchecked Sendable {
             if partes { return Textos.t("Em partes pela CoW, conforme chega liquidez") }
             if cotacao.execution == .order { return preencher(Textos.t("Leilão da CoW, o melhor entre %lld"), "\(cotacao.providersCompared)") }
             // Sem comparacao, "o melhor entre" sugeriria a comparacao que o aviso nega (revisao de 05/11/2026).
-            if cotacao.unanchored, cotacao.legs.count == 1 { return preencher(Textos.t("%@, sem comparação"), cotacao.legs[0].provider) }
+            if cotacao.unanchored, cotacao.legs.count == 1, cotacao.singleSource || cotacao.providersCompared == 1 { return preencher(Textos.t("%@, sem comparação"), cotacao.legs[0].provider) }
             if let escolhido, escolhido.par == par, cotacao.legs.first?.provider == escolhido.provedor {
                 return preencher(Textos.t("%@, escolhido por você"), escolhido.provedor)
             }
@@ -2089,10 +2108,25 @@ final class Troca: @unchecked Sendable {
                 + [Estado.Linha(rotulo: Textos.t("De"), valor: carteira?.name ?? "")]
                 + (atual?.limite == true && refazer && podeRefazer
                     ? [Estado.Linha(rotulo: Textos.t("Quando vencer"), valor: Textos.t("O app avisa e pergunta se refaz, com o mesmo preço"))] : []),
-            avisos: review.warnings.map { Envio.textoDoAviso($0, chain: plano.chain, tipo: .tag) },
+            // Outra chave ou contrato no controle desta conta vem primeiro (auditoria 8, 14/11/2026): a operacao segue, com o aviso.
+            avisos: (carteira?.foreignControl(on: plano.chain).map { [$0.message] } ?? [])
+                + review.warnings.map { Envio.textoDoAviso($0, chain: plano.chain, tipo: .tag) },
             // Na ordem limite, o aviso das duas assinaturas sai.
-            transacoes: atual?.limite == true ? 1 : review.transactionCount, nota: nota, erro: erroDaRevisao
+            transacoes: atual?.limite == true ? 1 : review.transactionCount, nota: nota, erro: erroDaRevisao,
+            fechada: Troca.contaFechada(Sessao.shared.metadata.wallets.first { $0.id == plano.walletID }, plano)
         )
+    }
+
+    /// A troca e a ordem limite numa conta que nao recebe (outra chave no controle, nesta carteira ou no mesmo endereco de outra):
+    /// o que for comprado chegaria nela, e quem controla a outra chave leva (pedido do dono, 15/11/2026, a forma mais segura), como
+    /// no iOS. Cancelar uma ordem nao recebe nada e segue. Devolve o motivo, ou nil.
+    /// A rede ainda nao lida para outra chave no controle tambem nao recebe a compra: ela espera a conferencia, como o Receber.
+    static func contaFechada(_ dona: WalletMeta?, _ plano: SigningPlan) -> String? {
+        guard plano.review.kind != .cancelOrder, let dona else { return nil }
+        if !dona.recebe(on: plano.chain) || Sessao.shared.metadata.wallets.marcadaEmOutra(dona, on: plano.chain) != nil {
+            return Textos.t("A troca fica fechada nesta conta: o que você comprar chegaria nela, e quem controla a outra chave leva.")
+        }
+        return dona.controlChecked(on: plano.chain) ? nil : Textos.t("Esta conta ainda não foi conferida nesta rede. Tente de novo em instantes.")
     }
 
     private func resultadoDTO() -> Estado.Resultado? {

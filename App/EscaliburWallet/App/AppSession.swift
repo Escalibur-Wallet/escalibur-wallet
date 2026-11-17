@@ -1,6 +1,7 @@
 import CryptoKit
 import EscaliburChains
 import EscaliburCore
+import EscaliburEngines
 import EscaliburKeys
 import EscaliburNetwork
 import Observation
@@ -18,6 +19,14 @@ enum Credential: Sendable {
     case hardened(SecureBytes, reason: String)
     /// Modo reforcado com o rosto ja confirmado antes do PIN (pedido do dono, 01/11/2026).
     case hardenedFace(SecureBytes, face: RootKeyVault.HardenedFacePass)
+
+    /// O PIN e o rosto (ou o Super Security, que pede os dois em tudo): a presenca que ver as palavras, lacrar e remover pedem.
+    var isFullPresence: Bool {
+        switch self {
+        case .pinAndBiometry, .hardened, .hardenedFace: return true
+        case .pin, .biometry: return false
+        }
+    }
 
     /// Zera o PIN quando a operacao para antes de abrir a RK, que o zeraria la dentro (revisao da decima terceira passada).
     func wipe() {
@@ -157,6 +166,8 @@ final class AppSession {
         }
         indexKey = key
         metadata = Metadata()
+        // Nada de uma instalacao anterior espera o destravar desta (um envio que terminou depois de apagar tudo; revisao, 08/11/2026).
+        afterUnlock = []
         try persist()
         phase = .unlocked
     }
@@ -316,6 +327,7 @@ final class AppSession {
         afterUnlock = []
         for change in queued { change(self) }
         NoticeMigration.runOnce(self)
+        scheduleControlChecks()
         // O cache de saldo e o historico de carteira que nao existe mais saem: uma leitura que terminou depois da remocao
         // os regravava (decima terceira passada da auditoria de 03/11/2026 e a revisao dela).
         let carteiras = Set(metadata.wallets.map(\.id))
@@ -379,6 +391,10 @@ final class AppSession {
         change(self)
     }
 
+    /// O app travou ou foi apagado: o que so pode existir destravado sai na hora (as palavras de uma importacao em curso). Ao
+    /// contrario do `SecureInputField.wipeAll`, nao sai ao ir para o fundo: a previa manda comparar os enderecos noutro app.
+    static let didLock = Notification.Name("escalibur.session.didLock")
+
     func lock() {
         // A folha de PIN, de passphrase ou de voz aberta por cima recebe "fechou": nada digitado
         // nela leva uma operacao adiante com o app travado (auditoria 6, A6-05).
@@ -388,8 +404,16 @@ final class AppSession {
         VoiceGate.shared.cancel()
         PassphraseGate.shared.clearGrace()
         NotificationCenter.default.post(name: SecureInputField.wipeAll, object: nil)
+        // Na hora do aviso, e nao quando a tela sair: suspenso, o SwiftUI so tira a tela na volta (revisao dos 3 agentes, 08/11/2026).
+        NotificationCenter.default.post(name: Self.didLock, object: nil)
         // Um rosto do Super Security confirmado e ainda sem PIN nao vale depois de travar.
         KeyServices.root.discardHardenedFace()
+        // As conferencias das carteiras com passphrase param: a tarefa guardava as contas dela na memoria com o app travado
+        // (rodada 3 da auditoria 8). A que nao terminou a primeira e conferida de novo quando escolhida (rodada 4).
+        for wallet in metadata.wallets where wallet.hasPassphrase { cancelControlChecks(of: wallet.id) }
+        // Travado, a tela da previa sai: a marca dela nao segura a rodada do dia depois de destravar (rodada 6).
+        previewOpen = false
+        tronReadAt = [:]
         indexKey = nil
         metadata = Metadata()
         forgetMemory()
@@ -628,7 +652,8 @@ final class AppSession {
     /// "Carteira principal" nunca se confunde com a do dono.
     func addWallet(
         secret: WalletSecret, name: String, origin: WalletMeta.Origin, wordCount: Int,
-        backupConfirmed: Bool, select: Bool = true, tronForeignControl: Bool = false,
+        backupConfirmed: Bool, select: Bool = true, tronForeignControl: Bool = false, foreignControl: [String: ForeignControl]? = nil,
+        chosenWords: Bool = false,
         passphraseConfirmed: Bool = false, legacyCardano: Bool = false, expectedFingerprint: String? = nil, credential: Credential
     ) async throws -> WalletMeta {
         guard !addingWordsBlocked else {
@@ -667,6 +692,22 @@ final class AppSession {
         }
         if let existing = metadata.wallets.first(where: { $0.fingerprint == fingerprint.hex && !$0.isWatchOnly }) {
             if saved { try? KeyServices.wallets.delete(id) }
+            // A delegacao que a previa viu vale para a carteira que ja estava, e ela e conferida (rodada 5 da auditoria 8). So se
+            // for a mesma conta EVM: a digital tem 4 bytes, e uma frase moida com a digital da vitima marcava a carteira dela.
+            let sameEVM = Set(accounts.filter { Chain.find($0.chainID)?.family == .evm }.map { $0.address.lowercased() })
+                .isSubset(of: Set(existing.accounts.map { $0.address.lowercased() }))
+            // A Tron que a previa viu tambem: a conferencia dela, e a marca so com dois de acordo (rodada 6).
+            if sameEVM, tronForeignControl || foreignControl?.isEmpty == false,
+               let index = metadata.wallets.firstIndex(where: { $0.id == existing.id }) {
+                if let foreignControl, !foreignControl.isEmpty {
+                    metadata.wallets[index].foreignControl = ForeignControlCheck.apply(foreignControl.mapValues { .foreign($0) },
+                                                                                       to: metadata.wallets[index].foreignControl, startingFrom: nil)
+                    try? persist()
+                    withdrawBlockedCopy(existing.id)
+                }
+                _ = checkTronControl(existing.id)
+                checkForeignControl(existing.id)
+            }
             throw WalletError.alreadyImported(existing.name)
         }
         // Estava aqui quando o cofre abriu e saiu no meio: nada foi gravado, e nada e criado.
@@ -677,6 +718,10 @@ final class AppSession {
             backupConfirmedAt: backupConfirmed ? .now : nil
         )
         if tronForeignControl { wallet.tronForeignControl = true }
+        // A delegacao EVM que a previa viu, com dois operadores de acordo, nasce como marca, como a da Tron (rodada 4 da
+        // auditoria 8): o envelope que nao fica escolhido so seria conferido quando escolhido.
+        if let foreignControl, !foreignControl.isEmpty { wallet.foreignControl = foreignControl }
+        if chosenWords { wallet.chosenWords = true }
         // As marcas do envelope de antes nascem com a carteira, e nao numa gravacao depois (revisao de blockchain de 05/11/2026).
         if wallet.hasPassphrase, passphraseConfirmed { wallet.passphraseConfirmedAt = .now }
         if wallet.hasPassphrase, legacyCardano { wallet.legacyCardanoPassphrase = true }
@@ -689,6 +734,22 @@ final class AppSession {
             metadata.wallets.removeAll { $0.id == id }
             try? KeyServices.wallets.delete(id)
             throw error
+        }
+        // A frase importada ou o envelope aberto, conferidos logo depois de gravar, como no Android: sem isso, o Copiar
+        // endereco, os Ajustes e as Minhas carteiras ficavam abertos ate o proximo destravar numa conta com varredor, e a W5
+        // da TON nao era procurada (rodada 3 da auditoria 8). A carteira criada aqui nao tem o que ler, e a consulta so
+        // entregaria os enderecos novos aos operadores; so a escolhida, como na rodada do dia.
+        // O envelope tambem quando nao fica escolhido: a previa ja consultou a EVM e a Tron dele, deste IP, segundos antes, e sem
+        // isso ele so seria conferido quando escolhido, aberto no Minhas carteiras de quem paga a taxa (rodada 4).
+        // A que passa a ser escolhida: o que ainda consultava a de antes para (rodada 4 da auditoria 8). O envelope que nao fica
+        // escolhido tambem: conferido agora, ele nao sai junto com a rodada da escolhida.
+        if metadata.selectedWalletID == id || origin == .importedEnvelope { pauseControlChecks(keeping: id) }
+        if origin != .created || chosenWords, metadata.selectedWalletID == id || origin == .importedEnvelope {
+            // So a sem passphrase entra na excecao da pausa: a com passphrase nunca sai junto com outra (rodada 5).
+            if !wallet.hasPassphrase { firstChecks.insert(id) }
+            _ = checkTronControl(id)
+            checkForeignControl(id)
+            _ = checkTONVersion(id)
         }
         return wallet
     }
@@ -763,19 +824,30 @@ final class AppSession {
             throw WalletError.locked
         }
         // A mesma frase com a mesma passphrase abre a mesma carteira: se ela ja esta aqui,
-        // abrir e so passar a usa-la.
+        // abrir e so passar a usa-la. A digital tem 4 bytes: o endereco da Bitcoin confirma que e a mesma, e uma
+        // carteira de outra frase com a mesma digital nunca e escolhida no lugar (revisao dos 3 agentes, 08/11/2026).
         if let existing = metadata.wallets.first(where: { $0.fingerprint == fingerprint.hex && !$0.isWatchOnly }) {
             if saved { try? KeyServices.wallets.delete(id) }
+            guard existing.account(.bitcoin)?.address == accounts.first(where: { $0.chainID == Chain.bitcoin.id })?.address else {
+                throw WalletError.alreadyImported(existing.name)
+            }
             metadata.selectedWalletID = existing.id
             try persist()
+            // Reaberta, a mesma conferencia da que nasce agora, como no Android (rodada 1 da auditoria 8).
+            _ = checkTronControl(existing.id)
+            checkForeignControl(existing.id)
+            _ = checkTONVersion(existing.id)
             return existing
         }
         guard saved else { throw WalletError.changedDuringSave }
-        let wallet = WalletMeta(
+        var wallet = WalletMeta(
             id: id, name: name, kind: .phrase(wordCount: wordCount), origin: base.origin, createdAt: .now,
             accounts: accounts, fingerprint: fingerprint.hex, hasPassphrase: true,
             backupConfirmedAt: base.backupConfirmedAt
         )
+        // As palavras escolhidas da base valem para a com passphrase: sem isso, a `.created` contava como conferida em toda
+        // rede (rodada 6 da auditoria 8).
+        wallet.chosenWords = base.chosenWords
         metadata.wallets.append(wallet)
         // A mesma conta de volta (removida e importada de novo nesta sessao) volta a ter os avisos de ordem.
         let returning = Self.evmOwners(wallet)
@@ -787,6 +859,10 @@ final class AppSession {
             throw error
         }
         freshPassphraseWallets[id] = PINPolicy.uptime
+        // A Tron dela ja, logo depois de gravar: travar entre aqui e a tela nao a deixa sem conferencia. E as outras redes.
+        _ = checkTronControl(id)
+        checkForeignControl(id)
+        _ = checkTONVersion(id)
         return wallet
     }
 
@@ -815,14 +891,33 @@ final class AppSession {
     }
 
     func select(_ wallet: WalletMeta) {
+        // A rodada de outra carteira para: a que passa a ser escolhida nao e consultada junto com ela (rodada 2 da auditoria 8).
+        if metadata.selectedWalletID != wallet.id { pauseControlChecks(keeping: wallet.id) }
         metadata.selectedWalletID = wallet.id
+        try? persist()
+        // A conferencia do dia e so da carteira em uso: a que passa a ser escolhida e conferida agora, se ja for a hora dela.
+        scheduleControlChecks()
+    }
+
+    /// So o nome, sobre a carteira como ela esta agora: gravar a copia da tela apagava a marca da Tron que chegou
+    /// depois de a tela abrir (revisao de seguranca de 08/11/2026).
+    func rename(_ id: UUID, to name: String) {
+        // Todo caminho de renomear passa pelo mesmo saneamento: sem controle, sem caractere invisivel ou de direcao, ate 40.
+        let clean = Envelope.sanitize(name, limit: 40)
+        guard !clean.isEmpty, let index = metadata.wallets.firstIndex(where: { $0.id == id }) else { return }
+        metadata.wallets[index].name = clean
         try? persist()
     }
 
-    func update(_ wallet: WalletMeta) {
-        guard let index = metadata.wallets.firstIndex(where: { $0.id == wallet.id }) else { return }
-        metadata.wallets[index] = wallet
+    /// Muda a carteira gravada, lida na hora, e devolve como ficou. A tela que gravava a copia inteira (guardada minutos
+    /// antes) apagava o que a conferencia de outra chave gravou no meio: a marca, as redes lidas, a troca da TON para a W5
+    /// (rodada 7 da auditoria 8). Como o `atualizar` do Android.
+    @discardableResult
+    func update(_ id: UUID, _ change: (inout WalletMeta) -> Void) -> WalletMeta? {
+        guard let index = metadata.wallets.firstIndex(where: { $0.id == id }) else { return nil }
+        change(&metadata.wallets[index])
         try? persist()
+        return metadata.wallets[index]
     }
 
     /// Grava o aceite de responsabilidade: a data e a versao do texto aceito.
@@ -832,10 +927,48 @@ final class AppSession {
         try? persist()
     }
 
+    /// As palavras de uma carteira, para ver ou lacrar num envelope. A presenca inteira e conferida aqui, na operacao, e nao
+    /// na tela que pede: uma tela nova que pedisse so o rosto e lesse as palavras passava (rodada 1 da auditoria 8,
+    /// 14/11/2026). Como o `credencialForte` do nucleo do Android. Com passphrase, `check` confere a digitada antes.
+    func walletPhrase(_ credential: Credential, walletID: UUID, check: SecureBytes?, fingerprint: [UInt8]?) async throws -> SecureBytes {
+        guard credential.isFullPresence else {
+            credential.wipe()
+            throw RootKeyVault.Failure.biometryRequired
+        }
+        return try await withRootKey(credential) { rk in
+            let secret = try KeyServices.wallets.open(walletID: walletID, rk: rk)
+            defer { secret.wipe() }
+            if let check, try PassphraseProof.check(secret, typed: check, fingerprint: fingerprint, cardanoPublicKey: nil) == .mismatch {
+                throw Signer.Failure.passphraseMismatch
+            }
+            return try secret.phrase()
+        }
+    }
+
+    /// Remove uma carteira com as palavras: so com a presenca inteira, e a credencial abrindo a chave raiz antes (rodada 1 da
+    /// auditoria 8). A carteira so de olhar sai sem credencial. Quem decide se e so de olhar e a lista, e nao quem chama.
+    func remove(_ wallet: WalletMeta, credential: Credential?) async throws {
+        guard let stored = metadata.wallets.first(where: { $0.id == wallet.id }) else {
+            credential?.wipe()
+            throw WalletError.removeFailed
+        }
+        if !stored.isWatchOnly {
+            guard let credential else { throw WalletError.removeFailed }
+            guard credential.isFullPresence else {
+                credential.wipe()
+                throw RootKeyVault.Failure.biometryRequired
+            }
+            _ = try await withRootKey(credential) { _ in true }
+        } else {
+            credential?.wipe()
+        }
+        try removeNow(stored)
+    }
+
     /// A carteira so sai da lista depois de o chaveiro confirmar que a frase saiu. Antes,
     /// uma falha do chaveiro tirava a carteira da lista e deixava a frase la, sem caminho
     /// para apagar (auditoria 4, C7-20).
-    func remove(_ wallet: WalletMeta) throws {
+    private func removeNow(_ wallet: WalletMeta) throws {
         // Quem chama esperou a autorizacao (await): o app pode ter travado nesse meio tempo, e o
         // lock() troca os metadados por vazios. Sem a sessao aberta e a carteira na lista, nada sai.
         // Antes, a lista vazia fazia a remocao de UMA carteira apagar o app inteiro (caca de bugs de
@@ -846,6 +979,9 @@ final class AppSession {
             try? KeyServices.wallets.delete(wallet.id)
             guard KeyServices.wallets.probe(wallet.id) == .absent else { throw WalletError.removeFailed }
         }
+        // A copia de um endereco da carteira que sai do aparelho sai tambem (rodada 12), ja aqui: com a chave fora, uma gravacao
+        // que falhe depois nao a deixa para tras (rodada 13).
+        Pasteboard.withdrawReceive(ifAmong: Set(wallet.accounts.map(\.address)))
         metadata.wallets.removeAll { $0.id == wallet.id }
         // Tudo o que leva enderecos ou o rastro desta carteira sai junto (revisao de seguranca de
         // 24/10/2026): o historico, as transacoes em transito, as ordens a refazer e a conta de
@@ -872,7 +1008,17 @@ final class AppSession {
         Task { await LimitOrderWatch.shared.forget(owners: owners, ids: stored) }
         PassphraseGate.shared.forget(self, wallet: wallet.id)
         ImageLoader.eraseStored()
+        // As consultas da removida param, e a rodada do dia, se for dela: os lotes seguintes saiam com os enderecos dela (rodada 4
+        // da auditoria 8).
+        cancelControlChecks(of: wallet.id)
+        if sweptWallet == wallet.id {
+            controlSweep?.cancel()
+            controlSweep = nil
+            sweptWallet = nil
+        }
         if metadata.selectedWalletID == wallet.id { metadata.selectedWalletID = metadata.wallets.first?.id }
+        // O que ainda consultava outra carteira para, mantendo a escolhida, em toda remocao, como no Android (rodadas 4 e 5).
+        pauseControlChecks(keeping: metadata.selectedWalletID)
         // A ultima carteira saiu: o app volta a ser como recem-instalado, PIN e ajustes inclusive
         // (pedido do dono, 24/10/2026). Nada da carteira de antes fica para a proxima. So depois de
         // a lista sem ela estar gravada: com a gravacao recusada, nada mais e apagado.
@@ -889,12 +1035,16 @@ final class AppSession {
     /// passphrase criada agora, e nunca para a ultima.
     func discardFreshPassphraseWallet(_ id: UUID, restoring previous: UUID?) throws {
         guard phase == .unlocked, indexKey != nil else { throw WalletError.locked }
+        // Vinda da importacao, ela pode ser a unica: a primeira carteira do aparelho, com as palavras ainda na tela de importar,
+        // que segue aberta (revisao dos 3 agentes, 08/11/2026). Nada mais e apagado.
         guard let openedAt = freshPassphraseWallets[id], PINPolicy.uptime - openedAt < 3600,
               let wallet = metadata.wallets.first(where: { $0.id == id }), wallet.hasPassphrase, !wallet.isWatchOnly,
-              metadata.wallets.count > 1
+              metadata.wallets.count > 1 || importedPassphraseWallets.contains(id)
         else { throw WalletError.removeFailed }
         try? KeyServices.wallets.delete(id)
         guard KeyServices.wallets.probe(id) == .absent else { throw WalletError.removeFailed }
+        // A copia de um endereco da descartada sai ja, com a chave fora, como no `removeNow` (rodadas 13 e 14).
+        Pasteboard.withdrawReceive(ifAmong: Set(wallet.accounts.map(\.address)))
         metadata.wallets.removeAll { $0.id == id }
         metadata.balanceCache[id] = nil
         metadata.activityCache?[id] = nil
@@ -906,17 +1056,525 @@ final class AppSession {
         PassphraseGate.shared.forget(self, wallet: id)
         let back = previous.flatMap { previous in metadata.wallets.contains { $0.id == previous } ? previous : nil }
         metadata.selectedWalletID = back ?? metadata.wallets.first?.id
+        // As da descartada param antes, ja fora da lista (rodada 5 da auditoria 8).
+        cancelControlChecks(of: id)
+        // O que ainda consultava a carteira descartada para, antes de a de volta ser consultada (rodada 3 da auditoria 8), e a
+        // rodada do dia da de volta e agendada de novo (rodada 4).
+        pauseControlChecks(keeping: metadata.selectedWalletID)
         try persist()
+        scheduleControlChecks()
         freshPassphraseWallets[id] = nil
+        importedPassphraseWallets.remove(id)
         forgetMemory(id)
+    }
+
+    /// As carteiras com passphrase gravadas pela importacao neste processo.
+    private var importedPassphraseWallets: Set<UUID> = []
+
+    /// O PIN ou o rosto, sem abrir nada: importar com o interruptor da passphrase pede a confirmacao antes da tela da
+    /// passphrase (pedido do dono, 08/11/2026), e so a carteira com passphrase e gravada depois, com outra.
+    func confirmPresence(_ credential: Credential) async throws {
+        _ = try await withRootKey(credential) { _ in true }
+    }
+
+    /// Importar com o interruptor da passphrase (08/11/2026): as palavras ficaram so na memoria da tela, e uma gravacao
+    /// so guarda a carteira com passphrase, como a importacao fazia antes. Nenhuma carteira sem passphrase destas palavras e
+    /// criada: com uma aqui, quem tem o PIN e o rosto veria as palavras sem a passphrase e testaria passphrases fora do
+    /// aparelho, e travar no meio deixava as duas (revisao dos 3 agentes, 08/11/2026). Ver as palavras da carteira com
+    /// passphrase pede a passphrase. As palavras continuam com a tela, para
+    /// tentar outra passphrase; a mesma frase com a mesma passphrase ja aqui so passa a ser a escolhida.
+    func addImportedPassphraseWallet(words: WalletSecret, passphrase: SecureBytes, name: String, wordCount: Int,
+                                     expectedWordsFingerprint: String, credential: Credential) async throws -> WalletMeta {
+        // Passphrase vazia seria a carteira das palavras marcada como "com passphrase" (revisao de blockchain de 26/10/2026).
+        guard passphrase.count > 0 else { credential.wipe(); throw WalletError.emptyPassphrase }
+        // As palavras zeradas (a tela saiu): nada a gravar.
+        guard words.entropy.count > 0 else { credential.wipe(); throw WalletError.importChanged }
+        guard !addingWordsBlocked else { credential.wipe(); throw WalletError.lockPolicy }
+        func copy(_ bytes: SecureBytes) -> SecureBytes {
+            let copy = SecureBytes(capacity: max(bytes.count, 1))
+            bytes.withUnsafeBytes { copy.append(contentsOf: $0.bindMemory(to: UInt8.self)) }
+            return copy
+        }
+        // A 25a palavra em NFKD, como `addPassphraseWallet` e a importacao de antes gravavam (revisao do modo reforcado, N1).
+        let alone = WalletSecret(entropy: copy(words.entropy), language: words.language, passphrase: SecureBytes(capacity: 1))
+        let secret = WalletSecret(entropy: copy(words.entropy), language: words.language, passphrase: BIP39.nfkd(passphrase))
+        let fingerprints: (alone: String, hidden: String, bitcoin: String?)
+        do {
+            fingerprints = try await Offload.run {
+                defer { alone.wipe() }
+                let hidden = try AccountDeriver.derive(secret, chains: [.bitcoin])
+                return (try AccountDeriver.derive(alone, chains: [.bitcoin]).fingerprint.hex.uppercased(),
+                        hidden.fingerprint.hex.uppercased(), hidden.accounts.first?.address)
+            }
+        } catch {
+            secret.wipe()
+            credential.wipe()
+            throw error
+        }
+        // As palavras na memoria sao as da previa que o dono conferiu.
+        guard fingerprints.alone == expectedWordsFingerprint.uppercased() else {
+            secret.wipe()
+            credential.wipe()
+            throw WalletError.importChanged
+        }
+        // A digital tem 4 bytes: o endereco da Bitcoin confirma que e a mesma carteira. Uma de outra frase com a mesma
+        // digital nunca e escolhida no lugar; o `addWallet` abaixo a recusa como ja importada (revisao, 08/11/2026).
+        if let existing = metadata.wallets.first(where: {
+            $0.fingerprint?.uppercased() == fingerprints.hidden && !$0.isWatchOnly && fingerprints.bitcoin != nil
+                && $0.account(.bitcoin)?.address == fingerprints.bitcoin
+        }) {
+            secret.wipe()
+            _ = try await withRootKey(credential) { _ in true }
+            metadata.selectedWalletID = existing.id
+            try persist()
+            _ = checkTronControl(existing.id)
+            checkForeignControl(existing.id)
+            _ = checkTONVersion(existing.id)
+            return existing
+        }
+        let wallet = try await addWallet(secret: secret, name: name, origin: .importedPhrase, wordCount: wordCount, backupConfirmed: true,
+                                         expectedFingerprint: fingerprints.hidden, credential: credential)
+        // A busca de movimento pode tira-la sem PIN, como a aberta pelos Ajustes, mesmo sendo a unica.
+        freshPassphraseWallets[wallet.id] = PINPolicy.uptime
+        importedPassphraseWallets.insert(wallet.id)
+        _ = checkTronControl(wallet.id)
+        checkForeignControl(wallet.id)
+        _ = checkTONVersion(wallet.id)
+        return wallet
+    }
+
+    private var tronChecks: [UUID: Task<Bool?, Never>] = [:]
+
+    /// Quem controla a conta da Tron de uma carteira que acabou de abrir por aqui (o golpe da "frase com saldo",
+    /// como a previa da importacao faz): outra chave no controle marca a carteira, e o Receber da Tron fecha. Uma
+    /// conferencia por carteira, que segue mesmo se a tela fechar; sem rede, nada a dizer, e o envio confere de novo.
+    /// O que volta (o aviso na hora) basta um operador ver; a marca guardada so entra com os dois de acordo, e sai com todos
+    /// os operadores que respondem vendo a conta limpa, e pelo menos tres: um operador sozinho fechava o Receber da Tron para
+    /// sempre (auditoria 8, 14/11/2026, e rodadas 1 e 2).
+    /// Devolve o aviso na hora (outra chave vista), ou nil quando a conferencia foi cancelada: o Receber e a ponte nao a
+    /// tomam por feita (rodada 4 da auditoria 8).
+    func checkTronControl(_ id: UUID) -> Task<Bool?, Never> {
+        if let running = tronChecks[id] { return running }
+        // Sem a carteira (o app travou e a lista esta vazia), nada fica guardado: a proxima chamada confere. A Tron desligada
+        // nos Ajustes nao e perguntada (rodada 1 da auditoria 8).
+        guard !metadata.settings.disabledChainIDs.contains(Chain.tron.id),
+              let address = metadata.wallets.first(where: { $0.id == id })?.account(.tron).flatMap({ TronAddress($0.address) }) else {
+            return Task { false }
+        }
+        // Ja marcada, "limpa" so com todos os operadores de acordo (rodada 1 da auditoria 8).
+        let marked = metadata.wallets.first(where: { $0.id == id })?.tronForeignControl == true
+        let tronText = metadata.wallets.first(where: { $0.id == id })?.account(.tron)?.address ?? ""
+        let check = Task { @MainActor [weak self] () -> Bool? in
+            // A tela das palavras deixa a rede em silencio: a conferencia espera ela fechar (rodada 7 da auditoria 8).
+            await HTTPClient.shared.whenAudible()
+            guard !Task.isCancelled else { return nil }
+            let reading = try? await TronReader.shared.ownerControlCheck(owner: address, everyone: marked)
+            guard let self, !Task.isCancelled else { return nil }
+            // Terminada, a proxima chamada pergunta de novo (a do destravar, um dia depois).
+            self.tronChecks[id] = nil
+            self.checkEnded(id)
+            // Sem resposta, nada fica guardado (revisao, 08/11/2026).
+            guard let reading else { return false }
+            // "Limpa" so tira a marca que ja estava quando a conferencia comecou, e foi lida com todos (rodada 2 da auditoria 8).
+            if let agreed = reading.agreed {
+                // A copia do endereco da Tron com outra chave sai ja, mesmo travado (rodada 12).
+                if agreed.isCompromised { Pasteboard.withdrawReceive(ifAmong: [tronText]) }
+                // Lida com dois de acordo: a data do dia da conferencia das outras redes pode contar com ela (rodada 7).
+                self.tronReadAt[id] = .now
+                // Travado no meio, a marca espera o proximo destravar em vez de se perder.
+                self.whenUnlocked { session in
+                    guard let index = session.metadata.wallets.firstIndex(where: { $0.id == id }) else { return }
+                    var changed = false
+                    if agreed.isCompromised || marked {
+                        let mark: Bool? = agreed.isCompromised ? true : nil
+                        if session.metadata.wallets[index].tronForeignControl != mark {
+                            session.metadata.wallets[index].tronForeignControl = mark
+                            changed = true
+                        }
+                    }
+                    // Lida de verdade, com dois de acordo: a Tron conta como lida (rodada 6 da auditoria 8).
+                    if session.metadata.wallets[index].foreignControlRead?.contains(Chain.tron.id) != true {
+                        session.metadata.wallets[index].foreignControlRead = (session.metadata.wallets[index].foreignControlRead ?? []).union([Chain.tron.id])
+                        changed = true
+                    }
+                    if changed { try? session.persist() }
+                    session.withdrawBlockedCopy(id)
+                }
+            }
+            return reading.shown.isCompromised
+        }
+        tronChecks[id] = check
+        return check
+    }
+
+    private var foreignChecks: [UUID: Task<Bool, Never>] = [:]
+    private var controlSweep: Task<Void, Never>?
+    /// Quando a Tron de cada carteira foi lida com dois de acordo, so na memoria (rodada 7 da auditoria 8).
+    private var tronReadAt: [UUID: Date] = [:]
+
+    /// O endereco que pode ser copiado agora, na carteira gravada: com a copia conferida, sem a marca em nenhuma das redes e o
+    /// mesmo em todas (rodada 9 da auditoria 8), como o `carteira.enderecoParaCopiar` do Android. O Copiar endereco e os
+    /// Enderecos dos Ajustes conferem aqui, na hora do toque.
+    /// Desde 15/11/2026 (pedido do dono, a forma mais segura), so a rede ja lida para outra chave no controle (`controlChecked`),
+    /// e nunca o endereco que outra carteira deste aparelho tem marcado (`markedElsewhere`).
+    func copyableAddress(_ walletID: UUID, chains: [Chain]) -> String? {
+        guard phase == .unlocked, let wallet = metadata.wallets.first(where: { $0.id == walletID }), wallet.hasBackup || wallet.isWatchOnly,
+              let first = chains.first, let address = wallet.account(first)?.address,
+              chains.allSatisfy({ wallet.receives(on: $0) && (wallet.isWatchOnly || wallet.controlChecked(on: $0))
+                                  && markedElsewhere(wallet, on: $0) == nil && wallet.account($0)?.address == address }) else { return nil }
+        return address
+    }
+
+    /// A rede da conta conferida de novo antes de receber nela pela troca (pedido do dono, 15/11/2026), como o Receber a cada
+    /// abertura: a delegacao posta depois da conferencia do dia receberia o que foi comprado (revisao dos tres agentes). Numa EVM,
+    /// tambem as outras EVM marcadas, como o Receber e a ponte. Devolve se a conferencia foi ate o fim.
+    @discardableResult
+    func checkBeforeReceiving(_ id: UUID, on chain: Chain) async -> Bool {
+        guard let wallet = metadata.wallets.first(where: { $0.id == id }), !wallet.isWatchOnly else { return true }
+        if chain.family == .tron { return await checkTronControl(id).value != nil }
+        let marked = chain.family == .evm ? Set((wallet.foreignControl ?? [:]).keys.filter { Chain.find($0)?.family == .evm }) : []
+        return await checkForeignControl(id, chains: marked.union([chain.id])).value
+    }
+
+    /// Outra carteira deste aparelho com o mesmo endereco nesta rede, e nele a marca de outra chave no controle: a so de
+    /// observacao desse endereco (ou outra carteira com ele) tambem nao recebe por ele (pedido do dono, 15/11/2026, a forma mais
+    /// segura).
+    func markedElsewhere(_ wallet: WalletMeta, on chain: Chain) -> WalletMeta? {
+        guard let address = wallet.account(chain)?.address else { return nil }
+        return markedOwner(of: address, on: chain, excluding: wallet.id)
+    }
+
+    /// A carteira deste aparelho dona de `address` nesta rede, com a marca de outra chave no controle nela (`receives`): receber
+    /// nesse endereco, ou enviar para ele de outra carteira, e depositar numa conta que quem controla a outra chave leva
+    /// (15/11/2026). Pela identidade canonica (`Address.canonicalRecipient`): a TON so de observacao fica gravada como foi
+    /// digitada (EQ ou crua) e a derivada como UQ. Numa EVM, o endereco de qualquer EVM, como a marca.
+    func markedOwner(of address: String, on chain: Chain, excluding: UUID? = nil) -> WalletMeta? {
+        guard let target = Address.canonicalRecipient(address, chain: chain) else { return nil }
+        let evm = chain.family == .evm
+        return metadata.wallets.first { other in
+            guard other.id != excluding, !other.receives(on: chain) else { return false }
+            if evm {
+                return other.accounts.contains { Chain.find($0.chainID)?.family == .evm && $0.address.lowercased() == target }
+            }
+            return other.account(chain).flatMap { Address.canonicalRecipient($0.address, chain: chain) } == target
+        }
+    }
+
+    /// A copia de um endereco que deixou de receber (a marca de outra chave, a troca da TON) sai da area de transferencia antes do
+    /// prazo (rodada 10 da auditoria 8).
+    /// Tambem a mesma conta escrita de outra forma em outra carteira deste aparelho (a TON so de observacao em EQ ou crua; revisao
+    /// dos tres agentes de 15/11/2026): a copia dela sai junto.
+    fileprivate func withdrawBlockedCopy(_ walletID: UUID, also extra: Set<String> = []) {
+        guard let wallet = metadata.wallets.first(where: { $0.id == walletID }) else { return }
+        let blocked = wallet.accounts.reduce(into: Set<String>()) { out, account in
+            guard let chain = Chain.find(account.chainID), !wallet.receives(on: chain) else { return }
+            out.formUnion(addressForms(account.address, on: chain))
+        }
+        Pasteboard.withdrawReceive(ifAmong: blocked.union(extra))
+    }
+
+    /// Como o endereco esta gravado em cada carteira deste aparelho com a mesma conta (`Address.canonicalRecipient`; numa EVM, em
+    /// qualquer EVM), mais ele mesmo.
+    func addressForms(_ address: String, on chain: Chain) -> Set<String> {
+        guard let target = Address.canonicalRecipient(address, chain: chain) else { return [address] }
+        var out: Set<String> = [address]
+        for account in metadata.wallets.flatMap(\.accounts) {
+            guard let other = Chain.find(account.chainID) else { continue }
+            let same = chain.family == .evm
+                ? other.family == .evm && account.address.lowercased() == target
+                : other.id == chain.id && Address.canonicalRecipient(account.address, chain: chain) == target
+            if same { out.insert(account.address) }
+        }
+        return out
+    }
+
+    /// Terminada uma conferencia de outra carteira (a primeira do envelope, a Tron, a TON, a releitura de uma rede), a rodada do
+    /// dia da escolhida volta: ela desiste com outra conferencia no ar, e nada mais a armava (rodada 7 da auditoria 8).
+    private func checkEnded(_ id: UUID) {
+        if metadata.selectedWalletID != id { scheduleControlChecks() }
+    }
+
+    /// Outra chave, conta ou contrato no controle das outras contas de uma carteira (`ForeignControlCheck`; auditoria 8,
+    /// 14/11/2026): rede por rede, a marca entra com dois operadores de acordo e so sai com todos os que respondem vendo a conta
+    /// limpa, e pelo menos tres. A Tron fica com `checkTronControl`. `chains`: so estas redes, como o Receber confere a dele.
+    @discardableResult
+    /// Devolve se a conferencia foi ate o fim (a cancelada pela pausa nao conta: o Receber e a ponte nao a tomam por feita,
+    /// rodada 4 da auditoria 8).
+    func checkForeignControl(_ id: UUID, chains: Set<String>? = nil) -> Task<Bool, Never> {
+        if chains == nil, let running = foreignChecks[id] { return running }
+        guard let wallet = metadata.wallets.first(where: { $0.id == id }), !wallet.isWatchOnly else {
+            firstChecks.remove(id)
+            return Task { true }
+        }
+        // So as redes ligadas nos Ajustes: as desligadas nao sao consultadas por nada (rodada 1 da auditoria 8).
+        let disabled = metadata.settings.disabledChainIDs
+        let accounts = wallet.accounts.filter {
+            $0.chainID != Chain.tron.id && !disabled.contains($0.chainID) && (chains?.contains($0.chainID) ?? true)
+        }
+        // A de algumas redes (o Receber, a ponte) tambem uma por vez: abrir de novo enquanto a primeira nao volta nao pergunta
+        // de novo a todos os operadores (rodada 3 da auditoria 8). Com o endereco na chave: a releitura da W5 nao reaproveita a
+        // do Receber da TON aberto com a V4R2 (rodada 8).
+        let chainKey = chains.map { _ in "\(id.uuidString)|" + accounts.map { "\($0.chainID):\($0.address)" }.sorted().joined(separator: ",") }
+        if let chainKey, let running = chainChecks[chainKey] { return running }
+        // Sem conta para ler, a completa segue mesmo assim: a data do dia entra com a Tron lida (a carteira so com a Tron, que
+        // antes era relida a cada destravar; rodada 8).
+        guard !accounts.isEmpty || chains == nil else { return Task { true } }
+        let start = wallet.foreignControl
+        let marked = Set((start ?? [:]).keys)
+        let check = Task { @MainActor [weak self] in
+            // A tela das palavras deixa a rede em silencio: a conferencia espera ela fechar (rodada 7 da auditoria 8).
+            await HTTPClient.shared.whenAudible()
+            guard !Task.isCancelled else { return false }
+            let verdicts = await ForeignControlCheck.check(accounts, marked: marked)
+            guard let self, !Task.isCancelled else { return false }
+            // A copia de um endereco com outra chave sai ja, sem esperar o destravar: o app pode estar travado na frente (rodada
+            // 12). Numa EVM o endereco e o mesmo em todas.
+            Pasteboard.withdrawReceive(ifAmong: Set(accounts.compactMap { account -> String? in
+                if case .foreign = verdicts[account.chainID] { return account.address }
+                return nil
+            }))
+            // A marca e as redes lidas entram ja; so a data do dia espera a Tron, embaixo (rodada 8: a marca achada esperava a
+            // Tron lenta, e o Copiar endereco seguia mostrando a rede marcada).
+            self.whenUnlocked { session in
+                guard let index = session.metadata.wallets.firstIndex(where: { $0.id == id }) else { return }
+                let marks = ForeignControlCheck.apply(verdicts, to: session.metadata.wallets[index].foreignControl, startingFrom: start)
+                var changed = marks != session.metadata.wallets[index].foreignControl
+                session.metadata.wallets[index].foreignControl = marks
+                // As redes que responderam de verdade contam como lidas, uma por uma (rodada 6 da auditoria 8), e so pelo endereco
+                // que a carteira ainda tem: a TON trocada para a W5 no meio nao conta pela leitura da V4R2 (rodada 7).
+                let current = session.metadata.wallets[index]
+                let read = Set(verdicts.compactMap { chainID, verdict -> String? in
+                    guard verdict != .unknown,
+                          accounts.first(where: { $0.chainID == chainID })?.address == current.accounts.first(where: { $0.chainID == chainID })?.address
+                    else { return nil }
+                    return chainID
+                })
+                if !read.isSubset(of: session.metadata.wallets[index].foreignControlRead ?? []) {
+                    session.metadata.wallets[index].foreignControlRead = (session.metadata.wallets[index].foreignControlRead ?? []).union(read)
+                    changed = true
+                }
+                if changed { try? session.persist() }
+                session.withdrawBlockedCopy(id)
+            }
+            // A data do dia tambem espera a Tron, quando ela tem o que ler: lida com dois de acordo nesta rodada. Sem isso, a
+            // carteira so com Bitcoin e Tron ganhava a data com a Tron sem resposta, e ficava 24 h sem reler (rodada 7). A Tron
+            // que corre junto (a do `addWallet`) e esperada, com esta ainda na lista: travar, pausar e apagar tudo a cancelam
+            // tambem na espera, e as contas da com passphrase nao ficam para depois do destravar (rodada 8).
+            if chains == nil, let tron = self.tronChecks[id] { _ = await tron.value }
+            guard !Task.isCancelled else { return false }
+            if chains == nil {
+                self.foreignChecks[id] = nil
+                self.firstChecks.remove(id)
+            }
+            if let chainKey { self.chainChecks[chainKey] = nil }
+            // Terminada a primeira (a do envelope, que pausou a escolhida), a rodada do dia da escolhida volta (rodada 5), e
+            // tambem depois de qualquer outra de outra carteira (rodada 7).
+            self.checkEnded(id)
+            let tronOwed = !disabled.contains(Chain.tron.id) && wallet.account(.tron) != nil
+            let tronRead = self.tronReadAt[id].map { Date.now.timeIntervalSince($0) < 600 } ?? false
+            // Sem resposta nenhuma (sem rede), a conferencia do dia fica para o proximo destravar. Sem conta com leitura (so o
+            // Bitcoin, a Sui ou a Cardano ligadas), conta como feita, e a rodada nao volta a cada destravar (rodada 6).
+            let answered = (verdicts.values.contains { $0 != .unknown }
+                || !accounts.contains { Chain.find($0.chainID).map(ForeignControlCheck.reads) ?? false })
+                && (!tronOwed || tronRead)
+            if chains == nil, answered {
+                // So com as mesmas contas lidas: a TON trocada para a W5 no meio (a da importacao, que corre junto) tirou a data, e
+                // esta conferencia leu a V4R2; gravar a data por cima deixava a W5 24 h sem leitura (rodada 9 da auditoria 8).
+                let read = Set(accounts.map { "\($0.chainID):\($0.address)" })
+                self.whenUnlocked { session in
+                    guard let index = session.metadata.wallets.firstIndex(where: { $0.id == id }) else { return }
+                    let now = Set(session.metadata.wallets[index].accounts
+                        .filter { $0.chainID != Chain.tron.id && !disabled.contains($0.chainID) }
+                        .map { "\($0.chainID):\($0.address)" })
+                    guard now == read else { return }
+                    session.metadata.wallets[index].foreignControlCheckedAt = .now
+                    try? session.persist()
+                }
+            }
+            return true
+        }
+        if chains == nil { foreignChecks[id] = check }
+        if let chainKey { chainChecks[chainKey] = check }
+        return check
+    }
+
+    private var chainChecks: [String: Task<Bool, Never>] = [:]
+
+    /// A carteira TON na W5 (`TONDiscovery`; auditoria 8, 14/11/2026): uma vez por carteira, depois de gravar ou abrir, e no
+    /// destravar para a que ja estava aqui. A conta da V4R2 sem movimento troca pela W5 da mesma chave que teve; o saldo
+    /// guardado da TON sai, e a leitura seguinte traz o da W5. Sem resposta, a proxima vez pergunta de novo.
+    func checkTONVersion(_ id: UUID) -> Task<Void, Never> {
+        // Uma por carteira: abrir, gravar e o destravar chamavam juntas, e a TON era perguntada duas ou tres vezes (rodada 2).
+        if let running = tonChecks[id] { return running }
+        guard let wallet = metadata.wallets.first(where: { $0.id == id }), !wallet.isWatchOnly, wallet.tonVersionChecked != true,
+              !metadata.settings.disabledChainIDs.contains(Chain.ton.id), let ton = wallet.account(.ton) else { return Task {} }
+        let check = Task { @MainActor [weak self] in
+            // A tela das palavras deixa a rede em silencio: a conferencia espera ela fechar (rodada 7 da auditoria 8).
+            await HTTPClient.shared.whenAudible()
+            guard !Task.isCancelled else { return }
+            let answer = await TONDiscovery.check(ton)
+            guard let self, !Task.isCancelled else { return }
+            self.tonChecks[id] = nil
+            self.checkEnded(id)
+            guard answer != .unknown else { return }
+            // A conta TON que muda de endereco e conferida de novo: a marca era a do endereco da V4R2 (rodada 1 da auditoria 8).
+            defer { if case .switchTo = answer { self.checkForeignControl(id, chains: [Chain.ton.id]) } }
+            // A copia da V4R2 sai ja, mesmo travado (rodada 12).
+            if case .switchTo = answer { Pasteboard.withdrawReceive(ifAmong: [ton.address]) }
+            self.whenUnlocked { session in
+                guard let index = session.metadata.wallets.firstIndex(where: { $0.id == id }) else { return }
+                if case .switchTo(let better) = answer,
+                   let account = session.metadata.wallets[index].accounts.firstIndex(where: { $0.chainID == Chain.ton.id && $0.address == ton.address }) {
+                    session.metadata.wallets[index].accounts[account] = better
+                    session.metadata.balanceCache[id]?[Chain.ton.id] = nil
+                    // A W5 ainda nao foi lida: a TON volta a contar so depois da releitura dela (rodada 7 da auditoria 8). E a data
+                    // do dia sai: se a releitura nao ler (travada, ou sem resposta), a proxima rodada le tudo (rodada 8).
+                    session.metadata.wallets[index].foreignControlRead?.remove(Chain.ton.id)
+                    session.metadata.wallets[index].foreignControlCheckedAt = nil
+                }
+                session.metadata.wallets[index].tonVersionChecked = true
+                try? session.persist()
+                if case .switchTo = answer { session.withdrawBlockedCopy(id, also: [ton.address]) }
+            }
+        }
+        tonChecks[id] = check
+        return check
+    }
+
+    private var tonChecks: [UUID: Task<Void, Never>] = [:]
+
+    /// A carteira com passphrase vai abrir: a rodada do dia para, para as duas nao serem consultadas juntas, do mesmo IP (rodada 1
+    /// da auditoria 8).
+    /// `hidden`: quem abre e uma carteira com passphrase (ou a previa de uma), e entao nada e poupado. Sem dizer, vale a de
+    /// `keeping`; sem `keeping`, nada e poupado (rodada 5 da auditoria 8).
+    func pauseControlChecks(keeping: UUID? = nil, hidden: Bool? = nil) {
+        let hiding = hidden ?? keeping.flatMap { id in metadata.wallets.first { $0.id == id }?.hasPassphrase } ?? true
+        controlSweep?.cancel()
+        controlSweep = nil
+        sweptWallet = nil
+        // E toda consulta de outra carteira no ar, e nao so a da rodada: a importacao, o Receber e a ponte disparam as suas, e
+        // seguiam junto com a da carteira que abriu, do mesmo IP (rodadas 2 e 3 da auditoria 8).
+        let running = Set(tronChecks.keys).union(foreignChecks.keys).union(tonChecks.keys)
+            .union(chainChecks.keys.compactMap { UUID(uuidString: String($0.prefix { $0 != "|" })) })
+        for id in running where id != keeping {
+            // A primeira conferencia da recem-importada (a disparada ao gravar) segue, salvo quando quem abre tem passphrase:
+            // a de base nao sai junto com ela (rodadas 4 e 5 da auditoria 8).
+            if !hiding, firstChecks.contains(id), metadata.wallets.first(where: { $0.id == id })?.hasPassphrase == false { continue }
+            cancelControlChecks(of: id)
+        }
+    }
+
+    /// As carteiras cuja primeira conferencia, disparada ao gravar, ainda esta no ar (so na memoria).
+    private var firstChecks: Set<UUID> = []
+
+    /// As consultas de outra chave e da TON de uma carteira, canceladas e fora das listas.
+    private func cancelControlChecks(of id: UUID) {
+        firstChecks.remove(id)
+        tronChecks.removeValue(forKey: id)?.cancel()
+        foreignChecks.removeValue(forKey: id)?.cancel()
+        tonChecks.removeValue(forKey: id)?.cancel()
+        for key in chainChecks.keys where key.hasPrefix(id.uuidString + "|") { chainChecks.removeValue(forKey: key)?.cancel() }
+    }
+
+    /// A carteira da rodada do dia em andamento, e a vez dela: so a rodada que ainda e a atual se apaga no fim.
+    private var sweptWallet: UUID?
+    private var sweepGeneration = 0
+
+    /// Uma vez por dia, ao destravar ou ao escolher a carteira: so a carteira em uso, e so as redes ligadas, como o saldo e a
+    /// atividade (docs/seguranca.md: so a carteira aberta e consultada). Antes, todas as carteiras, uma atras da outra, do mesmo
+    /// IP: o operador ligava uma a outra numa rodada so (rodada 1 da auditoria 8). Comeca depois de um tempo sorteado, de 30 s a
+    /// 5 min, para nao cair junto do destravar. A carteira com passphrase so e conferida quando abre.
+    /// A rodada do dia de volta, depois de uma pausa que nao trocou a escolhida (a previa da importacao fechou; rodada 5).
+    func resumeControlChecks() {
+        previewOpen = false
+        scheduleControlChecks()
+    }
+
+    /// A rodada do dia de volta depois de uma pausa da tela da passphrase (o PIN cancelado, a recusa), sem soltar a previa: na
+    /// importacao com a passphrase depois, quem solta e a tela de importar ao sumir (rodada 9 da auditoria 8).
+    func rescheduleControlChecks() {
+        scheduleControlChecks()
+    }
+
+    /// A previa da importacao abriu: a rodada do dia da escolhida para e nao volta enquanto ela estiver aberta (rodada 6 da
+    /// auditoria 8). `hidden`: a previa e de uma carteira com passphrase.
+    func beginPreview(hidden: Bool) {
+        previewOpen = true
+        pauseControlChecks(hidden: hidden)
+    }
+
+    /// Uma previa da importacao aberta, consultando a importada: a rodada do dia nao sai junto.
+    private var previewOpen = false
+
+    private func scheduleControlChecks() {
+        // A com passphrase so quando ainda nao terminou a primeira (travou no meio dela; rodada 4 da auditoria 8).
+        guard controlSweep == nil, !previewOpen, let id = metadata.selectedWalletID,
+              let wallet = metadata.wallets.first(where: { $0.id == id }), !wallet.isWatchOnly,
+              !wallet.hasPassphrase || wallet.foreignControlCheckedAt == nil,
+              wallet.foreignControlCheckedAt.map({ Date.now.timeIntervalSince($0) > ForeignControlCheck.interval }) ?? true
+        else { return }
+        let delay = ForeignControlCheck.checkDelay()
+        sweepGeneration &+= 1
+        let generation = sweepGeneration
+        sweptWallet = id
+        controlSweep = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self else { return }
+            // A rodada cancelada nao apaga a nova (rodada 2 da auditoria 8).
+            defer {
+                if self.sweepGeneration == generation {
+                    self.controlSweep = nil
+                    self.sweptWallet = nil
+                }
+            }
+            // Antes de cada passo: pausada, travada ou com outra carteira escolhida, para. Na saida, tambem com a conferencia de
+            // outra carteira no ar (a primeira do envelope, a da previa), e so se ainda for a hora: a conferencia logo depois de
+            // gravar ja leu a escolhida (rodada 6 da auditoria 8).
+            // Com a rede em silencio (a tela das palavras aberta), a rodada desiste em vez de esperar: a espera saia junto da
+            // carteira com passphrase que abre logo depois (rodada 8).
+            let current = { !Task.isCancelled && self.phase == .unlocked && self.metadata.selectedWalletID == id && !HTTPClient.shared.isQuiet }
+            let due = { self.metadata.wallets.first { $0.id == id }?.foreignControlCheckedAt.map { Date.now.timeIntervalSince($0) > ForeignControlCheck.interval } ?? true }
+            guard current(), due(), !self.previewOpen, !self.othersChecking(id) else { return }
+            _ = await self.checkTronControl(id).value
+            guard current() else { return }
+            _ = await self.checkForeignControl(id).value
+            guard current() else { return }
+            await self.checkTONVersion(id).value
+        }
+    }
+
+    /// Alguma conferencia de outra carteira no ar.
+    private func othersChecking(_ id: UUID) -> Bool {
+        let prefix = id.uuidString + "|"
+        return tronChecks.keys.contains { $0 != id } || foreignChecks.keys.contains { $0 != id }
+            || tonChecks.keys.contains { $0 != id } || chainChecks.keys.contains { !$0.hasPrefix(prefix) }
     }
 
     /// Apaga tudo deste aparelho: chaves do SE e itens do chaveiro primeiro.
     func eraseEverything() {
         lockEpoch &+= 1
+        // Nada da carteira de antes fica, nem o endereco copiado (rodada 12 da auditoria 8).
+        Pasteboard.withdrawReceive(ifAmong: nil)
         PassphraseGate.shared.cancel()
         PassphraseGate.shared.clearGrace()
+        NotificationCenter.default.post(name: Self.didLock, object: nil)
         afterUnlock = []
+        // A conferencia da Tron em voo para, e nada dela grava depois (revisao, 08/11/2026); a das outras redes tambem.
+        tronChecks.values.forEach { $0.cancel() }
+        tronChecks = [:]
+        foreignChecks.values.forEach { $0.cancel() }
+        foreignChecks = [:]
+        tonChecks.values.forEach { $0.cancel() }
+        tonChecks = [:]
+        chainChecks.values.forEach { $0.cancel() }
+        chainChecks = [:]
+        controlSweep?.cancel()
+        controlSweep = nil
+        sweptWallet = nil
+        firstChecks = []
+        previewOpen = false
+        tronReadAt = [:]
+        importedPassphraseWallets = []
         KeyServices.root.wipeAll()
         MetadataStore.deleteFile()
         Self.eraseBackgroundFiles()

@@ -178,6 +178,11 @@ struct TONSendEngine: SendEngine {
             coin = try TONSendEngine.coin(request.asset)
             _ = try TONSendEngine.parsedDestination(request.destination)
             comment = request.tag.flatMap { $0.isEmpty ? nil : $0 }
+            // Antes de qualquer leitura da rede: a estimativa da taxa ja leva o comentario a toncenter (revisao dos 3 agentes,
+            // 09/11/2026).
+            // A conferencia inteira do comentario (tamanho, segredo, caractere de formato): o comentario mal formado tambem nao
+            // chega a toncenter.
+            _ = try TONPlanner.checkedComment(comment)
         }
     }
 

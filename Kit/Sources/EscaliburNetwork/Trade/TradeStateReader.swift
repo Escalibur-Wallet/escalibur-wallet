@@ -56,21 +56,25 @@ public actor TradeStateReader {
     }
 
     /// Pergunta a varios provedores em paralelo e devolve as `count` primeiras respostas
-    /// de fontes distintas.
+    /// de fontes distintas: de operadores distintos (`operatorName`), e nao so de enderecos distintos. Dois nos do mesmo dono
+    /// (as dataseeds da BNB Chain) contavam como as duas simulacoes que conferem o calldata (revisao dos tres agentes de
+    /// 15/11/2026).
     func collect<T: Sendable>(_ providers: [ProviderPool.Provider], count: Int, what: String,
                               _ operation: @escaping @Sendable (ProviderPool.Provider) async throws -> T) async throws -> [(String, T)] {
         var answers = [(String, T)]()
+        var owners = Set<String>()
         var errors = [String]()
-        await withTaskGroup(of: (String, Result<T, Error>).self) { group in
+        await withTaskGroup(of: (ProviderPool.Provider, Result<T, Error>).self) { group in
             for provider in providers {
                 group.addTask {
-                    do { return (provider.name, .success(try await operation(provider))) } catch { return (provider.name, .failure(error)) }
+                    do { return (provider, .success(try await operation(provider))) } catch { return (provider, .failure(error)) }
                 }
             }
-            for await (name, result) in group {
+            for await (provider, result) in group {
                 switch result {
-                case .success(let value): answers.append((name, value))
-                case .failure(let error): errors.append("\(name): \(error)")
+                case .success(let value):
+                    if owners.insert(provider.operatorName).inserted { answers.append((provider.name, value)) }
+                case .failure(let error): errors.append("\(provider.name): \(error)")
                 }
                 if answers.count >= count { group.cancelAll(); break }
             }
@@ -79,8 +83,11 @@ public actor TradeStateReader {
         // que falharam. So leitura; nada aqui transmite.
         for pause in [500, 1_500, 3_000] where answers.count < count {
             try? await Task.sleep(for: .milliseconds(pause))
-            for provider in providers where !answers.contains(where: { $0.0 == provider.name }) {
-                if let value = try? await operation(provider) { answers.append((provider.name, value)) }
+            for provider in providers where !owners.contains(provider.operatorName) {
+                if let value = try? await operation(provider) {
+                    owners.insert(provider.operatorName)
+                    answers.append((provider.name, value))
+                }
                 if answers.count >= count { break }
             }
         }

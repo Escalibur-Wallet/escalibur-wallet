@@ -178,13 +178,19 @@ actor ReceiptWatchCenter {
         // Sal que nao saiu (sorteio falhou ao ligar): sorteia de novo agora.
         if file().enabled, file().salt == nil, let salt = try? SecureRandom.uint64() { update { $0.salt = salt } }
         guard file().enabled, file().accounts != accounts else { return }
-        let keep = Set(accounts.map { "\($0.chainID)|\($0.key)" })
-        let addresses = Set(accounts.flatMap { account in account.addresses.map { "\(account.chainID)|\($0)" } })
         update { file in
             file.accounts = accounts
-            file.seen = file.seen.filter { key, _ in keep.contains(key.split(separator: "|").prefix(2).joined(separator: "|")) }
-            file.addressSeen = file.addressSeen?.filter { addresses.contains($0.key) }
+            Self.prune(&file)
         }
+    }
+
+    /// O saldo visto so das contas que estao no arquivo: a conferencia que lia a rede quando uma carteira saiu devolvia o visto e
+    /// os enderecos UTXO dela, que ficavam ate a proxima mudanca de contas (rodada 17 da auditoria 8).
+    private static func prune(_ file: inout ReceiptWatchFile) {
+        let keep = Set(file.accounts.map { "\($0.chainID)|\($0.key)" })
+        let addresses = Set(file.accounts.flatMap { account in account.addresses.map { "\(account.chainID)|\($0)" } })
+        file.seen = file.seen.filter { key, _ in keep.contains(key.split(separator: "|").prefix(2).joined(separator: "|")) }
+        file.addressSeen = file.addressSeen?.filter { addresses.contains($0.key) }
     }
 
     func setShowDetails(_ on: Bool) {
@@ -237,6 +243,8 @@ actor ReceiptWatchCenter {
         for (account, balance) in balances {
             for (address, amount) in balance.perAddress ?? [:] { value.addressSeen = (value.addressSeen ?? [:]).merging(["\(account.chainID)|\(address)": amount]) { $1 } }
         }
+        // So o que e das contas que ficaram no arquivo (rodada 17).
+        Self.prune(&value)
         value.lastCheck = now
         current = value
         try? ReceiptWatchStore.save(value)

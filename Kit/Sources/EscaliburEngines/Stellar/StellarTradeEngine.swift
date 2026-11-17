@@ -59,7 +59,8 @@ struct StellarTradeEngine: TradeEngine {
             async let small = referenceQuote(send: sell, amount: referenceIn, receive: buy)
             async let market = MarketReference.reference(amountIn: request.amountIn, sell: request.sell, buy: request.buy, oracle: prices)
             guard let route = Self.higher(try await both) else { throw SendEngineError.message(Self.noRoute(request)) }
-            try Self.sanity(await market, expected: route.receiveAmount)
+            let marketReference = await market
+            try Self.sanity(marketReference, expected: route.receiveAmount)
             let minimum = TradeMath.minimumOut(route.receiveAmount, slippageBasisPoints: request.slippageBasisPoints)
             guard !minimum.isZero else { throw StellarPlanError.minimumReceiveZero }
             let reference = await small
@@ -74,7 +75,9 @@ struct StellarTradeEngine: TradeEngine {
                 providerFeeNote: kitText("Sem taxa de provedor: a troca acontece direto na DEX da Stellar."),
                 legs: [.init(provider: Self.provider, fraction: 1, amountIn: request.amountIn, expectedOut: route.receiveAmount)],
                 alternatives: [], providersCompared: 1, needsApproval: false,
-                expiresAt: Date().addingTimeInterval(TradeMath.quoteLifetime)
+                expiresAt: Date().addingTimeInterval(TradeMath.quoteLifetime),
+                // Sem preco de referencia: a caixa de aceite do dono (checagem final de 16/11/2026, M3).
+                unanchored: marketReference.oracleOut == nil
             )
         } catch {
             throw StellarEngineSupport.translate(error)
@@ -105,6 +108,11 @@ struct StellarTradeEngine: TradeEngine {
         let (sell, buy) = try pair(request.chain, request.sell, request.buy)
         try TradeMath.requireSlippage(request.slippageBasisPoints)
         try TradeMath.requireCurrent(quote, for: request)
+        // Sem preco de referencia, a troca so vira plano com o aceite do dono, como na EVM (checagem final de
+        // 16/11/2026, M3): as duas fontes daqui saem do mesmo tipo de servidor, que uma autoridade coagida forja juntas.
+        guard !quote.unanchored || request.acceptsUnanchored else {
+            throw SendEngineError.message(kitText("Não há preço de referência do mercado para comparar. Marque que entende o risco para trocar."))
+        }
         let source = try StellarEngineSupport.source(request.account)
         do {
             async let owner = reader.ownerAccount(source.account)
@@ -129,7 +137,7 @@ struct StellarTradeEngine: TradeEngine {
                   swap.destAsset == buy, swap.destination == StellarMuxedAccount(account: source.account),
                   swap.destMin == quote.minimumOut
             else { throw SendEngineError.message(TradeMath.priceMoved) }
-            return plan
+            return quote.unanchored ? plan.addingWarnings([.uncomparedPrice]) : plan
         } catch {
             throw StellarEngineSupport.translate(error)
         }

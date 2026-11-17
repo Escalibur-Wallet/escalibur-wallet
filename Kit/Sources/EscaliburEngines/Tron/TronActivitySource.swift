@@ -71,7 +71,7 @@ enum TronActivityScreen {
             guard let counterparty = item.counterparty else { return false }
             if trusted.contains(counterparty) { return false }
             if item.amount <= dustLimit(item.asset) { return true }
-            return AddressPoisoning.lookalike(counterparty, among: trusted, chain: .tron) != nil
+            return AddressPoisoning.lookalike(counterparty, among: trusted, chain: .tron, forHiding: true) != nil
         case .swap, .other:
             // Acao da propria conta (aprovacao, stake, chamada de contrato): foi ela que assinou.
             return false

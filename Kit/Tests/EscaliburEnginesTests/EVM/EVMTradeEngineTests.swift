@@ -121,17 +121,17 @@ struct EVMTradeEngineTests {
         let blind = H.engine(sources: single, transport: try H.baseTransport())
         let request = try F.request()
         let unanchored = try await blind.quote(request)
-        #expect(unanchored.unanchored && unanchored.providersCompared == 1)
+        #expect(unanchored.unanchored && unanchored.providersCompared == 1 && unanchored.singleSource)
 
         // Sem o aceite do dono o plano nao sai (pedido do dono, 05/11/2026). Pedido em partes tambem nao: sem
         // referencia a CoW nao oferece partes, e o teste prende so a ordem da trava, antes do ramo em partes.
         await #expect(throws: SendEngineError.message(
-            "Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Marque que entende o risco para trocar."
+            "Não há preço de referência do mercado para comparar. Marque que entende o risco para trocar."
         )) { _ = try await blind.plan(request, quote: unanchored) }
         let inParts = TradeRequest(walletID: request.walletID, chain: request.chain, account: request.account, sell: request.sell,
                                    buy: request.buy, amountIn: request.amountIn, slippageBasisPoints: request.slippageBasisPoints, inParts: true)
         await #expect(throws: SendEngineError.message(
-            "Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Marque que entende o risco para trocar."
+            "Não há preço de referência do mercado para comparar. Marque que entende o risco para trocar."
         )) { _ = try await blind.plan(inParts, quote: unanchored) }
 
         // Com o aceite, o plano sai preso ao minimo que a tela mostrou, com o aviso na revisao.
@@ -153,9 +153,15 @@ struct EVMTradeEngineTests {
         #expect(quote.providersCompared == 1 && !quote.unanchored)
         #expect(!(try await seeing.plan(request, quote: quote)).review.warnings.contains(.uncomparedPrice))
 
-        // Duas fontes sem referencia: ancoradas uma na outra, sem a marca.
-        let compared = try await H.engine(sources: try H.sources(EVMCallCounter()), transport: try H.baseTransport()).quote(request)
-        #expect(!compared.unanchored && compared.providersCompared >= 2)
+        // Duas fontes sem referencia: ancoradas uma na outra, e ainda marcadas sem comparacao, com o aceite
+        // (checagem final de 16/11/2026, M3: quem alinha os agregadores no caminho passaria sem aviso).
+        let twoSources = H.engine(sources: try H.sources(EVMCallCounter()), transport: try H.baseTransport())
+        let compared = try await twoSources.quote(request)
+        #expect(compared.unanchored && compared.providersCompared >= 2 && !compared.singleSource)
+        await #expect(throws: SendEngineError.message(
+            "Não há preço de referência do mercado para comparar. Marque que entende o risco para trocar."
+        )) { _ = try await twoSources.plan(request, quote: compared) }
+        #expect(try await twoSources.plan(accepted, quote: compared).review.warnings.contains(.uncomparedPrice))
     }
 
     @Test("Cotacao sem comparacao: a rota so oferece como alternativa as cotacoes que ficaram na rodada")
@@ -170,7 +176,7 @@ struct EVMTradeEngineTests {
         #expect(compared.alternatives.map(\.provider) == [TradeProvider.kyberSwap.displayName] && !compared.unanchored)
         let unanchored = EVMTradeQuoteMapping.quote(sell: F.usdc, buy: .native(.base), amountIn: F.amount, legs: legs, ranked: ranked,
                                                     allowances: [:], costs: costs, chain: .base, unanchored: true, alternativesFrom: [.velora])
-        #expect(unanchored.alternatives.isEmpty && unanchored.unanchored && unanchored.providersCompared == 1)
+        #expect(unanchored.alternatives.isEmpty && unanchored.unanchored && unanchored.providersCompared == 1 && unanchored.singleSource)
     }
 
     @Test("Cotacao sem comparacao aceita: a recotacao tem de garantir o minimo mostrado, mesmo com a referencia de volta; a alternativa escolhida continua marcada")
@@ -210,7 +216,7 @@ struct EVMTradeEngineTests {
         #expect(chosen.unanchored)
         #expect(withAlternative.adding(cow: nil).unanchored)
         await #expect(throws: SendEngineError.message(
-            "Não há uma segunda fonte de cotação independente nem preço de referência do mercado para comparar. Marque que entende o risco para trocar."
+            "Não há preço de referência do mercado para comparar. Marque que entende o risco para trocar."
         )) { _ = try await seeing.plan(request, quote: chosen) }
     }
 
@@ -288,7 +294,7 @@ struct EVMTradeEngineTests {
         let counter = EVMCallCounter()
         let state = FakeTradeChain()
         let engine = H.engine(state: state, sources: try H.sources(counter), transport: try H.baseTransport())
-        let request = try F.request()
+        let request = try F.request(acceptsUnanchored: true)
         let quote = try await engine.quote(request)
         let plan = try await engine.plan(request, quote: quote)
         expectIntent(plan, request, quote)
@@ -315,7 +321,7 @@ struct EVMTradeEngineTests {
         let counter = EVMCallCounter()
         let state = FakeTradeChain()
         let engine = H.engine(state: state, sources: try H.sources(counter), transport: try H.baseTransport())
-        let request = try F.request()
+        let request = try F.request(acceptsUnanchored: true)
         let quote = try await engine.quote(request)
         let best = quote.legs[0].provider
         let other = try #require(quote.alternatives.first { EVMTradeQuoteMapping.provider(named: $0.provider) != nil })
@@ -344,7 +350,8 @@ struct EVMTradeEngineTests {
         // As fontes dizem 7; a fila diz que a 7 esta em transito e o proximo e 8.
         let request = TradeRequest(
             walletID: base.walletID, chain: base.chain, account: base.account, sell: base.sell, buy: base.buy, amountIn: base.amountIn,
-            slippageBasisPoints: base.slippageBasisPoints, nonceQueue: PendingNonceQueue(nextNonce: 8, pendingHashes: ["0x01"])
+            slippageBasisPoints: base.slippageBasisPoints, nonceQueue: PendingNonceQueue(nextNonce: 8, pendingHashes: ["0x01"]),
+            acceptsUnanchored: true
         )
         let plan = try await engine.plan(request, quote: try await engine.quote(request))
         let approve = try #require(plan.transactions.first as? EVMTransaction)
@@ -358,7 +365,7 @@ struct EVMTradeEngineTests {
         // planejador recusa cotacao validada mais de 5 s depois do instante do plano. Com a
         // rede lenta (aqui, o oraculo levando 5,5 s), a troca saia como "cotacao vencida".
         let engine = H.engine(oracleDelay: .milliseconds(5_500), sources: try H.sources(EVMCallCounter()), transport: try H.baseTransport())
-        let request = try F.request()
+        let request = try F.request(acceptsUnanchored: true)
         let quote = try await engine.quote(request)
         let plan = try await engine.plan(request, quote: quote)
         expectIntent(plan, request, quote)
@@ -399,7 +406,7 @@ struct EVMTradeEngineTests {
     func simulationFailure() async throws {
         let engine = H.engine(state: FakeTradeChain(failingSimulationSource: "drpc"), sources: try H.sources(EVMCallCounter()),
                               transport: try H.baseTransport())
-        let request = try F.request()
+        let request = try F.request(acceptsUnanchored: true)
         let quote = try await engine.quote(request)
         await #expect(throws: SendEngineError.message("A simulação mostra que esta troca falharia agora. Nada foi assinado.")) {
             _ = try await engine.plan(request, quote: quote)
@@ -549,7 +556,7 @@ struct EVMTradeEngineTests {
     func submit() async throws {
         let transport = try H.baseTransport()
         let engine = H.engine(sources: try H.sources(EVMCallCounter()), transport: transport)
-        let request = try F.request()
+        let request = try F.request(acceptsUnanchored: true)
         let plan = try await engine.plan(request, quote: try await engine.quote(request))
         let signed = try EVMTestAccounts.sign(plan)
         let ids = try await engine.submit(signed, plan: plan)
@@ -563,7 +570,7 @@ struct EVMTradeEngineTests {
     func submitMismatch() async throws {
         let transport = try H.baseTransport()
         let engine = H.engine(sources: try H.sources(EVMCallCounter()), transport: transport)
-        let request = try F.request()
+        let request = try F.request(acceptsUnanchored: true)
         let plan = try await engine.plan(request, quote: try await engine.quote(request))
         let signed = try EVMTestAccounts.sign(plan)
         let refused = SendEngineError.message("As transações assinadas não conferem com o plano revisado. Nada foi transmitido.")

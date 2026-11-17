@@ -45,6 +45,9 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
     /// de execucao, ou vindo de uma resposta, nao sai do aparelho.
     private let allowedHosts: Set<String>
 
+    /// A rede de verdade (sem o `URLProtocol` dos testes): os leitores sorteiam a ordem dos donos a cada consenso.
+    public var drawsProviders: Bool { protocolClasses == nil }
+
     public override convenience init() { self.init(protocolClasses: nil, allowedHosts: AllowedHosts.all) }
 
     init(protocolClasses: [AnyClass]?, allowedHosts: Set<String> = AllowedHosts.all) {
@@ -254,7 +257,25 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
     }
 
     public func endQuiet() {
-        lock.withLock { quietHolds = max(0, quietHolds - 1) }
+        lock.withLock {
+            quietHolds = max(0, quietHolds - 1)
+            if quietHolds == 0 { audibleSince = ProcessInfo.processInfo.systemUptime }
+        }
+    }
+
+    /// Quando o ultimo silencio acabou (tempo desde o boot).
+    private var audibleSince: TimeInterval = 0
+
+    /// Espera o silencio acabar (a tela de segredo fechou), e mais 2 s, ou o cancelamento. A conferencia que sai com ele ligado
+    /// volta sem resposta nenhuma: a das palavras escolhidas, gravada com a tela de digitar ainda montada, nao lia nada (rodada
+    /// 7 da auditoria 8). Os 2 s dao a vez a tela seguinte (a previa da importacao pausa as conferencias antes de elas sairem;
+    /// rodada 8).
+    public func whenAudible() async {
+        while !Task.isCancelled {
+            let (quiet, since) = lock.withLock { (quietHolds > 0, audibleSince) }
+            if !quiet, ProcessInfo.processInfo.systemUptime - since >= 2 { return }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
     }
 
     private let lock = NSLock()
@@ -349,8 +370,8 @@ extension HTTPClient: URLSessionDataDelegate {
 /// Um conjunto de provedores equivalentes para o mesmo servico, com contingencia.
 ///
 /// Circuit breaker simples: tres falhas seguidas tiram o provedor por 60 segundos.
-/// A ordem de preferencia e fixa no codigo; nenhuma resposta de rede acrescenta
-/// provedor.
+/// A ordem de preferencia e fixa no codigo (o consenso a sorteia, `consensusOrder`);
+/// nenhuma resposta de rede acrescenta provedor.
 public actor ProviderPool {
     public struct Provider: Sendable, Hashable {
         public let name: String
@@ -374,8 +395,13 @@ public actor ProviderPool {
     private var failures: [String: Int] = [:]
     private var benchedUntil: [String: Date] = [:]
 
-    public init(_ providers: [Provider]) {
+    /// Sorteia a ordem dos donos a cada consenso (`consensusOrder`). Os leitores de rede ligam pelo transporte
+    /// (`ReaderTransport.drawsProviders`): no app sim, nos testes com transporte de mentira nao.
+    public let draws: Bool
+
+    public init(_ providers: [Provider], draws: Bool = false) {
         self.providers = Self.spreadingOperators(providers)
+        self.draws = draws
     }
 
     /// Os provedores disponiveis agora, na ordem de preferencia, com donos diferentes na
@@ -383,6 +409,20 @@ public actor ProviderPool {
     public func available(now: Date = .now) -> [Provider] {
         let live = providers.filter { (benchedUntil[$0.name] ?? .distantPast) <= now }
         return Self.spreadingOperators(live.isEmpty ? providers : live)
+    }
+
+    /// A ordem de um consenso (`Quorum.gather`): os donos diferentes na frente, sorteados a cada pergunta pelo gerador do
+    /// sistema (o CSPRNG do aparelho), e as repeticoes depois. Na ordem fixa, quem quisesse forjar um recibo, um saldo
+    /// ou um nonce sabia de antemao quais duas empresas pressionar: as duas primeiras da lista decidiam sozinhas toda
+    /// vez. Sorteado, o par pressionado so responde sozinho uma vez em tres (tres donos) ou em seis (quatro), e no resto
+    /// um honesto entra na primeira onda (auditoria 8, 14/11/2026).
+    public nonisolated func consensusOrder(_ list: [Provider]) -> [Provider] {
+        let spread = Self.spreadingOperators(list)
+        guard draws else { return spread }
+        var seen = Set<String>()
+        let distinct = spread.filter { seen.insert($0.operatorName).inserted }
+        var generator = SystemRandomNumberGenerator()
+        return distinct.shuffled(using: &generator) + spread.dropFirst(distinct.count)
     }
 
     /// A mesma ordem, mas cada dono aparece uma vez antes de qualquer repeticao.
@@ -401,6 +441,9 @@ public actor ProviderPool {
     }
 
     public func reportFailure(_ provider: Provider, now: Date = .now) {
+        // A consulta cortada por quem pediu (cancelada, ou a tela de segredo que abriu e silenciou a rede) nao e falha do
+        // operador: contada, punha no banco quem respondia, e a conferencia seguinte ficava com menos de tres (rodada 4).
+        guard !Task.isCancelled, !HTTPClient.shared.isQuiet else { return }
         let count = (failures[provider.name] ?? 0) + 1
         failures[provider.name] = count
         if count >= 3 {
@@ -414,6 +457,7 @@ public actor ProviderPool {
     /// Blockchair passa do 429 ao 430, "IP temporary blacklisted"). O resto segue a regra
     /// das tres falhas seguidas.
     public func reportFailure(_ provider: Provider, error: Error, now: Date = .now) {
+        guard !Task.isCancelled, !HTTPClient.shared.isQuiet else { return }
         guard let pause = Self.benchTime(for: error) else { return reportFailure(provider, now: now) }
         let until = now.addingTimeInterval(pause)
         benchedUntil[provider.name] = max(benchedUntil[provider.name] ?? until, until)

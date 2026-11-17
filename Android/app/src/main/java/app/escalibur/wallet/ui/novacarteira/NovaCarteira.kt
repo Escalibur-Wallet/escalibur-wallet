@@ -297,9 +297,9 @@ fun Trabalhando(titulo: String) {
 /** As palavras escolhidas pelo dono: a tela de digitar, com a ultima reservada para o sorteio. */
 @Composable
 private fun EscolherPalavras(palavras: Int, aoCancelar: () -> Unit, aoEscolher: suspend (ByteArray) -> String?) {
-    val entrada = remember(palavras) { EntradaDaFrase(palavras - 1) }
-    val semPassphrase = remember { Segredo() }
-    val semRepeticao = remember { Segredo() }
+    val entrada = remember(palavras) { EntradaDaFrase(palavras - 1, zeraAoTravar = true) }
+    val semPassphrase = remember { Segredo(zeraAoTravar = true) }
+    val semRepeticao = remember { Segredo(zeraAoTravar = true) }
     DisposableEffect(entrada) { onDispose { entrada.zerar() } }
     TelaDaFrase(entrada, semPassphrase, semRepeticao, false, {}, aoCancelar, escolhendo = palavras, aoEscolher = aoEscolher) {}
 }
@@ -812,7 +812,9 @@ fun ConferirPalavras(palavras: Int, aoVoltar: () -> Unit, aoDepois: (() -> Unit)
     val erros = remember { mutableStateMapOf<Int, Int>() }
     val palavra = rememberPalavra()
     val escopo = rememberCoroutineScope()
-    val proprio = App.estado.tecladoProprio
+    // O teclado padrao de outro app nunca recebe as palavras: com ele, o Safe Keyboard fica, mesmo desligado (auditoria 8).
+    val proprio = App.estado.tecladoProprio ||
+        app.escalibur.wallet.ui.comp.TecladoSeguro.tecladoDeTerceiros(androidx.compose.ui.platform.LocalContext.current)
     val celular = remember { TecladoDoCelular() }
 
     fun conferir() {

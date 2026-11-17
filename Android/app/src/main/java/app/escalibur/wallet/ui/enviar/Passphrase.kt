@@ -73,9 +73,10 @@ object PedidoDePassphrase {
     /** Soma um a cada `cancelar`: a resposta que chega depois de o app sair ou travar nao segue (sai zerada). */
     @Volatile private var epoca = 0
 
-    suspend fun pedir(nomeDaCarteira: String, motivo: String? = null): Resposta? {
+    /** `ofereceFolga`: sem dizer, so a frase de mover saldo (sem `motivo`) oferece a folga. */
+    suspend fun pedir(nomeDaCarteira: String, motivo: String? = null, ofereceFolga: Boolean = motivo == null): Resposta? {
         val inicio = epoca
-        val resposta = pedirAgora(nomeDaCarteira, motivo)
+        val resposta = pedirAgora(nomeDaCarteira, motivo, ofereceFolga)
         if (resposta != null && epoca != inicio) {
             resposta.bytes.fill(0)
             return null
@@ -83,10 +84,10 @@ object PedidoDePassphrase {
         return resposta
     }
 
-    private suspend fun pedirAgora(nomeDaCarteira: String, motivo: String?): Resposta? = suspendCancellableCoroutine { continuacao ->
+    private suspend fun pedirAgora(nomeDaCarteira: String, motivo: String?, ofereceFolga: Boolean): Resposta? = suspendCancellableCoroutine { continuacao ->
         pedido?.responder?.invoke(null)
         val linha = motivo ?: t("%@ pede a passphrase para mover saldo. Depois dela vem a biometria ou o PIN, como sempre.", nomeDaCarteira)
-        pedido = Pedido(nomeDaCarteira, linha, motivo == null) { resposta ->
+        pedido = Pedido(nomeDaCarteira, linha, ofereceFolga) { resposta ->
             pedido = null
             if (continuacao.isActive) continuacao.resume(resposta) else resposta?.bytes?.fill(0)
         }

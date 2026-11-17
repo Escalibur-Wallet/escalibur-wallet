@@ -81,6 +81,19 @@ public enum SolanaAccountParser {
     }
 
     /// Conta de token a partir do `jsonParsed` (`parsed.type == "account"`).
+    /// A conta de token da carteira com outro no controle: dono diferente, um delegado ou uma autoridade de fechamento no estado
+    /// lido em `jsonParsed` (rodada 1 da auditoria 8). Conta que nao e de token, de outro programa: tambem, porque o ATA do dono
+    /// so pode ser uma conta de token.
+    static func tokenControlChanged(_ account: RPCAccount, owner: SolanaPublicKey) -> Bool {
+        guard let parsed = account.data.parsed, parsed["type"]?.stringValue == "account", let info = parsed["info"],
+              let holder = info["owner"]?.stringValue
+        else { return true }
+        if holder != owner.base58 { return true }
+        if let delegate = info["delegate"]?.stringValue, !delegate.isEmpty { return true }
+        if let close = info["closeAuthority"]?.stringValue, !close.isEmpty { return true }
+        return false
+    }
+
     static func tokenAccount(_ account: RPCAccount, address: SolanaPublicKey, program: SolanaTokenProgram? = nil) throws -> SolanaTokenAccountState {
         let owner = try key(account.owner)
         guard let tokenProgram = SolanaTokenProgram(programID: owner), program == nil || program == tokenProgram,

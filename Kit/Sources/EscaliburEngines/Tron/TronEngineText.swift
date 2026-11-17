@@ -64,6 +64,8 @@ enum TronEngineText {
             return kitText("Valor acima do que a rede aceita.")
         case .memoTooLong:
             return kitText("O memo é longo demais para a rede Tron.")
+        case .memoHasSecret:
+            return kitText("O memo tem uma frase ou uma chave de carteira. Ele fica público na rede: apague e não envie.")
         case .insufficientTRX:
             return insufficientTRX
         case .insufficientUSDT:

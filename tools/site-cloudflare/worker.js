@@ -33,10 +33,17 @@ export default {
     // localhost e o wrangler dev, para testar.
     const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
     if ((url.hostname !== DOMINIO || url.protocol !== "https:") && !local) {
+      // O HSTS so no redirecionamento que ja chegou em https (o www; o workers.dev esta desligado): o www passa a valer so em
+      // https. No que chega em http ele nao vai: pela RFC 6797 (7.2 e 8.1), o servidor nao deve manda-lo por http e o navegador
+      // o ignora.
+      const seguro = url.protocol === "https:";
       url.hostname = DOMINIO;
       url.protocol = "https:";
-      // O HSTS tambem no redirecionamento: o www em https passa a valer so em https (revisao final de 07/11/2026).
-      return new Response(null, { status: 301, headers: { Location: url.toString(), "Strict-Transport-Security": HSTS } });
+      // Sem a porta: as portas http alternativas da Cloudflare (8080, 8880) nao tem https, e o endereco quebraria.
+      url.port = "";
+      const cabecalhos = { Location: url.toString() };
+      if (seguro) cabecalhos["Strict-Transport-Security"] = HSTS;
+      return new Response(null, { status: 301, headers: cabecalhos });
     }
     let resposta;
     let status;

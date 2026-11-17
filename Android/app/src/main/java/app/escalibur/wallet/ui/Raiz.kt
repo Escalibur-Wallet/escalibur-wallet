@@ -27,6 +27,9 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import app.escalibur.wallet.BuildConfig
 import app.escalibur.wallet.nucleo.Api
+import app.escalibur.wallet.nucleo.Eventos
+import app.escalibur.wallet.ui.comp.Transferencia
+import kotlinx.coroutines.flow.filter
 import app.escalibur.wallet.nucleo.Nucleo
 import app.escalibur.wallet.ui.abertura.FluxoDeAbertura
 import app.escalibur.wallet.ui.bloqueio.TelaDeBloqueio
@@ -73,7 +76,8 @@ object Ciclo {
         app.escalibur.wallet.nucleo.Cofre.cancelarBiometria()
         // O seletor de arquivos do proprio app (salvar ou abrir envelope) e outra Activity: sair para ele
         // nao e sair do app. Com "Ao sair do app", o app travava na volta, e salvar ou abrir envelope
-        // nunca terminava (caca de bugs de 27/10/2026). Ate 10 minutos no seletor, nao conta.
+        // nunca terminava (caca de bugs de 27/10/2026). Ate 2 minutos no seletor, nao conta (eram 10: o dono que
+        // saia do seletor para outro app deixava a carteira aberta por todo esse tempo; auditoria 8, 14/11/2026).
         if (seletorDesde != null) return
         runCatching { Nucleo.chamar("sessao.segundoPlano", "{}") }
     }
@@ -84,14 +88,14 @@ object Ciclo {
     }
 
     private var seletorDesde: Long? = null
-    private const val TEMPO_NO_SELETOR = 10 * 60 * 1000L
+    private const val TEMPO_NO_SELETOR = 2 * 60 * 1000L
 
     /** O nucleo decide se trava antes de a tela voltar: ate a resposta, a capa cobre tudo. */
     suspend fun voltou() {
         val ida = saidas
         val seletor = seletorDesde
         seletorDesde = null
-        // Mais que 10 minutos fora pelo seletor: trava como qualquer saida.
+        // Mais que 2 minutos fora pelo seletor: trava como qualquer saida.
         if (seletor != null && android.os.SystemClock.elapsedRealtime() - seletor > TEMPO_NO_SELETOR) {
             runCatching { App.aplicar(Api.objeto("sessao.travar")) }
         }
@@ -116,8 +120,11 @@ object Ciclo {
         app.escalibur.wallet.ui.enviar.PedidoDePassphrase.cancelar()
         Autorizacao.cancelar()
         app.escalibur.wallet.ui.comp.Segredo.limparTodos()
+        app.escalibur.wallet.ui.comp.Segredo.zerarAoTravar()
         app.escalibur.wallet.ui.pin.EntradaDoPin.limparTodas()
         app.escalibur.wallet.ui.importar.EntradaDaFrase.limparTodas()
+        app.escalibur.wallet.ui.importar.EntradaDaFrase.zerarAoTravar()
+        app.escalibur.wallet.ui.comp.PalavraEmDigitacao.zerarAoTravar()
         app.escalibur.wallet.nucleo.PalavrasNaTela.zerarTodas()
         // O aviso de tela apagada que chega atrasado, com o app ja de volta na frente, nao deixa a leitura travada.
         if (primeiroPlano) app.escalibur.wallet.nucleo.PalavrasNaTela.liberar()
@@ -155,11 +162,13 @@ suspend fun iniciarNucleo(contexto: Context) = withContext(Dispatchers.IO) {
     val padrao = android.text.format.DateFormat.getBestDateTimePattern(Formato.locale, "ddMMyyyyHHmm")
     val numeros = JSONObject().put("decimal", simbolos.decimalSeparator.toString()).put("grupo", simbolos.groupingSeparator.toString())
         .put("grupoPrimario", 3).put("grupoSecundario", 3).put("data", padrao)
-    App.aplicar(Api.objeto("iniciar", JSONObject().put("pasta", pasta.absolutePath).put("recursos", recursos.absolutePath)
+    val iniciado = Api.objeto("iniciar", JSONObject().put("pasta", pasta.absolutePath).put("recursos", recursos.absolutePath)
         .put("vigias", app.escalibur.wallet.vigias.Vigia.pasta(contexto).absolutePath)
         .put("pacote", JSONObject().put("nome", contexto.packageName).put("versao", BuildConfig.VERSION_NAME).put("build", BuildConfig.VERSION_CODE.toString()))
         .put("idioma", Textos.idioma)
-        .put("textos", Textos.tabelaPlana()).put("numeros", numeros)))
+        .put("textos", Textos.tabelaPlana()).put("numeros", numeros))
+    // Na principal, como todo `App.aplicar`: o contador da geracao do estado so muda numa thread (rodada 14).
+    withContext(Dispatchers.Main) { App.aplicar(iniciado) }
 }
 
 @Composable
@@ -176,6 +185,35 @@ fun Raiz() {
     if (pronto) app.escalibur.wallet.ui.avisos.ConferenciaAberta()
     // A versao desatualizada: ao abrir e a cada volta para a frente (no maximo a cada 6 horas).
     LaunchedEffect(pronto, Ciclo.vinda) { if (pronto) app.escalibur.wallet.ui.atualizar.Atualizacao.conferir(contexto) }
+    // O nucleo gravou na carteira com a tela aberta (a marca de outra chave, a troca da TON para a W5): o estado e lido de novo, e
+    // o Copiar endereco e os Ajustes tiram o endereco na hora (rodada 8 da auditoria 8), como o iOS observa a sessao.
+    // Destravado sem nada pendente, nenhum "estado" chega: a copia marcada sai aqui (rodada 11 da auditoria 8). Tambem a cada
+    // mudanca da lista (a carteira removida, o app apagado), sem depender de um aviso do nucleo (rodada 13); travado, a lista vem
+    // vazia e nada conta como mudado.
+    LaunchedEffect(App.estado.fase, App.estado.carteiras) {
+        Transferencia.retirarSeBloqueado(contexto, App.estado.carteiras, App.estado.fase)
+        // A lista do aviso de recebimento se acerta ja, e nao so no laco de 2 minutos: a removida deixa de ser vigiada pelo
+        // trabalho de hora em hora (rodada 16), como o iPhone. Sem mudanca, nao faz nada.
+        if (App.estado.fase == "unlocked") runCatching { Api.objeto("vigias.acompanhar") }
+    }
+    // O aviso do nucleo na hora da marca (rodada 12): a copia sai mesmo com o app travado na frente.
+    LaunchedEffect(pronto) {
+        if (pronto) Eventos.eventos.filter { it.nome == "copia.retirar" }.collect { evento ->
+            val lista = runCatching { org.json.JSONObject(evento.json).getJSONArray("enderecos") }.getOrNull() ?: return@collect
+            Transferencia.retirarEnderecos(contexto, (0 until lista.length()).map { lista.getString(it) }.toSet())
+        }
+    }
+    LaunchedEffect(pronto) {
+        // Pelo StateFlow, que nao perde o ultimo aviso com a rajada de saldos (rodada 15).
+        // Sem o drop: a Activity recriada (tema, idioma, letra) se inscreve de novo, e o aviso que chegou no meio nao se perde
+        // (rodada 16). Custa uma leitura a mais por inscricao.
+        if (pronto) Eventos.estadoMudou.collect {
+            runCatching { App.recarregar() }
+            // O endereco copiado de uma conta que acabou de deixar de receber, ou de trocar de endereco, sai da area de
+            // transferencia (rodadas 10 e 11).
+            Transferencia.retirarSeBloqueado(contexto, App.estado.carteiras, App.estado.fase)
+        }
+    }
     Box(Modifier.fillMaxSize().background(Paleta.vazio)) {
         if (pronto) {
             // Com a tela de atualizar na frente, a carteira por baixo sai da arvore do leitor de tela: o TalkBack nao navega
