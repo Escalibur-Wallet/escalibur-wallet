@@ -7,6 +7,7 @@ $s10Foundation12CharacterSetV13alphanumericsACvgZ
 $s10Foundation12CharacterSetV17controlCharactersACvgZ
 $s10Foundation12CharacterSetV22whitespacesAndNewlinesACvgZ
 $s10Foundation12CharacterSetV8containsySbs7UnicodeO6ScalarVF
+$s10Foundation12CharacterSetV8invertedACvg
 $s10Foundation12CharacterSetV8newlinesACvgZ
 $s10Foundation12CharacterSetVMa
 $s10Foundation14LocalizedErrorMp
@@ -45,6 +46,7 @@ $s10Foundation4DataVAA0B8ProtocolAAMc
 $s10Foundation4DataVACycfC
 $s10Foundation4DataVMn
 $s10Foundation4DataVN
+$s10Foundation4DataVSHAAMc
 $s10Foundation4DataVSKAAMc
 $s10Foundation4DataVSlAAMc
 $s10Foundation4DataVSmAAMc
@@ -157,6 +159,7 @@ $s9CryptoKit4P256O7SigningO14ECDSASignatureV17rawRepresentationAGx_tKc10Foundati
 $s9CryptoKit4P256O7SigningO14ECDSASignatureVMa
 $s9CryptoKit4P256O7SigningO14ECDSASignatureVMn
 $s9CryptoKit4P256O7SigningO9PublicKeyV16isValidSignature_3forSbAE14ECDSASignatureV_xt10Foundation12DataProtocolRzlF
+$s9CryptoKit4P256O7SigningO9PublicKeyV17rawRepresentation10Foundation4DataVvg
 $s9CryptoKit4P256O7SigningO9PublicKeyV17rawRepresentationAGx_tKc10Foundation15ContiguousBytesRzlufC
 $s9CryptoKit4P256O7SigningO9PublicKeyVMa
 $s9CryptoKit4P256O7SigningO9PublicKeyVMn
@@ -248,6 +251,7 @@ OBJC_CLASS_$_NSLock
 OBJC_CLASS_$_NSNumber
 OBJC_CLASS_$_NSNumberFormatter
 OBJC_CLASS_$_NSProcessInfo
+OBJC_CLASS_$_NSRegularExpression
 OBJC_CLASS_$_OS_dispatch_queue
 objc_getAssociatedObject
 OBJC_METACLASS_$__TtCs12_SwiftObject
@@ -260,6 +264,7 @@ objc_msgSend$dateFormatFromTemplate:options:locale:
 objc_msgSend$decimalSeparator
 objc_msgSend$domain
 objc_msgSend$domainState
+objc_msgSend$escapedPatternForString:
 objc_msgSend$evaluatedPolicyDomainState
 objc_msgSend$groupingSeparator
 objc_msgSend$groupingSize
