@@ -5,6 +5,8 @@ import app.escalibur.wallet.ui.comp.seguraToques
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -37,9 +39,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.escalibur.wallet.ui.comp.BotaoPrimario
-import app.escalibur.wallet.ui.comp.CabecalhoDeFolha
 import app.escalibur.wallet.ui.comp.Segmentado
 import app.escalibur.wallet.ui.t
 import app.escalibur.wallet.ui.tema.Altura
@@ -134,9 +136,19 @@ fun FolhaDaPassphrase(pedido: PedidoDePassphrase.Pedido) {
     BackHandler { fechar() }
 
     Column(Modifier.fillMaxSize().background(Paleta.vazio).seguraToques().statusBarsPadding().navigationBarsPadding().acimaDoTeclado()) {
-        CabecalhoDeFolha(t("Digite a passphrase"), { fechar() })
-        Column(Modifier.weight(1f).padding(horizontal = Espaco.margem)) {
-            Text(pedido.motivo, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
+        // O selo das telas onde se digita um segredo, no centro, com o fechar na mesma linha; o titulo e o motivo vem embaixo
+        // dele, no centro, como na folha do iOS (pedido do dono, 17/11/2026). Menor que nas telas cheias: a folha divide a
+        // altura com o teclado, e por isso o miolo rola quando nao cabe.
+        Box(Modifier.fillMaxWidth().padding(horizontal = Espaco.xs)) {
+            app.escalibur.wallet.ui.comp.EmblemaCifrado(60.dp, modifier = Modifier.align(androidx.compose.ui.Alignment.TopCenter).padding(top = Espaco.xs))
+            app.escalibur.wallet.ui.comp.BotaoDeCanto(app.escalibur.wallet.ui.comp.Icones.fechar, t("Fechar"),
+                                                      Modifier.align(androidx.compose.ui.Alignment.TopEnd).padding(top = Espaco.xxs)) { fechar() }
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem)) {
+            Text(t("Digite a passphrase"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
+                 modifier = Modifier.fillMaxWidth().padding(top = Espaco.sm))
+            Text(pedido.motivo, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
+                 modifier = Modifier.fillMaxWidth().padding(top = Espaco.xs))
             Box(
                 Modifier.padding(top = Espaco.lg).fillMaxWidth().height(Altura.primaria)
                     .background(Paleta.corpo, RoundedCornerShape(Raio.cartao))
@@ -166,7 +178,7 @@ fun FolhaDaPassphrase(pedido: PedidoDePassphrase.Pedido) {
                     }
                 }
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(Espaco.md))
         }
         BotaoPrimario(t("Continuar"), Modifier.padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs), ligado = campo.text.isNotEmpty()) { confirmar() }
     }

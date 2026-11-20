@@ -314,12 +314,14 @@ final class Sessao: @unchecked Sendable {
         if lidos.balanceCache.keys.contains(where: { !carteiras.contains($0) })
             || (lidos.activityCache ?? [:]).keys.contains(where: { !carteiras.contains($0) })
             || (lidos.activityFetched ?? [:]).keys.contains(where: { !carteiras.contains($0) })
-            || (lidos.pendingEVM ?? [:]).keys.contains(where: { chave in !prefixos.contains { chave.hasPrefix($0) } }) {
+            || (lidos.pendingEVM ?? [:]).keys.contains(where: { chave in !prefixos.contains { chave.hasPrefix($0) } })
+            || (lidos.unsureSends ?? []).contains(where: { !carteiras.contains($0.wallet) }) {
             try? alterar { metadata in
                 metadata.balanceCache = metadata.balanceCache.filter { carteiras.contains($0.key) }
                 metadata.activityCache = metadata.activityCache?.filter { carteiras.contains($0.key) }
                 metadata.activityFetched = metadata.activityFetched?.filter { carteiras.contains($0.key) }
                 metadata.pendingEVM = metadata.pendingEVM?.filter { item in prefixos.contains { item.key.hasPrefix($0) } }
+                metadata.unsureSends = metadata.unsureSends?.filter { carteiras.contains($0.wallet) }
             }
         }
         // E os mapas por ativo com o que nenhuma carteira tem mais.
@@ -827,6 +829,8 @@ final class Sessao: @unchecked Sendable {
         // Tudo o que leva enderecos ou o rastro desta carteira sai junto (revisao de seguranca de
         // 24/10/2026): o historico, as transacoes em transito, as ordens a refazer e a conta de
         // passphrases erradas dela. Numa funcao so: na gravacao de agora e, se o app travar no meio, na do destravar (rodada 14).
+        // A edicao de ordem guardada pode ser desta carteira (revisao dos 3 agentes, 17/11/2026).
+        Troca.esquecerEdicaoSuspensa()
         let tirar: (inout Metadata) -> Void = { metadata in
             metadata.wallets.removeAll { $0.id == id }
             metadata.balanceCache[id] = nil
@@ -834,6 +838,7 @@ final class Sessao: @unchecked Sendable {
             metadata.activityFetched?[id] = nil
             let prefixo = id.uuidString + "|"
             metadata.pendingEVM = metadata.pendingEVM?.filter { !$0.key.hasPrefix(prefixo) }
+            metadata.unsureSends?.removeAll { $0.wallet == id }
             metadata.limitRenewals?.removeAll { $0.walletID == id }
             metadata.signedOrders?.removeAll { $0.walletID == id }
             Saldos.podarPorAtivo(&metadata)
@@ -908,6 +913,8 @@ final class Sessao: @unchecked Sendable {
         guard Chaves.wallets.probe(id) == .absent else { throw Falha.remocaoFalhou }
         // A copia de um endereco da descartada sai ja, com a chave fora (rodadas 13 e 14), como no iOS.
         Sessao.retirarCopia(Set(wallet.accounts.map(\.address)))
+        // A edicao de ordem guardada pode ser desta carteira (revisao dos 3 agentes, 17/11/2026).
+        Troca.esquecerEdicaoSuspensa()
         let tirar: (inout Metadata) -> Void = { metadata in
             metadata.wallets.removeAll { $0.id == id }
             metadata.balanceCache[id] = nil
@@ -915,6 +922,7 @@ final class Sessao: @unchecked Sendable {
             metadata.activityFetched?[id] = nil
             // O que leva o endereco dela: as transacoes em transito e as ordens guardadas (quarta passada de 03/11/2026).
             metadata.pendingEVM = metadata.pendingEVM?.filter { !$0.key.hasPrefix(id.uuidString + "|") }
+            metadata.unsureSends?.removeAll { $0.wallet == id }
             metadata.signedOrders?.removeAll { $0.walletID == id }
             Saldos.podarPorAtivo(&metadata)
             PortaDaPassphrase.esquecer(&metadata, id)
@@ -1333,6 +1341,7 @@ final class Sessao: @unchecked Sendable {
         Renovacoes.esquecer(carteira: nil)
         PortaDaPassphrase.encerrarFolgas()
         Envio.encerrar()
+        Troca.esquecerEdicaoSuspensa()
         Silencio.ligar(false)
         esquecerSegredosDasTelas()
     }

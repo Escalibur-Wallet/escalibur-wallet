@@ -114,10 +114,26 @@ segunda_fase() {
     done
     swift tools/versoes/versoes.swift conferir-app "$app" \
         || { echo "o app nao leva a lista assinada que autoriza $versao ($build)" >&2; exit 1; }
-    if strings "$app/EscaliburWallet" | grep -E "abandon abandon abandon|DebugDemo|envio-incerto|enviar-eth|-alarme-versao|-versao-expirada|-versao-obrigatoria|-tentou-atualizar"; then
+    # O texto do binario guardado antes: um strings que falhasse deixava o if falso e a trava passava (rodada 2 dos 3 agentes).
+    local texto
+    texto=$(strings -a -arch all "$app/EscaliburWallet") || { echo "o strings do binario falhou" >&2; exit 1; }
+    if grep -E "abandon abandon abandon|DebugDemo|envio-incerto|enviar-eth|-alarme-versao|-versao-expirada|-versao-obrigatoria|-tentou-atualizar" <<<"$texto"; then
         echo "o binario de distribuicao carrega codigo do modo demo" >&2
         exit 1
     fi
+    # O sorteio do app e o do sistema: o binario importa o _SecRandomCopyBytes do Security e nao define outro com o mesmo
+    # nome (rodada dos 3 agentes de 19/11/2026: um @_cdecl ou uma funcao em C com esse nome ganhava do Security no link).
+    # Pela saida guardada, e nao por pipe com grep -q, que o pipefail engana.
+    # Cada fatia (arm64 e arm64e, que roda nos iPhones A12 em diante): sem -arch, o nm lia uma so (rodada 2 dos 3 agentes).
+    local simbolos fatias fatia
+    fatias=$(lipo -archs "$app/EscaliburWallet") || { echo "o lipo do binario falhou" >&2; exit 1; }
+    [ "$fatias" = "arm64 arm64e" ] || [ "$fatias" = "arm64" ] || { echo "o binario tem fatias inesperadas: $fatias" >&2; exit 1; }
+    for fatia in $fatias; do
+        simbolos=$(nm -m -arch "$fatia" "$app/EscaliburWallet") || { echo "o nm da fatia $fatia falhou" >&2; exit 1; }
+        grep -xE ' +\(undefined\) external _SecRandomCopyBytes \(from Security\)' >/dev/null <<<"$simbolos" \
+            && [ "$(grep -cE '[[:space:]]_SecRandomCopyBytes([[:space:]]|$)' <<<"$simbolos")" = 1 ] \
+            || { echo "a fatia $fatia nao tira o sorteio do SecRandomCopyBytes do sistema" >&2; exit 1; }
+    done
     # O export segue o ApplicationPath do Info.plist do archive: so o app daqui, e nada mais em Products/Applications
     # (setima passada da auditoria de 03/11/2026).
     [ "$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:ApplicationPath' "$saida/EscaliburWallet.xcarchive/Info.plist")" = "Applications/EscaliburWallet.app" ] \

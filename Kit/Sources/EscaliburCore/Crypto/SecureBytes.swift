@@ -237,9 +237,9 @@ public final class SecureBytes: @unchecked Sendable {
     /// `arc4random`: chave de cofre so nasce do CSPRNG do sistema.
     public static func random(count: Int) throws -> SecureBytes {
         let bytes = SecureBytes(capacity: count)
-        let status = bytes.base.withMemoryRebound(to: UInt8.self, capacity: count) {
-            SecRandomCopyBytes(kSecRandomDefault, count, $0)
-        }
+        // Direto no ponteiro do buffer, sem fecho da biblioteca padrao no meio: uma sobrecarga do `withMemoryRebound` no
+        // proprio modulo ganhava da do Swift e sobrescrevia o sorteio (rodada 2 dos 3 agentes, 19/11/2026).
+        let status = SecRandomCopyBytes(kSecRandomDefault, count, bytes.base)
         guard status == errSecSuccess else {
             bytes.wipe()
             throw CryptoError.randomnessUnavailable
@@ -274,6 +274,8 @@ public enum CryptoError: Error, Equatable {
 /// seed podia ir para o swap no flash (auditoria das chaves de 06/11/2026). Aqui cabem as chaves, a entropia, a seed, o PIN,
 /// a passphrase e a frase. O que nao cabe segue com a regiao propria. Entre as fatias nao ha pagina de guarda: a capacidade
 /// fixa do SecureBytes ja impede escrever fora, e as guardas da arena pegam o ponteiro cru que passa da ponta.
+// So o SecureBytes, neste arquivo travado, pega e devolve fatias: outro codigo do modulo que devolvesse a fatia ainda em
+// uso fazia as duas metades do sorteio do Android cairem no mesmo lugar, e o XOR dava zero (rodada 4 dos 3 agentes).
 enum LockedArena {
     static let sliceSize = 256
     /// Acima disto (texto de envelope, por exemplo) vai para a regiao propria, para nao ocupar a arena das chaves.
@@ -294,7 +296,7 @@ enum LockedArena {
     /// A arena nasceu (mmap, guardas e mlock aceitos)?
     static var isActive: Bool { lock.withLock { state != nil } }
 
-    static func noteLockFailure() { lock.withLock { failures += 1 } }
+    fileprivate static func noteLockFailure() { lock.withLock { failures += 1 } }
 
     private static func setup() -> State? {
         let pageSize = Int(getpagesize())
@@ -321,7 +323,7 @@ enum LockedArena {
     }
 
     /// As primeiras fatias seguidas e livres que cabem `capacity`, ou nil (arena cheia, ou sem arena).
-    static func take(_ capacity: Int) -> (pointer: UnsafeMutableRawPointer, first: Int, count: Int)? {
+    fileprivate static func take(_ capacity: Int) -> (pointer: UnsafeMutableRawPointer, first: Int, count: Int)? {
         let needed = (capacity + sliceSize - 1) / sliceSize
         return lock.withLock {
             // O `state` primeiro: a arena nasce no primeiro SecureBytes do processo, de qualquer tamanho. Se os grandes
@@ -341,7 +343,7 @@ enum LockedArena {
     }
 
     /// Devolve as fatias (ja zeradas por quem as usou).
-    static func give(first: Int, count: Int) {
+    fileprivate static func give(first: Int, count: Int) {
         lock.withLock {
             guard var current = state else { return }
             for slice in first..<(first + count) { current.used[slice] = false }

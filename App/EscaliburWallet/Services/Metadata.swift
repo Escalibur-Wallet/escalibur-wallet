@@ -27,6 +27,9 @@ struct Metadata: Codable, Equatable {
     /// Transacoes EVM transmitidas e ainda em transito, por carteira, rede e conta
     /// (`NonceQueue`). Opcional para os metadados gravados antes deste campo abrirem.
     var pendingEVM: [String: [PendingEVMTransaction]]?
+    /// Os envios fora da EVM transmitidos sem resposta certa da rede (`UnsureSend`, a mesma regra do Android): ate a rede
+    /// dizer se sairam, ou o prazo vencer. Opcional para os metadados gravados antes deste campo abrirem.
+    var unsureSends: [UnsureSend]?
     /// O ultimo aceite da tela de seguranca e responsabilidade (`ResponsibilityView`):
     /// quando e em qual versao do texto. Opcionais para os metadados gravados antes
     /// destes campos abrirem.

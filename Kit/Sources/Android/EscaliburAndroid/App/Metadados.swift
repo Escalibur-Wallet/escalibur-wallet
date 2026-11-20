@@ -49,6 +49,9 @@ struct Metadata: Codable, Equatable {
     var signedOrders: [SignedOrderRecord]?
     /// As transacoes EVM transmitidas e ainda sem confirmacao, por carteira, rede e conta.
     var pendingEVM: [String: [PendingEVMTransaction]]?
+    /// Os envios fora da EVM transmitidos sem resposta certa da rede (`UnsureSend`, a mesma regra do iOS): ate a rede
+    /// dizer se sairam, ou o prazo vencer.
+    var unsureSends: [UnsureSend]?
     /// O ultimo historico lido de cada carteira, e quando cada rede foi lida.
     var activityCache: [UUID: [CachedActivity]]?
     var activityFetched: [UUID: [String: ActivityFetch]]?

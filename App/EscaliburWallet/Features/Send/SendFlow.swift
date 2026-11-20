@@ -1614,7 +1614,10 @@ struct SendStages: View {
             destination: destination.address, tag: model.tagText.isEmpty ? nil : model.tagText,
             amount: amount, sendAll: sendAll, feeLevel: model.feeLevel, utxoUsage: model.wallet.utxoUsage[chain.id],
             knownAddresses: session.metadata.sentTo[chain.id] ?? [],
-            nonceQueue: NonceQueue.queue(session, wallet: model.wallet.id, chain: chain, address: account.address)
+            nonceQueue: NonceQueue.queue(session, wallet: model.wallet.id, chain: chain, address: account.address),
+            // Redes UTXO: as moedas de um envio que a rede disse nao conhecer entram de novo (rodada dos 3 agentes de 19/11/2026).
+            unsureCoins: UnsureSends.coinsToSpend(in: session.metadata.unsureSends ?? [], wallet: model.wallet.id, chainID: chain.id,
+                                                  address: account.address)
         )
     }
 
@@ -1623,7 +1626,10 @@ struct SendStages: View {
     /// reverteria cobrando a taxa (auditoria de 03/11/2026). Ler depois do `prune`. Mostra o motivo e
     /// devolve true.
     private func sellsInFlight(chain: Chain, address: String) -> Bool {
+        // Fora da EVM, o envio desta conta que ficou sem resposta da rede (`UnsureSendLedger`): outro por cima dele poderia
+        // pagar duas vezes (pentest de 17/11/2026).
         guard let reason = NonceQueue.blockedReason(session, wallet: model.wallet.id, chain: chain, address: address, asset: model.holding?.asset)
+            ?? UnsureSendLedger.blockedReason(session, wallet: model.wallet.id, chain: chain, address: address)
         else { return false }
         model.error = reason
         return true
@@ -1641,6 +1647,7 @@ struct SendStages: View {
         defer { model.working = false }
         // A fila de nonces sem o que a rede ja confirmou, antes de entrar no pedido.
         await NonceQueue.prune(session, wallet: model.wallet.id, chain: chain, address: account.address)
+        await UnsureSendLedger.prune(session, wallet: model.wallet.id, chain: chain, address: account.address)
         guard !sellsInFlight(chain: chain, address: account.address) else { return }
         // A leitura do historico ainda corre: a revisao espera por ela (o Continuar so esperou o prazo), para um parecido
         // achado tarde aparecer antes da assinatura, e nao depois (revisao de seguranca de 06/11/2026). Quase sempre ela
@@ -1999,6 +2006,21 @@ struct SendStages: View {
             model.stage = model.unsureSigned == nil ? .review : .unsure
             return
         }
+        // Fora da EVM, o envio fica anotado antes de os bytes sairem (`UnsureSend`): se a resposta nao vier, ou o sistema matar
+        // o app no meio, a Atividade segue mostrando a linha e a conta nao monta outro envio por cima dele. Antes, travar ou
+        // fechar a tela do envio sem resposta apagava o unico rastro, e o dono podia pagar duas vezes (pentest de 17/11/2026).
+        // Antes de qualquer outra anotacao, e sem o registro gravado nada sai: os bytes assinados ficam aqui.
+        var unsure: UnsureSend?
+        if UnsureSends.applies(to: chain), let address = model.account?.address, let hash = signed.last?.id, let asset = model.holding?.asset {
+            unsure = UnsureSend(wallet: model.wallet.id, chainID: chain.id, address: address, hash: hash, sentAt: .now, asset: asset,
+                                amount: plan.review.outgoing?.amount ?? model.amount ?? 0, recipient: model.destination?.address,
+                                context: engine.unsureContext(for: plan))
+        }
+        if let unsure, !UnsureSendLedger.record(session, unsure) {
+            model.error = String(localized: "Não foi possível preparar o envio.")
+            model.stage = model.unsureSigned == nil ? .review : .unsure
+            return
+        }
         // O que o plano consome (nonce EVM, indice de troco UTXO) fica anotado antes da
         // transmissao: se ela sair sem resposta, o proximo envio nao repete nenhum dos
         // dois. Anotar de novo numa retransmissao nao muda nada.
@@ -2017,17 +2039,22 @@ struct SendStages: View {
             let id = try await engine.broadcast(signed, chain: chain)
             model.unsureSigned = nil
             model.unsureDetail = nil
+            if let unsure { UnsureSendLedger.remove(session, hash: unsure.hash, wallet: unsure.wallet, chainID: unsure.chainID) }
             await finish(id: id, plan: plan, engine: engine, chain: chain)
         } catch {
             model.resultID = signed.last?.id
             model.unsureSigned = signed
             model.unsureDetail = (error as? LocalizedError)?.errorDescription
             model.stage = .unsure
+            // A linha ja aparece em "Pendentes": a tela do envio sem resposta oferece fechar e acompanhar na Atividade.
+            if let unsure, session.phase == .unlocked { ActivityFeed.shared.noteSent(unsure.entry(unanswered: UnsureSendLedger.note), wallet: unsure.wallet) }
         }
     }
 
     private func finish(id: String, plan: SigningPlan, engine: any SendEngine, chain: Chain) async {
         model.resultID = id
+        // Saiu: o registro de envio sem resposta, se havia (o que confirmou depois, com a tela aberta), sai.
+        UnsureSendLedger.remove(session, hash: id, wallet: model.wallet.id, chainID: chain.id)
         let address = model.destination?.address
         // Saiu: o registro vale mesmo que o app tenha travado durante a transmissao.
         session.whenUnlocked { session in

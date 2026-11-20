@@ -16,7 +16,7 @@ tools/android/compilar-nucleo.sh debug        # o núcleo, em Android/app/src/ma
 cd Android && ./gradlew assembleDebug          # o app
 ```
 
-O núcleo de release (`compilar-nucleo.sh` sem argumento) sai sem símbolos de depuração. O Gradle confere o digesto de cada dependência (`Android/gradle/verification-metadata.xml`) e o da própria distribuição (`gradle-wrapper.properties`); dependência nova pede `./gradlew --write-verification-metadata sha256 assembleDebug assembleRelease bundleRelease assembleConferencia` e a revisão do diff.
+O núcleo de release (`compilar-nucleo.sh` sem argumento) sai sem símbolos de depuração. O Gradle confere o digesto de cada dependência (`Android/gradle/verification-metadata.xml`) e o da própria distribuição (`gradle-wrapper.properties`); dependência nova pede, numa casa do Gradle nova (o cache quente esconde arquivo que falta, como os sete catálogos de 17/11/2026), `GRADLE_USER_HOME=$(mktemp -d) ./gradlew --no-daemon --no-configuration-cache -Pkotlin.compiler.execution.strategy=in-process --write-verification-metadata sha256 -x conferirOrigemDoRelease -x conferirCDoNucleo -x conferirNucleoDeRelease assembleDebug assembleConferencia bundleConferencia bundleRelease assembleRelease`, a revisão do diff (só linhas novas, sem `also-trust`) e a conferência de cada digesto novo em mais de uma fonte e pela assinatura `.asc`.
 
 O tipo de build `conferencia` é o release minificado pelo R8, com outro id (`app.escalibur.wallet.conferencia`) e a chave de depuração: instala ao lado do app de depuração para conferir no emulador o que o R8 faz, sem apagar as carteiras de teste. Como o release, ele recusa empacotar o núcleo de depuração: antes dele, `compilar-nucleo.sh release` (auditoria Android de 31/10/2026). Todo método que o núcleo procura pelo JNI (`Kit/Sources/Android/EscaliburAndroid/Java.swift`) precisa de regra em `Android/app/proguard-rules.pro`; o `tools/verificar.sh` confere.
 
@@ -37,6 +37,8 @@ O tipo de build `conferencia` é o release minificado pelo R8, com outro id (`ap
 ## O que é diferente do iOS
 
 - Sem confirmação por voz e sem widget.
+- Com um serviço de acessibilidade que não veio com o celular ligado, a carteira fica fechada e travada, em qualquer Android e se o serviço se declara ferramenta ou não (17/11/2026): ele lê a tela (até o Android 13, ou declarado ferramenta) ou, sem ler, desenha uma janela por cima dela. O leitor de tela do sistema não fecha nada. A tela fechada diz que as carteiras continuam guardadas, que a Escalibur não pede PIN, senha, passphrase nem palavras enquanto o acesso estiver ligado (a tela da Escalibur que pedir é falsa) e que desinstalar o app as apaga.
+- A checagem do aparelho avisa da depuração USB ou por Wi-Fi ligada, até o Android 16: pelo adb, um computador autorizado pode ler a tela e tocar nela. No Android 17 o sistema deixou de contar isso aos apps (a mudança chegou no QPR1): a linha não aparece do 17 em diante, para nunca mostrar uma linha que sempre passa.
 - O alarme de atualização não confirmada (docs/seguranca.md §8.6) é só do iOS: a Google Play não tem consulta pública da versão mais nova. A tela "Esta versão está desatualizada" e a obrigatória existem desde 07/11/2026, lendo só a lista assinada: o build que o dono liberou nela com o lançamento em 100% na Play (`versoes.swift liberar-android`).
 - Os builds do Android são numerados de 1001 em diante (`versionCode`), para nunca repetir um build do iOS na lista assinada.
 

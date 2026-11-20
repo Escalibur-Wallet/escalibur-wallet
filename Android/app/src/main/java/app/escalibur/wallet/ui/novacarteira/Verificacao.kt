@@ -40,6 +40,7 @@ import android.app.KeyguardManager
 import android.content.Context
 import android.os.Build
 import android.os.Debug
+import android.provider.Settings
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
 import android.view.accessibility.AccessibilityManager
@@ -126,12 +127,16 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
     class Passo(val id: String, val titulo: String, val rodar: (Context) -> Checagem)
 
     companion object {
-        fun passos(): List<Passo> = listOf(
+        fun passos(): List<Passo> = listOfNotNull(
             Passo("bloqueio", t("Bloqueio de tela ativo"), ::bloqueio),
             Passo("hardware", t("Chave guardada no hardware"), ::hardware),
             Passo("root", t("Nenhum sinal de root"), ::root),
             Passo("injecao", t("Nenhum código injetado encontrado"), ::injecao),
             Passo("depurador", t("Nenhum depurador conectado"), ::depurador),
+            // Ate o Android 16: no 17 (a mudanca chegou no QPR1) o sistema passou a responder 0 a todo app, com a depuracao ligada
+            // ou nao, e uma linha que sempre passa seria teatro. O corte fica no 17 inteiro, para nunca mostrar a linha cega
+            // (`depuracaoPeloComputador`).
+            if (Build.VERSION.SDK_INT <= 36) Passo("usb", t("Nenhuma depuração USB detectada"), ::depuracaoPeloComputador) else null,
             Passo("origem", t("Instalado pela Google Play"), ::origem),
             Passo("acessibilidade", t("Nenhum app lendo a tela"), ::acessibilidade),
             Passo("tela", t("Tela protegida contra captura"), { Checagem("tela", t("Tela protegida contra captura"), Resultado.Passou) }),
@@ -241,6 +246,26 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
             else Checagem("depurador", t("Nenhum depurador conectado"), Resultado.Passou)
         }
 
+        /**
+         * A depuracao USB ou por Wi-Fi do Android ligada (pentest de 17/11/2026, A-2): pelo adb, um computador autorizado
+         * neste celular le a arvore da tela (o shell conta como ferramenta de acessibilidade), inclusive o teclado embaralhado
+         * do PIN, e toca nela. So aviso, como a origem e o depurador: quem desenvolve usa.
+         *
+         * O que o app consegue saber: ate o Android 16 as duas chaves respondem (conferido no emulador, com um app comum de
+         * targetSdk 36). Do Android 17 em diante o sistema devolve 0 a todo app que nao e dele, e o passo nem entra na lista
+         * (`passos`). Por isso o resultado bom diz "nenhuma detectada", e nao "desligada": a chave que nao responde conta como
+         * nao vista.
+         */
+        fun depuracaoPeloComputador(contexto: Context): Checagem {
+            fun ligada(chave: String) = runCatching { Settings.Global.getInt(contexto.contentResolver, chave, 0) == 1 }.getOrDefault(false)
+            return if (ligada(Settings.Global.ADB_ENABLED) || ligada("adb_wifi_enabled")) {
+                Checagem("usb", t("Depuração USB ou Wi-Fi ligada"),
+                         Resultado.Cautela(t("Com a depuração ligada, um computador autorizado neste celular pode ler a tela da carteira e tocar nela no seu lugar. Desligue em Opções do desenvolvedor, nas configurações do celular.")))
+            } else {
+                Checagem("usb", t("Nenhuma depuração USB detectada"), Resultado.Passou)
+            }
+        }
+
         /** Instalado pela Google Play. Fora dela, o app pode nao ser o publicado. */
         fun origem(contexto: Context): Checagem {
             val instalador = runCatching { contexto.packageManager.getInstallSourceInfo(contexto.packageName).installingPackageName }.getOrNull()
@@ -271,11 +296,13 @@ data class Checagem(val id: String, val titulo: String, val resultado: Resultado
             }
         }
 
-        /** A atualizacao de seguranca do celular: mais de 6 meses atras, merece atencao. */
+        /** A atualizacao de seguranca do celular: mais de 4 meses atras (120 dias desde 19/11/2026; antes, 6 meses), merece
+         *  atencao. Nao 92: o celular com atualizacao trimestral (Samsung A, muitos Motorola), em dia, cairia no aviso em
+         *  parte de cada ciclo, sem nada para instalar (decisao do dono, 19/11/2026). */
         fun sistema(@Suppress("UNUSED_PARAMETER") contexto: Context): Checagem {
             val titulo = "Android ${Build.VERSION.RELEASE}"
             val patch = runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(Build.VERSION.SECURITY_PATCH) }.getOrNull()
-            val antiga = patch != null && Date().time - patch.time > 183L * 24 * 3600 * 1000
+            val antiga = patch != null && Date().time - patch.time > 120L * 24 * 3600 * 1000
             return Checagem("sistema", titulo,
                 if (antiga) Resultado.Cautela(t("A última atualização de segurança deste celular é de %@. Atualize quando puder.", Build.VERSION.SECURITY_PATCH)) else Resultado.Passou)
         }

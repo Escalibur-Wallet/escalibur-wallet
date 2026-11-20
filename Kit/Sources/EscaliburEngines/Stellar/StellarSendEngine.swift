@@ -144,6 +144,12 @@ struct StellarSendEngine: SendEngine {
         return ChainTransferStatus.transfer(answer, finalLedger: true)
     }
 
+    /// Para o registro dos envios sem resposta.
+    func lookup(_ send: UnsureSend, chain: Chain) async -> SendLookup {
+        guard chain == .stellar, let answer = try? await reader.status(hash: send.hash) else { return .noAnswer }
+        return ChainTransferStatus.lookup(answer)
+    }
+
     private func requireChain(_ chain: Chain) throws {
         guard chain == .stellar else { throw SendEngineError.message(NetworkFailureText.wrongAccount) }
     }

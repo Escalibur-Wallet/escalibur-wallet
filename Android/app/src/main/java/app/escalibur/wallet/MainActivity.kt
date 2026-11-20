@@ -50,8 +50,8 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             window.decorView.setAccessibilityDataSensitive(View.ACCESSIBILITY_DATA_SENSITIVE_YES)
         }
-        // Antes do Android 14, e do 14 em diante com quem se diz ferramenta sem ter vindo com o celular:
-        // a carteira fica fechada enquanto o servico estiver ligado (ver `Acessibilidade`).
+        // Esconder a leitura nao esconde a tela de uma janela por cima: com qualquer servico que nao veio com o
+        // celular, em qualquer Android, a carteira fica fechada enquanto ele estiver ligado (ver `Acessibilidade`).
         app.escalibur.wallet.ui.Acessibilidade.conferir(this)
         // Nenhum gerenciador de senhas oferece guardar a passphrase ou a senha do envelope.
         window.decorView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS

@@ -180,8 +180,20 @@ fun Raiz() {
         pronto = true
     }
     val aparelhoComBloqueio = remember(Ciclo.vinda) { contexto.getSystemService(KeyguardManager::class.java).isDeviceSecure }
-    // Um app de fora lendo a tela: so esta tela, e nada da carteira montado por baixo.
-    Acessibilidade.suspeitos.takeIf { it.isNotEmpty() }?.let { TelaDeAcessibilidade(it); return }
+    // Um app de fora com acesso de acessibilidade, leia a tela ou so possa cobri-la: so esta tela, e nada da carteira montado por
+    // baixo. Fechou, travou: o pedido de biometria do sistema que estiver na tela cai (e janela do sistema, fora desta arvore), o
+    // PIN e a passphrase em digitacao saem e a sessao trava, como na tela apagada. Desligado o servico, a volta e pelo PIN.
+    // O travar so depois de o nucleo responder (`pronto`): antes disso a chamada correria junto com o `iniciar`. Na Activity
+    // recriada o `pronto` volta a falso por um instante, sem nada da carteira montado, e o efeito roda de novo quando o nucleo
+    // responde. E vai ate o fim, mesmo que o servico desligue no meio (revisao dos 3 agentes, 17/11/2026).
+    Acessibilidade.suspeitos.takeIf { it.isNotEmpty() }?.let {
+        LaunchedEffect(pronto) {
+            app.escalibur.wallet.nucleo.Cofre.cancelarBiometria()
+            if (pronto) withContext(kotlinx.coroutines.NonCancellable) { Ciclo.travarAgora() }
+        }
+        TelaDeAcessibilidade(it, Acessibilidade.leemATela)
+        return
+    }
     if (pronto) app.escalibur.wallet.ui.avisos.ConferenciaAberta()
     // A versao desatualizada: ao abrir e a cada volta para a frente (no maximo a cada 6 horas).
     LaunchedEffect(pronto, Ciclo.vinda) { if (pronto) app.escalibur.wallet.ui.atualizar.Atualizacao.conferir(contexto) }

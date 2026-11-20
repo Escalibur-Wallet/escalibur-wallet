@@ -176,6 +176,17 @@ struct XRPLSendEngine: SendEngine {
         return Self.transfer(answer)
     }
 
+    /// Para o registro dos envios sem resposta.
+    func lookup(_ send: UnsureSend, chain: Chain) async -> SendLookup {
+        guard chain == .xrpl else { return .noAnswer }
+        let last = XRPLSubmissions.lastLedger.recall(send.hash.uppercased())
+        guard let answer = try? await reader.status(of: send.hash, lastLedgerSequence: last) else { return .noAnswer }
+        return SendLookup(answer) { reason in
+            if case .failed(let text) = Self.transfer(.failed(reason: reason)) { return text }
+            return reason
+        }
+    }
+
     static func transfer(_ status: TransactionStatus) -> TransferStatus {
         switch status {
         case .notFound, .pending:

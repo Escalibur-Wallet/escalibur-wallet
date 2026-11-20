@@ -83,6 +83,8 @@ enum AptosEngineText {
     static let unsupportedAsset = kitText("Por enquanto, a Escalibur envia só APT na rede Aptos.")
     static let planMismatch = kitText("O envio montado não confere com o destino pedido. Nada foi assinado.")
     static let notOurTransaction = kitText("A transação assinada não confere com a que foi montada. Nada foi transmitido.")
+    /// O registro dos envios sem resposta, com o numero de sequencia ja usado: a mesma frase da Polkadot, traduzida uma vez.
+    static let nonceUsed = kitText("Não deu para confirmar este envio, mas a conta já usou o número dele na rede: ele pode ter saído. Confira a Atividade antes de enviar de novo.")
     static let answerMismatch = kitText("A resposta da rede não confere com a transação assinada. Confira a Atividade antes de enviar de novo.")
     static let broadcastUnconfirmed = kitText("Não foi possível confirmar a transmissão. Confira a Atividade antes de enviar de novo.")
     static let rejected = kitText("A rede Aptos recusou a transação. Confira a Atividade antes de enviar de novo.")

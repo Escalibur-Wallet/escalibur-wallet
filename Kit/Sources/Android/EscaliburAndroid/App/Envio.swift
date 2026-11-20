@@ -955,7 +955,9 @@ final class Envio: @unchecked Sendable {
             walletID: wallet.id, chain: chain, asset: holding.asset, account: conta, destination: destino.address,
             tag: tag.isEmpty ? nil : tag, amount: quantidade, sendAll: tudo, feeLevel: nivelDaTaxa,
             utxoUsage: wallet.utxoUsage[chain.id], knownAddresses: metadata.sentTo[chain.id] ?? [],
-            nonceQueue: FilaDeNonces.fila(metadata, carteira: wallet.id, rede: chain, endereco: conta.address)
+            nonceQueue: FilaDeNonces.fila(metadata, carteira: wallet.id, rede: chain, endereco: conta.address),
+            // Redes UTXO: as moedas de um envio que a rede disse nao conhecer entram de novo (rodada dos 3 agentes de 19/11/2026).
+            unsureCoins: UnsureSends.coinsToSpend(in: metadata.unsureSends ?? [], wallet: wallet.id, chainID: chain.id, address: conta.address)
         )
     }
 
@@ -1001,6 +1003,7 @@ final class Envio: @unchecked Sendable {
         }
         guard let (motor, chain, conta, _) = preparo else { return }
         await FilaDeNonces.podar(carteira: wallet.id, rede: chain, endereco: conta.address)
+        await EnviosSemResposta.podar(carteira: wallet.id, rede: chain, endereco: conta.address)
         guard !emTransito(rede: chain, endereco: conta.address) else { return }
         // O pedido e o destino, o valor e o "tudo" de agora: o plano e comparado com eles, e nao com o que a tela tiver depois.
         guard let (pedido, destinoDoPedido, quantidadeDoPedido, tudoDoPedido) = trava.withLock({
@@ -1035,7 +1038,10 @@ final class Envio: @unchecked Sendable {
     /// 03/11/2026, o `sellsInFlight` do iOS). Ler depois de `podar`. Mostra o motivo e devolve true.
     private func emTransito(rede: Chain, endereco: String) -> Bool {
         let ativo = trava.withLock { holding.asset }
-        guard let motivo = FilaDeNonces.motivoDoBloqueio(carteira: wallet.id, rede: rede, endereco: endereco, ativo: ativo) else { return false }
+        // Fora da EVM, o envio desta conta que ficou sem resposta da rede (`EnviosSemResposta`): outro por cima dele poderia
+        // pagar duas vezes (pentest de 17/11/2026).
+        guard let motivo = FilaDeNonces.motivoDoBloqueio(carteira: wallet.id, rede: rede, endereco: endereco, ativo: ativo)
+            ?? EnviosSemResposta.motivoDoBloqueio(carteira: wallet.id, rede: rede, endereco: endereco) else { return false }
         trava.withLock { erro = motivo }
         return true
     }
@@ -1262,6 +1268,24 @@ final class Envio: @unchecked Sendable {
     /// Transmite os bytes assinados. Erro aqui nao quer dizer que nada saiu: a tela diz isso,
     /// acompanha o id que ja se conhece e so oferece transmitir de novo os mesmos bytes.
     private func transmitir(_ assinado: [SignedTransaction], plano: SigningPlan, motor: any SendEngine, chain: Chain) async {
+        // Fora da EVM, o envio fica anotado antes de os bytes sairem (`UnsureSend`): se a resposta nao vier, ou o app morrer
+        // no meio, a Atividade segue mostrando a linha e a conta nao monta outro envio por cima dele. Antes, travar ou fechar
+        // a tela do envio sem resposta apagava o unico rastro, e o dono podia pagar duas vezes (pentest de 17/11/2026).
+        // Antes de qualquer outra anotacao, e sem o registro gravado nada sai (o app travou no meio, ou a gravacao falhou):
+        // os bytes assinados ficam aqui, como no travar entre assinar e transmitir.
+        let semResposta = trava.withLock { () -> UnsureSend? in
+            guard UnsureSends.applies(to: chain), let endereco = conta?.address, let hash = assinado.last?.id else { return nil }
+            return UnsureSend(wallet: wallet.id, chainID: chain.id, address: endereco, hash: hash, sentAt: Date(), asset: holding.asset,
+                              amount: plano.review.outgoing?.amount ?? quantidade ?? BigUInt(), recipient: destino?.address,
+                              context: motor.unsureContext(for: plano))
+        }
+        if let semResposta, !EnviosSemResposta.anotar(semResposta) {
+            trava.withLock {
+                erro = Textos.t("Não foi possível preparar o envio.")
+                etapa = assinadoIncerto == nil ? .revisao : .incerto
+            }
+            return
+        }
         if let endereco = conta?.address {
             FilaDeNonces.anotar(carteira: wallet.id, rede: chain, endereco: endereco, plano: plano, assinado: assinado,
                                  vende: trava.withLock { holding.asset.id })
@@ -1280,6 +1304,7 @@ final class Envio: @unchecked Sendable {
                 assinadoIncerto = nil
                 detalheIncerto = nil
             }
+            if let semResposta { EnviosSemResposta.tirar(hash: semResposta.hash, carteira: wallet.id, rede: chain.id) }
             await concluir(id: id, motor: motor, chain: chain)
         } catch {
             trava.withLock {
@@ -1288,6 +1313,8 @@ final class Envio: @unchecked Sendable {
                 detalheIncerto = (error as? LocalizedError)?.errorDescription
                 etapa = .incerto
             }
+            // A linha ja aparece em "Pendentes": a tela do envio sem resposta oferece "Fechar e acompanhar na Atividade".
+            if let semResposta { Atividade.shared.anotarEnviado(semResposta.entry(unanswered: EnviosSemResposta.nota), carteira: wallet.id) }
         }
     }
 
@@ -1297,6 +1324,8 @@ final class Envio: @unchecked Sendable {
             etapa = .enviado
             return (destino?.address, plano?.review.outgoing?.amount ?? quantidade ?? BigUInt(), holding.asset)
         }
+        // Saiu: o registro de envio sem resposta, se havia (o que confirmou depois, com a tela aberta), sai.
+        EnviosSemResposta.tirar(hash: id, carteira: wallet.id, rede: chain.id)
         // O envio aparece ja em "Pendentes" na Atividade: a leitura da rede pode levar minutos (pedido do dono, 08/11/2026).
         Atividade.shared.anotarEnviado(ActivityEntry(id: "enviado-\(chain.id)-\(id)", chainID: chain.id, direction: .sent, asset: ativo,
                                                      amount: valor, counterparty: endereco, date: Date(), status: .pending(nil), fee: nil,
@@ -1628,6 +1657,122 @@ enum FilaDeNonces {
         guard rede.family == .evm, let entradas = Sessao.shared.metadata.pendingEVM?[chave(carteira: carteira, rede: rede, endereco: endereco)]
         else { return false }
         return ativo == Asset.native(rede).id ? !entradas.isEmpty : entradas.contains { $0.sells == ativo }
+    }
+}
+
+/// Os envios fora da EVM transmitidos sem resposta certa da rede (`UnsureSend`; a regra, no Kit, e a mesma do iOS, onde
+/// isto e o `UnsureSendLedger`). Gravado antes de os bytes sairem, tirado quando a transmissao responde. Enquanto fica: a
+/// Atividade mostra a linha em "Pendentes" e, ate a rede conhecer a transacao, a conta nao monta outro envio nesta rede.
+enum EnviosSemResposta {
+    /// A nota da linha na Atividade.
+    static var nota: String { Textos.t("Sem resposta da rede") }
+
+    private struct NadaATirar: Error {}
+
+    /// Grava o registro antes de os bytes sairem. false: nao gravou (o app travou no meio, a gravacao falhou, a carteira
+    /// saiu) e nao ha um registro deste mesmo envio de antes; quem chama nao transmite.
+    static func anotar(_ envio: UnsureSend) -> Bool {
+        let gravou = (try? Sessao.shared.alterar { metadata -> Bool in
+            // A carteira removida no meio nao volta a ter rastro.
+            guard metadata.wallets.contains(where: { $0.id == envio.wallet }) else { return false }
+            metadata.unsureSends = UnsureSends.recording(envio, in: metadata.unsureSends ?? [])
+            return true
+        }) ?? false
+        if gravou { return true }
+        // Transmitir de novo os mesmos bytes: o registro de antes segue valendo.
+        return Sessao.shared.metadata.unsureSends?.contains { $0.wallet == envio.wallet && $0.chainID == envio.chainID && $0.hash == envio.hash } == true
+    }
+
+    /// A transmissao respondeu, ou a rede confirmou com a tela aberta: o registro sai.
+    static func tirar(hash: String, carteira: UUID, rede: String) {
+        let saida: (inout Metadata) -> Bool = { metadata in
+            guard let lista = metadata.unsureSends else { return false }
+            let nova = UnsureSends.removing(hash: hash, wallet: carteira, chainID: rede, from: lista)
+            guard nova.count != lista.count else { return false }
+            metadata.unsureSends = nova.isEmpty ? nil : nova
+            return true
+        }
+        do {
+            // Destravado e sem registro (todo envio que respondeu certo, e todo envio da EVM, passa por aqui): nada a gravar. A
+            // conferencia e a gravacao na mesma trava da sessao.
+            try Sessao.shared.alterar { metadata in if !saida(&metadata) { throw NadaATirar() } }
+        } catch is NadaATirar {
+        } catch {
+            // Travado no meio (os metadados nao estao na memoria para saber) ou a gravacao falhou: fica para o destravar.
+            Sessao.shared.alterarOuDepois { metadata in _ = saida(&metadata) }
+        }
+    }
+
+    /// As linhas de "Pendentes" da carteira, para a Atividade.
+    static func linhas(_ metadata: Metadata, carteira: UUID) -> [ActivityEntry] {
+        (metadata.unsureSends ?? []).filter { $0.wallet == carteira && UnsureSends.shown($0) }.map { $0.entry(unanswered: nota) }
+    }
+
+    /// O motivo para a tela quando a conta tem um envio que a rede ainda nao disse se saiu, ou nil (ler depois de `podar`).
+    static func motivoDoBloqueio(carteira: UUID, rede: Chain, endereco: String) -> String? {
+        guard !UnsureSends.pending(in: Sessao.shared.metadata.unsureSends ?? [], wallet: carteira, chainID: rede.id, address: endereco).isEmpty
+        else { return nil }
+        return Textos.t("Um envio anterior desta conta ficou sem resposta da rede, e ainda não dá para saber se ele saiu. Para você não pagar duas vezes, o próximo envio espera a rede dizer o que houve com ele. Se a rede responder que não conhece esse envio, o app libera 30 minutos depois. Ele aparece em Pendentes, na Atividade.")
+    }
+
+    /// Pergunta a rede por cada envio sem resposta da carteira (ou so os de uma conta) e aplica a regra
+    /// (`UnsureSends.step`): o confirmado vira envio feito; o que falhou com prova sai; o que a rede conhece deixa de
+    /// segurar a conta; o que ela diz nao conhecer sai 30 minutos depois da primeira resposta dessas; sem resposta, nada
+    /// muda. Travado no meio, nada e gravado, e a proxima poda refaz.
+    static func podar(carteira: UUID, rede: Chain? = nil, endereco: String? = nil) async {
+        let registros = (Sessao.shared.metadata.unsureSends ?? []).filter { registro in
+            registro.wallet == carteira && rede.map { $0.id == registro.chainID } != false && endereco.map { $0 == registro.address } != false
+        }
+        for registro in registros {
+            // Rede que esta versao nao conhece mais, ou sem motor: nao ha a quem perguntar, e so o tempo decide.
+            var resposta = SendLookup.unknowable
+            if let chain = Chain.find(registro.chainID), let motor = SendEngines.engine(for: chain) {
+                resposta = await motor.lookup(registro, chain: chain)
+            }
+            let passo = UnsureSends.step(registro, lookup: resposta)
+            if case .keep(let igual) = passo, igual == registro { continue }
+            let gravou = (try? Sessao.shared.alterar { metadata -> Bool in
+                guard var lista = metadata.unsureSends,
+                      let indice = lista.firstIndex(where: { $0.wallet == registro.wallet && $0.chainID == registro.chainID && $0.hash == registro.hash })
+                else { throw NadaATirar() }
+                // So o registro conferido aqui. O confirmado sai sempre; o resto, so se ele segue como foi lido (um
+                // "Transmitir de novo" durante a leitura refez a hora, e esse e conferido na proxima poda).
+                switch passo {
+                case .sent:
+                    lista.remove(at: indice)
+                    // O que o envio feito anota (`Envio.concluir`), uma vez so: junto com a saida do registro.
+                    if let para = registro.recipient {
+                        var enviados = metadata.sentTo[registro.chainID] ?? []
+                        if !enviados.contains(para) { enviados.append(para) }
+                        metadata.sentTo[registro.chainID] = enviados
+                    }
+                    metadata.settings.completedSends = (metadata.settings.completedSends ?? 0) + 1
+                    // A rede desta carteira le o historico de novo: a linha de verdade entra no lugar da pendente.
+                    metadata.activityFetched?[registro.wallet]?[registro.chainID] = nil
+                case .dropped:
+                    guard lista[indice] == registro else { throw NadaATirar() }
+                    lista.remove(at: indice)
+                case .keep(let novo):
+                    guard lista[indice] == registro else { throw NadaATirar() }
+                    lista[indice] = novo
+                }
+                metadata.unsureSends = lista.isEmpty ? nil : lista
+                return true
+            }) ?? false
+            guard gravou else { continue }
+            // A linha que a memoria ainda mostra acompanha o registro.
+            switch passo {
+            case .sent: Atividade.shared.assentarEnviado(hash: registro.hash, carteira: registro.wallet, situacao: .confirmed)
+            case .dropped(let motivo?): Atividade.shared.assentarEnviado(hash: registro.hash, carteira: registro.wallet, situacao: .failed(motivo))
+            case .dropped: Atividade.shared.retirarEnviado(hash: registro.hash, carteira: registro.wallet)
+            case .keep(let novo) where !UnsureSends.shown(novo):
+                // A marca das moedas sai da Atividade, como o envio que a rede nao conhece saia antes.
+                Atividade.shared.retirarEnviado(hash: registro.hash, carteira: registro.wallet)
+            case .keep(let novo):
+                guard case .pending(let nota) = novo.entry(unanswered: Self.nota).status else { break }
+                Atividade.shared.assentarEnviado(hash: registro.hash, carteira: registro.wallet, situacao: .pending(nota))
+            }
+        }
     }
 }
 

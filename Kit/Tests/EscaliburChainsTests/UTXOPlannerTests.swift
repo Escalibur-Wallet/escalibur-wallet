@@ -132,6 +132,79 @@ struct UTXOPlannerTests {
         return parsed
     }
 
+    @Test("Moedas de um envio que a rede disse nao conhecer: uma de cada grupo entra, mesmo pequena, pendente ou fora da escolha a mao")
+    func mustSpendOneOf() throws {
+        let account = try UTXOTestAccount(.bitcoin, purpose: 84)
+        let big = try account.coin(100_000, index: 0), mid = try account.coin(50_000, index: 1), low = try account.coin(20_000, index: 2)
+        func intent(_ amount: UTXOSendIntent.Amount, change: UTXOChangeAddress?, coinControl: [UTXOOutpoint]? = nil,
+                    must: [[UTXOOutpoint]]) -> UTXOSendIntent {
+            UTXOSendIntent(destination: Address.Destination(address: Self.destination, tag: nil), amount: amount, feeRate: Self.rate(5),
+                           change: change, coinControl: coinControl, mustSpendOneOf: must)
+        }
+        func spent(_ plan: SigningPlan) throws -> Set<UInt64> {
+            let (signed, tx) = try account.sign(plan)
+            _ = try Self.checkSigned(signed, tx, rate: Self.rate(5))
+            return Set(tx.spends.map(\.value))
+        }
+        // Sem grupo, a de 100.000 paga sozinha (o caso de `sendWithChange`).
+        let plain = try UTXOPlanner.planSend(walletID: Self.wallet, chain: .bitcoin,
+                                             intent: intent(.exact(60_000), change: account.change(), must: []), network: Self.state([big, mid, low]))
+        #expect(try spent(plain) == [100_000])
+        // O grupo com a de 20.000: ela entra junto, e o que sobra volta como troco.
+        let forced = try UTXOPlanner.planSend(walletID: Self.wallet, chain: .bitcoin,
+                                              intent: intent(.exact(60_000), change: account.change(), must: [[low.outpoint]]),
+                                              network: Self.state([big, mid, low]))
+        #expect(try spent(forced) == [100_000, 20_000])
+        let (_, forcedTx) = try account.sign(forced)
+        #expect(try #require(forcedTx.summary).change != nil)
+        // A escolha que ja gasta uma moeda do grupo nao leva outra.
+        let served = try UTXOPlanner.planSend(walletID: Self.wallet, chain: .bitcoin,
+                                              intent: intent(.exact(10_000), change: account.change(), must: [[low.outpoint, mid.outpoint]]),
+                                              network: Self.state([big, mid, low]))
+        let servedCoins = try spent(served)
+        let plainCoins = try spent(UTXOPlanner.planSend(walletID: Self.wallet, chain: .bitcoin,
+                                                        intent: intent(.exact(10_000), change: account.change(), must: []),
+                                                        network: Self.state([big, mid, low])))
+        #expect(servedCoins.intersection([20_000, 50_000]).count == 1)
+        #expect(servedCoins == (plainCoins.isDisjoint(with: [20_000, 50_000]) ? plainCoins.union([50_000]) : plainCoins))
+        // Com a escolha servindo o grupo (so moedas dele na conta), nada a mais entra.
+        let onlyGroup = try UTXOPlanner.planSend(walletID: Self.wallet, chain: .bitcoin,
+                                                 intent: intent(.exact(10_000), change: account.change(), must: [[low.outpoint, mid.outpoint]]),
+                                                 network: Self.state([mid, low]))
+        #expect(try spent(onlyGroup).count == 1)
+        // A que nao serve o grupo leva uma so dele: a maior que ainda esta na conta.
+        let one = try UTXOPlanner.planSend(walletID: Self.wallet, chain: .bitcoin,
+                                           intent: intent(.exact(90_000), change: account.change(), must: [[low.outpoint, mid.outpoint]]),
+                                           network: Self.state([big, mid, low]))
+        #expect(try spent(one) == [100_000, 50_000])
+        // Grupo sem nenhuma moeda na conta (ja gasto): nao obriga nada.
+        let ghost = UTXOOutpoint(txid: UTXOTxID(bytes: [UInt8](repeating: 7, count: 32))!, vout: 3)
+        let gone = try UTXOPlanner.planSend(walletID: Self.wallet, chain: .bitcoin,
+                                            intent: intent(.exact(60_000), change: account.change(), must: [[ghost]]), network: Self.state([big, mid, low]))
+        #expect(try spent(gone) == [100_000])
+        // Pequena (protegida) e pendente de recebimento tambem entram quando sao a moeda do envio antigo.
+        let small = try account.coin(1_000, index: 4)
+        let pending = try account.coin(80_000, index: 5, confirmations: 0)
+        let protected = try UTXOPlanner.planSend(walletID: Self.wallet, chain: .bitcoin,
+                                                 intent: intent(.exact(60_000), change: account.change(), must: [[small.outpoint]]),
+                                                 network: Self.state([big, small]))
+        #expect(try spent(protected) == [100_000, 1_000])
+        let all = try UTXOPlanner.planSend(walletID: Self.wallet, chain: .bitcoin,
+                                           intent: intent(.all, change: nil, must: [[pending.outpoint]]), network: Self.state([big, pending]))
+        #expect(try spent(all) == [100_000, 80_000])
+        // Escolhida a mao sem a moeda do envio antigo: ela entra assim mesmo.
+        let manual = try UTXOPlanner.planSend(walletID: Self.wallet, chain: .bitcoin,
+                                              intent: intent(.all, change: nil, coinControl: [mid.outpoint], must: [[low.outpoint]]),
+                                              network: Self.state([big, mid, low]))
+        #expect(try spent(manual) == [50_000, 20_000])
+        // A moeda obrigada pesa a propria entrada: se a escolha deixa de pagar, entra outra.
+        let tight = try account.coin(60_800, index: 6)
+        let tightPlan = try UTXOPlanner.planSend(walletID: Self.wallet, chain: .bitcoin,
+                                                 intent: intent(.exact(60_000), change: account.change(), must: [[small.outpoint]]),
+                                                 network: Self.state([tight, small, mid]))
+        #expect(try spent(tightPlan).isSuperset(of: [1_000]))
+    }
+
     @Test("Envio com troco: selecao, taxa, RBF, locktime, troco nosso e assinatura de ponta a ponta")
     func sendWithChange() throws {
         let account = try UTXOTestAccount(.bitcoin, purpose: 84)

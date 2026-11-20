@@ -264,6 +264,19 @@ public actor PolkadotReader {
 
     /// Anota de onde o acompanhamento procura uma transacao: do nascimento ao ultimo
     /// bloco da era. So na memoria.
+    /// Este processo ainda acompanha a transacao (a varredura dos blocos da era dela esta na memoria).
+    public func tracks(_ id: String) -> Bool { scans[id.lowercased()] != nil }
+
+    /// O que da para dizer de uma transacao sem a varredura (a transmissao ficou sem resposta, ou o app reabriu): pelo numero
+    /// da conta num bloco final igual em dois provedores, a mesma prova que o `status` usa antes de dizer "venceu". Andou
+    /// alem do dela, ou a conta nem existe mais: o numero foi usado, e o envio pode ter saido (`nonceUsed`). Parado, com o
+    /// bloco final ja depois do ultimo bloco da era: venceu, nada saiu. Senao, pendente.
+    public func status(sender: PolkadotAddress, nonce: UInt32, death: UInt64) async throws -> TransactionStatus {
+        let point = try await checkpoint()
+        guard let current = try await accountNonce(sender, at: point), current <= nonce else { return .failed(reason: "nonceUsed") }
+        return point.number > death ? .failed(reason: "expired") : .pending
+    }
+
     func track(_ id: String, birth: UInt64, death: UInt64, sender: PolkadotAddress? = nil, nonce: UInt32? = nil) {
         scans[id.lowercased()] = Scan(birth: birth, death: death, next: birth, found: nil, sender: sender, nonce: nonce)
     }

@@ -119,6 +119,17 @@ public enum TransactionStatus: Sendable, Equatable {
     }
 }
 
+/// O que todos os donos dizem de uma transacao que os dois sorteados do `status` nao conheciam (o registro dos envios sem
+/// resposta, `Quorum.presence`). Um no podado diz "nao conheco" tambem da transacao antiga que entrou.
+public enum TransactionPresence: Sendable, Equatable {
+    /// Pelo menos um dono que respondeu conhece a transacao, na fila ou num bloco.
+    case known
+    /// Todos os donos que responderam nao conhecem, e foram pelo menos tres (ou todos os da lista, se forem menos).
+    case unknown
+    /// Nem um nem outro: responderam poucos, ou a pergunta foi cancelada.
+    case unclear
+}
+
 // MARK: Transporte
 
 /// Uma requisicao HTTP de leitor. Existe para os testes trocarem a rede por respostas
@@ -358,6 +369,24 @@ enum Quorum {
         // Cancelada no meio, nao diz "todos" com quem respondeu antes (rodada 4 da auditoria 8).
         if Task.isCancelled { return false }
         return answers.count >= floorOfEveryone(pool) && answers.allSatisfy { $0.value == expected }
+    }
+
+    /// Para o registro dos envios sem resposta, depois de os dois sorteados do `status` nao conhecerem a transacao: um no
+    /// podado diz "nao conheco" tambem da transacao antiga que entrou (conferido ao vivo em 18/11/2026: na Aptos, a PublicNode
+    /// guarda uns 6 dias e meio e a Aptos Labs uns 10, e so a Sentio guarda tudo). Um dono que conheca basta para "conhecida"
+    /// (o pior caso e uma linha pendente a mais). "Nao conhecida", que solta a conta, so com todos os donos da lista
+    /// respondendo sem conhecer (e pelo menos dois): o que guarda tudo e um deles, e a regra nao sabe qual. O piso de tres do
+    /// `everyoneSays` deixaria tres podados decidirem numa lista de quatro (rodada 4 dos 3 agentes, 18/11/2026).
+    static func presence(
+        _ providers: [Provider], pool: ProviderPool, _ knows: @escaping @Sendable (Provider) async throws -> Bool
+    ) async -> TransactionPresence {
+        let (answers, _) = await gather(providers, pool: pool, count: providers.count, firstWave: 2,
+                                        until: { $0.contains(true) }, knows)
+        if answers.contains(where: { $0.value }) { return .known }
+        // Cancelada no meio, nao diz "ninguem conhece" com quem respondeu antes.
+        if Task.isCancelled { return .unclear }
+        let everyone = max(2, Set(pool.providers.map(\.operatorName)).count)
+        return answers.count >= everyone ? .unknown : .unclear
     }
 
     /// O valor que decide: o mais votado, com pelo menos dois votos e dois a mais que todos os contra somados (os outros

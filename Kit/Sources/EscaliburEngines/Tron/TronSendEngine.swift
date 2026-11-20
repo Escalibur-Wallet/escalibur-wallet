@@ -160,6 +160,14 @@ struct TronSendEngine: SendEngine {
         }
     }
 
+    /// Para o registro dos envios sem resposta.
+    func lookup(_ send: UnsureSend, chain: Chain) async -> SendLookup {
+        guard chain.id == Chain.tron.id else { return .noAnswer }
+        let deadline = await deadlines.deadline(for: send.hash)
+        guard let status = try? await reader.status(of: send.hash, expiresAt: deadline) else { return .noAnswer }
+        return SendLookup(status) { TronEngineText.failure($0) }
+    }
+
     // MARK: O pedido conferido
 
     /// O pedido conferido antes de qualquer leitura: rede, conta, ativo e destino.

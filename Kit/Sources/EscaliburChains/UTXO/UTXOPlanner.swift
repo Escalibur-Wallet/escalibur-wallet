@@ -113,10 +113,16 @@ public struct UTXOSendIntent: Sendable {
     /// Enderecos para os quais a carteira ja enviou (historico e catalogo). Quando
     /// presente, liga os avisos de primeiro envio e de endereco parecido.
     public let knownAddresses: [String]?
+    /// Moedas de envios desta conta que a rede disse nao conhecer: de cada grupo que ainda esteja entre as moedas da conta,
+    /// pelo menos uma entra, mesmo pequena, sem confirmacao ou fora da escolha a mao. Quem recebeu os bytes do envio antigo
+    /// pode transmiti-los depois, e no Bitcoin a transacao nao vence: gastando a mesma moeda, so um dos dois confirma
+    /// (rodada dos 3 agentes de 19/11/2026). Grupo sem nenhuma moeda na conta ja foi gasto, e nao obriga nada.
+    public let mustSpendOneOf: [[UTXOOutpoint]]
 
     public init(
         destination: Address.Destination, amount: Amount, feeRate: UTXOFeeRate,
-        change: UTXOChangeAddress?, coinControl: [UTXOOutpoint]? = nil, knownAddresses: [String]? = nil
+        change: UTXOChangeAddress?, coinControl: [UTXOOutpoint]? = nil, knownAddresses: [String]? = nil,
+        mustSpendOneOf: [[UTXOOutpoint]] = []
     ) {
         self.destination = destination
         self.amount = amount
@@ -124,6 +130,7 @@ public struct UTXOSendIntent: Sendable {
         self.change = change
         self.coinControl = coinControl
         self.knownAddresses = knownAddresses
+        self.mustSpendOneOf = mustSpendOneOf
     }
 }
 
@@ -287,6 +294,26 @@ public enum UTXOPlanner {
                     && (coin.coin.confirmations > 0 || coin.coin.path.components[3] == 1)
             }
         }
+        // As moedas que tem de entrar (`mustSpendOneOf`): o grupo que a escolha ja serve nao pede nada; o outro leva a maior
+        // moeda dele que ainda esta na conta. Grupo sem moeda na conta ja foi gasto.
+        var forced = [(group: Set<UTXOOutpoint>, coin: VerifiedCoin)]()
+        for group in intent.mustSpendOneOf {
+            let members = Set(group)
+            let present = verified.filter { members.contains($0.coin.outpoint) }
+            guard let best = present.max(by: { a, b in
+                a.output.value != b.output.value ? a.output.value < b.output.value
+                    : (b.coin.outpoint.txid, b.coin.outpoint.vout) < (a.coin.outpoint.txid, a.coin.outpoint.vout)
+            }) else { continue }
+            forced.append((members, best))
+        }
+        func addingForced(_ coins: [VerifiedCoin]) -> [VerifiedCoin] {
+            var result = coins
+            for (members, coin) in forced where !result.contains(where: { members.contains($0.coin.outpoint) }) {
+                result.append(coin)
+            }
+            return result
+        }
+
         let selectionCoins = candidates.enumerated().map { index, coin in
             UTXOSelectionCoin(
                 id: index, value: coin.output.value,
@@ -314,7 +341,7 @@ public enum UTXOPlanner {
         switch intent.amount {
         case .all:
             let usable = zip(candidates, selectionCoins).filter { $0.1.effectiveValue > 0 }
-            selected = usable.map(\.0)
+            selected = addingForced(usable.map(\.0))
             if intent.coinControl == nil {
                 leftBehind = verified.filter { coin in !selected.contains { $0.coin.outpoint == coin.coin.outpoint } }
                 // As que nao pagam a propria entrada a esta taxa sao poeira; as outras (pequenas
@@ -354,7 +381,20 @@ public enum UTXOPlanner {
                 let available = selectionCoins.filter { $0.effectiveValue > 0 }.reduce(UInt64(0)) { $0 + UInt64($1.effectiveValue) }
                 throw UTXOPlanError.insufficientFunds(available: BigUInt(available), required: BigUInt(target))
             }
-            selected = result.ids.map { candidates[$0] }
+            let chosen = result.ids.map { candidates[$0] }
+            var picked = addingForced(chosen)
+            let added = picked.count > chosen.count
+            if added {
+                // A moeda obrigada pesa a propria entrada: se o total nao paga mais, entram outras, da maior para a menor.
+                var rest = candidates.filter { coin in !picked.contains { $0.coin.outpoint == coin.coin.outpoint } }
+                    .sorted { $0.output.value > $1.output.value }
+                func short(_ coins: [VerifiedCoin]) throws -> Bool {
+                    let total = try sum(coins.map(\.output.value), max: rules.maxMoney * 2)
+                    return total < amount + feeRate.fee(weight: UTXOSizing.weight(inputs: coins.map(\.kind), outputs: [destinationType]))
+                }
+                while try short(picked), !rest.isEmpty { picked.append(rest.removeFirst()) }
+            }
+            selected = picked
 
             // Com as moedas escolhidas, a conta exata: peso real da transacao e troco
             // so se ele sair viavel. O que nao vira troco vira taxa, e a tela mostra.
@@ -365,7 +405,7 @@ public enum UTXOPlanner {
                 throw UTXOPlanError.insufficientFunds(available: BigUInt(total), required: BigUInt(amount + feeWithoutChange))
             }
             let feeWithChange = feeRate.fee(weight: UTXOSizing.weight(inputs: kinds, outputs: [destinationType, change.type]))
-            if result.withChange, total >= amount + feeWithChange, total - amount - feeWithChange >= minViableChange {
+            if result.withChange || added, total >= amount + feeWithChange, total - amount - feeWithChange >= minViableChange {
                 changeValue = total - amount - feeWithChange
                 fee = feeWithChange
                 absorbed = 0

@@ -57,6 +57,34 @@ enum SolanaTransfers {
         }
     }
 
+    /// O que a rede diz, para o registro dos envios sem resposta (`SendEngine.lookup`), sem transmitir nada de novo e sem
+    /// mexer no livro. "A rede nao conhece" nunca sai de um provedor so (a regra da auditoria 2, M4: um no que mente ou
+    /// esta atrasado faria o dono pagar duas vezes, numa rede sem numero de sequencia):
+    /// - com o envio no livro (o processo que transmitiu segue vivo), a conferencia do `status` decide, e "ainda nao viu"
+    ///   conta como sem resposta: vencido o prazo, o caminho de duas fontes diz "venceu" com prova;
+    /// - sem o livro (o app reabriu, e o prazo nao esta mais na memoria), so o historico de duas fontes: as duas sem a
+    ///   transacao, a rede nao conhece; uma com ela, o que as duas fecham.
+    static func lookup(_ id: String, network: any SolanaEngineNetwork, book: SolanaTransferBook) async -> SendLookup {
+        if let transfer = await book.transfer(id) {
+            guard let state = try? await confirmation(id, deadline: transfer.lastValidBlockHeight, known: true, network: network)
+            else { return .noAnswer }
+            return lookup(state)
+        }
+        guard let histories = try? await network.historyStatuses(id), histories.count >= 2 else { return .noAnswer }
+        if histories.allSatisfy({ $0 == nil }) { return .notFound }
+        return lookup(agreed(histories))
+    }
+
+    private static func lookup(_ state: SolanaConfirmation) -> SendLookup {
+        switch state {
+        case .pending: return .noAnswer
+        case .processed: return .seen
+        case .confirmed, .finalized: return .confirmed
+        case .failed: return .failed(reason: kitText("A transação entrou num bloco e falhou. A taxa da rede foi cobrada e o valor não saiu."))
+        case .expired: return .failed(reason: kitText("A transação venceu antes de entrar num bloco. Nada foi debitado. Pode enviar de novo."))
+        }
+    }
+
     /// Blocos alem do `lastValidBlockHeight` antes de dizer que venceu: a altura
     /// finalizada anda atras da confirmada, e um no atrasado ainda poderia aceitar a
     /// transacao perto do limite. 150 blocos sao cerca de um minuto.

@@ -129,6 +129,30 @@ struct AptosSendEngine: SendEngine {
         }
     }
 
+    /// O que o `lookup` precisa depois de o app reabrir: o numero de sequencia da transacao na conta.
+    func unsureContext(for plan: SigningPlan) -> String? {
+        guard plan.transactions.count == 1, let transfer = plan.transactions.first as? AptosTransfer else { return nil }
+        return "\(transfer.raw.sequenceNumber)"
+    }
+
+    /// Para o registro dos envios sem resposta. Os dois sorteados sem conhecer nao bastam: os nos podados dizem isso tambem
+    /// da transacao antiga que entrou (conferido ao vivo em 18/11/2026). Um dono que conheca, entre todos (a Sentio guarda
+    /// tudo, `AptosReader.presence`): ela entrou. Senao decide o numero de sequencia guardado no registro (`unsureContext`),
+    /// em dois provedores na mesma versao: ja passado, ela (ou outra com o mesmo numero) entrou, e a linha manda conferir,
+    /// sem nunca dizer que nao saiu; ainda nao, ela nao entrou, e o proximo envio sai com o mesmo numero, entao so um dos
+    /// dois pode entrar. Sem o numero, decide o que todos os donos disseram.
+    func lookup(_ send: UnsureSend, chain: Chain) async -> SendLookup {
+        guard chain.id == Chain.aptos.id else { return .noAnswer }
+        let expiresAt = await deadlines.expiresAt(send.hash)
+        guard let status = try? await reader.status(of: send.hash, expiresAt: expiresAt) else { return .noAnswer }
+        guard case .notFound = status else { return SendLookup(status) { AptosEngineText.failure($0) } }
+        let presence = try? await reader.presence(of: send.hash)
+        if presence == .known { return .seen }
+        guard let sequence = send.context.flatMap({ UInt64($0) }), case .success(let owner) = AptosAddress.parse(send.address),
+              let current = try? await reader.sequenceNumber(of: owner) else { return SendLookup(presence) }
+        return current > sequence ? .seenUnclear(note: AptosEngineText.nonceUsed) : .notFound
+    }
+
     // MARK: O pedido conferido
 
     /// O pedido conferido antes de qualquer leitura: rede, ativo, conta e destino.

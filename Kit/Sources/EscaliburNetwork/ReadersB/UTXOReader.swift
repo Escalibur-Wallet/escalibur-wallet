@@ -776,6 +776,30 @@ public struct UTXOReader: Sendable {
         }
     }
 
+    /// Para o registro dos envios sem resposta: quantos donos diferentes responderam (ate dois, na mesma ordem do `status`) e
+    /// quantos conhecem a transacao, na fila ou num bloco. O `status` deixa um so decidir quando os outros falham; "a rede
+    /// nao conhece" precisa dos dois. "Conhece" pela pergunta propria de cada provedor (`knows`): o `status` do Esplora diz
+    /// "pendente" tambem de um id que ele nunca viu.
+    public func knowledge(txid: String) async throws -> (answered: Int, knowing: Int) {
+        guard let id = UTXOTxID(hex: txid.lowercased()) else { throw ChainReaderError.signedTransactionInconsistent }
+        let tip = try? await tipHeight()
+        var answered = 0
+        var knowing = 0
+        var owners = Set<String>()
+        for provider in Self.completeFirst(await pool.available()) where answered < 2 && !owners.contains(provider.operatorName) {
+            do {
+                let known = try await client(provider).knows(id, tip: tip)
+                owners.insert(provider.operatorName)
+                answered += 1
+                if known { knowing += 1 }
+                await pool.reportSuccess(provider)
+            } catch {
+                await report(provider, error)
+            }
+        }
+        return (answered, knowing)
+    }
+
     // MARK: Historico
 
     /// As ultimas transacoes da conta, com o efeito liquido na carteira.

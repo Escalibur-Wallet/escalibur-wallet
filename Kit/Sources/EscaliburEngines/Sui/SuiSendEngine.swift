@@ -113,6 +113,16 @@ struct SuiSendEngine: SendEngine {
         }
     }
 
+    /// Para o registro dos envios sem resposta. Os dois sorteados sem conhecer nao bastam: os nos podados dizem isso tambem
+    /// da transacao antiga que entrou, e decidem todos os donos (`SuiReader.presence`).
+    func lookup(_ send: UnsureSend, chain: Chain) async -> SendLookup {
+        guard chain.id == Chain.sui.id else { return .noAnswer }
+        let epoch = await deadlines.validUntil(send.hash)
+        guard let status = try? await reader.status(of: send.hash, validUntilEpoch: epoch) else { return .noAnswer }
+        guard case .notFound = status else { return SendLookup(status) { SuiEngineText.failure($0) } }
+        return SendLookup(try? await reader.presence(of: send.hash))
+    }
+
     // MARK: O pedido conferido
 
     /// O pedido conferido antes de qualquer leitura: rede, ativo, conta e destino.

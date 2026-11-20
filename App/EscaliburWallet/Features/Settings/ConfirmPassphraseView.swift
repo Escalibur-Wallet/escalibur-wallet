@@ -34,11 +34,16 @@ struct ConfirmPassphraseView: View {
             VStack(alignment: .leading, spacing: 0) {
                 // O selo das telas onde se digita um segredo (pedido do dono, 18/10/2026).
                 CipherEmblem().frame(maxWidth: .infinity).padding(.bottom, Space.md)
-                Text("Confira a passphrase").typeStyle(.title).foregroundStyle(Palette.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("Digite a passphrase de \(wallet.name) a partir de onde você anotou. Diferença de maiúscula, acento ou espaço já abre outra carteira, e o que chegar nesta se perde.")
-                    .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm)
-                    .fixedSize(horizontal: false, vertical: true)
+                // O titulo e o subtitulo no centro, embaixo do selo, como as outras telas de digitar segredo (pedido do dono, 17/11/2026).
+                Group {
+                    Text("Confira a passphrase").typeStyle(.title).foregroundStyle(Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Digite a passphrase de \(wallet.name) a partir de onde você anotou. Diferença de maiúscula, acento ou espaço já abre outra carteira, e o que chegar nesta se perde.")
+                        .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
                 PasswordBox(buffer: typed, length: $typedLength, placeholder: String(localized: "Passphrase"), focusOnAppear: true, reveal: $reveal,
                             onSubmit: { Task { await check() } }, glyphs: glyphs, wipesOnLeave: true)
                 .padding(.top, Space.lg)

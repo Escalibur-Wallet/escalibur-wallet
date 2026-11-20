@@ -889,6 +889,22 @@ struct UTXOProviderClient: Sendable {
         }
     }
 
+    /// Se o provedor conhece a transacao, na fila ou num bloco: o registro dos envios sem resposta (`UTXOReader.knowledge`).
+    /// O `/status` do Esplora responde `{"confirmed":false}` tambem para um id que ele nunca viu (conferido ao vivo em
+    /// 18/11/2026, na Blockstream e na mempool.space), e o envio que nunca saiu contava como visto: a linha ficava pendente
+    /// por 14 dias, como se o dinheiro tivesse saido. A transacao inteira (`tx/<id>`) da 404 nesse caso. Nos outros, o
+    /// `status` ja separa "nao encontrada".
+    func knows(_ txid: UTXOTxID, tip: UInt32?) async throws -> Bool {
+        guard case .esplora = backend else { return try await status(txid, tip: tip) != .notFound }
+        do {
+            let tx = try await get(EsploraTransaction.self, "tx/\(txid.hex)")
+            guard tx.txid == txid.hex else { throw ChainReaderError.mismatchedResponse }
+            return true
+        } catch HTTPClient.Failure.status(404) {
+            return false
+        }
+    }
+
     // MARK: Historico
 
     func history(_ address: String) async throws -> UTXOHistoryPage {

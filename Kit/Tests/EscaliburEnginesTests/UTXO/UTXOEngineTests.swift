@@ -88,6 +88,22 @@ struct UTXOEngineTests {
         return fake
     }
 
+    @Test("Envio sem resposta: a nunca vista que dois nao conhecem sai; a ja vista que saiu da fila dos dois fica, sem prazo no Bitcoin")
+    func unsureSendSeenThenEvicted() async throws {
+        let txid = String(repeating: "ab", count: 32)
+        let fake = FakeHTTP()
+        for host in ["esplora-a.test", "esplora-b.test", "esplora-c.test"] {
+            // O que o Esplora responde de verdade (18/11/2026) para um id que ele nao tem.
+            fake.on("\(host)/api/tx/\(txid)/status", data: Data(#"{"confirmed":false}"#.utf8))
+            fake.on("\(host)/api/tx/\(txid)", status: 404)
+        }
+        var record = UnsureSend(wallet: UUID(), chainID: Chain.bitcoin.id, address: TestAccounts.bitcoin.address, hash: txid,
+                                sentAt: Date(), asset: .native(.bitcoin), amount: BigUInt(1_000), recipient: nil, context: nil)
+        #expect(await (try Self.engine(fake)).lookup(record, chain: .bitcoin) == .notFound)
+        record.seen = true
+        #expect(await (try Self.engine(fake)).lookup(record, chain: .bitcoin) == .noAnswer)
+    }
+
     static func engine(_ fake: FakeHTTP) throws -> UTXOSendEngine {
         UTXOSendEngine(chain: .bitcoin, reader: try UTXOReader(chain: .bitcoin, transport: fake, providers: providers))
     }

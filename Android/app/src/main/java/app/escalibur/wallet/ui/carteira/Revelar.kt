@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.escalibur.wallet.nucleo.Api
 import app.escalibur.wallet.nucleo.FalhaDoNucleo
@@ -254,9 +255,10 @@ private fun ConferirPassphrase(carteira: Carteira, comRascunho: Boolean, aoTermi
 
     Column(Modifier.fillMaxSize().padding(horizontal = Espaco.margem).padding(top = Espaco.md, bottom = Espaco.xs)) {
         Box(Modifier.fillMaxWidth().padding(bottom = Espaco.md), contentAlignment = Alignment.Center) { EmblemaCifrado() }
-        Text(t("Confira a passphrase"), style = estilo(Tipo.titulo), color = Paleta.tinta)
+        // O titulo e o subtitulo no centro, embaixo do selo, como as outras telas de digitar segredo (pedido do dono, 17/11/2026).
+        Text(t("Confira a passphrase"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         Text(t("Digite a passphrase de %@ a partir de onde você anotou. Diferença de maiúscula, acento ou espaço já abre outra carteira, e o que chegar nesta se perde.", carteira.nome),
-             style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
+             style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.sm))
         Box(Modifier.padding(top = Espaco.lg)) { CampoSecreto(campo, t("Passphrase"), revelar) { revelar = it } }
         Text(t("Segure o dedo no campo para ver o que digitou."), style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.xs))
         mensagem?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }

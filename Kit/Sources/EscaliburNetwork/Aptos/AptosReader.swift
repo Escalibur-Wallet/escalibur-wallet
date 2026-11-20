@@ -76,6 +76,18 @@ public actor AptosReader {
         }.value
     }
 
+    /// O numero de sequencia da conta (o da proxima transacao dela), em dois provedores na mesma versao do ledger. Para o
+    /// registro dos envios sem resposta: maior que o da transacao quer dizer que ela, ou outra com o mesmo numero, entrou.
+    public func sequenceNumber(of owner: AptosAddress) async throws -> UInt64 {
+        try await agreedTwice {
+            try await self.pinned(field: "get_sequence_number") { provider, version in
+                try Self.parseU64View(
+                    try await self.view(provider, version, "0x1::account::get_sequence_number", [], [owner.hex]), "get_sequence_number"
+                )
+            }.value
+        }
+    }
+
     /// A chave de autenticacao da conta ja nao e a da frase (a rotacao): outra chave assina por ela, e o que entrar e
     /// dela. Dois provedores na mesma versao do ledger (auditoria 8, 14/11/2026). O plano ja recusa assinar
     /// (`authenticationKeyRotated`); isto e o aviso antes de receber.
@@ -252,6 +264,25 @@ public actor AptosReader {
             return .notFound
         default:
             return .pending
+        }
+    }
+
+    /// Para o registro dos envios sem resposta, quando os dois sorteados do `status` nao conhecem a transacao: todos os donos
+    /// (`Quorum.presence`). A PublicNode e a Aptos Labs podam (uns 6 dias e meio e uns 10, conferido ao vivo em 18/11/2026)
+    /// e dao 404 tambem para a transacao antiga que entrou; a Sentio guarda tudo. Com os dois podados sorteados, a transacao
+    /// confirmada havia 13 dias voltava como "a rede nao conhece", e o registro saia.
+    public func presence(of hash: String) async throws -> TransactionPresence {
+        guard hash.hasPrefix("0x"), let bytes = Hex.decode(hash), bytes.count == 32 else { throw ReaderError.invalidInput("hash") }
+        let id = Hex.encode(bytes, prefix: true)
+        let transport = self.transport
+        return await Quorum.presence(await pool.available(), pool: pool) { provider in
+            try await self.ensureMainnet(provider)
+            do {
+                let data = try await transport.send(.get(provider.baseURL.adding(path: "transactions/by_hash/" + id)))
+                return try Self.parseLookup(StrictJSON.parse(data), hash: id) != .notFound
+            } catch HTTPClient.Failure.status(404) {
+                return false
+            }
         }
     }
 

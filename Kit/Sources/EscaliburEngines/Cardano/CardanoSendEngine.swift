@@ -109,6 +109,14 @@ struct CardanoSendEngine: SendEngine {
         }
     }
 
+    /// Para o registro dos envios sem resposta. Pendente aqui e uma das duas fontes ja vendo a transacao num bloco.
+    func lookup(_ send: UnsureSend, chain: Chain) async -> SendLookup {
+        guard chain.id == Chain.cardano.id else { return .noAnswer }
+        let ttl = await deadlines.validUntil(send.hash)
+        guard let status = try? await reader.status(of: send.hash, validUntilSlot: ttl) else { return .noAnswer }
+        return SendLookup(status) { CardanoEngineText.failure($0) }
+    }
+
     // MARK: O pedido conferido
 
     /// A conta e o destino conferidos antes de qualquer leitura. A chave contra o endereco

@@ -5,12 +5,14 @@ import java.io.File
 import androidx.core.content.IntentCompat
 import androidx.core.content.FileProvider
 import android.content.Intent
+import android.content.res.AssetFileDescriptor
 import android.content.Context
 import android.app.PendingIntent
 import android.content.ClipData
 import app.escalibur.wallet.ui.comp.EmblemaCifrado
 import app.escalibur.wallet.ui.comp.Girando
 import android.net.Uri
+import android.os.CancellationSignal
 import android.provider.OpenableColumns
 import android.util.Base64
 import androidx.activity.compose.BackHandler
@@ -112,6 +114,7 @@ import app.escalibur.wallet.ui.tema.Paleta
 import app.escalibur.wallet.ui.tema.Raio
 import app.escalibur.wallet.ui.tema.Tipo
 import app.escalibur.wallet.ui.tema.estilo
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -119,11 +122,139 @@ import app.escalibur.wallet.nucleo.PalavrasNaTela
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.thread
 
 /** O tamanho fixo de todo envelope `.esclbr` v1. */
 private const val TAMANHO_DO_ENVELOPE = 16_504
+
+/**
+ * A leitura do arquivo do envelope, com prazo (pentest de 17/11/2026, A-3). O `content://` pode vir de outro app, porque a
+ * `MainActivity` e exportada, e o provedor dele pode nunca responder: sem prazo, a tela ficava parada, sem erro, e a
+ * leitura prendia para sempre uma thread da fila de fundo, a mesma das chamadas ao nucleo.
+ *
+ * A leitura roda numa thread propria, fora dessa fila. Vencido o prazo, ou com a tela fechada no meio, o provedor recebe o
+ * cancelamento e o descritor e fechado, o que solta a leitura presa nele; isso tambem numa thread propria, porque fechar o
+ * descritor de um provedor hostil pode nao voltar, e quem chama esta na thread da interface. A chamada presa dentro de um
+ * provedor que ignora o cancelamento (abrir o arquivo, ou a consulta do nome) nao tem como ser solta daqui, e a thread dela
+ * fica para tras ate ele responder ou morrer: por isso o teto de threads em andamento (a da leitura e a que fecha), que
+ * recusa a proxima em vez de empilhar. O que chega de outro app e o que o dono escolhe no seletor contam separados: um
+ * provedor de fora que nunca responde ocupa so as vagas de fora, e o seletor do app continua abrindo o arquivo do dono.
+ * Pelo seletor, o prazo vencido com o arquivo ainda chegando nao cancela nada: so desiste de esperar (ver `ler`).
+ */
+private object LeitorDeEnvelope {
+    /** O arquivo tem 16 KiB, mas o provedor de nuvem baixa antes de entregar: no dia de recuperar a carteira, numa rede ruim,
+     * um prazo curto recusaria o envelope do proprio dono. O botao gira enquanto isso, e a tela pode ser fechada. */
+    private const val PRAZO_DOS_BYTES = 60_000L
+    /** O nome e so o que a tela mostra: sem resposta, vale o nome padrao. */
+    private const val PRAZO_DO_NOME = 3_000L
+    private const val DE_FORA_DE_UMA_VEZ = 2
+    private const val DO_SELETOR_DE_UMA_VEZ = 4
+    private val deFora = AtomicInteger(0)
+    private val doSeletor = AtomicInteger(0)
+
+    /** `dados` nulo: o arquivo foi lido e nao tem o tamanho de um envelope (ou o provedor falhou). */
+    class Leitura(val dados: ByteArray?, val nome: String?)
+
+    private class Lidos(val dados: ByteArray?)
+
+    /** Nulo: o prazo venceu, ou ja ha leituras demais sem resposta. `deOutroApp`: o arquivo chegou por um intent, e nao pelo seletor. */
+    suspend fun ler(contexto: Context, uri: Uri, deOutroApp: Boolean): Leitura? {
+        val emAndamento = if (deOutroApp) deFora else doSeletor
+        if (emAndamento.incrementAndGet() > (if (deOutroApp) DE_FORA_DE_UMA_VEZ else DO_SELETOR_DE_UMA_VEZ)) {
+            emAndamento.decrementAndGet()
+            return null
+        }
+        val resolvedor = contexto.applicationContext.contentResolver
+        val bytes = CompletableDeferred<ByteArray?>()
+        val nome = CompletableDeferred<String?>()
+        // O descritor aberto. Um fechador so: quem o tirar daqui fecha (a thread da leitura ao terminar, ou o `largar` no prazo),
+        // porque dois fechando o mesmo numero ao mesmo tempo podem fechar o descritor de outra parte do app.
+        val aberto = AtomicReference<AssetFileDescriptor?>(null)
+        val desistiu = AtomicBoolean(false)
+        val sinal = CancellationSignal()
+        val lancada = runCatching {
+            thread(isDaemon = true, name = "envelope-leitura") {
+                try {
+                    val lido = runCatching {
+                        val descritor = resolvedor.openAssetFileDescriptor(uri, "r", sinal) ?: return@runCatching null
+                        aberto.set(descritor)
+                        try {
+                            // O prazo venceu enquanto o provedor abria o arquivo: nada a ler.
+                            if (desistiu.get()) return@runCatching null
+                            val entrada = descritor.createInputStream()
+                            val buffer = ByteArray(TAMANHO_DO_ENVELOPE + 1)
+                            var lidos = 0
+                            while (lidos < buffer.size) {
+                                val n = entrada.read(buffer, lidos, buffer.size - lidos)
+                                if (n < 0) break
+                                lidos += n
+                            }
+                            if (lidos == TAMANHO_DO_ENVELOPE) buffer.copyOf(lidos) else null
+                        } finally {
+                            aberto.getAndSet(null)?.let { runCatching { it.close() } }
+                        }
+                    }.getOrNull()
+                    bytes.complete(lido)
+                    // O nome que o dono ve no seletor; o caminho da uri e so um numero do provedor.
+                    nome.complete(if (lido == null || desistiu.get()) null else runCatching {
+                        resolvedor.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null, sinal)?.use { c ->
+                            if (c.moveToFirst()) c.getString(0) else null
+                        }
+                    }.getOrNull())
+                } finally {
+                    // Ninguem espera para sempre por uma thread que saiu por um erro que o `runCatching` nao pega.
+                    bytes.complete(null)
+                    nome.complete(null)
+                    emAndamento.decrementAndGet()
+                }
+            }
+        }
+        if (lancada.isFailure) {
+            emAndamento.decrementAndGet()
+            return null
+        }
+        try {
+            val lidos = withTimeoutOrNull(PRAZO_DOS_BYTES) { Lidos(bytes.await()) } ?: return null
+            val dados = lidos.dados ?: return Leitura(null, null)
+            return Leitura(dados, withTimeoutOrNull(PRAZO_DO_NOME) { nome.await() })
+        } finally {
+            // O `nome` so se completa no fim do trabalho da thread: incompleto, ela ainda trabalha (o prazo venceu, ou a tela saiu
+            // com a leitura ou a consulta do nome no meio).
+            if (!nome.isCompleted) {
+                desistiu.set(true)
+                // Pelo seletor, com o arquivo ainda chegando, so desiste: o provedor de nuvem baixa antes de entregar e respeita o
+                // cancelamento, e cancelar no prazo faria toda tentativa numa rede ruim recomecar do zero, no dia de recuperar a
+                // carteira. A thread termina quando ele responder, e a proxima escolha abre na hora; o teto do seletor segura o resto.
+                if (deOutroApp || bytes.isCompleted) largar(emAndamento, sinal, aberto.getAndSet(null))
+            }
+        }
+    }
+
+    /**
+     * Cancela e fecha fora da thread de quem chamou: o provedor que coopera para, e o descritor fechado solta a leitura presa nele.
+     * A thread daqui conta no mesmo teto: fechar o descritor de um provedor hostil pode nao voltar nunca.
+     */
+    private fun largar(emAndamento: AtomicInteger, sinal: CancellationSignal, descritor: AssetFileDescriptor?) {
+        emAndamento.incrementAndGet()
+        val lancou = runCatching {
+            thread(isDaemon = true, name = "envelope-fecha") {
+                try {
+                    runCatching { sinal.cancel() }
+                    runCatching { descritor?.close() }
+                } finally {
+                    emAndamento.decrementAndGet()
+                }
+            }
+        }.isSuccess
+        if (!lancou) emAndamento.decrementAndGet()
+    }
+}
 
 /** "cerca de 3 segundos": o tempo do Argon2 neste celular. */
 private fun cercaDe(segundos: Double): String {
@@ -790,6 +921,11 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
     var aberto by remember { mutableStateOf<JSONObject?>(null) }
     var previa by remember { mutableStateOf<JSONObject?>(null) }
     var trabalhando by remember { mutableStateOf(false) }
+    // O arquivo sendo lido (ate o prazo do `LeitorDeEnvelope`): o botao gira e nao aceita outro toque.
+    var lendo by remember { mutableStateOf(false) }
+    // O arquivo da tela chegou de outro app, e nao do seletor: a faixa vale por arquivo. O que o dono escolhe depois, no
+    // seletor, nao leva a faixa nem o "Veio de" do app anterior (revisao dos 3 agentes, 17/11/2026).
+    var veioDeFora by remember { mutableStateOf(false) }
     var palavras by remember { mutableStateOf(12) }
     // Super Security em "Bloquear as carteiras": importar recusa antes da senha; so ver as palavras continua (como no iOS).
     // Ate o nucleo responder, nem aberto nem fechado: a faixa so com sim, e os botoes so com nao (falha fechada, rodada 19).
@@ -823,38 +959,34 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
 
     fun mensagemDeMemoria(mib: Int) = t("Este envelope exige %lld MiB por tentativa, e este celular não consegue reservar tanto agora. Feche outros apps e tente de novo. A senha não chegou a ser testada.", mib)
 
-    fun receber(uri: Uri) {
+    fun receber(uri: Uri, deFora: Boolean) {
+        if (lendo) return
         erro = null
+        lendo = true
         escopo.launch {
-            val dados = withContext(Dispatchers.IO) {
-                runCatching {
-                    contexto.contentResolver.openInputStream(uri)?.use { entrada ->
-                        val buffer = ByteArray(TAMANHO_DO_ENVELOPE + 1)
-                        var lidos = 0
-                        while (lidos < buffer.size) {
-                            val n = entrada.read(buffer, lidos, buffer.size - lidos)
-                            if (n < 0) break
-                            lidos += n
-                        }
-                        if (lidos == TAMANHO_DO_ENVELOPE) buffer.copyOf(lidos) else null
-                    }
-                }.getOrNull()
+            // Com prazo: o arquivo pode ser de outro app, e o provedor dele pode nunca responder (`LeitorDeEnvelope`).
+            val leitura = try {
+                LeitorDeEnvelope.ler(contexto, uri, deFora)
+            } finally {
+                lendo = false
             }
+            if (leitura == null) {
+                // De outro app, tentar de novo la pode nao adiantar (o provedor dele nao respondeu, ou as vagas de fora estao presas);
+                // o botao de escolher o arquivo esta nesta tela e conta em outra fila.
+                erro = if (deFora) t("Não foi possível abrir este envelope agora. Tente de novo ou toque em Escolher arquivo.")
+                       else t("Não foi possível abrir este envelope agora. Tente de novo.")
+                return@launch
+            }
+            val dados = leitura.dados
             if (dados == null) {
                 erro = t("Este arquivo não é um envelope Escalibur. Envelopes terminam em .esclbr e têm 16.504 bytes.")
                 return@launch
             }
-            // O nome que o dono ve no seletor; o caminho da uri e so um numero do provedor.
-            nomeDoArquivo = withContext(Dispatchers.IO) {
-                runCatching {
-                    contexto.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-                        if (c.moveToFirst()) c.getString(0) else null
-                    }
-                }.getOrNull()
-            } ?: "envelope.esclbr"
+            nomeDoArquivo = leitura.nome ?: "envelope.esclbr"
             try {
                 segundos = Api.objeto("envelope.inspecionar", JSONObject().put("dados", Base64.encodeToString(dados, Base64.NO_WRAP))).optDouble("segundos", 3.0)
                 pesadoConfirmado = false
+                veioDeFora = deFora
                 passo = "senha"
             } catch (falha: FalhaDoNucleo) {
                 erro = when (falha.codigo) {
@@ -865,9 +997,9 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
             }
         }
     }
-    val escolher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? -> uri?.let(::receber) }
+    val escolher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? -> uri?.let { receber(it, deFora = false) } }
     // O arquivo aberto em outro app (o `initialURL` do iOS): lido na hora, direto para a senha.
-    LaunchedEffect(inicial) { inicial?.let(::receber) }
+    LaunchedEffect(inicial) { inicial?.let { receber(it, deFora = true) } }
 
     fun abrir() {
         if (senha.text.isEmpty() || passo == "abrindo") return
@@ -1017,28 +1149,31 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
                 Rodape {
                     // Com "Bloquear as carteiras" ligado, o envelope abre so para ver as palavras: o aviso vem antes da senha.
                     if (bloqueado == true) Faixa(TipoDeFaixa.cautela, t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova."), Modifier.padding(bottom = Espaco.sm))
-                    BotaoPrimario(t("Escolher arquivo")) { Ciclo.abrindoSeletor(); escolher.launch(arrayOf("*/*")) }
+                    BotaoPrimario(t("Escolher arquivo"), carregando = lendo) { Ciclo.abrindoSeletor(); escolher.launch(arrayOf("*/*")) }
                 }
             }
             "senha" -> {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md),
                        verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
                     Box(Modifier.fillMaxWidth().padding(bottom = Espaco.md), contentAlignment = Alignment.Center) { EmblemaCifrado() }
-                    Text(nomeDoArquivo, style = estilo(Tipo.monoPequeno), color = Paleta.tintaApagada, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(t("Senha do envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta)
+                    // O nome, o titulo e o subtitulo no centro, embaixo do selo, como os outros passos do envelope (pedido do dono, 17/11/2026).
+                    Text(nomeDoArquivo, style = estilo(Tipo.monoPequeno), color = Paleta.tintaApagada, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Text(t("Senha do envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     Text(t("A senha escolhida quando o envelope foi lacrado. No app Escalibur, é a senha do cofre."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave,
-                         modifier = Modifier.padding(bottom = Espaco.md))
-                    CampoSecreto(senha, t("Senha do envelope"), revelar) { revelar = it }
-                    Text(t("Segure o dedo no campo para ver o que digitou."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
-                    erro?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.baixa, modifier = Modifier.padding(top = Espaco.xs)) }
+                         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = Espaco.md))
                     // O envelope veio de outro app (auditoria Android de 31/10/2026, AA-10): o golpe do "envelope pronto"
-                    // e abrir a Escalibur ja nesta tela com um envelope do golpista, e convencer o dono a importa-lo.
-                    if (inicial != null) {
+                    // e abrir a Escalibur ja nesta tela com um envelope do golpista, e convencer o dono a importa-lo. Antes do
+                    // campo: embaixo dele, o teclado cobria a faixa na hora de digitar a senha (revisao dos 3 agentes, 17/11/2026).
+                    if (veioDeFora) {
                         Faixa(TipoDeFaixa.cautela, t("Este envelope veio de outro app"),
                               mensagem = t("Veio de %@. Só abra e importe se foi você que lacrou este envelope: um envelope feito por outra pessoa abre uma carteira que ela controla.",
                                            origem ?: t("outro app")),
-                              modifier = Modifier.padding(top = Espaco.md))
+                              modifier = Modifier.padding(bottom = Espaco.md))
                     }
+                    CampoSecreto(senha, t("Senha do envelope"), revelar) { revelar = it }
+                    Text(t("Segure o dedo no campo para ver o que digitou."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+                    erro?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.baixa, modifier = Modifier.padding(top = Espaco.xs)) }
                 }
                 Rodape { BotaoPrimario(t("Abrir envelope"), ligado = senha.text.isNotEmpty()) { abrir() } }
             }
@@ -1047,9 +1182,9 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
             "abrindo" -> {
                 Column(Modifier.weight(1f).padding(horizontal = Espaco.margem)) {
                     CartaoCifrado(ModoDoCartao.abrindo, Modifier.padding(top = Espaco.sm, bottom = Espaco.xl), nomeDoArquivo)
-                    Text(t("Abrindo o envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta)
+                    Text(t("Abrindo o envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     Text(t("Leva %@, e cada tentativa custa o mesmo para quem tentar adivinhar.", cercaDe(segundos)), style = estilo(Tipo.corpo),
-                         color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
+                         color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.sm))
                 }
             }
             "aberto" -> {
@@ -1057,10 +1192,11 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
                 palavras = dados.optInt("palavras", 12)
                 Column(Modifier.weight(1f).padding(horizontal = Espaco.margem)) {
                     CartaoCifrado(ModoDoCartao.aberto, Modifier.padding(top = Espaco.sm, bottom = Espaco.xl), nomeDoArquivo, palavras)
-                    Text(dados.optString("rotulo").ifEmpty { t("Envelope aberto") }, style = estilo(Tipo.titulo), color = Paleta.tinta)
+                    Text(dados.optString("rotulo").ifEmpty { t("Envelope aberto") }, style = estilo(Tipo.titulo), color = Paleta.tinta,
+                         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     Text(t("%lld palavras, lista em %@", palavras, nomeDoIdioma(dados.optString("idioma"))) +
                              (if (dados.optBoolean("comPassphrase")) t(" · com passphrase") else ""),
-                         style = estilo(Tipo.corpo), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xxs))
+                         style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.xxs))
                     erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
                     if (bloqueado == true) Faixa(TipoDeFaixa.cautela, t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova."), Modifier.padding(top = Espaco.md))
                 }

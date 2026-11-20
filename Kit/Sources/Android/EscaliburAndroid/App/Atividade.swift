@@ -143,6 +143,16 @@ final class Atividade: @unchecked Sendable {
         if mudou { emitir() }
     }
 
+    /// O envio sem resposta que a rede nunca mostrou, vencido o prazo: a linha pendente sai.
+    func retirarEnviado(hash: String, carteira: UUID) {
+        let mudou = trava.withLock { () -> Bool in
+            guard let antes = enviadosAqui[carteira]?.count else { return false }
+            enviadosAqui[carteira]?.removeAll { $0.hash.lowercased() == hash.lowercased() }
+            return enviadosAqui[carteira]?.count != antes
+        }
+        if mudou { emitir() }
+    }
+
     func esquecer(carteira: UUID? = nil) {
         trava.withLock {
             // Os envios feitos aqui saem junto: travar ou apagar nao deixa endereco nenhum na memoria. Ao remover uma carteira,
@@ -250,6 +260,10 @@ final class Atividade: @unchecked Sendable {
             leiturasTomadas[wallet.id] = enviadosAqui[wallet.id]?.isEmpty == false ? tomadas : nil
             todos += enviadosAqui[wallet.id] ?? []
             }
+            // Os envios sem resposta gravados (`EnviosSemResposta`): a linha segue em "Pendentes" depois de travar ou de o app
+            // fechar, ate a rede dizer se o envio saiu ou o prazo vencer. A que a memoria ou a leitura da rede ja mostra nao repete.
+            let mostrados = Set(todos.map { $0.hash.lowercased() })
+            todos += EnviosSemResposta.linhas(Sessao.shared.metadata, carteira: wallet.id).filter { !mostrados.contains($0.hash.lowercased()) }
             let itens = todos.filter { !$0.suspicious }.sorted { $0.date > $1.date }.compactMap { item(wallet, $0) }
             // Redes sem historico publico: so as em que a carteira tem saldo.
             let sem = indisponiveis.filter { saldos.saldo($0.chain, carteira: wallet.id)?.holdings.contains { !$0.amount.isZero } == true }
@@ -311,6 +325,12 @@ final class Atividade: @unchecked Sendable {
 
     func atualizar(forcar: Bool) async {
         _ = mostrar()
+        // Os envios sem resposta desta carteira perguntam a rede a cada atualizacao: o que confirmou ou falhou sai de
+        // "Pendentes" e libera a conta sem o dono ter de abrir outro envio.
+        if let carteira = Sessao.shared.metadata.selectedWallet?.id, Sessao.shared.metadata.unsureSends?.contains(where: { $0.wallet == carteira }) == true {
+            await EnviosSemResposta.podar(carteira: carteira)
+            emitir()
+        }
         let metadata = Sessao.shared.metadata
         guard let wallet = metadata.selectedWallet else { return }
         let (minha, emCurso) = trava.withLock { () -> (Int, Bool) in

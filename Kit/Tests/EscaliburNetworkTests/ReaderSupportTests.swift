@@ -301,6 +301,37 @@ struct ReaderSupportTests {
         #expect(await Quorum.everyoneSays(true, two, pool: ProviderPool(two)) { _ in true })
     }
 
+    @Test("Envio sem resposta: presence conhece com um dono so; 'nao conhecida' so com todos respondendo, e pelo menos tres")
+    func presence() async {
+        let three = testProviders("a", "b", "c")
+        // O no de arquivo e o ultimo e os dois primeiros podaram: conhecida.
+        #expect(await Quorum.presence(three, pool: ProviderPool(three)) { $0.name == "c" } == .known)
+        #expect(await Quorum.presence(three, pool: ProviderPool(three)) { _ in false } == .unknown)
+        // Um fora do ar: os dois que nao conhecem nao bastam, porque o de fora pode ser o que guarda tudo.
+        #expect(await Quorum.presence(three, pool: ProviderPool(three)) { provider -> Bool in
+            if provider.name == "c" { throw HTTPClient.Failure.timeout }
+            return false
+        } == .unclear)
+        // O que conhece responde mesmo com outro fora do ar.
+        #expect(await Quorum.presence(three, pool: ProviderPool(three)) { provider -> Bool in
+            if provider.name == "a" { throw HTTPClient.Failure.timeout }
+            return provider.name == "b"
+        } == .known)
+        // Com quatro donos, tres que nao conhecem nao bastam: o de fora do ar pode ser o que guarda tudo.
+        let four = testProviders("a", "b", "c", "d")
+        #expect(await Quorum.presence(four, pool: ProviderPool(four)) { _ in false } == .unknown)
+        #expect(await Quorum.presence(four, pool: ProviderPool(four)) { provider -> Bool in
+            if provider.name == "d" { throw HTTPClient.Failure.timeout }
+            return false
+        } == .unclear)
+        let two = testProviders("a", "b")
+        #expect(await Quorum.presence(two, pool: ProviderPool(two)) { _ in false } == .unknown)
+        #expect(await Quorum.presence(two, pool: ProviderPool(two)) { provider -> Bool in
+            if provider.name == "b" { throw HTTPClient.Failure.timeout }
+            return false
+        } == .unclear)
+    }
+
     @Test("Rodada 1: o ledger fixado e o menor de dois perto um do outro (XRP Ledger ate 20 ledgers, Aptos ate 30 s)")
     func pinnedGap() throws {
         #expect(try XRPLReader.pin([120, 100]) == 100)

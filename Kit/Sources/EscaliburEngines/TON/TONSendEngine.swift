@@ -162,6 +162,14 @@ struct TONSendEngine: SendEngine {
         }
     }
 
+    /// Para o registro dos envios sem resposta.
+    func lookup(_ send: UnsureSend, chain: Chain) async -> SendLookup {
+        guard chain.id == Chain.ton.id else { return .noAnswer }
+        let deadline = await deadlines.deadline(for: send.hash)
+        guard let status = try? await reader.status(of: send.hash, expiresAt: deadline, now: now()) else { return .noAnswer }
+        return SendLookup(status) { TONEngineText.failure($0) }
+    }
+
     // MARK: O pedido conferido
 
     /// O pedido conferido antes de qualquer leitura: rede, carteira, ativo e destino.

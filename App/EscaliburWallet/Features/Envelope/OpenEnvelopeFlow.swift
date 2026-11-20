@@ -46,7 +46,15 @@ struct OpenEnvelopeFlow: View {
     @Environment(AppSession.self) private var session
     @Environment(AuthCoordinator.self) private var auth
     let initialURL: URL?
+    /// O `initialURL` chegou de fora (Arquivos, AirDrop, e-mail, outro app) pelo "Abrir em": a tela da senha diz isso, como no
+    /// Android (pentest de 17/11/2026, I-1). No golpe do "envelope pronto", o golpista manda o envelope dele com a senha, e
+    /// quem importa passa a receber numa carteira que ele controla. O iOS nao diz qual app mandou.
+    var fromAnotherApp = false
     let onClose: () -> Void
+
+    /// O arquivo desta tela e o que chegou de fora, e nao um que o dono escolheu depois no seletor do app: a faixa vale por
+    /// arquivo (revisao dos 3 agentes, 17/11/2026).
+    @State private var loadedFromOutside = false
 
     @State private var picking = false
     @State private var howItWorks = false
@@ -135,7 +143,7 @@ struct OpenEnvelopeFlow: View {
         .fileImporter(isPresented: $picking, allowedContentTypes: [.escaliburEnvelope]) { result in
             if case .success(let url) = result { load(url) }
         }
-        .onAppear { if let initialURL { load(initialURL) } }
+        .onAppear { if let initialURL { load(initialURL, fromOutside: fromAnotherApp) } }
     }
 
     /// O texto no centro, embaixo da ilustracao, e o "Como funciona" (pedido do dono,
@@ -184,12 +192,22 @@ struct OpenEnvelopeFlow: View {
         EnvelopeScrollingStep {
             // O selo das telas onde se digita um segredo, como na seed (pedido do dono, 18/10/2026).
             CipherEmblem().frame(maxWidth: .infinity).padding(.bottom, Space.md)
-            if let fileName {
-                Text(fileName).typeStyle(.monoSmall).foregroundStyle(Palette.inkMuted)
+            // O nome, o titulo e o subtitulo no centro, embaixo do selo, como os outros passos do envelope (pedido do dono, 17/11/2026).
+            Group {
+                if let fileName {
+                    Text(fileName).typeStyle(.monoSmall).foregroundStyle(Palette.inkMuted).lineLimit(1).truncationMode(.middle)
+                }
+                Text("Senha do envelope").typeStyle(.title).foregroundStyle(Palette.ink).padding(.top, Space.xs)
+                Text("A senha escolhida quando o envelope foi lacrado. No app Escalibur, é a senha do cofre.")
+                    .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm).fixedSize(horizontal: false, vertical: true)
             }
-            Text("Senha do envelope").typeStyle(.title).foregroundStyle(Palette.ink).padding(.top, Space.xs)
-            Text("A senha escolhida quando o envelope foi lacrado. No app Escalibur, é a senha do cofre.")
-                .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm).fixedSize(horizontal: false, vertical: true)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            if loadedFromOutside {
+                Banner(kind: .caution, title: String(localized: "Este envelope veio de outro app"),
+                       message: String(localized: "Só abra e importe se foi você que lacrou este envelope: um envelope feito por outra pessoa abre uma carteira que ela controla."))
+                    .padding(.top, Space.md)
+            }
             PasswordBox(buffer: password, length: $passwordLength, placeholder: String(localized: "Senha do envelope"),
                         reveal: $revealPassword, onSubmit: { Task { await open() } }, glyphs: passwordGlyphs)
                 .padding(.top, Space.lg)
@@ -214,9 +232,13 @@ struct OpenEnvelopeFlow: View {
             if let opened {
                 openedContent(opened)
             } else {
-                Text("Abrindo o envelope").typeStyle(.title).foregroundStyle(Palette.ink)
-                Text("Leva \(Fmt.aboutSeconds(Double(estimate))), e cada tentativa custa o mesmo para quem tentar adivinhar.")
-                    .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm).fixedSize(horizontal: false, vertical: true)
+                Group {
+                    Text("Abrindo o envelope").typeStyle(.title).foregroundStyle(Palette.ink)
+                    Text("Leva \(Fmt.aboutSeconds(Double(estimate))), e cada tentativa custa o mesmo para quem tentar adivinhar.")
+                        .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm).fixedSize(horizontal: false, vertical: true)
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
                 Spacer()
             }
         }
@@ -230,10 +252,14 @@ struct OpenEnvelopeFlow: View {
     @ViewBuilder
     private func openedContent(_ contents: Envelope.Contents) -> some View {
         let words = Self.wordCount(contents)
-        (contents.label.isEmpty ? Text("Envelope aberto") : Text(verbatim: contents.label))
-            .typeStyle(.title).foregroundStyle(Palette.ink)
-        Text(String(localized: "\(words) palavras, lista em \(Fmt.languageName(contents.language))") + (contents.passphrase.count > 0 ? String(localized: " · com passphrase") : ""))
-            .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.xxs)
+        Group {
+            (contents.label.isEmpty ? Text("Envelope aberto") : Text(verbatim: contents.label))
+                .typeStyle(.title).foregroundStyle(Palette.ink)
+            Text(String(localized: "\(words) palavras, lista em \(Fmt.languageName(contents.language))") + (contents.passphrase.count > 0 ? String(localized: " · com passphrase") : ""))
+                .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.xxs)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
         if let error { Banner(kind: .failure, title: error).padding(.top, Space.md) }
         if wordsBlocked { Banner(kind: .caution, title: WalletError.lockPolicyMessage).padding(.top, Space.md) }
         Spacer()
@@ -245,13 +271,14 @@ struct OpenEnvelopeFlow: View {
 
     // MARK: Acoes
 
-    private func load(_ url: URL) {
+    private func load(_ url: URL, fromOutside: Bool = false) {
         error = nil
         do {
             let bytes = try EnvelopeFile.read(url)
             _ = try Envelope.inspect(bytes)
             fileName = url.lastPathComponent
             data = bytes
+            loadedFromOutside = fromOutside
             Task.detached {
                 let seconds = (try? Envelope.inspect(bytes).estimatedSeconds) ?? 3
                 await MainActor.run { estimate = max(1, Int(seconds.rounded())) }

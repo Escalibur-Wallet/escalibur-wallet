@@ -128,7 +128,8 @@ struct UTXOSendEngine: SendEngine {
         let intent = UTXOSendIntent(
             destination: try destination(request),
             amount: request.sendAll ? .all : .exact(request.amount),
-            feeRate: rate, change: change, knownAddresses: request.knownAddresses
+            feeRate: rate, change: change, knownAddresses: request.knownAddresses,
+            mustSpendOneOf: Self.outpoints(request.unsureCoins)
         )
         let plan = try UTXOPlanner.planSend(walletID: request.walletID, chain: chain, intent: intent, network: state.network)
 
@@ -173,6 +174,47 @@ struct UTXOSendEngine: SendEngine {
     func status(_ id: String, chain: Chain) async -> TransferStatus {
         guard chain == self.chain, let answer = try? await reader.status(txid: id) else { return .pending }
         return ChainTransferStatus.transfer(answer, finalLedger: false)
+    }
+
+    /// Para o registro dos envios sem resposta. Na fila de pelo menos um provedor, a rede conhece a transacao: aqui nao ha
+    /// prazo de validade, e a fila cheia segura uma transacao por horas.
+    /// "A rede nao conhece" so com dois donos respondendo isso: quando os outros falham, a resposta de um so valia sozinha, e
+    /// um 404 dele soltava a conta de uma transacao que entrou (revisao dos 3 agentes, 17/11/2026). Um so que a conhece
+    /// basta para "vista": o pior caso e uma linha pendente a mais. O final e o do `status`, com a prova de bloco.
+    /// A transacao ja vista que saiu da fila dos dois (a fila cheia tira a de taxa baixa) nao morreu: sem prazo de validade,
+    /// quem guardou os bytes, ate o destinatario, pode transmitir de novo quando quiser, e um envio novo com outras moedas
+    /// confirmaria junto. Ela fica sem resposta: o registro, que ja nao segura a conta, segue com a linha pendente ate
+    /// confirmar ou ate o teto de 14 dias (rodada 4 dos 3 agentes, 18/11/2026). So a nunca vista sai como "nao conhece": os
+    /// bytes so chegaram ao provedor da transmissao.
+    func lookup(_ send: UnsureSend, chain: Chain) async -> SendLookup {
+        guard chain == self.chain else { return .noAnswer }
+        // A marca das moedas nao pergunta nada a rede: ela so obriga o proximo envio a gastar uma das moedas.
+        if send.coinsHeld == true { return .noAnswer }
+        if let answer = try? await reader.status(txid: send.hash), case .confirmed = answer { return .confirmed }
+        guard let said = try? await reader.knowledge(txid: send.hash) else { return .noAnswer }
+        if said.knowing > 0 { return .seen }
+        guard said.answered >= 2 else { return .noAnswer }
+        return send.seen == true ? .noAnswer : .notFound
+    }
+
+    /// As moedas que o envio gasta ("utxo:txid:vout,..."): se a rede disser que nao conhece o envio, o registro vira a marca
+    /// que obriga o proximo envio da conta a gastar uma delas (`UnsureSends.coinsToSpend`).
+    func unsureContext(for plan: SigningPlan) -> String? {
+        guard plan.transactions.count == 1, let transaction = plan.transactions.first as? UTXOSignableTransaction,
+              !transaction.unsigned.inputs.isEmpty else { return nil }
+        return UnsureSends.coinsPrefix + transaction.unsigned.inputs.map { $0.outpoint.description }.joined(separator: ",")
+    }
+
+    /// Os grupos de `SendRequest.unsureCoins` como moedas. O texto e o que este app gravou; um item que nao le ("txid:vout")
+    /// fica de fora, e um grupo que nao le nada nao obriga nada.
+    static func outpoints(_ groups: [[String]]) -> [[UTXOOutpoint]] {
+        groups.map { group in
+            group.compactMap { text -> UTXOOutpoint? in
+                let parts = text.split(separator: ":")
+                guard parts.count == 2, let txid = UTXOTxID(hex: String(parts[0]).lowercased()), let vout = UInt32(parts[1]) else { return nil }
+                return UTXOOutpoint(txid: txid, vout: vout)
+            }
+        }.filter { !$0.isEmpty }
     }
 
     // MARK: Apoio

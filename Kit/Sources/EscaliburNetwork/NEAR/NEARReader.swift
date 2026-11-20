@@ -99,6 +99,22 @@ public actor NEARReader {
 
     struct OptionalAccount: Equatable, Sendable { let value: NEARAccountState? }
 
+    /// O numero (`nonce`) da chave de acesso do dono num bloco final, igual em dois provedores, como no `state`. Para o
+    /// registro dos envios sem resposta: a chave guarda o numero da ultima transacao dela que entrou, e o numero que ja
+    /// chegou ao da transacao quer dizer que ela, ou outra da mesma chave, entrou. Nil quando a chave (ou a conta) nao existe.
+    public func accessKeyNonce(owner: NEARAccountID, publicKey: [UInt8]) async throws -> UInt64? {
+        guard publicKey.count == 32 else { throw ReaderError.invalidInput("publicKey") }
+        let checkpoint = try await checkpoint()
+        let at = Base58.bitcoin.encode(checkpoint.hash)
+        let key = "ed25519:" + Base58.bitcoin.encode(publicKey)
+        return try await Quorum.agree(await live(), pool: pool, field: "accessKey") { provider in
+            try await self.ensureNetwork(provider)
+            return OptionalNonce(value: try await self.accessKey(provider, owner.text, key: key, at: at)?.nonce)
+        }.value
+    }
+
+    struct OptionalNonce: Equatable, Sendable { let value: UInt64? }
+
     /// Outra chave de acesso total na conta do dono (`view_access_key_list`), alem da chave da frase: ela assina tudo,
     /// ate tirar a do dono. Dois provedores no mesmo bloco final; a conta que ainda nao existe nao tem (auditoria 8,
     /// 14/11/2026). A chave de chamada de funcao (a que um app da NEAR pede para um contrato) nao move o saldo, e fica de fora.
@@ -285,6 +301,13 @@ public actor NEARReader {
     /// O resultado em dois provedores (`tx`, que pede quem assinou). Final so com os dois
     /// dizendo o mesmo num bloco final. Sem registro (o app foi reaberto), nao ha a quem
     /// perguntar, e fica `notFound`. Nao encontrada nos dois depois da validade: venceu.
+    /// O mesmo para a transacao que este processo nao acompanhou (o app foi reaberto): com a conta que assinou, da para
+    /// perguntar aos provedores. Sem a altura do envio, nunca conclui que venceu.
+    public func status(of id: String, signer: String) async throws -> TransactionStatus {
+        if tracked[id] == nil { tracked[id] = Tracked(signer: signer, height: 0) }
+        return try await status(of: id)
+    }
+
     public func status(of id: String) async throws -> TransactionStatus {
         guard let digest = Base58.bitcoin.decode(id), digest.count == 32 else { throw ReaderError.invalidInput("id") }
         guard let entry = tracked[id] else { return .notFound }
@@ -343,6 +366,21 @@ public actor NEARReader {
             body: StrictJSON.object(["tx_hashes": .array(hashes.map { .string($0) })]).serialized, timeout: 30
         ))
         return try Self.parseHistory(details, owner: owner, requested: Set(hashes))
+    }
+
+    /// Se a transacao esta na lista de transacoes da conta na FastNEAR (`/v0/account`, o indexador da Atividade, que nao
+    /// poda). Para o registro dos envios sem resposta: os nos RPC da NEAR esquecem a transacao em menos de um dia (conferido
+    /// ao vivo em 18/11/2026: com 12 horas os quatro ainda conheciam; com 24, dois de tres diziam UNKNOWN_TRANSACTION; com
+    /// 48, todos), e "nenhum dos dois conhece" ja nao separava a transacao que nunca saiu da que entrou na vespera. Uma fonte
+    /// so: serve para dizer que a rede conhece, e nunca diz o contrario sozinha.
+    public func historyContains(_ id: String, owner text: String) async throws -> Bool {
+        guard Base58.bitcoin.decode(id)?.count == 32 else { throw ReaderError.invalidInput("id") }
+        guard case .success(let owner) = NEARAccountID.parse(text) else { throw ReaderError.invalidInput("account") }
+        let list = try StrictJSON.parse(try await transport.send(ReaderRequest(
+            method: .post, url: historyURL.adding(path: "v0/account"),
+            body: StrictJSON.object(["account_id": .string(owner.text)]).serialized, timeout: 30
+        )))
+        return try Self.latestHashes(list, owner: owner, limit: .max).contains(id)
     }
 
     /// A API da FastNEAR entrega no maximo 20 transacoes por consulta de detalhes.

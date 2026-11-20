@@ -225,4 +225,10 @@ struct SolanaSendEngine: SendEngine {
         guard chain == .solana else { return .failed(reason: SolanaEngineMessages.text(SolanaEngineProblem.wrongChain)) }
         return await SolanaTransfers.status(id, network: network, book: book)
     }
+
+    /// Para o registro dos envios sem resposta.
+    func lookup(_ send: UnsureSend, chain: Chain) async -> SendLookup {
+        guard chain == .solana else { return .noAnswer }
+        return await SolanaTransfers.lookup(send.hash, network: network, book: book)
+    }
 }

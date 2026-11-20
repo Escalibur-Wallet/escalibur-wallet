@@ -91,4 +91,15 @@ enum ChainTransferStatus {
             return .failed(reason: kitText("A transação entrou na rede e falhou. Só a taxa foi cobrada."))
         }
     }
+
+    /// O mesmo estado para o registro dos envios sem resposta (`SendEngine.lookup`), sem juntar "nenhum provedor conhece"
+    /// com "na fila".
+    static func lookup(_ status: ChainTransactionStatus) -> SendLookup {
+        switch status {
+        case .notFound: return .notFound
+        case .pending: return .seen
+        case .confirmed: return .confirmed
+        case .failed: return .failed(reason: kitText("A transação entrou na rede e falhou. Só a taxa foi cobrada."))
+        }
+    }
 }

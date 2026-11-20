@@ -80,7 +80,7 @@ final class ActivityFeed {
     /// volta ao disco (o `esquecer` do Android; revisao da decima terceira passada). `wallet` nil esquece qualquer uma.
     func forget(_ wallet: UUID? = nil) {
         // Os envios feitos aqui saem junto: travar ou apagar nao deixa endereco nenhum na memoria.
-        if let wallet { sentHere[wallet] = nil; claimedReads[wallet] = nil } else { sentHere = [:]; claimedReads = [:] }
+        if let wallet { sentHere[wallet] = nil; claimedReads[wallet] = nil; unsure[wallet] = nil } else { sentHere = [:]; claimedReads = [:]; unsure = [:] }
         if let wallet, wallet != shownWalletID, wallet != currentWalletID { return }
         current?.cancel()
         current = nil
@@ -113,6 +113,7 @@ final class ActivityFeed {
         failed = []
         unavailable = []
         loadedOnce = !cached.isEmpty
+        unsure[wallet.id] = UnsureSendLedger.entries(session, wallet: wallet.id)
         publish(failures: [], missing: [])
     }
 
@@ -127,6 +128,13 @@ final class ActivityFeed {
     ) async {
         loading = true
         defer { if generation == mine { loading = false; remaining = 0 } }
+        // Os envios sem resposta desta carteira perguntam a rede a cada leitura: o que confirmou ou falhou sai de
+        // "Pendentes" e libera a conta sem o dono ter de abrir outro envio.
+        if session.metadata.unsureSends?.contains(where: { $0.wallet == wallet.id }) == true {
+            await UnsureSendLedger.prune(session, wallet: wallet.id)
+            guard !Task.isCancelled, generation == mine else { return }
+        }
+        unsure[wallet.id] = UnsureSendLedger.entries(session, wallet: wallet.id)
         var failures: [Chain] = []
         var missing: [(chain: Chain, reason: String)] = []
         let jobs: [Job] = wallet.accounts.compactMap { account in
@@ -246,6 +254,22 @@ final class ActivityFeed {
         if shownWalletID == wallet { publish(failures: failed, missing: unavailable) }
     }
 
+    /// Os envios sem resposta gravados, por carteira (`UnsureSendLedger`): a linha segue em "Pendentes" depois de travar ou de o
+    /// app fechar, ate a rede dizer se o envio saiu ou o prazo vencer.
+    private var unsure: [UUID: [ActivityEntry]] = [:]
+
+    func syncUnsure(_ session: AppSession, wallet: UUID) {
+        unsure[wallet] = UnsureSendLedger.entries(session, wallet: wallet)
+        if shownWalletID == wallet { publish(failures: failed, missing: unavailable) }
+    }
+
+    /// O envio sem resposta que a rede nunca mostrou, vencido o prazo: a linha pendente sai.
+    func dropSent(hash: String, wallet: UUID) {
+        guard sentHere[wallet]?.contains(where: { $0.hash.lowercased() == hash.lowercased() }) == true else { return }
+        sentHere[wallet]?.removeAll { $0.hash.lowercased() == hash.lowercased() }
+        if shownWalletID == wallet { publish(failures: failed, missing: unavailable) }
+    }
+
     private func publish(failures: [Chain], missing: [(chain: Chain, reason: String)]) {
         var collected = byChain.values.flatMap { $0 }
         if let wallet = shownWalletID {
@@ -272,6 +296,9 @@ final class ActivityFeed {
             }
             claimedReads[wallet] = sentHere[wallet]?.isEmpty == false ? claimed : nil
             collected += sentHere[wallet] ?? []
+            // A que a memoria ou a leitura da rede ja mostra nao repete.
+            let shown = Set(collected.map { $0.hash.lowercased() })
+            collected += (unsure[wallet] ?? []).filter { !shown.contains($0.hash.lowercased()) }
         }
         suspiciousCount = collected.filter(\.suspicious).count
         entries = collected.filter { !$0.suspicious }.sorted { $0.date > $1.date }

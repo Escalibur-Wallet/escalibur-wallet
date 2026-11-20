@@ -130,6 +130,41 @@ struct PolkadotSendEngine: SendEngine {
         }
     }
 
+    /// O que o `lookup` precisa depois de o app reabrir: o numero da transacao na conta e o ultimo bloco da era dela (o
+    /// bloco de nascimento e o do plano, sem depender do relogio do aparelho).
+    func unsureContext(for plan: SigningPlan) -> String? {
+        guard plan.transactions.count == 1, let transfer = plan.transactions.first as? PolkadotTransfer else { return nil }
+        return "\(transfer.fields.nonce)|\(transfer.fields.blockNumber + transfer.fields.era.period - 1)"
+    }
+
+    /// Para o registro dos envios sem resposta. O leitor acha a transacao varrendo os blocos da era dela, e a varredura
+    /// vive na memoria, anotada so quando a transmissao responde: no envio sem resposta, e depois de o app reabrir, ela nao
+    /// existe. Ai a pergunta e pelo numero da conta num bloco final igual em dois provedores, com o que o registro guardou
+    /// (`unsureContext`). So "venceu" prova que nada saiu: o numero parado e a era acabada. O numero usado quer dizer que o
+    /// envio pode ter saido, e o resultado do bloco vem de uma fonte so (o sidecar): os dois deixam de segurar a conta sem
+    /// dizer "falhou", e a linha fica com o texto que manda conferir (revisao dos 3 agentes, 17/11/2026).
+    func lookup(_ send: UnsureSend, chain: Chain) async -> SendLookup {
+        guard chain.id == Chain.polkadot.id else { return .noAnswer }
+        let status: TransactionStatus
+        if await reader.tracks(send.hash) {
+            guard let read = try? await reader.status(of: send.hash) else { return .noAnswer }
+            status = read
+        } else {
+            let parts = (send.context ?? "").split(separator: "|")
+            guard parts.count == 2, let nonce = UInt32(parts[0]), let death = UInt64(parts[1]),
+                  let sender = try? PolkadotAddress.parse(send.address).get() else { return .unknowable }
+            guard let read = try? await reader.status(sender: sender, nonce: nonce, death: death) else { return .noAnswer }
+            status = read
+        }
+        switch status {
+        case .confirmed: return .confirmed
+        // A varredura em curso, ou a era ainda aberta com o numero parado: nada se conclui ainda.
+        case .notFound, .pending: return .noAnswer
+        case .failed(let reason):
+            return reason == "expired" ? .failed(reason: PolkadotEngineText.failure(reason)) : .seenUnclear(note: PolkadotEngineText.failure(reason))
+        }
+    }
+
     // MARK: O pedido conferido
 
     /// O pedido conferido antes de qualquer leitura: rede, ativo, a chave contra o

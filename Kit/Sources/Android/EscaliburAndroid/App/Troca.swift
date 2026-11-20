@@ -60,6 +60,12 @@ final class Troca: @unchecked Sendable {
     static let aba = Troca(alvo: "aba")
     private static let travaDasOutras = NSLock()
     nonisolated(unsafe) private static var outras: [String: Troca] = [:]
+    /// A edicao que estava no meio quando a tela dela saiu sem o dono fechar (o travar, a carteira fechada pela
+    /// acessibilidade, a Activity recriada): fica guardada fora das telas, sem contar como operacao critica, e a tela que
+    /// voltar com a mesma ordem retoma dali (`retomarEdicao`). Antes, a tela que voltava pedia a ordem antiga, que ja tinha
+    /// saido da lista, e fechava calada: a antiga cancelada, a nova nunca criada, e nada avisava (pentest de 17/11/2026).
+    /// Uma so, e so os dados da ordem (nenhuma chave): sai ao retomar, ao editar outra ordem e ao apagar tudo.
+    nonisolated(unsafe) private static var edicaoSuspensa: Troca?
 
     /// Alguma troca (a da aba, ou de editar e cancelar ordem) em revisao, enviando ou sem resposta.
     static var algumaCritica: Bool {
@@ -1493,9 +1499,30 @@ final class Troca: @unchecked Sendable {
             troca.versaoDoValor += 1
             troca.versaoDoPreco += 1
         }
-        travaDasOutras.withLock { outras["edicao"] = troca }
+        travaDasOutras.withLock {
+            outras["edicao"] = troca
+            edicaoSuspensa = nil
+        }
         return troca
     }
+
+    /// A edicao desta ordem que ficou no meio, da carteira em uso e ainda num passo que so a tela dela resolve: volta a ser
+    /// a da tela. A que terminou sozinha nesse meio tempo nao volta (a tela fecha, e a lista de ordens mostra o resultado).
+    static func retomarEdicao(ordem: String) -> Troca? {
+        let carteira = Sessao.shared.metadata.selectedWalletID
+        let candidatas = travaDasOutras.withLock { [outras["edicao"], edicaoSuspensa].compactMap { $0 } }
+        guard !ordem.isEmpty, carteira != nil,
+              let atual = candidatas.first(where: { candidata in
+                  candidata.trava.withLock { candidata.edicao?.ordem.id == ordem && candidata.edicao?.carteira == carteira }
+              }), atual.critica else { return nil }
+        travaDasOutras.withLock {
+            outras["edicao"] = atual
+            if edicaoSuspensa === atual { edicaoSuspensa = nil }
+        }
+        return atual
+    }
+
+    static func esquecerEdicaoSuspensa() { travaDasOutras.withLock { edicaoSuspensa = nil } }
 
     /// Refazer uma ordem vencida: a ordem limite com o que falta vender, o mesmo preco e o mesmo
     /// prazo, na tela propria. O dono confere e revisa como qualquer ordem.
@@ -1531,10 +1558,17 @@ final class Troca: @unchecked Sendable {
         return troca
     }
 
-    /// A tela fechou: a troca dela sai da memoria (a da aba fica).
+    /// A tela fechou: a troca dela sai da memoria (a da aba fica). A edicao no meio fica guardada a parte
+    /// (`edicaoSuspensa`): a tela pode ter saido sem o dono fechar.
     static func encerrar(_ alvo: String) {
         guard alvo != "aba" else { return }
-        travaDasOutras.withLock { outras[alvo] = nil }
+        let saiu = travaDasOutras.withLock { () -> Troca? in
+            defer { outras[alvo] = nil }
+            return outras[alvo]
+        }
+        // Fora da trava das telas: a `critica` usa a trava da propria troca.
+        guard alvo == "edicao", let saiu, saiu.critica else { return }
+        travaDasOutras.withLock { if outras["edicao"] == nil { edicaoSuspensa = saiu } }
     }
 
     // MARK: Os atalhos
@@ -2179,6 +2213,9 @@ extension Troca {
         case "ordens.retrato":
             return try Nucleo.json(Ordens.shared.retrato())
         case "troca.editar":
+            // A edicao desta mesma ordem que ficou no meio retoma de onde parou: a ordem antiga pode ja ter saido da lista,
+            // cancelada pela etapa 1 (pentest de 17/11/2026).
+            if let retomada = retomarEdicao(ordem: pedido["ordem"]?.stringValue ?? "") { return try retrato(retomada) }
             // So a ordem da lista da carteira em uso.
             guard let (ordem, dona) = Ordens.shared.daLista(pedido["ordem"]?.stringValue ?? ""),
                   dona == Sessao.shared.metadata.selectedWalletID else { throw Nucleo.Falha(erro: "troca.semOrdem") }

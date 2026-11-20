@@ -335,11 +335,13 @@ final class AppSession {
         if metadata.balanceCache.keys.contains(where: { !carteiras.contains($0) })
             || (metadata.activityCache ?? [:]).keys.contains(where: { !carteiras.contains($0) })
             || (metadata.activityFetched ?? [:]).keys.contains(where: { !carteiras.contains($0) })
-            || (metadata.pendingEVM ?? [:]).keys.contains(where: { key in !prefixes.contains { key.hasPrefix($0) } }) {
+            || (metadata.pendingEVM ?? [:]).keys.contains(where: { key in !prefixes.contains { key.hasPrefix($0) } })
+            || (metadata.unsureSends ?? []).contains(where: { !carteiras.contains($0.wallet) }) {
             metadata.balanceCache = metadata.balanceCache.filter { carteiras.contains($0.key) }
             metadata.activityCache = metadata.activityCache?.filter { carteiras.contains($0.key) }
             metadata.activityFetched = metadata.activityFetched?.filter { carteiras.contains($0.key) }
             metadata.pendingEVM = metadata.pendingEVM?.filter { item in prefixes.contains { item.key.hasPrefix($0) } }
+            metadata.unsureSends = metadata.unsureSends?.filter { carteiras.contains($0.wallet) }
             try? persist()
         }
         // E os mapas por ativo com o que nenhuma carteira tem mais (o resto de uma leitura que terminou depois de remover).
@@ -991,6 +993,7 @@ final class AppSession {
         metadata.activityFetched?[wallet.id] = nil
         let prefix = wallet.id.uuidString + "|"
         metadata.pendingEVM = metadata.pendingEVM?.filter { !$0.key.hasPrefix(prefix) }
+        metadata.unsureSends?.removeAll { $0.wallet == wallet.id }
         // Os avisos de refazer quando vencer dela saem da agenda do sistema (quinta passada de 03/11/2026).
         LimitRenewalCenter.forgetNotices((metadata.limitRenewals ?? []).filter { $0.walletID == wallet.id }.map(\.orderID))
         // As notificacoes ja mostradas saem da Central: a de ordem e a de recebimento podem ser desta carteira, e o id
@@ -1051,6 +1054,7 @@ final class AppSession {
         metadata.activityFetched?[id] = nil
         // O que leva o endereco dela: as transacoes em transito e as ordens guardadas (quarta passada de 03/11/2026).
         metadata.pendingEVM = metadata.pendingEVM?.filter { !$0.key.hasPrefix(id.uuidString + "|") }
+        metadata.unsureSends?.removeAll { $0.wallet == id }
         metadata.signedOrders?.removeAll { $0.walletID == id }
         Self.pruneAssetMaps(&metadata)
         PassphraseGate.shared.forget(self, wallet: id)

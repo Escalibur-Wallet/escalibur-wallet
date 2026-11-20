@@ -102684,6 +102684,82 @@
         }
       }
     },
+    "Este envelope veio de outro app" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "جاء هذا المغلف من تطبيق آخر"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Umschlag kam aus einer anderen App"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This envelope came from another app"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este sobre vino de otra app"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette enveloppe vient d’une autre app"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "यह लिफ़ाफ़ा किसी दूसरे ऐप से आया है"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amplop ini datang dari aplikasi lain"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このエンベロープは別のアプリから届きました"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 봉투는 다른 앱에서 왔습니다"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu zarf başka bir uygulamadan geldi"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phong bì này đến từ một ứng dụng khác"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个信封来自另一个应用"
+          }
+        }
+      }
+    },
     "Este envio ativa a conta de destino (mínimo %@)." : {
       "localizations" : {
         "ar" : {
@@ -193072,6 +193148,82 @@
         }
       }
     },
+    "Sem resposta da rede" : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا رد من الشبكة"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Antwort vom Netzwerk"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No answer from the network"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin respuesta de la red"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sans réponse du réseau"
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "नेटवर्क से जवाब नहीं मिला"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belum ada jawaban dari jaringan"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ネットワークから応答なし"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "네트워크 응답 없음"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ağdan yanıt yok"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mạng chưa trả lời"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网络未答复"
+          }
+        }
+      }
+    },
     "Sem servidor, quem decide a hora de conferir é o iOS: algumas vezes por hora com o iPhone em uso, menos quando ele está parado ou com pouca bateria. O aviso pode chegar alguns minutos depois de a moeda entrar. Com o app aberto, a conferência é a cada 2 minutos." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -197614,6 +197766,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "只有资金池费用，已包含在价格中；最低数量已考虑这一点"
+          }
+        }
+      }
+    },
+    "Só abra e importe se foi você que lacrou este envelope: um envelope feito por outra pessoa abre uma carteira que ela controla." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "لا تفتحه وتستورده إلا إذا كنت أنت من ختم هذا المغلف: المغلف الذي صنعه شخص آخر يفتح محفظة يتحكم فيها ذلك الشخص."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne und importiere ihn nur, wenn du diesen Umschlag selbst versiegelt hast: Ein Umschlag von jemand anderem öffnet ein Wallet, das diese Person kontrolliert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only open and import it if you sealed this envelope yourself: an envelope made by someone else opens a wallet that they control."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ábrelo e impórtalo solo si fuiste tú quien selló este sobre: un sobre hecho por otra persona abre una billetera que esa persona controla."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ne l’ouvrez et ne l’importez que si c’est vous qui avez scellé cette enveloppe : une enveloppe faite par quelqu’un d’autre ouvre un portefeuille que cette personne contrôle."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इसे तभी खोलें और इंपोर्ट करें जब यह लिफ़ाफ़ा आपने खुद सील किया हो: किसी और का बनाया लिफ़ाफ़ा ऐसा वॉलेट खोलता है जिस पर उसका नियंत्रण होता है।"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buka dan impor hanya jika Anda sendiri yang menyegel amplop ini: amplop buatan orang lain membuka dompet yang dikendalikan orang itu."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このエンベロープを封印したのが自分である場合にのみ開いて取り込んでください。他人が作ったエンベロープは、その人が管理するウォレットを開きます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 봉투를 직접 봉인한 경우에만 열고 가져오세요. 다른 사람이 만든 봉투는 그 사람이 통제하는 지갑을 엽니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu zarfı yalnızca siz mühürlediyseniz açıp içe aktarın: başkasının yaptığı bir zarf, o kişinin kontrol ettiği bir cüzdanı açar."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chỉ mở và nhập nếu chính bạn đã niêm phong phong bì này: phong bì do người khác tạo sẽ mở một ví mà người đó kiểm soát."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有在这个信封是你自己封存的情况下才打开并导入：别人制作的信封会打开一个由对方控制的钱包。"
           }
         }
       }
@@ -209732,6 +209960,82 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "每个网络一个地址"
+          }
+        }
+      }
+    },
+    "Um envio anterior desta conta ficou sem resposta da rede, e ainda não dá para saber se ele saiu. Para você não pagar duas vezes, o próximo envio espera a rede dizer o que houve com ele. Se a rede responder que não conhece esse envio, o app libera 30 minutos depois. Ele aparece em Pendentes, na Atividade." : {
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "بقي تحويل سابق من هذا الحساب بلا رد من الشبكة، ولا يمكن بعد معرفة ما إذا كان قد خرج. حتى لا تدفع مرتين، ينتظر التحويل التالي أن تقول الشبكة ما حدث له. إذا ردّت الشبكة بأنها لا تعرف هذا التحويل، يرفع التطبيق القيد بعد 30 دقيقة. يظهر ضمن قيد الانتظار، في النشاط."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein früherer Transfer von diesem Konto blieb ohne Antwort vom Netzwerk, und es lässt sich noch nicht sagen, ob er rausgegangen ist. Damit du nicht doppelt zahlst, wartet der nächste Transfer, bis das Netzwerk sagt, was mit ihm passiert ist. Antwortet das Netzwerk, dass es diesen Transfer nicht kennt, gibt die App ihn 30 Minuten später frei. Er steht unter „Ausstehend“ in der Aktivität."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An earlier transfer from this account got no clear answer from the network, and there is no way to tell yet whether it went out. So you don’t pay twice, the next transfer waits until the network says what happened to it. If the network answers that it doesn’t know this transfer, the app lifts the hold 30 minutes later. It shows under Pending, in Activity."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un envío anterior de esta cuenta quedó sin respuesta de la red, y todavía no se puede saber si salió. Para que no pagues dos veces, el próximo envío espera a que la red diga qué pasó con él. Si la red responde que no conoce ese envío, la app lo libera 30 minutos después. Aparece en Pendientes, en Actividad."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un envoi précédent de ce compte est resté sans réponse du réseau, et il est encore impossible de savoir s’il est parti. Pour que vous ne payiez pas deux fois, le prochain envoi attend que le réseau dise ce qu’il en est. Si le réseau répond qu’il ne connaît pas cet envoi, l’app le libère 30 minutes plus tard. Il apparaît dans En attente, dans Activité."
+          }
+        },
+        "hi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "इस खाते का पिछला ट्रांसफ़र नेटवर्क से जवाब के बिना रह गया, और अभी यह पता नहीं चल सकता कि वह गया या नहीं. आप दो बार भुगतान न करें, इसलिए अगला ट्रांसफ़र तब तक रुकता है जब तक नेटवर्क यह न बता दे कि उसका क्या हुआ. अगर नेटवर्क जवाब दे कि उसे इस ट्रांसफ़र की जानकारी नहीं है, तो ऐप 30 मिनट बाद रोक हटा देता है. वह गतिविधि में पेंडिंग के नीचे दिखता है."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pengiriman sebelumnya dari akun ini tidak mendapat jawaban dari jaringan, dan belum bisa dipastikan apakah sudah terkirim. Agar Anda tidak membayar dua kali, pengiriman berikutnya menunggu jaringan memberi tahu apa yang terjadi dengannya. Jika jaringan menjawab bahwa pengiriman itu tidak dikenalnya, aplikasi melepasnya 30 menit kemudian. Pengiriman itu muncul di Tertunda, di Aktivitas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このアカウントからの前回の送金は、ネットワークから応答がないままで、送信されたかどうかまだ分かりません。二重に支払わないよう、次の送金は、その送金がどうなったかをネットワークが示すまで待ちます。ネットワークがその送金を認識していないと応答した場合は、その30分後にアプリが制限を解除します。アクティビティの「保留中」に表示されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 계정의 이전 전송이 네트워크의 응답을 받지 못했으며, 전송되었는지 아직 알 수 없습니다. 이중으로 지불하지 않도록, 다음 전송은 네트워크가 그 전송이 어떻게 되었는지 알려줄 때까지 기다립니다. 네트워크가 그 전송을 모른다고 응답하면 앱이 30분 뒤에 제한을 해제합니다. 활동의 대기 중에 표시됩니다."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu hesaptan yapılan önceki bir transfer ağdan yanıt alamadı ve gidip gitmediği henüz bilinemiyor. İki kez ödeme yapmaman için, sıradaki transfer ağ ona ne olduğunu söyleyene kadar bekler. Ağ bu transferi tanımadığını söylerse uygulama 30 dakika sonra kilidi kaldırır. Etkinlik'te, Bekleyenler altında görünür."
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Một lần gửi trước từ tài khoản này chưa được mạng trả lời, và chưa thể biết nó đã đi hay chưa. Để bạn không trả hai lần, lần gửi tiếp theo sẽ chờ mạng cho biết điều gì đã xảy ra với nó. Nếu mạng trả lời rằng không biết lần gửi đó, ứng dụng sẽ mở khóa sau 30 phút. Nó hiện trong mục Đang chờ, ở Hoạt động."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此账户之前的一笔转账没有得到网络的明确答复，目前还无法确定它是否已发出。为避免你重复付款，下一笔转账会等到网络给出它的结果。如果网络答复说不知道这笔转账，应用会在 30 分钟后解除限制。它显示在“活动”的“待处理”中。"
           }
         }
       }

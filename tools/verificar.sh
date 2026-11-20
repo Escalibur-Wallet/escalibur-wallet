@@ -1668,6 +1668,222 @@ python3 -I tools/codigo.py --exige "$fda" 'guard CCryptoBoringSSL_RAND_bytes(sai
     && python3 -I tools/codigo.py --exige "$fda" 'kernel.withUnsafeBytes { metade in for indice in 0..<count { saida[indice] ^= metade[indice] } }' --plataforma android \
     && python3 -I tools/codigo.py --exige "$fda" 'let kernel = SecureBytes(capacity: count)' --plataforma android \
     && ok "no Android, o sorteio mistura o getrandom do kernel com o da BoringSSL" || aviso "o sorteio do Android sem a mistura com o getrandom do kernel"
+# A frase nova nasce do sorteio do sistema e de nada mais (licao da Coldcard, 19/11/2026; endurecida na rodada dos 3
+# agentes do mesmo dia, que furou a primeira versao com sombra de nome, sobrecarga mais nova e chamada trocada):
+# - BIP39.swift, SecureBytes.swift, o ForaDaApple.swift (o sorteio do Android: uma linha a mais deixava 32 bits de entropia,
+#   rodada 3), o Mnemonic.swift (o `validWordCounts` que o `generate` le, rodada 3), o WordlistDigest.swift e o Recursos.swift
+#   (o digesto esperado da lista e a pasta de onde ela vem: os dois juntos trocavam a lista so no app, rodada 4) e o Wordlist.swift (o `nfkdWords` que o `phrase(fromEntropy:)` le: um subscript com estado deixava 33 bits,
+#   rodada 3) travados inteiros pelo digesto do texto sem comentario (o `phrase(fromEntropy:)`, o
+#   sorteio dos bits livres do `completing`, um `didSet` no `count`: nada muda sem rever esta regra), e as duas linhas do
+#   sorteio exigidas pelo texto;
+# - quem cria a frase nos dois apps chama o `generate` ou o `completing` nas linhas de sempre; `phrase(fromEntropy:`,
+#   `PhraseDraft(phrase:` e `Rascunho(frase:` so onde ja estao;
+# - em nenhum Swift do app ou do Kit fora dos testes (com crase tirada, linha quebrada e comentario no meio, no texto cru e
+#   no sem comentario): declaracao de SecRandomCopyBytes, kSecRandomDefault, errSecSuccess, getrandom ou
+#   CCryptoBoringSSL_RAND_bytes fora do ForaDaApple.swift (la, so as tres de sempre, e nenhuma no iOS); outra
+#   `generate(wordCount`, `random(count`, `phrase(fromEntropy` ou `completing`; `extension BIP39` ou `extension SecureBytes`
+#   fora dos donos, ou typealias para eles; @_silgen_name, @_disfavoredOverload, @_dynamicReplacement ou @_extern; @_cdecl
+#   fora dos nomes do JNI;
+# - no modo --testes, o objeto compilado do SecureBytes chama o _SecRandomCopyBytes do sistema (o binario da loja e conferido
+#   no envio, pelo `nm`).
+# O limite: um caminho novo ate a carteira em outra parte do app e assunto da revisao do codigo, como no da acessibilidade.
+bip=$CORE/BIP39/BIP39.swift
+sorteio_digesto() { sed 's/[[:space:]]\{1,\}/ /g; s/^ //; s/ $//' | grep -v '^$' | shasum -a 256 | cut -d' ' -f1; }
+sorteio_bip=$(codigo "$bip" | sorteio_digesto)
+sorteio_sb=$(codigo "$CORE/Crypto/SecureBytes.swift" | sorteio_digesto)
+sorteio_fda=$(codigo "$fda" | sorteio_digesto)
+sorteio_wl=$(codigo "$CORE/BIP39/Wordlist.swift" | sorteio_digesto)
+sorteio_mn=$(codigo "$CORE/BIP39/Mnemonic.swift" | sorteio_digesto)
+sorteio_wd=$(codigo "$CORE/BIP39/WordlistDigest.swift" | sorteio_digesto)
+sorteio_rec=$(codigo "$CORE/Platform/Recursos.swift" | sorteio_digesto)
+sorteio_rascunho=$(cat <<'SWIFT'
+final class PhraseDraft {
+    let phrase: SecureBytes
+    let wordCount: Int
+
+    init(wordCount: Int) throws {
+        phrase = try BIP39.generate(wordCount: wordCount)
+        self.wordCount = wordCount
+    }
+SWIFT
+)
+sorteio_sessao=$(cat <<'SWIFT'
+        let frase = try BIP39.generate(wordCount: palavras)
+        return try guardarRascunho(Rascunho(frase: frase, palavras: palavras), escolhidas: false, credencial: credencial)
+SWIFT
+)
+[ "$sorteio_bip" = "568c32793be8f2824e865379667422611c75d172dc80c407ec56a900db2d6d67" ] \
+    && [ "$sorteio_sb" = "78c6ea1834787c23cdbe4e4ebe96f69e32553b9df25c0cbace46215d1b1f16c8" ] \
+    && [ "$sorteio_fda" = "2707933756bc2680693d2dfb01ea3255104dc6ffc03f609efd40f2e2488f8bec" ] \
+    && [ "$sorteio_wl" = "b22d1188ba9cef2e7ca0a7940462ea417e3be0db4926c67fe3c460e7405a9974" ] \
+    && [ "$sorteio_mn" = "95f34ce602e5b0167e16f3c97ccf7e777080299489782dba3f763b0565b0af8b" ] \
+    && [ "$sorteio_wd" = "7b762bdb0bb918152e5f4fd2d4e2c072daef297fea00d02fc00bb472661a9fff" ] \
+    && [ "$sorteio_rec" = "d8d0176ab1f5d45738afbd60fb91050f89ca16e7152f54660d2985609776aa4b" ] \
+    && python3 -I tools/codigo.py --exige "$bip" 'let entropy = try SecureBytes.random(count: entropyBytes)' --plataforma ambas \
+    && python3 -I tools/codigo.py --exige "$CORE/Crypto/SecureBytes.swift" 'let status = SecRandomCopyBytes(kSecRandomDefault, count, bytes.base)' --plataforma ambas \
+    && python3 -I tools/codigo.py --exige "$APP/Features/NewWallet/NewWalletFlow.swift" "$sorteio_rascunho" \
+    && python3 -I tools/codigo.py --exige "$APP/Features/NewWallet/NewWalletFlow.swift" 'created = try PhraseDraft(wordCount: wordCount)' \
+    && python3 -I tools/codigo.py --exige "$APP/Features/NewWallet/NewWalletFlow.swift" 'full = try BIP39.completing(firstWords)' \
+    && python3 -I tools/codigo.py --exige Kit/Sources/Android/EscaliburAndroid/App/Sessao.swift "$sorteio_sessao" --plataforma android \
+    && python3 -I tools/codigo.py --exige Kit/Sources/Android/EscaliburAndroid/App/Sessao.swift 'frase = try BIP39.completing(primeiras)' --plataforma android \
+    && [ -z "$(codigo_vivo_ios "$fda" | tr -d '`' | grep -E 'SecRandomCopyBytes|kSecRandomDefault|errSecSuccess|getrandom|CCryptoBoringSSL_RAND_bytes')" ] \
+    && SORTEIO_INVENTARIO=bff15c02dc6854dbce200d610c2bb502670fd5717784e44ee2934aaf29d03052 python3 -I - <<'PY' && ok "a frase nova nasce do SecureBytes.random e ele so do SecRandomCopyBytes do sistema" || aviso "a frase nova ou o SecureBytes.random fora do sorteio do sistema"
+import hashlib, os, re, subprocess, sys
+sys.path.insert(0, "tools")
+import codigo
+CORE = "Kit/Sources/EscaliburCore/"
+BIP, SB, FORA = CORE + "BIP39/BIP39.swift", CORE + "Crypto/SecureBytes.swift", CORE + "Platform/ForaDaApple.swift"
+JNI = "Kit/Sources/Android/EscaliburAndroid/JNI.swift"
+lista = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.swift"],
+                       capture_output=True, check=True).stdout.decode().split("\0")
+fontes = sorted(a for a in set(filter(None, lista)) if os.path.isfile(a) and a.startswith(("Kit/Sources/", "App/"))
+                and not a.startswith(("App/EscaliburWalletTests/", "App/EscaliburWalletUITests/")))
+NOMES = ("SecRandomCopyBytes", "kSecRandomDefault", "errSecSuccess", "getrandom", "CCryptoBoringSSL_RAND_bytes")
+def declara(nome):
+    n = re.escape(nome) + r"(?![\w])"
+    return re.compile(
+        r"\b(?:enum|struct|class|typealias|protocol|actor|let|var|func|associatedtype|macro)\s+" + n
+        + r"|\bcase\s+(?:let|var)\s+" + n
+        + r"|<\s*(?:[^<>]*,\s*)?" + n + r"\s*[:,>]"
+        + r"|[(,]\s*(?:\w+\s+)?" + n + r"\s*:"
+        + r"|\bfor\s+(?:case\s+(?:let|var)\s+)?" + n
+        + r"|\{\s*\(?[\w\s,]*(?<![\w])" + n + r"[^}]*?\bin\b"
+        + r"|\b(?:let|var)\s*\([^)]*(?<![\w])" + n
+        + r"|\bimport\s+\w+\s+[\w.]*\." + n, re.S)
+DECLARA = {nome: declara(nome) for nome in NOMES}
+NA_FORA = {"SecRandomCopyBytes": 1, "kSecRandomDefault": 1, "errSecSuccess": 1, "getrandom": 0, "CCryptoBoringSSL_RAND_bytes": 0}
+# Quantas declaracoes cada arquivo tem de cada uma (fora da lista, nenhuma): o Mnemonic.generate e o da isca e dos testes.
+MNEMONIC = CORE + "BIP39/Mnemonic.swift"
+FUNCOES = [(re.compile(r"\bfunc\s+" + f, re.S), donos) for f, donos in (
+    (r"generate\s*(?:<[^>]*>)?\s*\(\s*wordCount(?![\w])", {BIP: 1, MNEMONIC: 1}),
+    (r"phrase\s*(?:<[^>]*>)?\s*\(\s*fromEntropy(?![\w])", {BIP: 1}),
+    (r"completing(?![\w])", {BIP: 2}), (r"random\s*(?:<[^>]*>)?\s*\(\s*count(?![\w])", {SB: 1}))]
+EXT_BIP = re.compile(r"\bextension\s+(?:EscaliburCore\s*\.\s*)?BIP39(?![\w])")
+EXT_SB = re.compile(r"\bextension\s+(?:EscaliburCore\s*\.\s*)?SecureBytes(?![\w])")
+DONOS_SB = {SB, "Kit/Sources/EscaliburKeys/Enclave.swift", "Kit/Sources/EscaliburKeys/WalletVault.swift"}
+APELIDO = re.compile(r"\btypealias\s+\w+\s*(?:<[^>]*>)?\s*=\s*(?:EscaliburCore\s*\.\s*)?(?:BIP39|SecureBytes)(?![\w])")
+PROIBIDOS = re.compile(r"@\s*_(?:silgen_name|disfavoredOverload|dynamicReplacement|extern)(?![\w])")
+# Com e sem parenteses: `@c func getpid()` compila no Swift 6.3 e toma o lugar da funcao da libc no link (rodada 4).
+CDECL = re.compile(r"@\s*(?:_cdecl|c)(?![\w])")
+CDECL_OK = re.compile(r'@_cdecl\("(?:JNI_OnLoad|Java_app_escalibur_[A-Za-z0-9_]+)"\)')
+# Quem usa o texto, e quantas vezes: a frase de entropia dada, o rascunho com frase dada (iPhone) e o do Android.
+USOS = [(re.compile(r"\bphrase\s*\(\s*fromEntropy\s*:"), None,
+         {BIP: None, "Kit/Sources/EscaliburKeys/WalletVault.swift": None, "Kit/Sources/EscaliburKeys/DerivationSelfTest.swift": None}),
+        (re.compile(r"\bPhraseDraft\s*\(\s*phrase\s*:"), 3,
+         {"App/EscaliburWallet/Features/NewWallet/NewWalletFlow.swift": 1, "App/EscaliburWallet/Features/Settings/RevealFlow.swift": 1,
+          "App/EscaliburWallet/Features/Envelope/OpenEnvelopeFlow.swift": 1}),
+        (re.compile(r"\bRascunho\s*\(\s*frase\s*:"), 4,
+         {"Kit/Sources/Android/EscaliburAndroid/App/Sessao.swift": 3, "Kit/Sources/Android/EscaliburAndroid/App/Envelopes.swift": 1})]
+# Rodada 2 dos 3 agentes (19/11/2026): um tipo, let ou generico com o nome de quem cria a frase (`enum BIP39` aninhado no
+# PhraseDraft, `extension Sessao`) ganha do de verdade na linha exigida; um so, no dono, e nenhum outro em lugar nenhum.
+NEWFLOW = "App/EscaliburWallet/Features/NewWallet/NewWalletFlow.swift"
+SESSAO = "Kit/Sources/Android/EscaliburAndroid/App/Sessao.swift"
+TIPOS = {"BIP39": {BIP: 1}, "SecureBytes": {SB: 1}, "PhraseDraft": {NEWFLOW: 1}, "Rascunho": {SESSAO: 1}, "EscaliburCore": {}, "EscaliburKeys": {}}
+TIPO_RE = {nome: declara(nome) for nome in TIPOS}
+GERA = re.compile(r"\b(?:let|var|case|subscript)\s+(?:generate|completing)(?![\w])")
+DINAMICOS = re.compile(r"\bcallAsFunction\b|@\s*dynamicMemberLookup\b|@\s*dynamicCallable\b")
+EXPORTADO = re.compile(r"@\s*_exported\s+import\b")
+problemas = []
+for arquivo in fontes:
+    cru = open(arquivo, encoding="utf-8").read()
+    sem = codigo.ler(arquivo, False).replace("`", "")
+    textos = (cru.replace("`", ""), sem)
+    for nome, regra in DECLARA.items():
+        if nome not in textos[0] and nome not in textos[1]:
+            continue
+        if arquivo == FORA:
+            if len(regra.findall(sem)) != NA_FORA[nome]:
+                problemas.append(f"{arquivo}: {nome} declarado {len(regra.findall(sem))} vezes (esperado {NA_FORA[nome]})")
+        elif any(regra.search(t) for t in textos):
+            problemas.append(f"{arquivo}: declara {nome}")
+    for regra, donos in FUNCOES:
+        n = max(len(regra.findall(t)) for t in textos)
+        if n != donos.get(arquivo, 0):
+            problemas.append(f"{arquivo}: {n} declaracoes de {regra.pattern}")
+    if arquivo != BIP and any(EXT_BIP.search(t) for t in textos):
+        problemas.append(f"{arquivo}: extension BIP39 fora do dono")
+    if arquivo not in DONOS_SB and not arquivo.startswith("Kit/Sources/SwiftCrypto/") and any(EXT_SB.search(t) for t in textos):
+        problemas.append(f"{arquivo}: extension SecureBytes fora dos donos")
+    if any(APELIDO.search(t) for t in textos):
+        problemas.append(f"{arquivo}: typealias para BIP39 ou SecureBytes")
+    if any(PROIBIDOS.search(t) for t in textos):
+        problemas.append(f"{arquivo}: atributo que troca funcao (@_silgen_name, @_disfavoredOverload, @_dynamicReplacement, @_extern)")
+    cdecl = max(len(CDECL.findall(t)) for t in textos)
+    if cdecl and (arquivo != JNI or cdecl != len(CDECL_OK.findall(cru))):
+        problemas.append(f"{arquivo}: @_cdecl fora dos nomes do JNI")
+    if not arquivo.startswith("Kit/Sources/SwiftCrypto/"):
+        for nome, regra in TIPO_RE.items():
+            if nome not in textos[0] and nome not in textos[1]:
+                continue
+            n = max(len(regra.findall(t)) for t in textos)
+            if n != TIPOS[nome].get(arquivo, 0):
+                problemas.append(f"{arquivo}: {n} declaracoes com o nome {nome}")
+        if any(EXPORTADO.search(t) for t in textos):
+            problemas.append(f"{arquivo}: @_exported import")
+    if arquivo != BIP and any(GERA.search(t) for t in textos):
+        problemas.append(f"{arquivo}: let, var, case ou subscript chamado generate ou completing")
+    if any(DINAMICOS.search(t) for t in textos):
+        problemas.append(f"{arquivo}: callAsFunction, @dynamicMemberLookup ou @dynamicCallable")
+    for regra, _, donos in USOS:
+        n = max(len(regra.findall(t)) for t in textos)
+        esperado = donos.get(arquivo, 0)
+        if (esperado is None and n == 0) or (esperado is not None and n != esperado):
+            problemas.append(f"{arquivo}: {regra.pattern} {n} vezes")
+# Uma funcao em C, C++, Objective-C ou assembly com o nome do sorteio ganha dele no link (provado na rodada de 19/11):
+# nenhum desses arquivos do Kit ou do app cita o SecRandomCopyBytes ou o kSecRandomDefault.
+outros = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "Kit/Sources", "App"],
+                        capture_output=True, check=True).stdout.decode().split("\0")
+for arquivo in sorted(set(filter(None, outros))):
+    if os.path.isfile(arquivo) and arquivo.endswith((".c", ".h", ".m", ".mm", ".cc", ".cpp", ".hpp", ".s", ".S", ".inc", ".cxx", ".c++",
+                                                     ".cp", ".C", ".M", ".hh", ".hxx", ".h++", ".ipp", ".modulemap")):
+        texto = open(arquivo, encoding="utf-8", errors="replace").read()
+        if re.search(r"SecRandomCopyBytes|kSecRandomDefault", texto):
+            problemas.append(f"{arquivo}: cita o SecRandomCopyBytes")
+        # Um nome Swift dado a uma funcao C (`swift_name`, que o pre-processador ainda emenda) entra no lugar de outra.
+        if not arquivo.startswith("Kit/Sources/SwiftCrypto/") and re.search(r"swift_name|SWIFT_NAME", texto):
+            problemas.append(f"{arquivo}: swift_name")
+# O inventario do EscaliburCore (rodada 2 dos 3 agentes, 19/11/2026): uma extensao de tipo de fora (Array, UInt32,
+# UnsafeMutableRawPointer) ou uma declaracao de topo no modulo ganha da biblioteca padrao dentro do BIP39 e do SecureBytes
+# travados, sem citar nome nenhum. Toda extensao de tipo de fora (com o corpo) e todo nome de topo, vivos no iPhone ou no
+# Android, entram num digesto: mudou, a regra para, e quem mexeu confere a lista impressa e grava o digesto novo.
+def nivel(texto):
+    marcas, prof = [], 0
+    for c in texto:
+        marcas.append(prof)
+        prof += 1 if c == "{" else -1 if c == "}" else 0
+    return marcas
+def corpo(texto, inicio):
+    i = texto.find("{", inicio)
+    if i < 0:
+        return ""
+    prof = 0
+    for j in range(i, len(texto)):
+        prof += 1 if texto[j] == "{" else -1 if texto[j] == "}" else 0
+        if prof == 0:
+            return " ".join(texto[i:j + 1].split())
+    return " ".join(texto[i:].split())
+nucleo = [a for a in fontes if a.startswith(CORE)]
+vivos = {(a, plat): codigo.ler(a, True, plat).replace("`", "") for a in nucleo for plat in ("ios", "android")}
+# O esqueleto de cada arquivo, em qualquer grafia (rodada 3: `extension[UInt8]`, `func>>` e `let(SHA256, _)` compilam sem
+# espaco e escapavam das buscas por palavra): todo caractere de nivel 0, imports inclusive, e toda extensao de nivel 0, de
+# qualquer tipo, com o cabecalho e o corpo.
+inventario = set()
+for (arquivo, plataforma), texto in vivos.items():
+    marcas = nivel(texto)
+    topo = " ".join("".join(c if m == 0 else " " for c, m in zip(texto, marcas)).split())
+    inventario.add(f"{arquivo} {plataforma} topo {hashlib.sha256(topo.encode()).hexdigest()}")
+    for m in re.finditer(r"\bextension(?![\w])", texto):
+        if marcas[m.start()] == 0:
+            cabeca = " ".join(texto[m.end():texto.find("{", m.end())].split())
+            inventario.add(f"{arquivo} {plataforma} extension {cabeca} {hashlib.sha256(corpo(texto, m.end()).encode()).hexdigest()}")
+lista_do_nucleo = "\n".join(sorted(inventario))
+if hashlib.sha256(lista_do_nucleo.encode()).hexdigest() != os.environ.get("SORTEIO_INVENTARIO", ""):
+    problemas.append("o inventario do EscaliburCore mudou (extensao de tipo de fora ou nome de topo):")
+    problemas.extend("  " + linha for linha in sorted(inventario))
+for problema in problemas:
+    print("    " + problema)
+sys.exit(1 if problemas else 0)
+PY
 sb=$CORE/Crypto/SecureBytes.swift
 # A cota de memoria travada do Android (64 KiB) acaba no 17o buffer com regiao propria: o segredo pequeno vai para uma
 # arena travada, e nenhum mlock tem o resultado engolido (auditoria das chaves de 06/11/2026).
@@ -1938,6 +2154,65 @@ codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -q 
     && codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoDePalavras.kt" | grep -qF 'TecladoFechadoPelaAcessibilidade(deFora)' \
     && ok "o teclado de segredo fecha com qualquer servico de acessibilidade de fora, em qualquer Android, tambem o fisico e o que ja estava aberto" \
     || aviso "teclado de segredo aberto com servico de acessibilidade de fora"
+# A carteira inteira fecha com qualquer servico de acessibilidade que nao veio com o celular, em qualquer Android, se
+# declare ferramenta ou nao (pentest de 17/11/2026, A-1): do 14 em diante, esconder a leitura nao tira de cima da tela a
+# janela do servico, que o setHideOverlayWindows nao esconde e o filterTouchesWhenObscured nao ve. Fechou, travou: o portao
+# do Raiz derruba o pedido de biometria e trava a sessao, e so depois mostra a tela fechada.
+# Trecho solto nao segura esta regra (tres rodadas dos 3 agentes, 17/11/2026: um filtro encadeado no `deFora`, um retorno
+# cedo, uma condicao na frente da linha do Raiz, a carteira montada dentro da tela fechada, um import que troca o objeto, o
+# `setContent` com outra coisa dentro, o travar sem o `sessao.travar`). Vai por digesto do codigo sem comentario e sem
+# diferenca de espaco, do caminho inteiro entre abrir o app e o portao:
+#   - Acessibilidade.kt inteiro, sem o texto entre aspas (a regra e a tela fechada; o texto da tela pode mudar), e o
+#     objeto de novo com o texto entre aspas, que nele e parte da regra;
+#   - Raiz.kt: o `package` e os imports (um import ganha da declaracao do mesmo pacote e trocaria o objeto, a tela ou o
+#     travar), o comeco do `Raiz` ate o retorno da tela fechada, e o `travarAgora`;
+#   - MainActivity.kt do topo ate o `setContent`, e o `onStart` ate a conferencia; o `TemaEscalibur`; o `cancelarBiometria`.
+# Mudou de proposito (um import novo no Raiz.kt tambem conta): confira que o portao segue como esta descrito aqui e grave
+# o digesto novo. Em volta, sem digesto, sempre no codigo sem comentario e sem crase (o Kotlin aceita qualquer nome entre
+# crases, e a crase escondia o nome da conferencia):
+#   - so a MainActivity monta tela (`setContent`, `ComposeView`, `Composition`), uma vez, e o app tem uma Activity so;
+#   - o teclado proprio repassa o conteudo e nao usa nenhum pacote de tela;
+#   - as telas de entrada (bloqueio, PIN, carteira) so sao citadas, por palavra, nos arquivos de sempre;
+#   - os nomes do caminho (`Acessibilidade`, `TelaDeAcessibilidade`, `Ciclo`, `Raiz`, `TecladoSeguro`, `TemaEscalibur`,
+#     `Cofre`) so sao declarados onde ja sao, 8 vezes: uma propriedade, uma funcao de extensao ou um objeto com o mesmo
+#     nome, em qualquer arquivo, ganharia do verdadeiro na resolucao de nomes do Kotlin.
+# O limite desta trava e este: escrever em outra parte do app um caminho novo ate a carteira e assunto da revisao do codigo.
+a11y_normal() { sed 's/[[:space:]]\{1,\}/ /g; s/^ //; s/ $//' | grep -v '^$'; }
+a11y_digesto() { a11y_normal | shasum -a 256 | cut -d' ' -f1; }
+a11y_w="$AND/java/app/escalibur/wallet"
+a11y_arquivo=$(codigo_vivo "$a11y_w/ui/Acessibilidade.kt" | a11y_digesto)
+a11y_objeto=$(codigo "$a11y_w/ui/Acessibilidade.kt" | awk '/^object Acessibilidade \{/ { d = 1 } d { print } d && /^\}/ { exit }' | a11y_digesto)
+a11y_cabeca=$(codigo "$a11y_w/ui/Raiz.kt" | grep -E '^[[:space:]]*(package|import)([[:space:]]|$)' | a11y_digesto)
+a11y_raiz=$(codigo "$a11y_w/ui/Raiz.kt" | awk '/^fun Raiz\(\) \{/ { d = 1 } d { print } d && /^ *return[[:space:]]*$/ { exit }' | a11y_digesto)
+a11y_travar=$(codigo "$a11y_w/ui/Raiz.kt" | awk '/^    suspend fun travarAgora\(\) \{/ { d = 1 } d { print } d && /^    \}[[:space:]]*$/ { exit }' | a11y_digesto)
+a11y_entrada=$(codigo "$a11y_w/MainActivity.kt" | awk '{ print } /^ *setContent \{/ { exit }' | a11y_digesto)
+a11y_volta=$(codigo "$a11y_w/MainActivity.kt" | awk '/^    override fun onStart\(\)/ { d = 1 } d { print } d && /Acessibilidade\.conferir\(this\)/ { exit }' | a11y_digesto)
+a11y_tema=$(codigo "$a11y_w/ui/tema/Tema.kt" | awk '/^fun TemaEscalibur\(/ { d = 1 } d { print } d && /^\}[[:space:]]*$/ { exit }' | a11y_digesto)
+a11y_bio=$(codigo "$a11y_w/nucleo/Cofre.kt" | awk '/^    fun cancelarBiometria\(\) \{/ { d = 1 } d { print } d && /^    \}[[:space:]]*$/ { exit }' | a11y_digesto)
+a11y_compoe=$(for a11y_f in $(grep -rlE 'setContent|ComposeView|Composition|Recomposer' "$AND/java"); do codigo "$a11y_f" | tr -d '`' | grep -qwE 'setContent|ComposeView|AbstractComposeView|Composition|createComposition|Recomposer' && echo "$a11y_f"; done)
+a11y_entradas="$a11y_w/ui/(Raiz|bloqueio/Bloqueio|ajustes/Seguranca|abertura/Abertura|pin/Pin|principal/Principal)\\.kt"
+a11y_telas=$(for a11y_f in $(grep -rlE 'TelaDeBloqueio|TelaDoPin|Principal|FluxoDeAbertura|TelaSemBloqueio' "$AND/java"); do codigo_vivo "$a11y_f" | tr -d '`' | grep -qwE 'TelaDeBloqueio|TelaDoPin|Principal|FluxoDeAbertura|TelaSemBloqueio' && echo "$a11y_f"; done | grep -vxE "$a11y_entradas")
+a11y_nomes='Acessibilidade|TelaDeAcessibilidade|Ciclo|Raiz|TecladoSeguro|TemaEscalibur|Cofre'
+a11y_declarados=$(for a11y_f in $(grep -rlE "$a11y_nomes" "$AND/java"); do codigo "$a11y_f" | tr -d '`' | tr '\n' ' ' | sed 's/[^A-Za-z0-9_]/&&/g'; echo; done | grep -oE "(^|[^A-Za-z0-9_])((object|class|interface|typealias)[[:space:]]+|(fun|val|var)[[:space:]]+([^(=;{}:]*[^A-Za-z0-9_])?)($a11y_nomes)([^A-Za-z0-9_]|\$)" | wc -l | tr -d ' ')
+[ "$a11y_arquivo" = "20acc5962d6dd59452e65042da0e5050729f99c5cd0d2e5a1ede55f039496780" ] \
+    && [ "$a11y_objeto" = "ad14b7fb067545166519596412863d1797d3bdcb33da8325c5cbfb07761a017e" ] \
+    && [ "$a11y_cabeca" = "1c98a9beb2b9f85366394f8dc297f6a02b0df8c8804b261ce0c5662f4d9a66e9" ] \
+    && [ "$a11y_raiz" = "9b176acca2fd4ea622dd48fc75a7499a8ae52bc9b1aa9009be88025ecad45d5b" ] \
+    && [ "$a11y_travar" = "24a864f24d8d3b848bdb7d42e4fe59f09c517407ed9b2ddc518616f2ed8625ae" ] \
+    && [ "$a11y_entrada" = "11467a9a0b8950a5afc982a698f20e678d5a96a53d962a350eaf36dc2e939136" ] \
+    && [ "$a11y_volta" = "395bf07a4a43d0060e0aa9d2ffb4fb0708eb908484af083478e0438d320e7044" ] \
+    && [ "$a11y_tema" = "6c2389bc9fbf567ffc4c3b2c4c3ce02532c918d268078787af85a82a9a9c7de0" ] \
+    && [ "$a11y_bio" = "7f98514ffff5400f1529d705c1f4733be42750e1ce649cc3fe433137692318c5" ] \
+    && [ "$(codigo "$a11y_w/ui/Raiz.kt" | grep -c '^fun Raiz() {')" = 1 ] \
+    && [ "$a11y_compoe" = "$a11y_w/MainActivity.kt" ] \
+    && [ "$(codigo "$a11y_w/MainActivity.kt" | tr -d '`' | grep -oE '(^|[^A-Za-z0-9_])setContent([^A-Za-z0-9_]|$)' | wc -l | tr -d ' ')" = 2 ] \
+    && [ "$(find "$AND/.." -name AndroidManifest.xml -exec cat {} + | grep -oE '<activity' | wc -l | tr -d ' ')" = 1 ] \
+    && [ "$(codigo "$a11y_w/ui/comp/TecladoSeguro.kt" | a11y_normal | grep -cxF 'content = conteudo,')" = 1 ] \
+    && [ -z "$(codigo "$a11y_w/ui/comp/TecladoSeguro.kt" | tr -d '`' | tr '\n' ' ' | sed 's/[[:space:]]*\.[[:space:]]*/./g' | grep -oE 'app\.escalibur\.wallet\.ui\.[a-z][A-Za-z0-9_]*\.' | grep -vxE 'app\.escalibur\.wallet\.ui\.(comp|tema)\.')" ] \
+    && [ -z "$a11y_telas" ] \
+    && [ "$a11y_declarados" = 8 ] \
+    && ok "a carteira fecha e trava com qualquer servico de acessibilidade de fora, em qualquer Android, ferramenta ou nao" \
+    || aviso "carteira aberta com servico de acessibilidade de fora (Acessibilidade.kt, o portao do Raiz ou os imports dele, o travar, a entrada da MainActivity ou o que fica em volta mudou: confira o portao e grave o digesto novo)"
 # A frase e a passphrase nunca vao para o teclado padrao de outro app: nem pelo Safe Keyboard desligado, nem pelo globo, nem
 # trocando o padrao no meio (auditoria 8, 14/11/2026).
 codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -qF 'val deTerceiros = deSegredo && tecladoDeTerceiros(vista.context)' \
@@ -2087,6 +2362,11 @@ if [ "${1:-}" = "--testes" ]; then
         echo "$saida" | grep -E "✘|error:|fatal error|Fatal error" | head -40
         echo "$saida" | tail -15
     fi
+    # O objeto do SecureBytes chama o _SecRandomCopyBytes do sistema, e nao um com o mesmo nome do proprio Swift (regra do
+    # sorteio, rodada dos 3 agentes de 19/11/2026). O binario da loja e conferido pelo nm no arquivar.sh.
+    sorteio_o=$(nm -u Kit/.build/debug/EscaliburCore.build/SecureBytes.swift.o 2>/dev/null)
+    grep -qx '_SecRandomCopyBytes' <<<"$sorteio_o" && grep -qx '_kSecRandomDefault' <<<"$sorteio_o" \
+        && ok "o SecureBytes compilado chama o SecRandomCopyBytes do sistema" || aviso "o SecureBytes compilado nao chama o SecRandomCopyBytes do sistema"
     proibidos='URLSession|_nw_|CFSocket|CFStream|CFHTTP|NSURLConnection|XMLParser|NSInputStream|NSOutputStream|So11InputStream|So12OutputStream|objc_getClass|^_dlopen$|^_dlsym$|^_socket$|^_connect$|^_getaddrinfo$'
     achados=""
     for modulo in EscaliburKeys EscaliburChains EscaliburCore; do

@@ -146,3 +146,119 @@ enum NonceQueue {
         return asset == Asset.native(chain).id ? !entries.isEmpty : entries.contains { $0.sells == asset }
     }
 }
+
+/// Os envios fora da EVM transmitidos sem resposta certa da rede (`UnsureSend`; a regra, no Kit, e a mesma do Android,
+/// onde isto e o `EnviosSemResposta`). Gravado antes de os bytes sairem, tirado quando a transmissao responde. Enquanto
+/// fica: a Atividade mostra a linha em "Pendentes" e, ate a rede conhecer a transacao, a conta nao monta outro envio nesta
+/// rede. Antes, travar, fechar a tela do envio sem resposta ou o sistema matar o app apagava o unico rastro, e o dono
+/// podia pagar duas vezes (pentest de 17/11/2026).
+@MainActor
+enum UnsureSendLedger {
+    /// A nota da linha na Atividade.
+    static var note: String { String(localized: "Sem resposta da rede") }
+
+    /// Grava o registro antes de os bytes sairem. false: nao gravou (o app travou no meio, a gravacao falhou, a carteira
+    /// saiu) e nao ha um registro deste mesmo envio de antes; quem chama nao transmite.
+    static func record(_ session: AppSession, _ send: UnsureSend) -> Bool {
+        let before = session.metadata.unsureSends
+        // Transmitir de novo os mesmos bytes: o registro de antes segue valendo se o novo nao gravar.
+        let already = before?.contains { $0.wallet == send.wallet && $0.chainID == send.chainID && $0.hash == send.hash } == true
+        // A carteira removida no meio nao volta a ter rastro.
+        guard session.phase == .unlocked, session.metadata.wallets.contains(where: { $0.id == send.wallet }) else { return already }
+        session.metadata.unsureSends = UnsureSends.recording(send, in: before ?? [])
+        do {
+            try session.persist()
+        } catch {
+            session.metadata.unsureSends = before
+            return already
+        }
+        ActivityFeed.shared.syncUnsure(session, wallet: send.wallet)
+        return true
+    }
+
+    /// A transmissao respondeu, ou a rede confirmou com a tela aberta: o registro sai. Travado no meio, fica para o destravar.
+    static func remove(_ session: AppSession, hash: String, wallet: UUID, chainID: String) {
+        session.whenUnlocked { session in
+            guard let list = session.metadata.unsureSends else { return }
+            let left = UnsureSends.removing(hash: hash, wallet: wallet, chainID: chainID, from: list)
+            guard left.count != list.count else { return }
+            session.metadata.unsureSends = left.isEmpty ? nil : left
+            try? session.persist()
+            ActivityFeed.shared.syncUnsure(session, wallet: wallet)
+        }
+    }
+
+    /// As linhas de "Pendentes" da carteira, para a Atividade.
+    static func entries(_ session: AppSession, wallet: UUID) -> [ActivityEntry] {
+        (session.metadata.unsureSends ?? []).filter { $0.wallet == wallet && UnsureSends.shown($0) }.map { $0.entry(unanswered: note) }
+    }
+
+    /// O motivo para a tela quando a conta tem um envio que a rede ainda nao disse se saiu, ou nil (ler depois de `prune`).
+    static func blockedReason(_ session: AppSession, wallet: UUID, chain: Chain, address: String) -> String? {
+        guard !UnsureSends.pending(in: session.metadata.unsureSends ?? [], wallet: wallet, chainID: chain.id, address: address).isEmpty
+        else { return nil }
+        return String(localized: "Um envio anterior desta conta ficou sem resposta da rede, e ainda não dá para saber se ele saiu. Para você não pagar duas vezes, o próximo envio espera a rede dizer o que houve com ele. Se a rede responder que não conhece esse envio, o app libera 30 minutos depois. Ele aparece em Pendentes, na Atividade.")
+    }
+
+    /// Pergunta a rede por cada envio sem resposta da carteira (ou so os de uma conta) e aplica a regra
+    /// (`UnsureSends.step`): o confirmado vira envio feito; o que falhou com prova sai; o que a rede conhece deixa de
+    /// segurar a conta; o que ela diz nao conhecer sai 30 minutos depois da primeira resposta dessas; sem resposta, nada
+    /// muda. Travado no meio, nada e gravado, e a proxima poda refaz.
+    static func prune(_ session: AppSession, wallet: UUID, chain: Chain? = nil, address: String? = nil) async {
+        let records = (session.metadata.unsureSends ?? []).filter { record in
+            record.wallet == wallet && chain.map { $0.id == record.chainID } != false && address.map { $0 == record.address } != false
+        }
+        var changed = false
+        for record in records {
+            // Rede que esta versao nao conhece mais, ou sem motor: nao ha a quem perguntar, e so o tempo decide.
+            var answer = SendLookup.unknowable
+            if let known = Chain.find(record.chainID), let engine = SendEngines.engine(for: known) {
+                answer = await engine.lookup(record, chain: known)
+            }
+            let step = UnsureSends.step(record, lookup: answer)
+            if case .keep(let same) = step, same == record { continue }
+            // Depois da espera: so o registro conferido aqui, com o app ainda destravado. O confirmado sai sempre; o resto, so
+            // se ele segue como foi lido (um "Transmitir de novo" durante a leitura refez a hora, e esse e conferido na proxima poda).
+            guard session.phase == .unlocked, var list = session.metadata.unsureSends,
+                  let index = list.firstIndex(where: { $0.wallet == record.wallet && $0.chainID == record.chainID && $0.hash == record.hash })
+            else { continue }
+            switch step {
+            case .sent:
+                list.remove(at: index)
+                // O que o envio feito anota (`SendStages.finish`), uma vez so: junto com a saida do registro.
+                if let to = record.recipient {
+                    var sentTo = session.metadata.sentTo[record.chainID] ?? []
+                    if !sentTo.contains(to) { sentTo.append(to) }
+                    session.metadata.sentTo[record.chainID] = sentTo
+                }
+                session.metadata.settings.completedSends = (session.metadata.settings.completedSends ?? 0) + 1
+                // A rede desta carteira le o historico de novo: a linha de verdade entra no lugar da pendente.
+                session.metadata.activityFetched?[record.wallet]?[record.chainID] = nil
+                ActivityFeed.shared.settleSent(hash: record.hash, wallet: record.wallet, status: .confirmed)
+            case .dropped(let reason):
+                guard list[index] == record else { continue }
+                list.remove(at: index)
+                if let reason {
+                    ActivityFeed.shared.settleSent(hash: record.hash, wallet: record.wallet, status: .failed(reason))
+                } else {
+                    ActivityFeed.shared.dropSent(hash: record.hash, wallet: record.wallet)
+                }
+            case .keep(let updated):
+                guard list[index] == record else { continue }
+                list[index] = updated
+                // A linha que a memoria ainda mostra acompanha o registro; a marca das moedas sai da Atividade, como o envio
+                // que a rede nao conhece saia antes.
+                if UnsureSends.shown(updated) {
+                    ActivityFeed.shared.settleSent(hash: record.hash, wallet: record.wallet, status: updated.entry(unanswered: note).status)
+                } else {
+                    ActivityFeed.shared.dropSent(hash: record.hash, wallet: record.wallet)
+                }
+            }
+            session.metadata.unsureSends = list.isEmpty ? nil : list
+            changed = true
+        }
+        guard changed else { return }
+        try? session.persist()
+        ActivityFeed.shared.syncUnsure(session, wallet: wallet)
+    }
+}

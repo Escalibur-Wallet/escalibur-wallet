@@ -91,6 +91,8 @@ enum NEAREngineText {
     static let accountMissing = kitText("Esta conta ainda não existe na rede NEAR. Ela passa a existir quando receber o primeiro NEAR.")
     static let keyNotOnAccount = kitText("A chave desta carteira não pode mover esta conta NEAR: ela foi removida da conta ou só chama contratos. Nada foi montado.")
     static let planMismatch = kitText("O envio montado não confere com o destino pedido. Nada foi assinado.")
+    /// O registro dos envios sem resposta, com o numero da chave ja usado: a mesma frase da Polkadot, traduzida uma vez.
+    static let nonceUsed = kitText("Não deu para confirmar este envio, mas a conta já usou o número dele na rede: ele pode ter saído. Confira a Atividade antes de enviar de novo.")
     static let notOurTransaction = kitText("A transação assinada não confere com a que foi montada. Nada foi transmitido.")
     static let answerMismatch = kitText("A resposta da rede não confere com a transação assinada. Confira a Atividade antes de enviar de novo.")
     static let broadcastUnconfirmed = kitText("Não foi possível confirmar a transmissão. Confira a Atividade antes de enviar de novo.")

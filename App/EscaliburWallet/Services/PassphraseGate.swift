@@ -521,14 +521,27 @@ struct PassphrasePromptSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SheetHeader(title: String(localized: "Digite a passphrase")) { close() }
             // O selo das telas onde se digita um segredo (pedido do dono, 18/10/2026).
-            // Menor que nas telas cheias: a folha divide a altura com o teclado.
-            CipherEmblem(size: 60).frame(maxWidth: .infinity)
-            Text(request.reason)
-                .typeStyle(.body).foregroundStyle(Palette.inkSoft)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, Space.gutter).padding(.top, Space.sm)
+            // Menor que nas telas cheias: a folha divide a altura com o teclado. O fechar fica na linha
+            // do selo, e o titulo e o motivo vem embaixo dele, no centro, como nas outras telas de
+            // digitar segredo (pedido do dono, 17/11/2026). A altura da folha fica a mesma de antes.
+            ZStack(alignment: .top) {
+                CipherEmblem(size: 60).frame(maxWidth: .infinity).padding(.top, Space.lg)
+                SheetHeader(title: "") { close() }
+            }
+            Group {
+                Text("Digite a passphrase").typeStyle(.title).foregroundStyle(Palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.top, Space.sm)
+                Text(request.reason)
+                    .typeStyle(.body).foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Space.xs)
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Space.gutter)
             PasswordBox(buffer: buffer, length: $length, placeholder: String(localized: "Passphrase"), focusOnAppear: true, reveal: $reveal,
                         onSubmit: { confirm() }, glyphs: glyphs, wipesOnLeave: true)
                 .padding(.horizontal, Space.gutter).padding(.top, Space.lg)

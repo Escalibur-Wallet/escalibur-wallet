@@ -46,7 +46,7 @@ struct DeviceCheck: Identifiable, Equatable {
             Step(id: "origem", title: String(localized: "Instalado pela App Store"), run: origin),
             Step(id: "tela", title: String(localized: "Tela sem gravação"), run: screen),
             Step(id: "teclado", title: String(localized: "Teclados de terceiros bloqueados"), run: keyboards),
-            Step(id: "sistema", title: "iOS \(version.majorVersion).\(version.minorVersion)", run: system),
+            Step(id: "sistema", title: "iOS \(versionText(version))", run: system),
             Step(id: "leitor", title: String(localized: "Nada lendo a tela em voz alta"), run: voiceOver),
         ]
     }
@@ -191,14 +191,21 @@ struct DeviceCheck: Identifiable, Equatable {
         .init(id: "teclado", title: String(localized: "Teclados de terceiros bloqueados"), outcome: .pass)
     }
 
-    /// O iOS contra a versao com que este build foi feito: abaixo dela, o aparelho pode
-    /// estar sem correcoes de seguranca que ja existem.
+    /// O iOS contra o mais novo com correcoes de seguranca quando este build saiu (27.2.1, de 09/11/2026;
+    /// a cadeia de exploracao que a SlowMist descreveu em setembro chegaria ate a 26.5): abaixo dele, o
+    /// aparelho pode estar sem correcoes que ja existem. A linha 26 (26.7.3) tambem ve o aviso: a Apple
+    /// nao leva toda correcao para a versao anterior. A correcao (o terceiro numero) conta.
     static func system() -> DeviceCheck {
         let version = ProcessInfo.processInfo.operatingSystemVersion
-        let current = "\(version.majorVersion).\(version.minorVersion)"
-        let behind = (version.majorVersion, version.minorVersion) < (26, 5)
-        return .init(id: "sistema", title: "iOS \(current)",
+        let behind = (version.majorVersion, version.minorVersion, version.patchVersion) < (27, 2, 1)
+        return .init(id: "sistema", title: "iOS \(versionText(version))",
                      outcome: behind ? .caution(String(localized: "Existe iOS mais novo, com correções de segurança. Atualize quando puder.")) : .pass)
+    }
+
+    /// "27.2" ou "27.2.1": a correcao aparece quando existe, para o aviso nao parecer errado na 27.2.
+    static func versionText(_ version: OperatingSystemVersion) -> String {
+        let base = "\(version.majorVersion).\(version.minorVersion)"
+        return version.patchVersion > 0 ? "\(base).\(version.patchVersion)" : base
     }
 
     @MainActor

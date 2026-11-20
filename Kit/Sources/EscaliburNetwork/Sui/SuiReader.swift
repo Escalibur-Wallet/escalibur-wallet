@@ -197,6 +197,19 @@ public actor SuiReader {
         }
     }
 
+    /// Para o registro dos envios sem resposta, quando os dois sorteados do `status` nao conhecem a transacao: todos os donos
+    /// (`Quorum.presence`). Um no podado diz "nao encontrada" tambem da transacao antiga que entrou (conferido ao vivo em
+    /// 18/11/2026: com 13 dias, so um dos tres ainda tinha a transacao; com 20, nenhum).
+    public func presence(of digest: String) async throws -> TransactionPresence {
+        guard let bytes = Base58.bitcoin.decode(digest), bytes.count == 32 else { throw ReaderError.invalidInput("digesto") }
+        return await Quorum.presence(await pool.available(), pool: pool) { provider in
+            try await self.ensureMainnet(provider)
+            return try Self.parseTransactionLookup(
+                try await self.call(provider, "sui.rpc.v2.LedgerService/BatchGetTransactions", Self.lookupRequest(digest)), digest: digest
+            ) != .notFound
+        }
+    }
+
     /// A epoca atual em dois provedores concordando.
     public func currentEpoch() async throws -> UInt64 {
         try await Quorum.agree(await pool.available(), pool: pool, field: "epoch") { provider in

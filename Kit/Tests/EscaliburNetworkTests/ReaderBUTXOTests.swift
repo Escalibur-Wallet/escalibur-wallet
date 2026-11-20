@@ -160,6 +160,37 @@ struct ReaderBUTXOTests {
         }
     }
 
+    @Test("Envio sem resposta: o Esplora que diz {\"confirmed\":false} de um id que nunca viu nao conta como quem conhece")
+    func knowledgeOfANeverBroadcastTransaction() async throws {
+        let txid = String(repeating: "ab", count: 32)
+        let neverSeen = ReaderBFakeTransport()
+        for host in ["esplora-a.test", "esplora-b.test", "esplora-c.test"] {
+            // O que a Blockstream e a mempool.space respondem de verdade (18/11/2026) para um id sorteado.
+            neverSeen.on("\(host)/api/tx/\(txid)/status", text: #"{"confirmed":false}"#)
+            neverSeen.on("\(host)/api/tx/\(txid)", status: 404)
+        }
+        let unknown = try await UTXOReader(chain: .bitcoin, transport: neverSeen, providers: T.esploraProviders).knowledge(txid: txid)
+        #expect(unknown.answered == 2 && unknown.knowing == 0)
+
+        // Na fila de um so: conhece. A transacao com outro id nao vale como resposta.
+        let inOneMempool = ReaderBFakeTransport()
+        inOneMempool.on("esplora-a.test/api/tx/\(txid)", status: 404)
+        inOneMempool.on("esplora-b.test/api/tx/\(txid)", text: Self.esploraTransaction(txid))
+        inOneMempool.on("esplora-c.test/api/tx/\(txid)", status: 404)
+        let seen = try await UTXOReader(chain: .bitcoin, transport: inOneMempool, providers: T.esploraProviders).knowledge(txid: txid)
+        #expect(seen.answered == 2 && seen.knowing == 1)
+        let lying = ReaderBFakeTransport()
+        lying.on("esplora-a.test/api/tx/\(txid)", text: Self.esploraTransaction(String(repeating: "cd", count: 32)))
+        lying.on("esplora-b.test/api/tx/\(txid)", status: 404)
+        lying.on("esplora-c.test/api/tx/\(txid)", status: 404)
+        let refused = try await UTXOReader(chain: .bitcoin, transport: lying, providers: T.esploraProviders).knowledge(txid: txid)
+        #expect(refused.answered == 2 && refused.knowing == 0)
+    }
+
+    static func esploraTransaction(_ txid: String) -> String {
+        #"{"txid":"\#(txid)","vin":[],"vout":[],"fee":200,"status":{"confirmed":false}}"#
+    }
+
     @Test("Aviso de recebimento: endereco por endereco, provedor fixo sem contingencia, outro dono confere toda mudanca")
     func receiptBalancesPerAddress() async throws {
         let address = T.abandonReceive0

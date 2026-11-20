@@ -150,7 +150,7 @@ struct RootView: View {
                         get: { router.incomingEnvelope.map { IncomingEnvelope(url: $0) } },
                         set: { if $0 == nil { router.incomingEnvelope = nil } }
                     )) { incoming in
-                        OpenEnvelopeFlow(initialURL: incoming.url) { router.incomingEnvelope = nil }
+                        OpenEnvelopeFlow(initialURL: incoming.url, fromAnotherApp: true) { router.incomingEnvelope = nil }
                     }
             }
         }
