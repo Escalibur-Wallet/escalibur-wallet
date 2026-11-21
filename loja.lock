@@ -31,7 +31,7 @@
     ".xcode-version": "8fdab257cb1a860a6416eadf25c0ae8ddf3af194de2b8e8003c9e974a8f33644",
     ".github/workflows/verificar.yml": "4c075e8f7ce45392079a10f9481439fc53131d2a6e1d7ee919d470ad9a7d656d",
     ".github/workflows/site.yml": "acdee3c5ba97785b9a187e7631c8288c1cf9120c7afa99fc95ead16e28af502c",
-    "tools/android/testar-nucleo.sh": "e31e627dad25af4f4644a001e987670f880fff10bd041891006c567abcaaa24a",
+    "tools/android/testar-nucleo.sh": "8ab49ac9bdf7abd344963c06ff00c158aaec166dfa745e6208d1307ba4631664",
     "tools/android/play.py": "0e0a772eb4f8604c5392a3a3ab52d92ae0df0bd11b59d03787f99529f64c5ada"
   }
 }

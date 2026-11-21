@@ -170,7 +170,8 @@ for t in "${TESTES[@]}"; do
     # (decima terceira passada). Vetor novo pede atualizar o numero aqui.
     if [ -n "$FILTRO" ]; then
         esperado=0
-        if [ "$t" = EscaliburCoreTests ]; then esperado=15; fi
+        # 17 desde 20/11/2026: o alarme do sorteio (SecureBytesTests) roda tambem no nucleo otimizado do Android.
+        if [ "$t" = EscaliburCoreTests ]; then esperado=17; fi
         if [ "$t" = EscaliburKeysTests ]; then esperado=40; fi
         sed 's/\x1b\[[0-9;]*m//g' "$L" | grep -qE "Test run with $esperado tests? in [0-9]+ suites? passed" \
             || { echo "== $t: nao rodaram os $esperado vetores esperados" >&2; falhou=1; }
