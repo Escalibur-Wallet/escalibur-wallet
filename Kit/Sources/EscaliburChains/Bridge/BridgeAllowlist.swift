@@ -14,8 +14,8 @@ import Foundation
 // - O SpokePool da Base, 0x09ae...bEC64, tem codigo com o mesmo endereco na X Layer e na
 //   Celo, e la nao e SpokePool (`chainId()` reverte). Endereco vale so na rede listada.
 //
-// Conferencia em 11 e 12/10/2026, cada valor em duas leituras independentes (o agente
-// de seguranca e a sessao principal), cada leitura em dois RPCs:
+// Conferencia em 11 e 12/10/2026, cada valor em duas leituras independentes (a revisao
+// de seguranca e a leitura principal), cada leitura em dois RPCs:
 // - endereco nas fontes oficiais: developers.circle.com (contract-addresses,
 //   supported-chains-and-domains, usdc-contract-addresses) e docs.across.to mais
 //   across-protocol/contracts broadcast/deployed-addresses.json, que concordam;
@@ -160,7 +160,7 @@ public enum BridgeAllowlist {
 
     // Segunda leva, 14/10/2026: lida do mesmo jeito (implementacao no slot EIP-1967,
     // `localDomain()` e `chainId()` em dois RPCs; dominio e implementacao do
-    // TokenMessengerV2 batem com a leitura independente do agente de seguranca de
+    // TokenMessengerV2 batem com a leitura independente da revisao de seguranca de
     // 11/10). Cada uma tem `eth_simulateV1` em duas fontes. O que fica de fora em cada:
     // - Polygon: so USDC. O ETH que o Across entrega la e WETH de ponte, e o USDT da
     //   lista ainda nao tem a conferencia de emissor registrada.
@@ -219,7 +219,7 @@ public enum BridgeAllowlist {
         chain: .plasma, cctpDomain: 33,
         usdc: address("2d661C89D812261039AF9764eceaAee884f5F67F"),
         // A Plasma tem outra implementacao do TokenMessengerV2 (lida em dois RPCs, igual a
-        // do agente de seguranca).
+        // da revisao de seguranca).
         messengerImplementation: address("1ccafdffbc1b7b5c499c97322f961b7d929a41b4"),
         transmitterImplementation: address("d683965f427af258f5eec40f950a95a62edc8ca6"),
         across: .init(spokePool: address("50039fAEfebef707cFD94D6d462fE6D10B39207a"), implementation: address("af10c33de0aee6df661b9bfb25e829871ab87a41"),

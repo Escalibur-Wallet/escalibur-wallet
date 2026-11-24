@@ -7,6 +7,10 @@
 #     ./tools/verificar.sh            as verificacoes estaticas
 #     ./tools/verificar.sh --testes   e tambem os testes do nucleo (vetores oficiais)
 #     ./tools/verificar.sh --atualizar-simbolos   regrava simbolos.lock (revise o diff)
+#     ./tools/verificar.sh --atualizar-simbolos-android
+#                                     regrava simbolos-swift-android.lock do ultimo build do nucleo do Android
+#     ./tools/verificar.sh --dex <apk|aab|pasta> [todas|app]
+#                                     o bytecode de um pacote Android (o gerar-aab.sh usa o --dex-loja)
 #     ./tools/verificar.sh --binario <EscaliburWallet.app>
 #                                     e tambem o app de um build Release para aparelho
 #                                     (arm64e, autenticacao de ponteiro, entitlements)
@@ -18,6 +22,14 @@ set -uo pipefail
 app_binario=""
 if [ "${1:-}" = "--binario" ] && [ -n "${2:-}" ]; then
     app_binario="$(cd "$(dirname "$2")" 2>/dev/null && pwd)/$(basename "$2")"
+fi
+# Os caminhos do --dex-loja e do --dex tambem.
+if [ "${1:-}" = "--dex-loja" ] || [ "${1:-}" = "--dex" ]; then
+    caminhos_dex=("$1")
+    for caminho_dex in "${@:2}"; do
+        case "$caminho_dex" in app|todas) caminhos_dex+=("$caminho_dex") ;; *) caminhos_dex+=("$(cd "$(dirname "$caminho_dex")" 2>/dev/null && pwd)/$(basename "$caminho_dex")") ;; esac
+    done
+    set -- "${caminhos_dex[@]}"
 fi
 cd "$(dirname "$0")/.." || exit 1
 
@@ -117,11 +129,420 @@ conferir_trava_do_segredo() {
     [ "$chamadas" = "2" ] && ok "o SecureBytes do nucleo do Android ($1) chama mlock e madvise (AA-01)" \
         || aviso "o SecureBytes do nucleo do Android ($1) sem mlock ou madvise no objeto (AA-01)"
 }
+# Os objetos Swift do nucleo do Android tambem por lista fechada, como o C (auditoria de 23/11/2026): regra de texto no
+# Swift sempre tem outra grafia (a funcao numa variavel, um espaco antes do parentese, o nome em pedacos), e o objeto
+# compilado nao tem. Em EscaliburAndroid, EscaliburEngines e EscaliburNetwork, todo simbolo de fora que nao e do Swift (sem
+# `$s`, `swift_` e `__swift`) esta em simbolos-swift-android.lock, por configuracao e modulo; e alguns nunca passam, nem com
+# o lock atualizado: rede, executar programa, carregar biblioteca, chamada direta ao kernel, ioctl e memoria executavel
+# (`write`, `close`, `fsync`, `rename` e `unlink` sao do Metadados.swift, que grava os metadados cifrados).
+# Entre os simbolos do Swift, no EscaliburAndroid e no EscaliburEngines, nunca: o FoundationNetworking (URLSession,
+# URLProtocol), o Process, o NSData e o NSString de endereco (no Foundation do Android eles buscam o endereco de fora pelo
+# FoundationNetworking), o Host (DNS), a classe ou o tipo pelo nome (NSClassFromString, _typeByName) e o Bundle que carrega
+# codigo. O Data(contentsOf:) e o String(contentsOf:) de hoje sao os do FoundationEssentials, que le so arquivo: a biblioteca
+# dele nao chama socket, curl, dlsym nem o Foundation. O EscaliburNetwork usa o FoundationNetworking de proposito (o
+# AndroidURLProtocol e o HTTPClient) e e o controle: a regra que nao o visse la estaria cega.
+modulos_swift_android="EscaliburAndroid EscaliburEngines EscaliburNetwork"
+swift_android_proibidos='^(socket|socketpair|connect|bind|listen|accept|accept4|send|recv|sendto|recvfrom|sendmsg|recvmsg|sendmmsg|recvmmsg|getaddrinfo|getnameinfo|gethostbyname|gethostbyname2|gethostbyaddr|getifaddrs|res_.*|execve|execv|execvp|execl|execlp|execle|fexecve|system|popen|fork|vfork|posix_spawn|posix_spawnp|dlopen|dlsym|dlvsym|dladdr|android_dlopen_ext|loader_.*|ptrace|syscall|process_vm_readv|process_vm_writev|memfd_create|sendfile|sendfile64|ioctl|mprotect|curl_.*)$'
+swift_android_proibidos_swift='^_?\$s(20FoundationNetworking|10Foundation7ProcessC|10Foundation6NSDataC10contentsOf|10Foundation8NSStringC10contentsOf|10Foundation4HostC|10Foundation17NSClassFromString|s11_typeByName|10Foundation6BundleC(4load|10classNamed|14principalClass))'
+# Nos tres modulos, o EscaliburNetwork inclusive: o Mirror, a reflexao do Swift (hoje nenhum).
+swift_android_proibidos_todos='^_?\$ss6MirrorV'
+# No EscaliburNetwork, o FoundationNetworking travado por objeto (.o) no simbolos-swift-android.lock: hoje so o
+# HTTPClient, o AndroidTransport e o CoWClient o usam, e um URLSession novo sem o AndroidURLProtocol, noutro arquivo ou
+# com um simbolo novo, sairia pela libcurl sem passar pelo Rede.kt (auditoria de 23/11/2026).
+swift_android_fn='^_?\$s20FoundationNetworking'
+objetos_swift_android() { ls "build/android-kit/out/Intermediates.noindex/EscaliburKit.build/$1-android-aarch64/$2-t.build/Objects-normal/aarch64/"*.o 2>/dev/null; }
+# "<configuracao> <modulo> <simbolo>" de cada simbolo de fora que nao e do Swift.
+simbolos_swift_android() {
+    local configuracao="$1" modulo objetos
+    for modulo in $modulos_swift_android; do
+        objetos=$(objetos_swift_android "$configuracao" "$modulo")
+        [ -n "$objetos" ] || continue
+        # shellcheck disable=SC2086
+        "$(nm_android)" -u $objetos 2>/dev/null | awk 'NF && $NF !~ /:$/ {print $NF}' | grep -vE '^_?\$s|^_?swift_|^__swift' \
+            | LC_ALL=C sort -u | sed "s/^/$configuracao $modulo /"
+    done
+}
+# "<configuracao> EscaliburNetwork/<objeto> <simbolo>" de cada simbolo do FoundationNetworking que o objeto usa.
+simbolos_fn_android() {
+    local configuracao="$1" objeto
+    for objeto in $(objetos_swift_android "$configuracao" EscaliburNetwork); do
+        "$(nm_android)" -u "$objeto" 2>/dev/null | awk 'NF {print $NF}' | grep -E "$swift_android_fn" \
+            | LC_ALL=C sort -u | sed "s|^|$configuracao EscaliburNetwork/$(basename "$objeto") |"
+    done
+    # O objeto sem FoundationNetworking deixa o grep em 1: com o pipefail, a lista inteira falhava.
+    return 0
+}
+conferir_simbolos_swift_android() {
+    local configuracao="$1" modulo objetos atuais novos perigosos swift_proibidos controle fn fn_novos faltam=""
+    for modulo in $modulos_swift_android; do [ -n "$(objetos_swift_android "$configuracao" "$modulo")" ] || faltam="$faltam $modulo"; done
+    [ -z "$faltam" ] || { aviso "checagem do Swift do nucleo do Android ($configuracao) cega: sem os objetos de$faltam"; return; }
+    atuais=$(simbolos_swift_android "$configuracao")
+    [ -n "$atuais" ] || { aviso "checagem do Swift do nucleo do Android ($configuracao) cega: nenhum simbolo nos objetos"; return; }
+    perigosos=$(echo "$atuais" | awk '{print $3}' | nome_sem_fortificacao | grep -E "$swift_android_proibidos" | LC_ALL=C sort -u | tr '\n' ' ')
+    swift_proibidos=""
+    for modulo in EscaliburAndroid EscaliburEngines; do
+        # shellcheck disable=SC2086
+        swift_proibidos="$swift_proibidos$("$(nm_android)" -u $(objetos_swift_android "$configuracao" "$modulo") 2>/dev/null | awk '{print $NF}' \
+            | grep -E "$swift_android_proibidos_swift" | LC_ALL=C sort -u | sed "s/^/$modulo:/" | tr '\n' ' ')"
+    done
+    for modulo in $modulos_swift_android; do
+        # shellcheck disable=SC2086
+        swift_proibidos="$swift_proibidos$("$(nm_android)" -u $(objetos_swift_android "$configuracao" "$modulo") 2>/dev/null | awk '{print $NF}' \
+            | grep -E "$swift_android_proibidos_todos" | LC_ALL=C sort -u | sed "s/^/$modulo:/" | tr '\n' ' ')"
+    done
+    fn=$(simbolos_fn_android "$configuracao")
+    fn_novos=$(comm -23 <(echo "$fn" | LC_ALL=C sort -u) <(grep "^$configuracao EscaliburNetwork/" simbolos-swift-android.lock 2>/dev/null | LC_ALL=C sort -u) \
+        | awk '{print $2 ":" $3}' | tr '\n' ' ')
+    # shellcheck disable=SC2086
+    controle=$("$(nm_android)" -u $(objetos_swift_android "$configuracao" EscaliburNetwork) 2>/dev/null | awk '{print $NF}' | grep -cE '^\$s20FoundationNetworking10URLSessionC')
+    novos=$(comm -23 <(echo "$atuais" | LC_ALL=C sort -u) <(grep -E "^$configuracao Escalibur[A-Za-z]+ " simbolos-swift-android.lock 2>/dev/null | LC_ALL=C sort -u) | awk '{print $2 ":" $3}' | tr '\n' ' ')
+    if [ -n "$perigosos" ] || [ -n "$swift_proibidos" ]; then
+        aviso "o Swift do nucleo do Android ($configuracao) chama o que nunca pode: $perigosos$swift_proibidos"
+    elif [ "$controle" = 0 ]; then
+        aviso "checagem do Swift do nucleo do Android ($configuracao) cega: nem o EscaliburNetwork mostrou o URLSession"
+    elif [ -n "$novos" ]; then
+        aviso "simbolo de fora novo no Swift do nucleo do Android ($configuracao): $novos(revise e rode --atualizar-simbolos-android)"
+    elif [ -n "$fn_novos" ]; then
+        aviso "FoundationNetworking novo no EscaliburNetwork ($configuracao), por objeto: $fn_novos(um URLSession sem o AndroidURLProtocol sai sem o Rede.kt; revise e rode --atualizar-simbolos-android)"
+    else
+        ok "o Swift do nucleo do Android ($configuracao: $modulos_swift_android) so chama os $(echo "$atuais" | wc -l | tr -d ' ') simbolos de simbolos-swift-android.lock, sem rede no EscaliburAndroid e no EscaliburEngines, e o FoundationNetworking do EscaliburNetwork so nos $(echo "$fn" | awk '{print $2}' | LC_ALL=C sort -u | wc -l | tr -d ' ') objetos e nos $(echo "$fn" | grep -c .) simbolos do lock"
+    fi
+}
+# Regrava simbolos-swift-android.lock das configuracoes compiladas nesta maquina; a que nao esta compilada fica como estava.
+gravar_simbolos_swift_android() {
+    local c
+    { for c in Debug Release; do
+          if [ -n "$(objetos_swift_android "$c" EscaliburAndroid)" ]; then simbolos_swift_android "$c"; simbolos_fn_android "$c"
+          else grep "^$c " simbolos-swift-android.lock 2>/dev/null; fi
+      done; } | LC_ALL=C sort -u > simbolos-swift-android.lock.novo && mv simbolos-swift-android.lock.novo simbolos-swift-android.lock \
+        && ok "simbolos-swift-android.lock atualizado: $(wc -l < simbolos-swift-android.lock | tr -d ' ') simbolos (revise o diff)" \
+        || { rm -f simbolos-swift-android.lock.novo; aviso "simbolos-swift-android.lock nao foi regravado"; }
+}
+# O bytecode do app Android (auditoria de 23/11/2026): regra de texto no Kotlin sempre tem outra grafia (um apelido de tipo,
+# um escape unicode, o nome em pedacos para a reflexao), e o dex compilado nao tem. O dexdump do build-tools que o
+# gerar-aab.sh confere pelo digesto le cada classe, e nenhuma do app referencia rede, carregar ou montar codigo, executar
+# programa, reflexao, mandar dado a outro app (broadcast, provedor, servico) nem o Rede (so o nucleo o chama, pelo JNI).
+# Referencia conta em qualquer lugar da classe: instrucao, tipo de campo, assinatura, superclasse. O metodo pelo nome, e nao
+# pela classe, onde a classe pode ser uma filha (o sendBroadcast de uma Activity, o loadClass de um ClassLoader proprio).
+# As excecoes, minimas e nomeadas, cada uma pelo arquivo de origem (o SourceFile que o dexdump mostra no fim do bloco da
+# classe) e pelo nome exato da classe: o nome sozinho qualquer arquivo forja (uma classe `Rede$Falsa` de outro arquivo
+# herdava a excecao do Rede; auditoria de 23/11/2026). A classe sintetica do d8 ou do R8 (os lambdas) vale pela classe que
+# a gerou, e classe sem SourceFile fica sem excecao. O bash confere que so ha um arquivo com cada um destes nomes no app.
+#   - o Rede (Rede e Rede$SoTlsModerno, do Rede.kt, e os lambdas deles): so o java.net e o javax.net do transporte. E tudo
+#     o que vem do Rede.kt so chama o que esta fora do app (java, javax, kotlin, android) ou o proprio Rede: do app, so o
+#     HostsPermitidos.contem e o BuildConfig.DEBUG (uma extensao `String.lowercase` em outro arquivo do pacote mudava o
+#     que o Rede.permitido chama sem mudar o texto do Rede.kt);
+#   - o Nucleo (do Nucleo.kt): os metodos native da ponte do JNI e o System.loadLibrary so no <clinit>, sem desvio, com o
+#     nome do nucleo ou da libc++ escrito logo antes (native em outra classe nao passa);
+#   - o video da abertura (do Abertura.kt, e a classe do onDispose que o Compose gera nele, do Effects.kt): do
+#     android.media, so o MediaPlayer, com os metodos de hoje e o setDataSource so com descritor de arquivo (o video sai do
+#     APK). O MediaPlayer.create e o VideoView com endereco abrem conexao sem java.net no bytecode do app: qualquer outra
+#     referencia ao android.media, e o VideoView, nao passa, nem classe do app filha de uma do android.media;
+#   - o envelope (EnvelopeKt e as classes dentro dele, do Envelope.kt): o ContentResolver.openOutputStream(Uri, String) no
+#     documento que o dono escolheu para salvar o envelope, que ja sai cifrado.
+# E nenhuma classe do app usa invoke-custom, invoke-polymorphic nem const-method-handle (o d8 desfaz os lambdas do Kotlin).
+# O codigo das bibliotecas (androidx, kotlin, compose) fica de fora: ele vem pelo verification-metadata.xml, conferido pelo
+# digesto. Por isso a regra so ve as classes do app: no APK de depuracao, as do pacote app.escalibur e as que o Kotlin e o
+# Java do mesmo build compilaram (um `package` de outro nome nao sai da regra); no da loja, a entrada do R8, porque o R8
+# renomeia e funde as classes do app com as das bibliotecas (no APK de release de 31/10/2026, 124 classes com nome de
+# biblioteca levavam codigo do app, e uma delas tocava o Rede): la todas as classes que o Kotlin e o Java compilaram no
+# mesmo build, passadas pelo d8, contam como do app (--dex-loja).
+BUILD_TOOLS="$HOME/Library/Android/sdk/build-tools/36.0.0"
+# Le o `dexdump -d` da entrada e devolve as referencias proibidas. Modo `app`: as classes de Lapp/escalibur/ e as da lista
+# do arquivo do segundo argumento; modo `todas`: todas.
+conferidor_dex() {
+    python3 -I -c '
+import re, sys
+modo, lista = sys.argv[1], sys.argv[2]
+do_app = set()
+if lista:
+    do_app = {l.strip() for l in open(lista, encoding="utf-8") if l.strip()}
+ALTERNATIVAS = (r"Ljava/net/|Ljavax/net/|Landroid/net/Network;|Landroid/net/DnsResolver|Landroid/net/LocalSocket|Landroid/net/LocalServerSocket|"
+    r"Landroid/net/http/|Landroid/webkit/|Landroid/app/DownloadManager|Ldalvik/system/|Ljava/lang/Runtime;\.(exec|load)|Ljava/lang/ProcessBuilder|"
+    r";\.(loadClass|defineClass|findClass):|Ljava/lang/Class;\.(forName|newInstance):|Ljava/lang/reflect/|Ljava/lang/invoke/|Ljava/lang/System;\.load|"
+    r";\.setDataSource:|;\.send[A-Za-z]*Broadcast[A-Za-z]*:|Landroid/content/ContentResolver;\.(insert|bulkInsert|update|call|applyBatch|openOutputStream|openFileDescriptor):|"
+    r";\.(startService|startForegroundService|bindService|bindIsolatedService|bindServiceAsUser):|Lapp/escalibur/wallet/nucleo/Rede[;$]|"
+    r"Landroid/media/|Landroid/widget/VideoView[;$]|\binvoke-custom|\bconst-method-handle|\binvoke-polymorphic")
+# Toda posicao da linha, num lookahead: uma alternativa que casa nao consome o comeco de outra (o `Rede;` engolia o `;` do
+# `;.setDataSource:` seguinte).
+ALGUM = re.compile(ALTERNATIVAS)
+PROIBIDO = re.compile("(?=(" + ALTERNATIVAS + "))")
+NATIVO = re.compile(r"^      access        : 0x[0-9a-f]+ \([A-Z_ ]*\bNATIVE\b")
+FONTE = re.compile(r"^  source_file_idx   : -?[0-9]+ \((.*)\)$")
+CABECALHO = re.compile(r"^[0-9a-f]+: +\|\[[0-9a-f]+\] (\S+)$")
+INSTRUCAO = re.compile(r"^[0-9a-f]+: [^|]*\|[0-9a-f]+: (\S+)(.*)$")
+DESVIO = re.compile(r"^(if-|goto|packed-switch|sparse-switch)")
+DONO = re.compile(r"\}, (\[*(?:L[^;]+;|[ZBSCIJFD]))\.(\S+)")
+TIPO_DO_APP = re.compile(r"Lapp/escalibur/[^;\s]*;")
+MEMBRO_DO_APP = re.compile(r"(Lapp/escalibur/[^;\s]*;)\.([^:\s]+:\S+)")
+SINTETICA = re.compile(r"^(L[^;]*)\$\$ExternalSynthetic[A-Za-z]+[0-9]+;$")
+FONTES_SINTETICAS = {"D8$$SyntheticClass", "R8$$SyntheticClass"}
+# As excecoes, pelo arquivo de origem (o SourceFile do dex) e nao so pelo nome da classe.
+REDE = "Lapp/escalibur/wallet/nucleo/Rede;"
+REDE_PROPRIAS = {REDE, "Lapp/escalibur/wallet/nucleo/Rede$SoTlsModerno;"}
+NUCLEO = "Lapp/escalibur/wallet/nucleo/Nucleo;"
+NUCLEO_CARGA = "app.escalibur.wallet.nucleo.Nucleo.<clinit>:()V"
+CARGA = re.compile(r"^invoke-static \{(v[0-9]+)\}, Ljava/lang/System;\.loadLibrary:\(Ljava/lang/String;\)V( |$)")
+CARGA_NOME = re.compile(r"^const-string(/jumbo)? (v[0-9]+), \"(c\+\+_shared|EscaliburAndroid)\"( |$)")
+ENVELOPE = re.compile(r"Lapp/escalibur/wallet/ui/envelope/EnvelopeKt[;$]")
+ABERTURA_EFEITO = "Lapp/escalibur/wallet/ui/abertura/AberturaKt$VideoEmLoop$lambda$1$0$$inlined$onDispose$1;"
+MIDIA_TIPO = re.compile(r"Landroid/media/[^;\s]*;")
+MIDIA_TIPOS = {"Landroid/media/MediaPlayer;", "Landroid/media/MediaPlayer$OnPreparedListener;", "Landroid/media/MediaPlayer$OnVideoSizeChangedListener;"}
+MIDIA_METODOS = {"<init>:()V", "prepareAsync:()V", "release:()V", "setDataSource:(Ljava/io/FileDescriptor;JJ)V", "setLooping:(Z)V",
+    "setOnPreparedListener:(Landroid/media/MediaPlayer$OnPreparedListener;)V",
+    "setOnVideoSizeChangedListener:(Landroid/media/MediaPlayer$OnVideoSizeChangedListener;)V", "setSurface:(Landroid/view/Surface;)V",
+    "setVolume:(FF)V", "start:()V", "stop:()V"}
+DESCRITOR_FD = "Landroid/media/MediaPlayer;.setDataSource:(Ljava/io/FileDescriptor;JJ)V"
+GRAVAR_ENVELOPE = "Landroid/content/ContentResolver;.openOutputStream:(Landroid/net/Uri;Ljava/lang/String;)"
+# O Rede.kt so chama o que esta fora do app (java, javax, kotlin, android) ou ele mesmo; do app, so estes tres membros.
+REDE_TIPOS_DO_APP = REDE_PROPRIAS | {"Lapp/escalibur/wallet/nucleo/HostsPermitidos;", "Lapp/escalibur/wallet/BuildConfig;"}
+REDE_MEMBROS_DO_APP = {"Lapp/escalibur/wallet/nucleo/HostsPermitidos;.INSTANCE:Lapp/escalibur/wallet/nucleo/HostsPermitidos;",
+    "Lapp/escalibur/wallet/nucleo/HostsPermitidos;.contem:(Ljava/lang/String;)Z", "Lapp/escalibur/wallet/BuildConfig;.DEBUG:Z"}
+REDE_SINTETICA = re.compile(r"^Lapp/escalibur/wallet/nucleo/Rede\$\$ExternalSynthetic[A-Za-z]+[0-9]+;$")
+FORA_DO_APP = re.compile(r"^L(java|javax|kotlin|android)/")
+def do_app_(classe):
+    if modo == "todas" or classe.startswith("Lapp/escalibur/") or classe in do_app:
+        return True
+    # O que o d8 gera de uma classe do app (o lambda, o backport) leva o nome dela na frente.
+    return classe.split("$$")[0] + ";" in do_app if "$$" in classe else False
+fonte, registros, vistas, repetidas, achados, falhou = {}, {}, set(), [], [], False
+classe = registro = metodo = anterior = None
+def fechar():
+    # A fonte chega no fim do bloco da classe: sem ela, a classe fica sem fonte e sem excecao.
+    global classe, registro
+    if classe is not None:
+        if fonte.get(classe) not in FONTES_SINTETICAS and fonte.get(classe) != "Rede.kt":
+            registro["tipos"], registro["membros"], registro["donos"] = set(), set(), set()
+        registros[classe] = registro
+    classe = registro = None
+for bruta in sys.stdin.buffer:
+    linha = bruta.decode("latin-1").rstrip("\n")
+    if linha.startswith("@@dexdump-falhou "):
+        falhou = True
+        continue
+    if linha.startswith("Class #"):
+        fechar()
+        continue
+    if linha.startswith("  Class descriptor  : "):
+        fechar()
+        nome = linha.split("\x27")[1]
+        if do_app_(nome):
+            if nome in vistas:
+                repetidas.append(nome)
+            classe, metodo, anterior = nome, None, None
+            vistas.add(nome)
+            registro = {"linhas": [], "nativo": False, "desvios": set(), "tipos": set(), "membros": set(), "donos": set()}
+        continue
+    if classe is None:
+        continue
+    f = FONTE.match(linha)
+    if f:
+        fonte[classe] = f.group(1)
+        fechar()
+        continue
+    c = CABECALHO.match(linha)
+    if c:
+        metodo, anterior = c.group(1), None
+        continue
+    if linha.startswith("      catches       : ") and linha != "      catches       : (none)":
+        registro["desvios"].add(metodo)
+    i = INSTRUCAO.match(linha)
+    if i and DESVIO.match(i.group(1)):
+        registro["desvios"].add(metodo)
+    if NATIVO.match(linha):
+        registro["nativo"] = True
+    if ALGUM.search(linha):
+        registro["linhas"].append((linha, metodo, anterior, i.group(1) + i.group(2) if i else ""))
+    if "Lapp/escalibur/" in linha:
+        registro["tipos"].update(TIPO_DO_APP.findall(linha))
+        registro["membros"].update(a + "." + b for a, b in MEMBRO_DO_APP.findall(linha))
+    if i and i.group(1).startswith("invoke-"):
+        d = DONO.search(linha)
+        registro["donos"].add(d.group(1) + "." + d.group(2) if d else linha.strip())
+    if i and i.group(1) != "nop":
+        anterior = i.group(1) + i.group(2)
+fechar()
+def fonte_efetiva(c):
+    # A classe sintetica do d8 ou do R8 (o lambda, o backport) vale pela classe que a gerou, e so se a fonte dela for de
+    # verdade: o descritor dela, sozinho, qualquer arquivo forja.
+    f = fonte.get(c)
+    if f in FONTES_SINTETICAS:
+        m = SINTETICA.match(c)
+        dona = m.group(1) + ";" if m else None
+        fd = fonte.get(dona)
+        return (fd, dona) if fd not in (None, "unknown") and fd not in FONTES_SINTETICAS else (None, None)
+    return (f, c) if f not in (None, "unknown") else (None, None)
+def e_rede(c):
+    f, d = fonte_efetiva(c)
+    return f == "Rede.kt" and d in REDE_PROPRIAS and (d == c or REDE_SINTETICA.match(c) is not None)
+def e_nucleo(c):
+    return c == NUCLEO and fonte.get(c) == "Nucleo.kt"
+def e_envelope(c):
+    f, d = fonte_efetiva(c)
+    return f == "Envelope.kt" and ENVELOPE.match(d) is not None
+def e_abertura(c):
+    return fonte_efetiva(c)[0] == "Abertura.kt" or (c == ABERTURA_EFEITO and fonte.get(c) == "Effects.kt")
+def midia_permitida(linha, p):
+    t = MIDIA_TIPO.match(linha, p)
+    if not t:
+        return False
+    resto = linha[t.end():]
+    if resto.startswith("."):
+        m = re.match(r"\.([^:\s]+:\S+)", resto)
+        return t.group(0) == "Landroid/media/MediaPlayer;" and m is not None and m.group(1) in MIDIA_METODOS
+    return t.group(0) in MIDIA_TIPOS and not linha.startswith("  Superclass")
+def carga_permitida(c, metodo, anterior, instrucao):
+    # So o System.loadLibrary do <clinit> do Nucleo, sem desvio no metodo, com o nome logo antes no mesmo registrador.
+    a, b = CARGA.match(instrucao), CARGA_NOME.match(anterior or "")
+    return e_nucleo(c) and metodo == NUCLEO_CARGA and metodo not in registros[c]["desvios"] and a is not None and b is not None and a.group(1) == b.group(2)
+def permitido(c, linha, p, texto, metodo, anterior, instrucao):
+    if texto.startswith("Landroid/media/"):
+        return e_abertura(c) and midia_permitida(linha, p)
+    if texto.startswith(";.setDataSource:"):
+        return e_abertura(c) and linha.startswith(DESCRITOR_FD, p - len("Landroid/media/MediaPlayer"))
+    if texto.startswith(("Ljava/net/", "Ljavax/net/", "Lapp/escalibur/wallet/nucleo/Rede")):
+        return e_rede(c)
+    if texto.startswith("Ljava/lang/System;.load"):
+        return linha.startswith("Ljava/lang/System;.loadLibrary:(Ljava/lang/String;)V", p) and carga_permitida(c, metodo, anterior, instrucao)
+    if texto.startswith("Landroid/content/ContentResolver;.openOutputStream:"):
+        return e_envelope(c) and linha.startswith(GRAVAR_ENVELOPE, p)
+    return False
+def rotulo(c):
+    return c + " (" + fonte.get(c, "sem fonte") + ")"
+for c in repetidas:
+    achados.append(f"{c}: classe repetida no dex")
+for c, r in registros.items():
+    for linha, metodo, anterior, instrucao in r["linhas"]:
+        for m in PROIBIDO.finditer(linha):
+            if not permitido(c, linha, m.start(), m.group(1), metodo, anterior, instrucao):
+                achados.append(f"{rotulo(c)}: {linha.strip()[-160:]}")
+    if r["nativo"] and not e_nucleo(c):
+        achados.append(f"{rotulo(c)}: metodo native fora do Nucleo")
+    if fonte_efetiva(c)[0] == "Rede.kt":
+        # Uma funcao de outro arquivo do pacote (uma extensao `String.lowercase` que nao e inline, uma classe com o nome de
+        # uma do java.lang) muda o que o Rede.kt chama sem mudar o texto dele: no bytecode ela e uma classe do app.
+        for t in sorted(r["tipos"]):
+            if t not in REDE_TIPOS_DO_APP and not REDE_SINTETICA.match(t):
+                achados.append(f"{rotulo(c)}: referencia a classe do app {t}")
+        for mb in sorted(r["membros"]):
+            if mb.split(";.")[0] + ";" in REDE_TIPOS_DO_APP - REDE_PROPRIAS and mb not in REDE_MEMBROS_DO_APP:
+                achados.append(f"{rotulo(c)}: membro do app {mb}")
+        for d in sorted(r["donos"]):
+            dono = d.split(";.")[0] + ";" if ";." in d else d
+            elemento = dono.lstrip("[")
+            if dono in REDE_PROPRIAS or REDE_SINTETICA.match(dono) or d in REDE_MEMBROS_DO_APP:
+                continue
+            if len(elemento) == 1 and elemento in "ZBSCIJFD":
+                continue
+            if not FORA_DO_APP.match(elemento) or elemento in vistas:
+                achados.append(f"{rotulo(c)}: chama {d}")
+unicos = list(dict.fromkeys(achados))
+for a in unicos[:40]:
+    print(a)
+if len(unicos) > 40:
+    print(f"... e mais {len(unicos) - 40}, em", " ".join(sorted({a.split(":")[0] for a in unicos[40:]})))
+faltando = sorted(do_app - vistas) if modo == "app" else []
+for f in faltando[:10]:
+    print(f"{f}: compilada pelo Kotlin ou pelo Java e ausente do dex (o APK e de outro build)")
+print(f"@@classes {len(vistas)}")
+cega = not {REDE, NUCLEO} <= vistas
+sys.exit(3 if falhou else 1 if unicos or faltando else 2 if cega else 0)
+' "$@"
+}
+# Confere os .dex dados (modo e lista como no conferidor_dex). Devolve 0 se limpo; imprime o que achou.
+conferir_dex() {
+    local rotulo="$1" modo="$2" lista="$3" dexdump="$BUILD_TOOLS/dexdump" saida codigo_dex classes; shift 3
+    [ -x "$dexdump" ] || { aviso "bytecode do $rotulo sem conferir: falta o dexdump em $BUILD_TOOLS"; return 1; }
+    [ "$#" -gt 0 ] || { aviso "bytecode do $rotulo sem conferir: nenhum classes*.dex"; return 1; }
+    saida=$(for d in "$@"; do LC_ALL=C "$dexdump" -d "$d" 2>/dev/null || echo "@@dexdump-falhou $d"; done | conferidor_dex "$modo" "$lista"); codigo_dex=$?
+    classes=$(echo "$saida" | sed -n 's/^@@classes //p')
+    case "$codigo_dex" in
+        0) ok "o bytecode do $rotulo ($classes classes do app) nao abre conexao fora do Rede, nao carrega codigo, nao executa programa, nao usa reflexao, nao manda dado a outro app nem chama o Rede"; return 0 ;;
+        2) aviso "conferencia do bytecode do $rotulo cega: sem a classe Rede ou Nucleo do app entre as $classes lidas" ;;
+        3) aviso "o dexdump nao leu um dos dex do $rotulo" ;;
+        *) aviso "o bytecode do $rotulo chama o que nao pode (rede fora do Rede, codigo carregado, programa, reflexao, dado a outro app ou o Rede)" ;;
+    esac
+    echo "$saida" | grep -v '^@@classes '
+    return 1
+}
+# Os .dex de um APK, de um AAB (base/dex/) ou de uma pasta, extraidos numa pasta nova.
+dex_de() {
+    local origem="$1" pasta="$2"
+    if [ -d "$origem" ]; then find "$origem" -name 'classes*.dex' -type f | LC_ALL=C sort
+    else unzip -q -o "$origem" 'classes*.dex' 'base/dex/classes*.dex' -d "$pasta" 2>/dev/null; find "$pasta" -name 'classes*.dex' -type f | LC_ALL=C sort; fi
+}
+# A entrada do R8 do build da loja: as classes que o Kotlin e o Java compilaram no release e o R.jar, passadas pelo d8 do
+# build-tools conferido (com o Java conferido pelo gerar-aab.sh) e conferidas todas como do app. E o APK e o AAB que sairam
+# lidos inteiros pelo dexdump (um dex que ele nao le nao passa).
+conferir_dex_da_loja() {
+    local pasta java classes_kt classes_java rjar arquivos=() f d dex_saida ilegivel
+    classes_kt=Android/app/build/intermediates/built_in_kotlinc/release/compileReleaseKotlin/classes
+    classes_java=Android/app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes
+    rjar=Android/app/build/intermediates/compile_and_runtime_r_class_jar/release/processReleaseResources/R.jar
+    java="${JAVA_HOME:-}/bin/java"
+    [ -x "$java" ] && [ -f "$BUILD_TOOLS/lib/d8.jar" ] && [ -f "$HOME/Library/Android/sdk/platforms/android-37.0/android.jar" ] \
+        && [ -d "$classes_kt" ] && [ -d "$classes_java" ] && [ -f "$rjar" ] \
+        || { aviso "bytecode da loja sem conferir: falta o Java, o d8, a plataforma ou as classes do release"; return; }
+    pasta=$(mktemp -d)
+    while IFS= read -r -d '' f; do arquivos+=("$f"); done < <(find "$classes_kt" "$classes_java" -name '*.class' -type f -print0)
+    [ "${#arquivos[@]}" -gt 0 ] || { aviso "bytecode da loja sem conferir: nenhuma classe do release"; rm -rf "$pasta"; return; }
+    mkdir "$pasta/d8"
+    "$java" -Xmx512m -cp "$BUILD_TOOLS/lib/d8.jar" com.android.tools.r8.D8 --min-api 30 \
+        --lib "$HOME/Library/Android/sdk/platforms/android-37.0/android.jar" --output "$pasta/d8" "${arquivos[@]}" "$rjar" > "$pasta/d8.log" 2>&1 \
+        || { aviso "o d8 nao converteu as classes do release"; tail -5 "$pasta/d8.log"; rm -rf "$pasta"; return; }
+    # shellcheck disable=SC2046
+    conferir_dex "release, entrada do R8 (${#arquivos[@]} classes do Kotlin e do Java e o R.jar)" todas "" $(dex_de "$pasta/d8" "$pasta/d8")
+    [ "$#" -gt 0 ] || aviso "bytecode da loja sem o APK e o AAB que sairam"
+    for f in "$@"; do
+        mkdir -p "$pasta/saida"
+        dex_saida=$(dex_de "$f" "$pasta/saida/$(basename "$f")")
+        [ -n "$dex_saida" ] || { aviso "nenhum classes*.dex em $f"; continue; }
+        ilegivel=0
+        for d in $dex_saida; do
+            LC_ALL=C "$BUILD_TOOLS/dexdump" -d "$d" > /dev/null 2>&1 || { aviso "o dexdump nao le $d de $f"; ilegivel=1; }
+        done
+        [ "$ilegivel" = 0 ] && ok "o dexdump le inteiros os $(echo "$dex_saida" | wc -l | tr -d ' ') dex de $f"
+    done
+    rm -rf "$pasta"
+}
+# O APK de depuracao deste Mac, quando ha um, com as classes que o Kotlin e o Java do mesmo build compilaram.
+conferir_dex_de_depuracao() {
+    local apk=Android/app/build/outputs/apk/debug/app-debug.apk pasta lista
+    [ -f "$apk" ] || { echo "  - bytecode do app Android sem conferir: nenhum APK de depuracao neste Mac (Android/app/build)"; return; }
+    pasta=$(mktemp -d)
+    lista="$pasta/do-app.txt"
+    for raiz in Android/app/build/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes Android/app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes; do
+        [ -d "$raiz" ] && (cd "$raiz" && find . -name '*.class' -type f | sed -E 's|^\./|L|; s|\.class$|;|')
+    done > "$lista"
+    # shellcheck disable=SC2046
+    conferir_dex "APK de depuracao de $(stat -f '%Sm' -t '%d/%m %H:%M' "$apk")" app "$lista" $(dex_de "$apk" "$pasta/apk")
+    rm -rf "$pasta"
+}
 # Chamado pelo compilar-nucleo.sh depois de cada build do nucleo do Android.
 if [ "${1:-}" = "--c-android" ]; then
     case "${2:-release}" in debug) configuracao=Debug ;; *) configuracao=Release ;; esac
     conferir_simbolos_do_c android "$configuracao"
     conferir_trava_do_segredo "$configuracao"
+    conferir_simbolos_swift_android "$configuracao"
+    exit $(( falhas > 0 ))
+fi
+# Regrava simbolos-swift-android.lock dos objetos do ultimo build de cada configuracao (revise o diff).
+if [ "${1:-}" = "--atualizar-simbolos-android" ]; then
+    gravar_simbolos_swift_android
+    exit 0
+fi
+# Chamado pelo gerar-aab.sh depois do Gradle, com o APK e o AAB que sairam.
+if [ "${1:-}" = "--dex-loja" ]; then
+    shift
+    conferir_dex_da_loja "$@"
+    exit $(( falhas > 0 ))
+fi
+# Uma pasta, um APK ou um AAB qualquer, com todas as classes contando como do app (a prova das amostras; nenhum build usa).
+if [ "${1:-}" = "--dex" ] && [ -n "${2:-}" ]; then
+    dex_pasta=$(mktemp -d)
+    # shellcheck disable=SC2046
+    conferir_dex "${2}" "${3:-todas}" "" $(dex_de "$2" "$dex_pasta")
+    rm -rf "$dex_pasta"
     exit $(( falhas > 0 ))
 fi
 
@@ -314,7 +735,7 @@ if blocos:
     lista = re.search(r"\n        (HOME\|[^\n]*\)) ;;\n", b)
     certo &= lista is not None and lista.group(1) == ("HOME|PATH|TMPDIR|USER|LOGNAME|LANG|TERM|PWD|OLDPWD|SHLVL|_|GIT_CONFIG_NOSYSTEM|GIT_CONFIG_GLOBAL|"
                                                     "GIT_NO_REPLACE_OBJECTS|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_0|GIT_CONFIG_VALUE_0|GIT_CONFIG_KEY_1|GIT_CONFIG_VALUE_1|xcrun_db)")
-    # O cache do xcrun novo e vazio em cada script (rodada 3 dos 3 agentes da checagem final de 16/11/2026): o git, o
+    # O cache do xcrun novo e vazio em cada script (rodada 3 da revisao de seguranca da checagem final de 16/11/2026): o git, o
     # Python e o swift de /usr/bin escolhem o programa por ele.
     for trecho in ('&& [ -n "${xcrun_db:-}" ] && [ "${xcrun_db#"$(/usr/bin/getconf DARWIN_USER_TEMP_DIR)"escalibur-xcrun.}" != "$xcrun_db" ] && [ ! -e "$xcrun_db" ] \\\n    || limpo=false\n',
                    '    xcrun_db="$(/usr/bin/mktemp -d "$(/usr/bin/getconf DARWIN_USER_TEMP_DIR)escalibur-xcrun.XXXXXX")/xcrun_db" \\\n    /bin/bash -p "$0" "$@"\n'):
@@ -392,21 +813,49 @@ achados=$(procurar 'Secp256k1\.sign|Ed25519\.sign' "$CHAINS" "$NET" "$APP" "$ENG
 # 2. Hosts travados.
 secao "hosts"
 hosts_atuais=$(grep -ohE 'https://[A-Za-z0-9.-]+' $(swift_em "$NET" "$ENG") "$APP/Resources/Info.plist" 2>/dev/null | sort -u)
+# O texto inteiro do AllowedHosts.swift, que o --atualizar-hosts grava e a regra compara com o arquivo (auditoria de
+# 23/11/2026: antes so as linhas de host eram comparadas, e uma linha a mais depois da lista passava).
+texto_allowed_hosts() {
+    echo "// Gerado por tools/verificar.sh --atualizar-hosts a partir do hosts.lock. Nao editar."
+    echo "// O HTTPClient recusa qualquer host fora desta lista, em tempo de execucao."
+    echo "enum AllowedHosts {"
+    echo "    static let all: Set<String> = ["
+    sed 's|https://||' hosts.lock | while read -r host; do echo "        \"$host\","; done
+    echo "    ]"
+    echo "}"
+}
 gerar_allowed_hosts() {
-    {
-        echo "// Gerado por tools/verificar.sh --atualizar-hosts a partir do hosts.lock. Nao editar."
-        echo "// O HTTPClient recusa qualquer host fora desta lista, em tempo de execucao."
-        echo "enum AllowedHosts {"
-        echo "    static let all: Set<String> = ["
-        sed 's|https://||' hosts.lock | while read -r host; do echo "        \"$host\","; done
-        echo "    ]"
-        echo "}"
-    } > "$NET/AllowedHosts.swift"
+    texto_allowed_hosts > "$NET/AllowedHosts.swift"
+    texto_hosts_permitidos_kt > "$HOSTS_KT"
+}
+# Os hosts que so o iPhone consulta: a App Store (a versao nova do app). O Android le a lista assinada do github.io
+# (ReleaseWatch.checkAndroid) e nao fala com eles. Uma lista so, para a Politica do Android e para o HostsPermitidos.kt.
+hosts_so_do_iphone="itunes.apple.com"
+hosts_do_android() {
+    sed 's|https://||' hosts.lock | while read -r host; do
+        case " $hosts_so_do_iphone " in *" $host "*) ;; *) echo "$host" ;; esac
+    done
+}
+# A mesma lista, sem os hosts so do iPhone, para o Rede.kt, a segunda trava do Android: o transporte do sistema recusa o
+# host fora dela mesmo que o pedido chegue por outro caminho que nao o HTTPClient (auditoria de 23/11/2026). Uma funcao com
+# um `when`, e nao um conjunto: nada no Kotlin acrescenta host a ela em tempo de execucao.
+HOSTS_KT=Android/app/src/main/java/app/escalibur/wallet/nucleo/HostsPermitidos.kt
+texto_hosts_permitidos_kt() {
+    echo "// Gerado por tools/verificar.sh --atualizar-hosts a partir do hosts.lock (sem os hosts so do iPhone). Nao editar."
+    echo "// O transporte de rede do Kotlin recusa qualquer host fora desta lista, em tempo de execucao."
+    echo "package app.escalibur.wallet.nucleo"
+    echo
+    echo "internal object HostsPermitidos {"
+    echo "    fun contem(host: String): Boolean = when (host) {"
+    hosts_do_android | sed 's/.*/        "&",/' | sed '$ s/,$/ -> true/'
+    echo "        else -> false"
+    echo "    }"
+    echo "}"
 }
 if [ "${1:-}" = "--atualizar-hosts" ]; then
     echo "$hosts_atuais" > hosts.lock
     gerar_allowed_hosts
-    ok "hosts.lock e AllowedHosts.swift atualizados"
+    ok "hosts.lock, AllowedHosts.swift e HostsPermitidos.kt atualizados"
 elif [ ! -f hosts.lock ]; then
     aviso "hosts.lock nao existe (gere com --atualizar-hosts e revise o diff)"
 elif ! diff -q <(echo "$hosts_atuais") hosts.lock >/dev/null; then
@@ -428,10 +877,15 @@ else
 fi
 
 # 3. Dependencias.
-esperado=$(sed 's|https://||' hosts.lock 2>/dev/null | sort)
-gerado=$(grep -oE '^        "[^"]+",$' "$NET/AllowedHosts.swift" 2>/dev/null | tr -d ' ",' | sort)
-[ "$esperado" = "$gerado" ] && ok "o cliente HTTP recusa em tempo de execucao todo host fora do hosts.lock" || aviso "AllowedHosts.swift difere do hosts.lock (rode --atualizar-hosts)"
+# O AllowedHosts.swift inteiro igual ao que o gerador escreve, como o HostsPermitidos.kt abaixo.
+[ -s hosts.lock ] && [ -f "$NET/AllowedHosts.swift" ] && [ "$(texto_allowed_hosts)" = "$(cat "$NET/AllowedHosts.swift")" ] \
+    && ok "o cliente HTTP recusa em tempo de execucao todo host fora do hosts.lock (AllowedHosts.swift igual ao gerado)" \
+    || aviso "AllowedHosts.swift difere do hosts.lock (rode --atualizar-hosts)"
 codigo_vivo "$NET/HTTPClient.swift" | grep -q 'allowedHosts.contains(host)' && ok "HTTPClient confere o host de toda requisicao" || aviso "HTTPClient deixou de conferir o host"
+# O HostsPermitidos.kt inteiro igual ao que o gerador escreve: uma linha a mais depois da lista nao entra.
+[ -s hosts.lock ] && [ -f "$HOSTS_KT" ] && [ "$(texto_hosts_permitidos_kt)" = "$(cat "$HOSTS_KT")" ] \
+    && ok "o transporte do Android recusa em tempo de execucao todo host fora do hosts.lock, menos os so do iPhone ($hosts_so_do_iphone) (HostsPermitidos.kt)" \
+    || aviso "HostsPermitidos.kt difere do hosts.lock (rode --atualizar-hosts)"
 
 secao "dependencias"
 if grep -q "XCRemoteSwiftPackageReference" EscaliburWallet.xcodeproj/project.pbxproj 2>/dev/null; then aviso "pacote remoto no projeto"; else ok "nenhum pacote remoto no projeto"; fi
@@ -1023,6 +1477,15 @@ fora_do_c=$(comm -23 <( { (cd Kit/Sources/CArgon2 && find . -type f | sed 's#^\.
 # O C do nucleo do Android, de cada configuracao compilada nesta maquina (o compilar-nucleo.sh tambem
 # confere a que acabou de sair).
 for configuracao in $(configuracoes_android); do conferir_simbolos_do_c android "$configuracao"; conferir_trava_do_segredo "$configuracao"; done
+# E o Swift do nucleo (EscaliburAndroid, EscaliburEngines, EscaliburNetwork) por simbolos-swift-android.lock, de cada
+# configuracao compilada aqui. Sem build do nucleo neste Mac (o CI, uma pasta limpa) nao ha objeto: diz, sem falhar.
+[ -s simbolos-swift-android.lock ] || aviso "simbolos-swift-android.lock ausente ou vazio"
+swift_android_conferidas=0
+for configuracao in Debug Release; do
+    [ -n "$(objetos_swift_android "$configuracao" EscaliburAndroid)" ] || continue
+    conferir_simbolos_swift_android "$configuracao"; swift_android_conferidas=$((swift_android_conferidas + 1))
+done
+[ "$swift_android_conferidas" -gt 0 ] || echo "  - Swift do nucleo do Android sem conferir: nenhum build do nucleo neste Mac (build/android-kit)"
 # A swift-crypto (so no build Android): cada arquivo igual ao do commit da versao, e nenhum a
 # mais na pasta.
 conferir_lock swift-crypto.lock Kit/Sources/SwiftCrypto swift-crypto
@@ -1046,7 +1509,7 @@ for idioma in $(sed -n 's/^ *"\([a-z0-9_]*\)": "[0-9a-f]*".*/\1/p' wordlists.loc
     [ "$atual" != "$esperado" ] && { aviso "lista $idioma nao confere"; divergentes=$((divergentes + 1)); }
 done
 [ "$divergentes" = "0" ] && ok "as 10 listas BIP-39 e a SLIP-39 conferem com wordlists.lock"
-# Toda lista da pasta esta no lock: a SLIP-39 fora dele passava sem conferir (revisao dos 3 agentes, 14/11/2026).
+# Toda lista da pasta esta no lock: a SLIP-39 fora dele passava sem conferir (revisao de seguranca, 14/11/2026).
 fora_do_lock=$(comm -23 <(ls "$CORE/Resources/Wordlists" | sed 's/\.txt$//' | LC_ALL=C sort) <(sed -n 's/^ *"\([a-z0-9_]*\)": .*/\1/p' wordlists.lock | LC_ALL=C sort))
 [ -n "$fora_do_lock" ] && { aviso "lista de palavras fora do wordlists.lock"; echo "$fora_do_lock"; } || ok "toda lista de palavras da pasta esta no wordlists.lock"
 divergentes=0
@@ -1338,7 +1801,7 @@ f="$APP/Features/Receive/ReceiveSheet.swift"
 # carteira sem passphrase, fora do Super Security, vai tambem para o Mac (pedido do dono, 01/11/2026;
 # auditoria de 03/11/2026): a unica copia sem localOnly e a de copyReceiveAddress, que pergunta a
 # Pasteboard.macAllowed antes. O unico outro uso e o clearSecret, que esvazia a area quando o Colar
-# do app traz uma frase ou uma chave (revisao dos 3 agentes, 09/11/2026): so a linha que esvazia, uma
+# do app traz uma frase ou uma chave (revisao de seguranca, 09/11/2026): so a linha que esvazia, uma
 # vez, dentro dele.
 copias=$(grep -c 'UIPasteboard.general.setItems' "$f"); locais=$(grep -c '\.localOnly: true' "$f"); prazos=$(grep -c '\.expirationDate: Date().addingTimeInterval' "$f")
 # Rodada 10: tambem a leitura do numero da area (o `changeCount`, que nao avisa o colar), na copia do endereco de receber e na
@@ -1348,7 +1811,7 @@ outras=$(grep -n 'UIPasteboard' "$f" | grep -v 'UIPasteboard.general.setItems' |
     | grep -vxE '[0-9]+:        defer \{ lastReceive = \(address, UIPasteboard\.general\.changeCount\) \}' \
     | grep -vxE '[0-9]+:        if UIPasteboard\.general\.changeCount == last\.change \{ clearSecret\(\) \}')
 esvazia=$(grep -c '^        UIPasteboard\.general\.items = \[\]$' "$f")
-# O clearSecret inteiro e so a linha que esvazia: nada de continuacao gravando outra coisa (revisao dos 3 agentes, 14/11/2026).
+# O clearSecret inteiro e so a linha que esvazia: nada de continuacao gravando outra coisa (revisao de seguranca, 14/11/2026).
 esvazia_no_clear=$(awk '/static func clearSecret\(\) \{/,/^    }/' "$f" | tr '\n' '|')
 [ "$esvazia_no_clear" = "    static func clearSecret() {|        UIPasteboard.general.items = []|    }|" ] && esvazia_no_clear=1 || esvazia_no_clear=0
 endereco_local=$(awk '/static func copyReceiveAddress/,/^    }/' "$f" | grep -c 'guard macAllowed(session, hasPassphrase: hasPassphrase) else { return copyAddress(address) }')
@@ -1522,11 +1985,10 @@ fi
 
 secao "android"
 AND=Android/app/src/main
-# A politica do Android: todo host do hosts.lock, menos a consulta da App Store, que o Android nao faz
-# (a lista de versoes do github.io ele le desde 07/11/2026, para a tela de atualizar).
+# A politica do Android: todo host do hosts.lock, menos os so do iPhone (a consulta da App Store, que o Android nao faz;
+# a lista de versoes do github.io ele le desde 07/11/2026, para a tela de atualizar). A mesma lista do HostsPermitidos.kt.
 faltando=""
-for host in $(sed 's|https://||' hosts.lock); do
-    case "$host" in itunes.apple.com) continue ;; esac
+for host in $(hosts_do_android); do
     for politica in privacidade.md privacidade-en.md; do
         codigo "$AND/assets/legal/$politica" | grep -qF "\`$host\`" 2>/dev/null || faltando="$faltando $host($politica)"
     done
@@ -1668,8 +2130,8 @@ python3 -I tools/codigo.py --exige "$fda" 'guard CCryptoBoringSSL_RAND_bytes(sai
     && python3 -I tools/codigo.py --exige "$fda" 'kernel.withUnsafeBytes { metade in for indice in 0..<count { saida[indice] ^= metade[indice] } }' --plataforma android \
     && python3 -I tools/codigo.py --exige "$fda" 'let kernel = SecureBytes(capacity: count)' --plataforma android \
     && ok "no Android, o sorteio mistura o getrandom do kernel com o da BoringSSL" || aviso "o sorteio do Android sem a mistura com o getrandom do kernel"
-# A frase nova nasce do sorteio do sistema e de nada mais (licao da Coldcard, 19/11/2026; endurecida na rodada dos 3
-# agentes do mesmo dia, que furou a primeira versao com sombra de nome, sobrecarga mais nova e chamada trocada):
+# A frase nova nasce do sorteio do sistema e de nada mais (licao da Coldcard, 19/11/2026; endurecida na rodada da revisao
+# de seguranca do mesmo dia, que furou a primeira versao com sombra de nome, sobrecarga mais nova e chamada trocada):
 # - BIP39.swift, SecureBytes.swift, o ForaDaApple.swift (o sorteio do Android: uma linha a mais deixava 32 bits de entropia,
 #   rodada 3), o Mnemonic.swift (o `validWordCounts` que o `generate` le, rodada 3), o WordlistDigest.swift e o Recursos.swift
 #   (o digesto esperado da lista e a pasta de onde ela vem: os dois juntos trocavam a lista so no app, rodada 4) e o Wordlist.swift (o `nfkdWords` que o `phrase(fromEntropy:)` le: um subscript com estado deixava 33 bits,
@@ -1774,7 +2236,7 @@ USOS = [(re.compile(r"\bphrase\s*\(\s*fromEntropy\s*:"), None,
           "App/EscaliburWallet/Features/Envelope/OpenEnvelopeFlow.swift": 1}),
         (re.compile(r"\bRascunho\s*\(\s*frase\s*:"), 4,
          {"Kit/Sources/Android/EscaliburAndroid/App/Sessao.swift": 3, "Kit/Sources/Android/EscaliburAndroid/App/Envelopes.swift": 1})]
-# Rodada 2 dos 3 agentes (19/11/2026): um tipo, let ou generico com o nome de quem cria a frase (`enum BIP39` aninhado no
+# Rodada 2 da revisao de seguranca (19/11/2026): um tipo, let ou generico com o nome de quem cria a frase (`enum BIP39` aninhado no
 # PhraseDraft, `extension Sessao`) ganha do de verdade na linha exigida; um so, no dono, e nenhum outro em lugar nenhum.
 NEWFLOW = "App/EscaliburWallet/Features/NewWallet/NewWalletFlow.swift"
 SESSAO = "Kit/Sources/Android/EscaliburAndroid/App/Sessao.swift"
@@ -1842,7 +2304,7 @@ for arquivo in sorted(set(filter(None, outros))):
         # Um nome Swift dado a uma funcao C (`swift_name`, que o pre-processador ainda emenda) entra no lugar de outra.
         if not arquivo.startswith("Kit/Sources/SwiftCrypto/") and re.search(r"swift_name|SWIFT_NAME", texto):
             problemas.append(f"{arquivo}: swift_name")
-# O inventario do EscaliburCore (rodada 2 dos 3 agentes, 19/11/2026): uma extensao de tipo de fora (Array, UInt32,
+# O inventario do EscaliburCore (rodada 2 da revisao de seguranca, 19/11/2026): uma extensao de tipo de fora (Array, UInt32,
 # UnsafeMutableRawPointer) ou uma declaracao de topo no modulo ganha da biblioteca padrao dentro do BIP39 e do SecureBytes
 # travados, sem citar nome nenhum. Toda extensao de tipo de fora (com o corpo) e todo nome de topo, vivos no iPhone ou no
 # Android, entram num digesto: mudou, a regra para, e quem mexeu confere a lista impressa e grava o digesto novo.
@@ -1915,9 +2377,21 @@ gradle_fontes=$(grep -rnE 'sourceSets|srcDir|sources\.(java|kotlin|resources|aid
     | grep -vE '^Android/app/build\.gradle\.kts:[0-9]+:        variante\.sources\.assets\?\.addGeneratedSourceDirectory\((gerarTextos, GerarTextos|copiarLogos, CopiarParaOApp|copiarListas, CopiarParaOApp|copiarAbertura, CopiarParaOApp)::saida\)$')
 links=$(git ls-files -s | awk '$1 == "120000"')
 ignorados=$(git ls-files -ci --exclude-standard)
-[ -z "$fora_do_main" ] && [ -z "$gradle_fontes" ] && [ -z "$links" ] && [ -z "$ignorados" ] \
-    && ok "todo o Kotlin do Android esta em src/main/java, onde as regras leem (sem link, sem fonte a mais no Gradle)" \
-    || { aviso "Kotlin ou Java fora de src/main/java, fonte a mais no Gradle, link simbolico ou arquivo rastreado ignorado"; echo "$fora_do_main$gradle_fontes$links$ignorados"; }
+# E nenhum Java no Android, rastreado ou nao (auditoria de 23/11/2026): as regras de texto leem o Kotlin, e o Java aceita
+# escape unicode no meio do nome (`java.net`). O bytecode confere os dois, e o app nao tem Java nenhum.
+java_no_android=$(git ls-files --cached --others --exclude-standard -- 'Android/*.java')
+[ -z "$fora_do_main" ] && [ -z "$gradle_fontes" ] && [ -z "$links" ] && [ -z "$ignorados" ] && [ -z "$java_no_android" ] \
+    && ok "todo o Kotlin do Android esta em src/main/java, onde as regras leem (sem link, sem fonte a mais no Gradle, nenhum .java)" \
+    || { aviso "Kotlin ou Java fora de src/main/java, um .java no Android, fonte a mais no Gradle, link simbolico ou arquivo rastreado ignorado"; echo "$fora_do_main$gradle_fontes$links$ignorados$java_no_android"; }
+# Nenhum source set alem do main (o src/debug, o src/release e os outros levam codigo, recurso ou biblioteca nativa so a
+# uma variante) e nenhuma biblioteca pronta no Android, rastreada ou nova: .so, .jar, .aar e .dex, so o gradle-wrapper.jar
+# (conferido pelo loja.lock). O nucleo e a libc++ do jniLibs saem do compilar-nucleo.sh, e o git ignora a pasta: rastreado
+# la, aparece aqui (auditoria de 23/11/2026).
+fora_do_source_set=$(git ls-files --cached --others --exclude-standard -- Android/app/src | grep -v '^Android/app/src/main/')
+binarios_no_android=$(git ls-files --cached --others --exclude-standard -- Android | grep -iE '\.(so|jar|aar|dex)$' | grep -vxF Android/gradle/wrapper/gradle-wrapper.jar)
+[ -z "$fora_do_source_set" ] && [ -z "$binarios_no_android" ] \
+    && ok "o Android so tem o source set main, e nenhum .so, .jar, .aar nem .dex rastreado ou novo (so o gradle-wrapper.jar)" \
+    || { aviso "source set alem do main ou biblioteca pronta no Android"; echo "$fora_do_source_set$binarios_no_android"; }
 # Fora do Vigia.kt, nenhum outro jeito de montar ou postar notificacao (NotificationCompat do androidx, o construtor
 # antigo, recoverBuilder, servico em primeiro plano, notify, setLocalOnly(false), o do relogio, um apelido no import);
 # dentro dele, um construtor e um notify so, com espaco ou quebra de linha no meio inclusive (sexta passada).
@@ -2016,7 +2490,7 @@ PY
 # da auditoria 8: o conferidor de entitlements, que roda no job do envio, o que tem a chave da App Store Connect.
 [ "$(sed -n 's/^    "\([^"]*\)": "[0-9a-f]\{64\}".*/\1/p' loja.lock 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')" = ".github/workflows/release.yml .github/workflows/site.yml .github/workflows/verificar.yml .xcode-version Android/app/build.gradle.kts Android/app/proguard-rules.pro Android/build.gradle.kts Android/gradle.properties Android/gradle/libs.versions.toml Android/gradle/verification-metadata.xml Android/gradle/wrapper/gradle-wrapper.jar Android/gradle/wrapper/gradle-wrapper.properties Android/settings.gradle.kts EscaliburWallet.xcodeproj/project.pbxproj EscaliburWallet.xcodeproj/project.xcworkspace/contents.xcworkspacedata EscaliburWallet.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings EscaliburWallet.xcodeproj/xcshareddata/xcschemes/EscaliburWallet.xcscheme Kit/Package.swift project.yml tools/android/compilar-nucleo.sh tools/android/gerar-aab.sh tools/android/play.py tools/android/testar-nucleo.sh tools/arquivar.sh tools/codigo.py tools/conferir-entitlements.py tools/copia-publicada.sh tools/digesto.sh tools/flags-do-build.py tools/flags-do-pacote.py tools/verificar.sh tools/versoes/versoes.swift " ] \
     && ok "loja.lock trava os scripts da loja, o release.yml, os conferidores das flags, o Package.swift, o projeto do Xcode, o Gradle e o envio a Play" || aviso "loja.lock sem os scripts da loja, o release.yml, os conferidores das flags, o Package.swift, o projeto do Xcode, o Gradle ou o envio a Play"
-# A ordem das travas da loja (rodada 3 dos 3 agentes da checagem final de 16/11/2026): no gerar-aab.sh, o JDK e o SDK
+# A ordem das travas da loja (rodada 3 da revisao de seguranca da checagem final de 16/11/2026): no gerar-aab.sh, o JDK e o SDK
 # conferidos depois dos vetores e do nucleo e antes do Gradle; no testar-nucleo.sh, o toolchain antes do swift build.
 python3 -I - <<'PY' && ok "a conferencia do JDK, do SDK e do toolchain vem antes de usa-los" || aviso "trava da loja fora de ordem"
 import sys
@@ -2027,8 +2501,10 @@ def pos(texto, trecho):
     return i if i >= 0 and texto.count(trecho) == 1 else -1
 a, b, c, d = (pos(g, '"$aqui/tools/android/compilar-nucleo.sh" release --loja'), pos(g, "/usr/bin/codesign --verify --deep --strict"),
               pos(g, "/bin/rm -rf Android/.gradle Android/.kotlin Android/build Android/app/build"), pos(g, "./gradlew -q --no-daemon"))
+# O bytecode conferido depois do Gradle e antes de copiar o pacote para a saida (auditoria de 23/11/2026).
+x, y = pos(g, "./tools/verificar.sh --dex-loja"), pos(g, 'cp "$aab" "$apk" "$saida/"')
 e, f = pos(t, 'for binario in swift swift-build swift-driver swift-frontend clang ld.lld; do'), pos(t, '"$SWIFT" build --build-tests')
-sys.exit(0 if min(a, b, c, d, e, f) >= 0 and a < b < c < d and e < f else 1)
+sys.exit(0 if min(a, b, c, d, e, f, x, y) >= 0 and a < b < c < d < x < y and e < f else 1)
 PY
 origem=0
 exigidos=(
@@ -2080,7 +2556,7 @@ exigidos=(
     # nova a cada build, sem nada do ~/.gradle.
     "tools/android/gerar-aab.sh|-R='identifier \"net.java.openjdk.jdk\" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = \"JCDTMS22B4\"'"
     "tools/android/gerar-aab.sh||| { echo \"o JDK, a plataforma ou o build-tools do SDK nao sao os conferidos (selo ou digesto da arvore): nada foi montado\" >&2; exit 1; }"
-    # Revisao dos 3 agentes da checagem final: a conferencia logo antes do Gradle, com a copia limpa de novo; o ~/.android
+    # Revisao de seguranca da checagem final: a conferencia logo antes do Gradle, com a copia limpa de novo; o ~/.android
     # fora; o Kotlin dentro do Gradle; o nucleo do pacote igual ao do carimbo; o adb do Google; sem strip e sem baixar SDK.
     "tools/android/gerar-aab.sh||| { echo \"a copia limpa mudou durante os vetores ou a compilacao do nucleo: nada foi montado\" >&2; exit 1; }"
     "tools/android/gerar-aab.sh|trap '/bin/rm -rf \"\$casa_gradle\"' EXIT"
@@ -2110,6 +2586,14 @@ exigidos=(
     "tools/android/gerar-aab.sh|&& [ \"\$(arvore \"\$ANDROID_HOME/platforms/android-37.0\")\" = 79a0343c9b1f159b66e28adad51838ef22cc9ac47570cb3fe42a2f0ff56400eb ]"
     "tools/android/gerar-aab.sh|&& [ \"\$(arvore \"\$ANDROID_HOME/build-tools/36.0.0\")\" = a74275b60c4b098b13049d9c3fa17d1afa5f0e23ca9f354f05a42e8c670f6790 ]"
     "tools/android/gerar-aab.sh|export GRADLE_USER_HOME=\"\$casa_gradle\""
+    # Auditoria de 23/11/2026: o bytecode do app conferido no pacote da loja, pela entrada do R8 do mesmo build.
+    "tools/android/gerar-aab.sh|./tools/verificar.sh --dex-loja \"\$dex/apk\" \"\$dex/aab\" \\"
+    "tools/android/gerar-aab.sh||| { echo \"o bytecode do app chama o que nao pode (veja acima): nada foi entregue\" >&2; exit 1; }"
+    # Auditoria de 23/11/2026: so as bibliotecas nativas de hoje no APK e no AAB, nenhuma a mais.
+    "tools/android/gerar-aab.sh|local libs_esperadas=\"arm64-v8a/libEscaliburAndroid.so arm64-v8a/libandroidx.graphics.path.so arm64-v8a/libc++_shared.so arm64-v8a/libimage_processing_util_jni.so arm64-v8a/libsurface_util_jni.so\""
+    "tools/android/gerar-aab.sh|[ \"\$(unzip -Z1 \"\$apk\" | grep -E '^lib/|\.so\$' | LC_ALL=C sort | tr '\n' ' ')\" = \"\$(printf 'lib/%s ' \$libs_esperadas)\" ] \\"
+    "tools/android/gerar-aab.sh|&& [ \"\$(unzip -Z1 \"\$aab\" | grep -E '^base/lib/|\.so\$' | LC_ALL=C sort | tr '\n' ' ')\" = \"\$(printf 'base/lib/%s ' \$libs_esperadas)\" ] \\"
+    "tools/android/gerar-aab.sh||| { echo \"biblioteca nativa a mais ou fora do lugar no APK ou no AAB: nada foi entregue\" >&2; exit 1; }"
     # Checagem final de 16/11/2026, M3: sem preco de referencia, a troca pede o aceite tambem com duas fontes.
     "Kit/Sources/EscaliburEngines/EVM/EVMTradeEngine.swift|unanchored = market.reference.oracleOut == nil"
     "Kit/Sources/EscaliburEngines/Stellar/StellarTradeEngine.swift|unanchored: marketReference.oracleOut == nil"
@@ -2158,7 +2642,7 @@ codigo_vivo "$AND/java/app/escalibur/wallet/ui/comp/TecladoSeguro.kt" | grep -q 
 # declare ferramenta ou nao (pentest de 17/11/2026, A-1): do 14 em diante, esconder a leitura nao tira de cima da tela a
 # janela do servico, que o setHideOverlayWindows nao esconde e o filterTouchesWhenObscured nao ve. Fechou, travou: o portao
 # do Raiz derruba o pedido de biometria e trava a sessao, e so depois mostra a tela fechada.
-# Trecho solto nao segura esta regra (tres rodadas dos 3 agentes, 17/11/2026: um filtro encadeado no `deFora`, um retorno
+# Trecho solto nao segura esta regra (tres rodadas da revisao de seguranca, 17/11/2026: um filtro encadeado no `deFora`, um retorno
 # cedo, uma condicao na frente da linha do Raiz, a carteira montada dentro da tela fechada, um import que troca o objeto, o
 # `setContent` com outra coisa dentro, o travar sem o `sessao.travar`). Vai por digesto do codigo sem comentario e sem
 # diferenca de espaco, do caminho inteiro entre abrir o app e o portao:
@@ -2256,6 +2740,117 @@ achados=$(grep -iE 'firebase|crashlytics|analytics|sentry|appsflyer|adjust|ampli
 # O Kotlin nao fala com a internet: o unico endereco e a pagina da auditoria, aberta no navegador.
 enderecos=$(grep -rhoE '"https?://[^"]+' "$AND/java" | sed 's/^"//' | sort -u | tr '\n' ' ')
 [ "$enderecos" = "https://escalibur-wallet.github.io/auditoria/ " ] && ok "o Kotlin so tem o endereco da auditoria (aberto no navegador)" || aviso "endereco novo no Kotlin: $enderecos"
+# A regra acima so ve o texto "https://": um URL("https", host, caminho) em qualquer .kt passava, e o Rede.kt so conferia
+# o esquema (auditoria de 23/11/2026). Agora so o Rede.kt abre conexao, e so ele toca reflexao de rede; ninguem no Kotlin
+# chama o Rede (so o nucleo, pelo JNI); e o Rede.kt recusa o host fora do hosts.lock, a porta e o caminho fora da regra do
+# HTTPClient e o endereco com usuario. Cru, para a ausencia: um comentario que case se reescreve. Estas regras de texto
+# ficam como o primeiro aviso, barato, e nao crescem: texto sempre tem outra grafia, e a garantia e o bytecode
+# (conferir_dex, abaixo e no gerar-aab.sh) e os simbolos do nucleo (simbolos-swift-android.lock).
+kt_rede="$AND/java/app/escalibur/wallet/nucleo/Rede.kt"
+achados=$(grep -rnE 'java\.net|javax\.net|URLConnection|openConnection|openStream|\bSocket|SocketFactory|okhttp|android\.net\.http|Cronet|WebView|DownloadManager|Class\.forName|getDeclaredMethod|\.getMethod\(|kotlin\.reflect' "$AND/java" 2>/dev/null | grep -v "^$kt_rede:")
+[ -n "$achados" ] && { aviso "o Kotlin abre conexao ou usa reflexao fora do Rede.kt"; echo "$achados"; } \
+    || ok "so o Rede.kt abre conexao no Kotlin (nenhum java.net, socket, WebView, DownloadManager nem reflexao fora dele)"
+achados=$(grep -rnE '\bRede(\.|::)|nucleo\.Rede\b|\(Rede\)' "$AND/java" 2>/dev/null | grep -v "^$kt_rede:")
+[ -n "$achados" ] && { aviso "o Kotlin chama o Rede fora do Rede.kt (so o nucleo chama, pelo JNI)"; echo "$achados"; } \
+    || ok "nenhum Kotlin chama o Rede (so o nucleo, pelo JNI)"
+# O Rede.kt inteiro por digesto, como o Acessibilidade.kt: o codigo sem comentario e sem diferenca de espaco, COM o texto
+# entre aspas (o "https", os hosts do teste e as versoes do TLS sao parte da trava). Regra de forma (so o objeto no topo, so
+# requisitar e cancelar abertos, um openConnection) sempre tinha outra grafia; a garantia de que nenhum outro codigo abre
+# conexao e o bytecode (conferir_dex), e esta trava segura o que o Rede.kt faz com o que chega a ele (auditoria de
+# 23/11/2026). Mudou de proposito: confira o permitido (https, sem usuario, host do HostsPermitidos, porta e caminho da
+# regra do HTTPClient, sem `..` nem `%`; o badssl.com so com BuildConfig.DEBUG), o TLS 1.2 e 1.3 e o sem redirecionamento,
+# e grave o digesto novo. As portas e os caminhos iguais aos do HTTPClient.swift, lidos dos dois.
+rede_digesto=$(codigo "$kt_rede" | a11y_digesto)
+portas_swift=$(codigo "$NET/HTTPClient.swift" | awk '/static let extraPorts: \[String: Int\] = \[/ { f = 1; next } f && /^    \]/ { f = 0 } f' | sed -nE 's/^[[:space:]]*"([^"]+)": ([0-9]+),$/\1=\2/p' | LC_ALL=C sort | tr '\n' ' ')
+portas_kt=$(codigo "$kt_rede" | awk '/private fun portaExtra\(host: String\): Int\? = when \(host\) \{/ { f = 1; next } f && /^    \}/ { f = 0 } f' | sed -nE 's/^[[:space:]]*"([^"]+)" -> ([0-9]+)$/\1=\2/p' | LC_ALL=C sort | tr '\n' ' ')
+caminhos_swift=$(codigo "$NET/HTTPClient.swift" | awk '/static let pathPrefixes: \[String: String\] = \[/ { f = 1; next } f && /^    \]/ { f = 0 } f' | sed -nE 's/^[[:space:]]*"([^"]+)": "([^"]+)",$/\1=\2/p' | LC_ALL=C sort | tr '\n' ' ')
+caminhos_kt=$(codigo "$kt_rede" | awk '/private fun caminhoDo\(host: String\): String\? = when \(host\) \{/ { f = 1; next } f && /^    \}/ { f = 0 } f' | sed -nE 's/^[[:space:]]*"([^"]+)" -> "([^"]+)"$/\1=\2/p' | LC_ALL=C sort | tr '\n' ' ')
+[ "$rede_digesto" = "8848b974378a29e52f473de8815724683923b07a8642eedaaa374fb9bd89ff9e" ] \
+    && [ -n "$portas_swift" ] && [ "$portas_swift" = "$portas_kt" ] && [ -n "$caminhos_swift" ] && [ "$caminhos_swift" = "$caminhos_kt" ] \
+    && [ "$(grep -rlE 'badssl' "$AND/java")" = "$kt_rede" ] \
+    && ok "o Rede.kt e o revisado (digesto): recusa host fora do hosts.lock, porta e caminho fora da regra do HTTPClient e endereco com usuario (o badssl.com do teste so em depuracao)" \
+    || { aviso "o Rede.kt mudou (digesto $rede_digesto) ou as portas e os caminhos diferem dos do HTTPClient: confira a trava e grave o digesto novo"; echo "portas: $portas_swift / $portas_kt"; echo "caminhos: $caminhos_swift / $caminhos_kt"; }
+# As excecoes do bytecode valem pelo arquivo de origem, e o SourceFile do dex guarda so o nome do arquivo: um so Rede.kt,
+# Envelope.kt, Nucleo.kt e Abertura.kt no Android, os de sempre, e nenhum Effects.kt (o arquivo do Compose de onde vem a
+# classe do onDispose da abertura) (auditoria de 23/11/2026).
+fontes_unicas=""
+for par in "Rede.kt|$kt_rede" "Envelope.kt|$AND/java/app/escalibur/wallet/ui/envelope/Envelope.kt" "Nucleo.kt|$AND/java/app/escalibur/wallet/nucleo/Nucleo.kt" \
+    "Abertura.kt|$AND/java/app/escalibur/wallet/ui/abertura/Abertura.kt" "Effects.kt|"; do
+    [ "$(find Android -name "${par%%|*}" -not -path 'Android/build/*' -not -path 'Android/app/build/*' -not -path 'Android/.gradle/*' 2>/dev/null)" = "${par#*|}" ] \
+        || fontes_unicas="$fontes_unicas ${par%%|*}"
+done
+[ -z "$fontes_unicas" ] && ok "um so Rede.kt, Envelope.kt, Nucleo.kt e Abertura.kt no Android, e nenhum Effects.kt (as excecoes do bytecode sao pelo arquivo)" \
+    || aviso "arquivo a mais (ou fora do lugar) com o nome de uma excecao do bytecode:$fontes_unicas"
+# A sombra inline no pacote do Rede.kt nao deixa chamada no bytecode (a que nao e inline o conferir_dex pega): em nenhum
+# arquivo do pacote app.escalibur.wallet.nucleo, pela pasta ou pelo `package`, extensao (fun ou val sobre um tipo, como
+# `String.lowercase`), inline, operator, infix nem typealias. Hoje nenhum. Cru, para a ausencia, e no texto inteiro: a
+# declaracao partida em linhas e o nome do pacote entre crases contam.
+sombras=$(python3 -I - "$AND/java/app/escalibur/wallet/nucleo" <<'PY'
+import os, re, sys
+pasta = sys.argv[1]
+PACOTE = re.compile(r"^\s*package\s+([\w\x60.\s]+?)\s*(;|$)", re.M)
+EXTENSAO = re.compile(r"\b(fun|va[lr])\s+(<[^=]*?>\s*)?[\w\x60][\w\x60.]*\s*(<[^=]*>)?\s*\??\s*\.\s*[\w\x60]")
+PALAVRA = re.compile(r"\b(inline|operator|infix|typealias)\b")
+for raiz, subpastas, arquivos in os.walk("Android"):
+    subpastas[:] = [s for s in subpastas if os.path.join(raiz, s) not in ("Android/build", "Android/app/build", "Android/.gradle")]
+    for nome in arquivos:
+        if not nome.endswith(".kt"):
+            continue
+        caminho = os.path.join(raiz, nome)
+        texto = open(caminho, encoding="utf-8", errors="replace").read()
+        m = PACOTE.search(texto)
+        if (re.sub(r"[\x60\s]", "", m.group(1)) if m else "") != "app.escalibur.wallet.nucleo" and raiz != pasta:
+            continue
+        for regra in (EXTENSAO, PALAVRA):
+            for achado in regra.finditer(texto):
+                print(f"{caminho}:{texto.count(chr(10), 0, achado.start()) + 1}: {achado.group(0)}")
+PY
+)
+[ -z "$sombras" ] && ok "nenhuma extensao, inline, operator, infix nem typealias no pacote do Rede.kt (a sombra que o bytecode nao ve)" \
+    || { aviso "extensao, inline, operator, infix ou typealias no pacote app.escalibur.wallet.nucleo (pode mudar o que o Rede.kt chama)"; echo "$sombras"; }
+# O que foi compilado, e nao o texto: o bytecode do APK de depuracao deste Mac, quando ha um (conferir_dex). Numa pasta
+# limpa, sem build, a regra diz que nao conferiu, sem falhar: a do pacote da loja roda no gerar-aab.sh, sempre.
+conferir_dex_de_depuracao
+# No nucleo do Android, so o Rede.swift chega ao Java da rede: o transporte instalado confere a regra do HTTPClient
+# (AndroidTransport.permits) antes de chamar o Rede.kt, o Rede.executar e privado, e so o TesteTLS (inteiro em DEBUG)
+# monta pedido para o transporte. Nenhum outro arquivo acha classe ou metodo do Java por conta propria (o java.net
+# direto pelo JNI): so o JNI.swift e o Java.swift, com a lista fixa de metodos do app.
+achados=$(swift_em Kit/Sources App | xargs grep -nE 'Rede\.executar|AndroidTransport\.(Request|install)|Java\.metodo\("Rede\.' 2>/dev/null \
+    | grep -vE "^($APPA/Rede\.swift|$NET/AndroidTransport\.swift|$APPA/TesteTLS\.swift):")
+vivos_teste=$(codigo_vivo_android "$APPA/TesteTLS.swift" | grep -cE 'Rede\.executar|AndroidTransport\.')
+jni=$(swift_em Kit/Sources App | xargs grep -nE 'FindClass|GetStaticMethodID|GetMethodID|GetStaticFieldID|GetFieldID|globalClass\(|staticMethod\(|"(java|javax|android)/' 2>/dev/null \
+    | grep -vE "^($APPA/JNI\.swift|$APPA/Java\.swift):")
+[ -z "$achados" ] && [ "$vivos_teste" = 0 ] && [ -z "$jni" ] \
+    && codigo_vivo_android "$APPA/Rede.swift" | grep -qF 'AndroidTransport.install(.init(perform: Rede.executar, cancel: Rede.cancelar))' \
+    && codigo_vivo_android "$APPA/Rede.swift" | grep -qF '@Sendable private static func executar(_ pedido: AndroidTransport.Request) throws -> AndroidTransport.Response {' \
+    && python3 -I tools/codigo.py --exige "$APPA/Rede.swift" 'guard AndroidTransport.permits(pedido.url) else { throw Falha.recusado.erro }' --plataforma android \
+    && [ "$(codigo_vivo_android "$APPA/Rede.swift" | grep -cE '\benviar\(')" = 2 ] \
+    && ! codigo_vivo_android "$APPA/Rede.swift" | grep -q 'executarNoTesteTLS' \
+    && codigo_vivo_android "$NET/AndroidTransport.swift" | grep -qF 'guard let url = URL(string: address), url.user == nil, url.password == nil else { return false }' \
+    && codigo_vivo_android "$NET/AndroidTransport.swift" | grep -qF 'return HTTPClient.permits(url, allowedHosts: AllowedHosts.all)' \
+    && ok "no nucleo do Android so o Rede.swift chega ao Java da rede, e confere a regra do HTTPClient antes" \
+    || { aviso "pedido de rede no nucleo do Android fora do Rede.swift ou sem a regra do HTTPClient"; echo "$achados"; echo "$jni"; }
+# Os tipos do JNI (o JNIEnv e o JavaVM, a tabela de funcoes, o ponteiro de funcao em C, o cast cru e o deslocamento na
+# tabela) so no JNI.swift e no Java.swift: fora deles, um arquivo do EscaliburAndroid chegaria ao FindClass pela tabela sem
+# escrever o nome (auditoria de 23/11/2026). Cru, para a ausencia.
+jni_tipos=$(grep -rlE 'JNIEnv|JavaVM|JNINativeInterface|@convention\(c\)|unsafeBitCast|fromByteOffset' "$APPA" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')
+[ "$jni_tipos" = "$APPA/JNI.swift $APPA/Java.swift " ] && ok "os tipos do JNI (JNIEnv, JavaVM, a tabela, @convention(c), unsafeBitCast) so no JNI.swift e no Java.swift" \
+    || aviso "tipo do JNI fora do JNI.swift e do Java.swift (ou fora dos dois): $jni_tipos"
+# Fora do Rede.swift, o Java.metodo so nos lugares de hoje, com o nome de hoje: o do Eventos, com o nome escrito, e os quatro
+# do Cofre.swift, com o nome que vem das funcoes chamarInt, chamarVoid, chamarBytes e chamarSegredo, e estas so com um nome
+# escrito do Cofre que esta no Java.swift (auditoria de 23/11/2026: `Java.metodo(nome)` com o nome montado em pedacos
+# chegava ao Rede.requisitar sem a regra do HTTPClient). Cru, para a ausencia.
+java_metodos=$(swift_em Kit/Sources App | grep -vxE "$APPA/(Rede|Java)\.swift" | xargs grep -noE 'Java[[:space:]]*\.[[:space:]]*metodo\b[^)]*\)?' 2>/dev/null \
+    | sed -E 's/^([^:]+):[0-9]+:/\1:/' | LC_ALL=C sort | tr '\n' '|')
+metodos_do_cofre=$(sed -nE 's/^        \("Cofre", "([A-Za-z]+)", "[^"]+"\),$/\1/p' "$APPA/Java.swift" | tr '\n' '|')
+chamadas_do_cofre=$(swift_em Kit/Sources App | xargs grep -noE '\bchamar(Int|Void|Bytes|Segredo)\b[[:space:]]*\(?("[^"]*")?' 2>/dev/null | sed -E 's/^([^:]+):[0-9]+:/\1:/')
+[ "$java_metodos" = "$APPA/App/Eventos.swift:Java.metodo(\"Eventos.emitir\")|$APPA/Cofre.swift:Java.metodo(nome)|$APPA/Cofre.swift:Java.metodo(nome)|$APPA/Cofre.swift:Java.metodo(nome)|$APPA/Cofre.swift:Java.metodo(nome)|" ] \
+    && [ -n "$metodos_do_cofre" ] && [ -n "$chamadas_do_cofre" ] \
+    && [ -z "$(echo "$chamadas_do_cofre" | grep -vxE "($APPA/Cofre\\.swift|$APPA/Nucleo\\.swift):chamar(Int|Void|Bytes|Segredo)\\(\"Cofre\\.(${metodos_do_cofre%|})\"" | grep -vxE "$APPA/Cofre\\.swift:chamar(Int|Void|Bytes|Segredo)\\(")" ] \
+    && [ "$(echo "$chamadas_do_cofre" | grep -cxE "$APPA/Cofre\\.swift:chamar(Int|Void|Bytes|Segredo)\\(")" = 4 ] \
+    && [ "$(grep -cE '^    static func chamar(Int|Void|Bytes|Segredo)\(_ nome: String, _ argumentos: \[Argumento\]\)' "$APPA/Cofre.swift")" = 4 ] \
+    && ok "fora do Rede.swift, o Java.metodo so com os nomes de hoje (o Eventos.emitir e os do Cofre, escritos)" \
+    || { aviso "Java.metodo fora do Rede.swift com outro nome, ou um nome montado chegando a ele"; echo "$java_metodos" | tr '|' '\n'; }
 achados=$(grep -rnE 't\("[^"]*(—|–)[^"]*"' "$AND/java" 2>/dev/null; grep -nE '—|–' Android/app/textos-android.json "$AND"/assets/legal/*.md 2>/dev/null)
 [ -n "$achados" ] && { aviso "travessao em texto do Android"; echo "$achados" | head; } || ok "nenhum travessao nos textos, traducoes e documentos do Android"
 # Cada dependencia do Gradle conferida pelo digesto, e o proprio Gradle pelo digesto da distribuicao.
@@ -2349,6 +2944,7 @@ if [ "${1:-}" = "--atualizar-simbolos" ]; then
       else grep '^android ' simbolos-c.lock 2>/dev/null; fi; } \
         | sort -u > simbolos-c.lock.novo && mv simbolos-c.lock.novo simbolos-c.lock
     ok "simbolos-c.lock atualizado: $(wc -l < simbolos-c.lock | tr -d ' ') simbolos do C (revise o diff)"
+    gravar_simbolos_swift_android
     exit 0
 fi
 
@@ -2363,7 +2959,7 @@ if [ "${1:-}" = "--testes" ]; then
         echo "$saida" | tail -15
     fi
     # O objeto do SecureBytes chama o _SecRandomCopyBytes do sistema, e nao um com o mesmo nome do proprio Swift (regra do
-    # sorteio, rodada dos 3 agentes de 19/11/2026). O binario da loja e conferido pelo nm no arquivar.sh.
+    # sorteio, rodada da revisao de seguranca de 19/11/2026). O binario da loja e conferido pelo nm no arquivar.sh.
     sorteio_o=$(nm -u Kit/.build/debug/EscaliburCore.build/SecureBytes.swift.o 2>/dev/null)
     grep -qx '_SecRandomCopyBytes' <<<"$sorteio_o" && grep -qx '_kSecRandomDefault' <<<"$sorteio_o" \
         && ok "o SecureBytes compilado chama o SecRandomCopyBytes do sistema" || aviso "o SecureBytes compilado nao chama o SecRandomCopyBytes do sistema"

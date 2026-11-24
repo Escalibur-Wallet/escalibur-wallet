@@ -263,7 +263,7 @@ private fun ColumnScope.Etapas(controle: ControleDoEnvio, r: RetratoDoEnvio, vol
         "destino" -> voltarParaEscolha
         else -> null
     }
-    // Durante "Conferindo o historico da rede" o voltar fica parado, como no iOS (rodada 19 dos 3 agentes).
+    // Durante "Conferindo o historico da rede" o voltar fica parado, como no iOS (rodada 19 da revisao de seguranca).
     BackHandler(enabled = !enviando) { if (!r.conferindoHistorico) voltar?.invoke() ?: Navegacao.fechar() }
     // Como no iOS: com etapa anterior (a tag, o valor, a revisao), o voltar a esquerda e o fechar a
     // direita (pedido do dono, 23/10/2026: o valor nao tinha como voltar ao endereco).
@@ -309,7 +309,7 @@ private fun ColumnScope.EtapaDoDestino(controle: ControleDoEnvio, r: RetratoDoEn
     var conferenciaDoOutroID by remember(r.destino, r.rodadaDoDesafio) { mutableStateOf("") }
     var conferenciaCega by remember(r.destino, r.rodadaDoDesafio) { mutableStateOf("") }
     /** O endereco entrou inteiro e o nucleo ainda nao respondeu: o campo fica escondido ate o retrato dizer se ha desafio, para o
-     * nome colado nao aparecer nem por uma ida ao nucleo (revisao dos 3 agentes, 09/11/2026). */
+     * nome colado nao aparecer nem por uma ida ao nucleo (revisao de seguranca, 09/11/2026). */
     var esperandoInteiro by remember { mutableStateOf(false) }
 
     // A ultima mudanca do destino manda: o campo segue o nucleo quando ele apaga o texto (a frase
@@ -353,7 +353,7 @@ private fun ColumnScope.EtapaDoDestino(controle: ControleDoEnvio, r: RetratoDoEn
                 BasicTextField(
                     texto, { novo ->
                         // Colado pelo menu do sistema ou pelo teclado: com um segredo, a area de transferencia esvazia tambem (o campo
-                        // esvazia no nucleo), como no Colar do app (revisao dos 3 agentes, 09/11/2026).
+                        // esvazia no nucleo), como no Colar do app (revisao de seguranca, 09/11/2026).
                         if (novo.length > texto.length + 1) {
                             val gerente = contexto.getSystemService(ClipboardManager::class.java)
                             escopo.launch { limparSeSegredo(gerente, novo, r.rede) }
@@ -373,7 +373,7 @@ private fun ColumnScope.EtapaDoDestino(controle: ControleDoEnvio, r: RetratoDoEn
                     val gerente = contexto.getSystemService(ClipboardManager::class.java)
                     val colado = runCatching { gerente.primaryClip?.getItemAt(0)?.text?.toString() }.getOrNull().orEmpty()
                     if (colado.isNotEmpty()) {
-                        // A frase ou a chave colada sai tambem da area de transferencia (como no iOS, revisao dos 3 agentes, 09/11/2026).
+                        // A frase ou a chave colada sai tambem da area de transferencia (como no iOS, revisao de seguranca, 09/11/2026).
                         escopo.launch { limparSeSegredo(gerente, colado, r.rede) }
                         mudar("envio.link", JSONObject().put("texto", colado))
                     }
@@ -406,16 +406,16 @@ private fun ColumnScope.EtapaDoDestino(controle: ControleDoEnvio, r: RetratoDoEn
         val destino = r.destino
         val parecido = r.parecido
         if (parecido != null && destino != null) {
-            // Parecido com nome da NEAR: o aviso e o do nome, e o desafio, o nome colado inteiro, a vista acima (revisao dos 3
-            // agentes, 08/11/2026).
+            // Parecido com nome da NEAR: o aviso e o do nome, e o desafio, o nome colado inteiro, a vista acima (revisao de
+            // seguranca, 08/11/2026).
             val parecidoInteiro = parecido.trechoColado?.let { it.inicio == 0 && it.tamanho == destino.trim().length } == true
             Faixa(TipoDeFaixa.cautela, if (parecidoInteiro) t("Nome parecido com um que você já usou") else t("Endereço parecido com um que você já usou"),
                   Modifier.padding(top = Espaco.md),
                   mensagem = if (parecidoInteiro) t("Golpistas registram por centavos nomes assim, para o envio cair na conta deles.")
                              else t("As pontas são iguais, o meio é diferente. Golpistas mandam centavos de um endereço assim para ele aparecer no seu histórico."))
             Column(Modifier.padding(top = Espaco.sm), verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-                // O nome colado escondido, como no desafio escondido: a vista, quem copiasse da tela passava (revisao dos 3
-                // agentes, 09/11/2026). O conhecido fica a vista.
+                // O nome colado escondido, como no desafio escondido: a vista, quem copiasse da tela passava (revisao de
+                // seguranca, 09/11/2026). O conhecido fica a vista.
                 EnderecoMarcado(t("Você colou"), destino, parecido.trechoColado, escondido = parecidoInteiro)
                 EnderecoMarcado(parecido.rotulo, parecido.conhecido, parecido.trechoConhecido)
             }
@@ -449,7 +449,7 @@ private fun ColumnScope.EtapaDoDestino(controle: ControleDoEnvio, r: RetratoDoEn
 
         val cego = r.cego
         if (cego != null) {
-            // Na NEAR com nome, o trecho e o nome inteiro, com o registro (revisao dos 3 agentes, 08/11/2026).
+            // Na NEAR com nome, o trecho e o nome inteiro, com o registro (revisao de seguranca, 08/11/2026).
             val nomeInteiro = cego.trecho.inicio == 0 && cego.trecho.tamanho == cego.fonte.trim().length
             if (cego.todoEnvio) {
                 Faixa(TipoDeFaixa.neutra, t("Conferência do endereço"), Modifier.padding(top = Espaco.md),
@@ -586,7 +586,7 @@ private fun CampoDaTag(texto: String, dica: String, numerico: Boolean, altura: D
         if (texto.isEmpty()) Text(dica, style = estilo(Tipo.mono), color = Paleta.tintaMorta)
         BasicTextField(
             // O colado vai inteiro ao nucleo, que confere e so depois corta em 120: cortado aqui, o par de 128 hexadecimais ou a
-            // chave da Cardano passavam como pedaco (revisao dos 3 agentes, 09/11/2026).
+            // chave da Cardano passavam como pedaco (revisao de seguranca, 09/11/2026).
             texto, { aoMudar(it.take(4096)) }, singleLine = true,
             textStyle = estilo(Tipo.mono).copy(color = Paleta.tinta), cursorBrush = SolidColor(Paleta.acento),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false,
@@ -632,7 +632,7 @@ fun EnderecoMarcado(rotulo: String, endereco: String, trecho: Trecho?, escondido
             append(endereco)
         } else {
             append(endereco.substring(0, trecho.inicio))
-            // O nome inteiro escondido vai em 8 pontos fixos: um por letra diria o tamanho do colado (revisao dos 3 agentes, 08/11/2026).
+            // O nome inteiro escondido vai em 8 pontos fixos: um por letra diria o tamanho do colado (revisao de seguranca, 08/11/2026).
             val inteiro = trecho.inicio == 0 && trecho.tamanho == endereco.length
             withStyle(SpanStyle(color = Paleta.cautela, textDecoration = TextDecoration.Underline)) {
                 append(if (escondido) "•".repeat(if (inteiro) 8 else trecho.tamanho) else endereco.substring(trecho.inicio, trecho.inicio + trecho.tamanho))
@@ -660,7 +660,7 @@ fun NotaDaCaixa(modifier: Modifier = Modifier) {
 }
 
 /** Um campo curto. Com `semColar`, o de um desafio (o ID e o memo, lidos na fonte): um caractere por vez e sem Colar, como as
- * caixas (`CaixasDeConferencia`), ate 20, o maior ID (revisao dos 3 agentes, 08/11/2026). */
+ * caixas (`CaixasDeConferencia`), ate 20, o maior ID (revisao de seguranca, 08/11/2026). */
 @Composable
 fun CampoCurto(texto: String, dica: String, modifier: Modifier = Modifier, largura: Dp = 180.dp, semColar: Boolean = false, aoMudar: (String) -> Unit) {
     Box(
@@ -725,7 +725,7 @@ fun CaixasDeConferencia(texto: String, quantos: Int, modifier: Modifier = Modifi
  * O campo de um desafio, lido na fonte e digitado: so entra um caractere por vez, contado na edicao de verdade, com a selecao
  * de antes, e o Colar sai do menu (o antigo e o novo do Compose). Colar a area de transferencia, que um programa no computador
  * pode ter trocado, dava a resposta certa no nome inteiro de uma conta NEAR, tambem por cima do texto selecionado; o chip da
- * area de transferencia do teclado entra de uma vez e fica de fora (revisao dos 3 agentes, 08/11/2026). O `ChallengeTextField`
+ * area de transferencia do teclado entra de uma vez e fica de fora (revisao de seguranca, 08/11/2026). O `ChallengeTextField`
  * do iOS faz igual.
  */
 @Composable
@@ -789,7 +789,7 @@ internal fun entrouInteiro(antes: String, depois: String): Boolean {
 }
 
 /** O Colar do app trouxe uma frase ou uma chave: a area de transferencia esvazia, para a copia nao seguir no historico do teclado
- * (revisao dos 3 agentes, 09/11/2026). */
+ * (revisao de seguranca, 09/11/2026). */
 suspend fun limparSeSegredo(gerente: android.content.ClipboardManager, texto: String, rede: String?) {
     // Com a rede da tela (a chave com 0x na EVM), e na falha do nucleo esvazia tambem.
     val corpo = JSONObject().put("texto", texto).apply { if (rede != null) put("rede", rede) }
@@ -925,7 +925,7 @@ private fun ColumnScope.EtapaDoValor(controle: ControleDoEnvio, r: RetratoDoEnvi
 
     fun mudar(texto: String, tudo: Boolean) {
         // Enquanto a revisao espera o historico e monta o plano, o valor fica o do toque: as ordens abertas ja foram
-        // conferidas com ele, e o plano e comparado com ele (rodada 19 dos 3 agentes, 06/11/2026). Vale para o campo, o
+        // conferidas com ele, e o plano e comparado com ele (rodada 19 da revisao de seguranca, 06/11/2026). Vale para o campo, o
         // Max e o deslizante, que passam todos por aqui.
         if (controle.trabalhando) return
         valor = texto

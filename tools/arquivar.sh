@@ -10,8 +10,8 @@
 #
 #   tools/arquivar.sh <build>      grava /private/tmp/escalibur-arquivo-<versao>-<build>.*/EscaliburWallet.xcarchive
 #
-# O archive sai numa pasta nova fora do repositorio (so do dono, 700), e nao na pasta de trabalho, que outra sessao
-# edita; e o digesto da arvore do .app sai no fim, para conferir antes de assinar (sexta passada de 03/11/2026).
+# O archive sai numa pasta nova fora do repositorio (so do dono, 700), e nao na pasta de trabalho, que outro trabalho
+# em paralelo edita; e o digesto da arvore do .app sai no fim, para conferir antes de assinar (sexta passada de 03/11/2026).
 set -euo pipefail
 # O ambiente da loja (revisao da decima terceira passada da auditoria de 03/11/2026): o bash do sistema em modo privilegiado,
 # sem funcao herdada nem BASH_ENV, e o resto so por lista de permitidos. Quem chama `bash script` para aqui, numa expansao
@@ -20,7 +20,7 @@ set -euo pipefail
 # hooks. CDPATH, as variaveis do Perl, do compilador e do Java ficam todas de fora.
 # O git, o Python, o swift e o xcodebuild de /usr/bin escolhem o programa de verdade pelo cache do xcrun, que fica
 # na pasta temporaria do usuario: cada script comeca com um cache novo e vazio (xcrun_db), resolvido de novo pelo Xcode,
-# que e do root (checagem final de 16/11/2026, rodada 3 dos 3 agentes).
+# que e do root (checagem final de 16/11/2026, rodada 3 da revisao de seguranca).
 case "$-" in *p*) ;; *) _sem_p=; : "${_sem_p:?rode pelo caminho do script, e nao por bash script}" ;; esac
 casa=$(/usr/bin/dscl . -read "/Users/$(/usr/bin/id -un)" NFSHomeDirectory | /usr/bin/sed -n 's/^NFSHomeDirectory: //p')
 limpo=true
@@ -114,7 +114,7 @@ segunda_fase() {
     done
     swift tools/versoes/versoes.swift conferir-app "$app" \
         || { echo "o app nao leva a lista assinada que autoriza $versao ($build)" >&2; exit 1; }
-    # O texto do binario guardado antes: um strings que falhasse deixava o if falso e a trava passava (rodada 2 dos 3 agentes).
+    # O texto do binario guardado antes: um strings que falhasse deixava o if falso e a trava passava (rodada 2 da revisao de seguranca).
     local texto
     texto=$(strings -a -arch all "$app/EscaliburWallet") || { echo "o strings do binario falhou" >&2; exit 1; }
     if grep -E "abandon abandon abandon|DebugDemo|envio-incerto|enviar-eth|-alarme-versao|-versao-expirada|-versao-obrigatoria|-tentou-atualizar" <<<"$texto"; then
@@ -122,9 +122,9 @@ segunda_fase() {
         exit 1
     fi
     # O sorteio do app e o do sistema: o binario importa o _SecRandomCopyBytes do Security e nao define outro com o mesmo
-    # nome (rodada dos 3 agentes de 19/11/2026: um @_cdecl ou uma funcao em C com esse nome ganhava do Security no link).
+    # nome (rodada da revisao de seguranca de 19/11/2026: um @_cdecl ou uma funcao em C com esse nome ganhava do Security no link).
     # Pela saida guardada, e nao por pipe com grep -q, que o pipefail engana.
-    # Cada fatia (arm64 e arm64e, que roda nos iPhones A12 em diante): sem -arch, o nm lia uma so (rodada 2 dos 3 agentes).
+    # Cada fatia (arm64 e arm64e, que roda nos iPhones A12 em diante): sem -arch, o nm lia uma so (rodada 2 da revisao de seguranca).
     local simbolos fatias fatia
     fatias=$(lipo -archs "$app/EscaliburWallet") || { echo "o lipo do binario falhou" >&2; exit 1; }
     [ "$fatias" = "arm64 arm64e" ] || [ "$fatias" = "arm64" ] || { echo "o binario tem fatias inesperadas: $fatias" >&2; exit 1; }

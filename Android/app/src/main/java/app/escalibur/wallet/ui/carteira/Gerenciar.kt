@@ -113,7 +113,8 @@ fun TelaDeGerenciarAtivos() {
                 GrupoDeAjustes(Modifier.padding(top = Espaco.md)) {
                     for (linha in retrato.todasAsLinhas) {
                         LinhaComInterruptor(null, linha.simbolo, linha.id !in ocultos, cor = Paleta.acento, inicio = {
-                            LogoDaMoeda(linha.coingecko, linha.simbolo, 28.dp, anel = Paleta.corpo, naoConferido = linha.reconhecido || !linha.conferido)
+                            LogoDaMoeda(linha.logo, linha.simbolo, 28.dp, anel = Paleta.corpo, naoConferido = linha.reconhecido || !linha.conferido,
+                                        logoConfirmada = linha.reconhecido)
                         }) { mostrar(linha.id, it) }
                     }
                 }
@@ -253,7 +254,7 @@ fun AdicionarMoedaCustom(inicial: String? = null, rede: String? = null, codigoIn
     }
 
     LaunchedEffect(Unit) { if (inicial != null) ler() }
-    // A frase ou a chave colada ou digitada sai do campo na hora, com o aviso, como no observar (revisao dos 3 agentes, 09/11/2026).
+    // A frase ou a chave colada ou digitada sai do campo na hora, com o aviso, como no observar (revisao de seguranca, 09/11/2026).
     suspend fun conferirCampo(texto: String, limpar: () -> Unit) {
         if (texto.isBlank()) return
         val resposta = runCatching { Api.objeto("texto.campo", JSONObject().put("texto", texto).apply { if (rede != null) put("rede", rede) }) }.getOrNull() ?: return

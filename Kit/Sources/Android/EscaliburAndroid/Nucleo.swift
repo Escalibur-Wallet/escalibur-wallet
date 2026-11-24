@@ -240,7 +240,7 @@ enum Nucleo {
         case "suporte.pareceFrase":
             // A mesma conferencia do SupportView do iOS (`PrivateKeyGuard.supportSecret`): a chave, a frase ou um pedaco dela, e
             // no texto os hexadecimais longos, que no ID da transacao passam. O tipo escolhe o aviso; nas palavras, o trecho vai
-            // junto, para quem so conversava saber o que trocar (revisao dos 3 agentes, 09/11/2026). Um caractere a mais que o
+            // junto, para quem so conversava saber o que trocar (revisao de seguranca, 09/11/2026). Um caractere a mais que o
             // campo aceita, para o texto comprido demais tambem ficar.
             let detalhes = String((pedido["detalhes"]?.stringValue ?? "").prefix(4097))
             let transacao = String((pedido["transacao"]?.stringValue ?? "").prefix(4097))
@@ -653,7 +653,7 @@ enum Nucleo {
             )
             return try json(CarteiraResumo(wallet, selecionada: true))
         case "carteira.importarComPassphrase":
-            // O interruptor da passphrase na importacao: so a carteira com passphrase vai ao cofre (revisao dos 3 agentes, 08/11/2026).
+            // O interruptor da passphrase na importacao: so a carteira com passphrase vai ao cofre (revisao de seguranca, 08/11/2026).
             // A rodada do dia da carteira de base para antes, como ao abrir pelos Ajustes (rodada 2 da auditoria 8). Sem abrir (o
             // PIN recusado, um erro), ela volta (rodada 6), como no iOS.
             Sessao.shared.pararConferencias()
@@ -797,7 +797,7 @@ enum Nucleo {
     }
 
     /// O nome da carteira com passphrase, saneado como no iOS. So com caractere de controle ou invisivel, o saneamento deixava
-    /// vazio, e a carteira ficava sem nome na lista (revisao dos 3 agentes, 08/11/2026).
+    /// vazio, e a carteira ficava sem nome na lista (revisao de seguranca, 08/11/2026).
     static func nomeComPassphrase(_ pedido: String?) -> String {
         let nome = Envelope.sanitize(pedido ?? "", limit: 40)
         return nome.isEmpty ? Textos.t("Carteira com passphrase") : nome

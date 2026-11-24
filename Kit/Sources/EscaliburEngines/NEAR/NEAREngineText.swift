@@ -76,7 +76,11 @@ enum NEAREngineText {
         case .expired: return kitText("O envio venceu antes de chegar à rede. Nada saiu da conta. Revise e envie de novo.")
         case .insufficientFunds: return kitText("A rede NEAR recusou o envio por saldo insuficiente para o valor e a taxa. Nada saiu da conta.")
         case .invalidSignature: return kitText("A rede NEAR recusou a assinatura. Nada saiu da conta.")
-        case .nonceTooLow, .nonceTooHigh:
+        // InvalidNonce nao prova que nada saiu. No reenvio por "Transmitir de novo", o no procura a propria transacao e, se
+        // acha, devolve o resultado dela; se nao acha mais (historico ja podado pelo no), volta InvalidNonce. Outra
+        // transacao com o mesmo numero tambem volta assim. A tela manda conferir antes de enviar de novo.
+        case .nonceTooLow: return nonceUsed
+        case .nonceTooHigh:
             return kitText("Outra transação desta conta entrou antes. Nada saiu por esta. Confira a Atividade e envie de novo.")
         case .alreadyKnown, .underpriced, .wrongNetwork, .other:
             return kitText("A rede NEAR recusou o envio. Nada saiu da conta.")

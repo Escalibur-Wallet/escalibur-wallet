@@ -231,7 +231,7 @@ class EntradaDaFrase(quantas: Int = 12, limpaAoSair: Boolean = false, zeraAoTrav
 
         /** As grades de criar e importar: ir ao fundo nao as zera (a previa manda comparar noutro app), travar sim, na hora do
          * aviso de tela apagada. O onDispose so viria na volta, com a composicao parada; e na volta a tela de bloqueio tira o
-         * fluxo da arvore, entao nada zerado chega a ser gravado (o didLock do iOS, revisao dos 3 agentes, 08/11/2026). */
+         * fluxo da arvore, entao nada zerado chega a ser gravado (o didLock do iOS, revisao de seguranca, 08/11/2026). */
         private val ateTravar: MutableSet<EntradaDaFrase> = java.util.Collections.newSetFromMap(java.util.WeakHashMap())
 
         fun zerarAoTravar() {
@@ -309,7 +309,7 @@ fun FluxoDeImportar(aoCancelar: () -> Unit, aoTerminar: () -> Unit) {
                 }
             }
             // A mesma tela da passphrase dos Ajustes. O voltar leva a conferencia, com as palavras ainda na memoria; so a carteira
-            // com passphrase e gravada, numa vez so, e a das palavras nunca vai ao cofre (revisao dos 3 agentes, 08/11/2026).
+            // com passphrase e gravada, numa vez so, e a das palavras nunca vai ao cofre (revisao de seguranca, 08/11/2026).
             "passphrase" -> previa?.let { dados ->
                 // As palavras ja aqui (a digital e os enderecos da previa): o nome da carteira delas, como pelos Ajustes.
                 val enderecos = dados.getJSONArray("enderecos").objetos().map { it.getString("rede") to it.getString("endereco") }

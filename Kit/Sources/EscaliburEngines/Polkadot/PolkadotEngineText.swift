@@ -80,7 +80,10 @@ enum PolkadotEngineText {
         case .expired: return kitText("O envio venceu antes de chegar à rede. Nada saiu da conta. Revise e envie de novo.")
         case .insufficientFunds: return kitText("A rede Polkadot recusou o envio por saldo insuficiente para a taxa. Nada saiu da conta.")
         case .invalidSignature: return kitText("A rede Polkadot recusou a assinatura. Nada saiu da conta.")
-        case .nonceTooLow, .nonceTooHigh:
+        // Numero antigo (1010 "outdated", 1014) tambem e a resposta a "Transmitir de novo" quando a propria transacao ja
+        // entrou: nao prova que nada saiu, e a tela manda conferir antes de enviar de novo.
+        case .nonceTooLow: return failure("nonceUsed")
+        case .nonceTooHigh:
             return kitText("Outra transação desta conta entrou antes. Nada saiu por esta. Confira a Atividade e envie de novo.")
         case .alreadyKnown, .underpriced, .wrongNetwork, .other:
             return kitText("A rede Polkadot recusou o envio. Nada saiu da conta.")

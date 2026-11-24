@@ -138,7 +138,7 @@ fun DetalheDoAtivo(id: String) {
         aoVoltar = { Navegacao.fechar() },
         centro = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                LogoDaMoeda(linha.coingecko, linha.simbolo, 20.dp, naoConferido = !linha.conferido && !linha.reconhecido)
+                LogoDaMoeda(linha.logo, linha.simbolo, 20.dp, naoConferido = !linha.conferido && !linha.reconhecido, logoConfirmada = linha.reconhecido)
                 Text(linha.nome, style = estilo(Tipo.acao), color = Paleta.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (linha.custom) SeloDeToken(TipoDeSelo.custom)
             }

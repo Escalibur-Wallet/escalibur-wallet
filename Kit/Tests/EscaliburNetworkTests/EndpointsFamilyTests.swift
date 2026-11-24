@@ -43,7 +43,7 @@ struct EndpointsFamilyTests {
         #expect(shared.isEmpty, "na frente de mais de uma familia: \(shared)")
     }
 
-    /// Operadores de verdade, e nao enderecos (revisao dos tres agentes de 15/11/2026): as dataseeds da BNB Chain (bnbchain.org,
+    /// Operadores de verdade, e nao enderecos (revisao de seguranca de 15/11/2026): as dataseeds da BNB Chain (bnbchain.org,
     /// defibit.io e ninicoin.io, a mesma NodeReal atras) contavam como tres, e a BNB Chain sozinha escondia a delegacao 7702.
     @Test("Toda EVM com tres operadores na leitura e dois na simulacao, e as dataseeds da BNB Chain como um so")
     func distinctOperators() {

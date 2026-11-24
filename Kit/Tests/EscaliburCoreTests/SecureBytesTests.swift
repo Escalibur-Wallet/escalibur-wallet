@@ -4,7 +4,7 @@ import Testing
 
 @Suite("SecureBytes")
 struct SecureBytesTests {
-    /// O alarme do sorteio (rodada 2 dos 3 agentes, 19/11/2026): pega por comportamento o que a regra do verificador nao ve
+    /// O alarme do sorteio (rodada 2 da revisao de seguranca, 19/11/2026): pega por comportamento o que a regra do verificador nao ve
     /// pelo texto, como o buffer sobrescrito depois do sorteio ou uma parte fixa. Nao pega um gerador fraco que varia.
     @Test("O sorteio do sistema: 64 de 16 e 64 de 32 bytes, todos diferentes, nenhum zerado e nenhum byte fixo")
     func randomIsNeverFixed() throws {

@@ -66,8 +66,8 @@ final class Envio: @unchecked Sendable {
     /// O desafio escondido e o da opcao "Conferir o endereco em todo envio".
     private var cegoDeTodoEnvio = false
     /// Nome da NEAR: o texto cujo desafio ja nasceu, no toque do Continuar ou na entrada inteira, sem a rede. Digitando, cada comeco
-    /// ja e conta valida ("bo" de "bob.near"), e o desafio nascia no segundo caractere (o nearArmedFor do iOS, revisao dos 3
-    /// agentes, 09/11/2026).
+    /// ja e conta valida ("bo" de "bob.near"), e o desafio nascia no segundo caractere (o nearArmedFor do iOS, revisao de
+    /// seguranca, 09/11/2026).
     private var nomeArmado: String?
     /// Nome da NEAR valido no campo, com o desafio ainda por nascer: o Continuar o faz nascer.
     private var nomePendente = false
@@ -471,7 +471,7 @@ final class Envio: @unchecked Sendable {
             guard let destino, achadoTardio(destino.address, chain: chain) else { return false }
             validar()
             // Ja na tag, no valor ou na revisao: volta ao destino agora, antes de a passphrase e o PIN serem pedidos para um
-            // envio que a assinatura recusaria (rodada 19 dos 3 agentes, 06/11/2026).
+            // envio que a assinatura recusaria (rodada 19 da revisao de seguranca, 06/11/2026).
             if [.tag, .valor, .revisao].contains(etapa) { etapa = .destino }
             return true
         }
@@ -493,7 +493,7 @@ final class Envio: @unchecked Sendable {
     }
 
     /// O desafio na tela e o nome inteiro de uma conta NEAR: conferido no toque do Continuar, e nao ao vivo, para o botao nao
-    /// acender no meio do nome verdadeiro, no tamanho de um colado que seja o comeco dele (revisao dos 3 agentes, 09/11/2026).
+    /// acender no meio do nome verdadeiro, no tamanho de um colado que seja o comeco dele (revisao de seguranca, 09/11/2026).
     /// Chamar com a trava.
     private var nomeInteiroNaTela: Bool {
         if parecido != nil, let segmento = trechoDoParecido, let endereco = destino?.address { return AddressPoisoning.coversAll(segmento, of: endereco) }
@@ -514,7 +514,7 @@ final class Envio: @unchecked Sendable {
         // Nome da NEAR digitado letra a letra fica a vista (o desafio espera o Continuar); armado, escondido.
         if chain.family == .near, AddressPoisoning.wholeNEARName(texto, chain: chain) != nil { return nomeArmado == texto }
         // Em toda rede, o desafio escondido pode nascer quando o prazo do historico vencer: a vista, os blocos destacavam o fim
-        // (o wholeEntryHidden do iOS, revisao dos 3 agentes, 09/11/2026).
+        // (o wholeEntryHidden do iOS, revisao de seguranca, 09/11/2026).
         return cegoPossivel
     }
 
@@ -616,7 +616,7 @@ final class Envio: @unchecked Sendable {
         guard !texto.isEmpty else { return }
         // A frase (ou a chave, ou os 64 hexadecimais que nesta rede nao sao endereco) digitada ou colada sai do campo na hora.
         if Self.pareceFrase(texto) || PrivateKeyGuard.looksLikeHexKey(texto, on: chain) {
-            // A frase tambem nao fica na marca do nome da NEAR (revisao dos 3 agentes, 09/11/2026).
+            // A frase tambem nao fica na marca do nome da NEAR (revisao de seguranca, 09/11/2026).
             nomeArmado = nil
             textoDoDestino = ""
             let mensagem = Self.avisoDoSegredo(texto, rede: chain)
@@ -697,8 +697,8 @@ final class Envio: @unchecked Sendable {
     }
 
     /// A chave privada colada (WIF, xprv, a semente da Stellar ou da XRPL, a chave da Solana) tem o mesmo destino da frase
-    /// (`PrivateKeyGuard`, como o PhraseGuard do iOS, revisao dos 3 agentes, 09/11/2026).
-    /// Tambem o pedaco da frase, o SeedQR e os 64 hexadecimais com rotulo de chave (como no iOS, revisao dos 3 agentes, 09/11/2026).
+    /// (`PrivateKeyGuard`, como o PhraseGuard do iOS, revisao de seguranca, 09/11/2026).
+    /// Tambem o pedaco da frase, o SeedQR e os 64 hexadecimais com rotulo de chave (como no iOS, revisao de seguranca, 09/11/2026).
     static func pareceFrase(_ texto: String) -> Bool {
         PrivateKeyGuard.looksLikeSecretInAddressField(texto)
     }
@@ -720,7 +720,7 @@ final class Envio: @unchecked Sendable {
     }
 
     /// A tag, o memo ou o comentario: com uma frase ou uma chave, sai na hora. O comentario da TON vai a rede ja na estimativa da
-    /// taxa e, enviado, fica publico para sempre (o guardTag do iOS, revisao dos 3 agentes, 09/11/2026). Chamar com a trava.
+    /// taxa e, enviado, fica publico para sempre (o guardTag do iOS, revisao de seguranca, 09/11/2026). Chamar com a trava.
     private func guardarTag(_ texto: String) {
         // A regra das 12 palavras soltas fica so no campo do endereco: aqui ela apagava qualquer comentario comprido.
         if PrivateKeyGuard.publicTextHasSecret(texto) {
@@ -846,14 +846,14 @@ final class Envio: @unchecked Sendable {
     }
 
     /// O endereco entrou inteiro (colar, QR, contato, Minhas carteiras): o desafio do nome da NEAR nasce na hora. Adiar ate o
-    /// Continuar deixava o nome trocado a vista no campo (o armNEAR do iOS, revisao dos 3 agentes, 09/11/2026). Chamar com a trava.
+    /// Continuar deixava o nome trocado a vista no campo (o armNEAR do iOS, revisao de seguranca, 09/11/2026). Chamar com a trava.
     private func armarNome(_ texto: String) {
         // So o texto, sem a rede: colado noutra rede e trocado para a NEAR pela sugestao, o nome voltava a vista.
         nomeArmado = texto.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// De volta ao destino por um guard (a revisao, a assinatura): os passos dele recomecam, iguais na tela e no nucleo,
-    /// como no `voltar` (rodada 19 dos 3 agentes). Chamar com a trava.
+    /// como no `voltar` (rodada 19 da revisao de seguranca). Chamar com a trava.
     private func voltarAoDestino() {
         etapa = .destino
         validar()
@@ -861,7 +861,7 @@ final class Envio: @unchecked Sendable {
 
     /// Continuar do destino: a rede diz se o destino existe e se exige tag.
     func continuar() async {
-        // Nome da NEAR: o desafio nasce aqui, e o nome inteiro e conferido aqui (revisao dos 3 agentes, 09/11/2026). Sem desafio,
+        // Nome da NEAR: o desafio nasce aqui, e o nome inteiro e conferido aqui (revisao de seguranca, 09/11/2026). Sem desafio,
         // segue direto.
         let parar = trava.withLock { () -> Bool in
             if nomePendente {
@@ -888,7 +888,7 @@ final class Envio: @unchecked Sendable {
             trava.withLock {
                 // A consulta vale so para o destino consultado, inteiro (o X-address da XRPL e o classico da mesma conta tem o
                 // mesmo endereco e tags diferentes), e so com os passos do destino ainda feitos: o campo, os contatos, a rede e
-                // uma leitura tardia do historico continuam ativos durante ela (rodada 19 dos 3 agentes, 06/11/2026).
+                // uma leitura tardia do historico continuam ativos durante ela (rodada 19 da revisao de seguranca, 06/11/2026).
                 guard etapa == .destino, self.destino == destino, self.chain?.id == chain.id, montarEstado().podeContinuar else { return }
                 problema = nil
                 infoDoDestino = info
@@ -956,7 +956,7 @@ final class Envio: @unchecked Sendable {
             tag: tag.isEmpty ? nil : tag, amount: quantidade, sendAll: tudo, feeLevel: nivelDaTaxa,
             utxoUsage: wallet.utxoUsage[chain.id], knownAddresses: metadata.sentTo[chain.id] ?? [],
             nonceQueue: FilaDeNonces.fila(metadata, carteira: wallet.id, rede: chain, endereco: conta.address),
-            // Redes UTXO: as moedas de um envio que a rede disse nao conhecer entram de novo (rodada dos 3 agentes de 19/11/2026).
+            // Redes UTXO: as moedas de um envio que a rede disse nao conhecer entram de novo (rodada da revisao de seguranca de 19/11/2026).
             unsureCoins: UnsureSends.coinsToSpend(in: metadata.unsureSends ?? [], wallet: wallet.id, chainID: chain.id, address: conta.address)
         )
     }
@@ -1157,7 +1157,7 @@ final class Envio: @unchecked Sendable {
         switch aviso {
         case .firstSendToAddress: return Textos.t("Primeira vez que você envia para este endereço.")
         case .lookalikeAddress(let conhecido):
-            // Nome da NEAR: o aviso e o do nome (revisao dos 3 agentes, 09/11/2026).
+            // Nome da NEAR: o aviso e o do nome (revisao de seguranca, 09/11/2026).
             if let chain, AddressPoisoning.wholeNEARName(conhecido, chain: chain) != nil { return preencher(Textos.t("Nome parecido com %@."), conhecido) }
             return preencher(Textos.t("Endereço parecido com %@."), Fmt.endereco(conhecido, chain: chain))
         case .noDestinationTag:

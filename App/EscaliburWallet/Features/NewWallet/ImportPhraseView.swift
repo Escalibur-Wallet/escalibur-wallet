@@ -136,7 +136,7 @@ struct ImportPhraseView: View {
     @State private var pending: (secret: WalletSecret, preview: ImportPreview)?
     /// Com o interruptor da passphrase, depois do PIN: a tela da passphrase por cima da conferencia, com as palavras
     /// so na memoria (pedido do dono, 08/11/2026), e o nome que a carteira com passphrase recebe. A carteira das
-    /// palavras nunca vai ao cofre (revisao dos 3 agentes, 08/11/2026).
+    /// palavras nunca vai ao cofre (revisao de seguranca, 08/11/2026).
     @State private var passphraseStep = false
     @State private var hiddenName = ""
     /// O dono tocou no globo do teclado proprio: nesta tela, o teclado do iPhone.
@@ -215,8 +215,8 @@ struct ImportPhraseView: View {
         // Na conferencia do Super Security, as palavras digitadas saem ao sair do app (05/11/2026). Criar e importar ficam: a
         // previa manda comparar os enderecos noutro app.
         .onReceive(NotificationCenter.default.publisher(for: SecureInputField.wipeAll)) { _ in if verify != nil { entry.wipe() } }
-        // Travar zera as palavras na hora, tambem na tela da passphrase: suspenso, o onDisappear so viria na volta (revisao dos
-        // 3 agentes, 08/11/2026). O Android zera as grades e os campos pelo `zerarAoTravar`.
+        // Travar zera as palavras na hora, tambem na tela da passphrase: suspenso, o onDisappear so viria na volta (revisao de
+        // seguranca, 08/11/2026). O Android zera as grades e os campos pelo `zerarAoTravar`.
         .onReceive(NotificationCenter.default.publisher(for: AppSession.didLock)) { _ in
             discardPending()
             entry.wipe()

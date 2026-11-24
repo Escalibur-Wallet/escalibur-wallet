@@ -3,7 +3,7 @@ import Foundation
 
 /// Texto que e uma chave privada, e nao um endereco: como a frase (`PaymentLink.looksLikePhrase`), nunca fica num campo de
 /// endereco nem vai para uma busca, por colar, digitar ou ler QR. So a frase era barrada, e a chave colada no Para ficava em
-/// claro na tela (revisao dos 3 agentes, 09/11/2026).
+/// claro na tela (revisao de seguranca, 09/11/2026).
 ///
 /// Os 64 hexadecimais nao entram aqui: sao tambem a conta implicita da NEAR e o endereco da Sui e da Aptos. Por rede, eles
 /// passam por `looksLikeHexKey(_:on:)`; no que vai a rede e fica publico, por `publicTextHasSecret`.
@@ -65,8 +65,8 @@ public enum PrivateKeyGuard {
     }
 
     /// Texto livre (o ID da transacao no suporte) com um segredo: a chave em algum lugar do texto, o SeedQR ou as palavras
-    /// seguidas de uma lista BIP-39. Contar palavras soltas, de qualquer texto, recusava todo chamado de 12 palavras (revisao dos
-    /// 3 agentes, 09/11/2026). A assinatura de uma transacao da Solana (64 bytes, como a chave) passa, e os 64 hexadecimais
+    /// seguidas de uma lista BIP-39. Contar palavras soltas, de qualquer texto, recusava todo chamado de 12 palavras (revisao de
+    /// seguranca, 09/11/2026). A assinatura de uma transacao da Solana (64 bytes, como a chave) passa, e os 64 hexadecimais
     /// tambem: ali eles sao o codigo da transacao.
     public static func containsSecret(_ raw: String) -> Bool {
         freeTextSecret(raw, hexAllowed: true) != .none
@@ -105,7 +105,7 @@ public enum PrivateKeyGuard {
 
     /// O chamado do suporte. O texto: sem hexadecimais longos, fora o endereco da rede escolhida. O ID da transacao: os 64
     /// hexadecimais passam so no formato do codigo de transacao da rede (com ou sem 0x); sem a rede, ela e pedida antes. A chave
-    /// da MetaMask movida do texto para o ID saia por e-mail (revisao dos 3 agentes, 09/11/2026).
+    /// da MetaMask movida do texto para o ID saia por e-mail (revisao de seguranca, 09/11/2026).
     public static func supportSecret(details: String, transaction: String, chain: Chain?, known: Set<String> = []) -> FreeTextSecret {
         let found = freeTextSecret(details, hexAllowed: false, addressesOn: chain, known: known)
         if found != .none { return found }
@@ -219,7 +219,7 @@ public enum PrivateKeyGuard {
         let text = transformed ? raw : visible(raw)
         if let han = hanPhrase(text) { return han }
         // As palavras de funcao do ingles (no texto livre) contam como posicao, mas nao como palavra: tiradas da conta, a frase com
-        // dois ou tres erros e uma "about" voltava a passar no comentario (revisao dos 3 agentes, 09/11/2026).
+        // dois ou tres erros e uma "about" voltava a passar no comentario (revisao de seguranca, 09/11/2026).
         if let glued = gluedPhrase(text) ?? gluedPhrase(Self.joiningSpacedLetters(text)) { return glued }
         // A frase com algarismo no lugar de letra ("ab4nd0n 4b1l1ty"): lida de novo com as letras de volta (rodada 1 da auditoria 8).
         if !transformed, text.contains(where: \.isNumber) {
@@ -453,7 +453,7 @@ public enum PrivateKeyGuard {
     /// que o checksum fecha e ao menos metade dos caracteres esta fora dos 512 mais comuns da lista. A lista chinesa vem em ordem
     /// de frequencia: a frase sorteada tem caracteres raros, a conversa tem os comuns. Sem esse filtro, uma janela qualquer fecha o
     /// checksum 1 vez em 16; com ele, so a palavra-chave perto da frase ja nao bastava, e testar toda janela barrava 17 de 25
-    /// chamados (revisao dos 3 agentes, 09/11/2026).
+    /// chamados (revisao de seguranca, 09/11/2026).
     private static func hanPhrase(_ text: String) -> String? {
         func valid(_ characters: ArraySlice<Character>) -> Bool {
             switch Mnemonic.validate(characters.map(String.init).joined(separator: " ")) {

@@ -379,7 +379,7 @@ public actor EVMReader {
         }
         // Contra: a testemunha que nao viu a transacao no bloco do recibo e o `null` sem testemunha (a que falhou, um 429).
         // Senao, dois operadores fora do primeiro par aproveitavam a falha passageira de um honesto para forjar o
-        // "confirmado" de uma pendente (revisao dos tres agentes de 14/11/2026); a leitura seguinte resolve o honesto.
+        // "confirmado" de uma pendente (revisao de seguranca de 14/11/2026); a leitura seguinte resolve o honesto.
         let against: (Receipt) -> Int = { receipt in
             silent - testimonies.count + testimonies.filter { !$0.places(block: receipt.block, blockHash: receipt.blockHash) }.count
         }
@@ -438,11 +438,11 @@ public actor EVMReader {
         /// Quem chama conta contra o `null` cuja testemunha falhou (`silent - testimonies.count`), no sucesso e na falha.
         /// `support`: o que disseram pelo hash os operadores cujo recibo falhou (o 403 da publicnode na OP, um 429, o
         /// disjuntor), com algum recibo ja achado. So completam os tres atras do recibo (`vouched`) e nunca contam contra
-        /// (revisao dos tres agentes de 15/11/2026).
+        /// (revisao de seguranca de 15/11/2026).
         case found([T], testimonies: [Inclusion], silent: Int, support: [Inclusion])
     }
 
-    /// Pergunta `fetch` aos provedores (revisao dos tres agentes de 14/11/2026). A primeira volta para quando o valor
+    /// Pergunta `fetch` aos provedores (revisao de seguranca de 14/11/2026). A primeira volta para quando o valor
     /// decide sem nenhum `null`, ou com dois `null`: a transacao pendente nao vai a todos os operadores (o hash com o IP).
     /// Com algum `null` e algum valor, pergunta a todos, para que dois operadores que forjam nao decidam antes do honesto
     /// de baixo ser ouvido. Cada um que disse `null` testemunha pelo hash (so ele, que ja viu o hash): nem todo RPC
@@ -483,7 +483,7 @@ public actor EVMReader {
             testimonies += await inclusions(hash, chain: chain, asking: quiet, pool: pool)
         }
         // Algum recibo achado: quem falhou no recibo testemunha pelo hash. A transacao esta num bloco, e o hash ja nao e so
-        // deste aparelho (revisao dos tres agentes de 15/11/2026).
+        // deste aparelho (revisao de seguranca de 15/11/2026).
         var support: [Inclusion] = []
         if answers.contains(where: { $0.value != nil }) {
             let answered = Set(answers.map(\.provider.operatorName))
@@ -578,7 +578,7 @@ public actor EVMReader {
         // Sem recibo e `nil`, que nao vota. Quem o disse testemunha pelo hash (`witnessed`): o recibo que decide tem de
         // estar no bloco que ele viu e, na moeda da rede, a transacao dele tem de dizer o mesmo do destino e do valor; a
         // testemunha que diz outra coisa conta contra. Sem isso, dois operadores forjavam o recebimento de um hash que nem
-        // existe, ou o de uma transacao antiga antes do honesto de baixo ser ouvido (revisao dos tres agentes de 14/11/2026).
+        // existe, ou o de uma transacao antiga antes do honesto de baixo ser ouvido (revisao de seguranca de 14/11/2026).
         let gathered = try await witnessed(hash, chain: chain, providers: providers, pool: pool,
                                            needs: { $0.receipt.success && $0.delivered ? Self.moneyVotes : 2 }) { provider -> Seen? in
             try await self.verify(provider, chain: chain)
@@ -946,13 +946,13 @@ public actor EVMReader {
 
     /// Quantas transacoes da conta ja entraram num bloco ate o bloco fixado (`eth_getTransactionCount` nele), igual em
     /// dois operadores. E estado, e nao indice de transacoes: todo no completo responde, ate pela transacao de meses
-    /// atras. A poda da fila de nonces da por resolvida toda entrada abaixo dele (revisao dos tres agentes de 14/11/2026).
+    /// atras. A poda da fila de nonces da por resolvida toda entrada abaixo dele (revisao de seguranca de 14/11/2026).
     public func minedNonce(chain: Chain, account: EVMAddress) async throws -> UInt64 {
         let (pool, providers) = try await eligible(chain)
         let pin = try await pinnedBlock(chain, pool: pool, providers: providers)
         let transport = self.transport
         // O primeiro par de acordo decide. Se ele discordar, todos respondem e vale o menor valor com dois votos: dois
-        // operadores fora do primeiro par nao inflam o nonce contra um honesto (revisao dos tres agentes de 14/11/2026).
+        // operadores fora do primeiro par nao inflam o nonce contra um honesto (revisao de seguranca de 14/11/2026).
         let (answers, lastError) = await Quorum.gather(providers, pool: pool, count: providers.count, firstWave: 2, until: { values in
             values.count == 2 && values[0] == values[1]
         }) { (provider: Provider) async throws -> UInt64 in

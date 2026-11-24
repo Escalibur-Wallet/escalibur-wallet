@@ -1,6 +1,6 @@
 # Auditoria 3 (10/10/2026)
 
-Auditoria de segurança completa pedida pelo dono ("make sure que ela tá unbreachable"), feita pelo agente de cybersecurity sobre a main f615343 com as mudanças em andamento. Nenhum achado crítico. "Inviolável" não existe para carteira nenhuma; esta é a lista de onde a proteção real era mais fraca que a documentação, e o que foi feito.
+Auditoria de segurança completa pedida pelo dono ("make sure que ela tá unbreachable"), feita pela revisão de segurança de aplicação sobre a main f615343 com as mudanças em andamento. Nenhum achado crítico. "Inviolável" não existe para carteira nenhuma; esta é a lista de onde a proteção real era mais fraca que a documentação, e o que foi feito.
 
 ## Estado dos achados
 

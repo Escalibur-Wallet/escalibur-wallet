@@ -1,3 +1,4 @@
+import EscaliburChains
 import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
@@ -103,6 +104,25 @@ struct HTTPClientTests {
         #expect(HTTPClient.permits(URL(string: "https://s1.ripple.com:51234")!, allowedHosts: AllowedHosts.all))
         #expect(!HTTPClient.permits(URL(string: "https://s1.ripple.com:8443")!, allowedHosts: AllowedHosts.all))
         #expect(!HTTPClient.permits(URL(string: "https://xrplcluster.com:51234")!, allowedHosts: AllowedHosts.all))
+    }
+
+    /// Usuario ou senha no endereco e escape no caminho de host com prefixo nao passam; o caminho e
+    /// conferido cru, como sai no pedido (auditoria de 23/11/2026).
+    @Test("Sem usuario no endereco e sem escape no caminho com prefixo")
+    func userAndEscapedPath() throws {
+        let todos = AllowedHosts.all
+        #expect(!HTTPClient.permits(URL(string: "https://eu@mempool.space/api/blocks")!, allowedHosts: todos))
+        #expect(!HTTPClient.permits(URL(string: "https://eu:senha@mempool.space/api/blocks")!, allowedHosts: todos))
+        #expect(!HTTPClient.permits(URL(string: "https://raw.githubusercontent.com/trustwallet/assets/../../outra-conta/x.json")!, allowedHosts: todos))
+        #expect(!HTTPClient.permits(URL(string: "https://raw.githubusercontent.com/trustwallet/assets/%2e%2e/%2e%2e/outra-conta/x.json")!, allowedHosts: todos))
+        #expect(!HTTPClient.permits(URL(string: "https://raw.githubusercontent.com/trustwallet/assets/%2E%2E/x")!, allowedHosts: todos))
+        // A logo de verdade, como o TokenLogos monta, passa (tambem a do Sui, com `::` no nome da pasta).
+        let token = try #require(TokenLogos.url(for: TokenLogosTests.asset(Chain.ethereum, .token(contract: "0xdac17f958d2ee523a2206206994597c13d831ec7"))))
+        #expect(HTTPClient.permits(token, allowedHosts: todos))
+        let sui = try #require(TokenLogos.url(for: TokenLogosTests.asset(Chain.sui, .token(contract: "0x2::sui::SUI"))))
+        #expect(HTTPClient.permits(sui, allowedHosts: todos))
+        // O host sem prefixo continua aceitando o escape no caminho (o parametro de consulta e o caminho de cada API).
+        #expect(HTTPClient.permits(URL(string: "https://mempool.space/api/address/a%20b")!, allowedHosts: todos))
     }
 
     /// Todo endereco escrito no codigo do Kit e do app, de host da lista, passa pela regra do

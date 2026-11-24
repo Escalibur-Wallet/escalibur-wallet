@@ -112,7 +112,7 @@ struct RecordWordsView: View {
         .onChange(of: hidden) { _, _ in load() }
         .onChange(of: showingAll) { _, _ in load() }
         .onDisappear { shown = [:] }
-        // Na hora de travar, e nao so quando a tela sair (revisao dos 3 agentes, 09/11/2026).
+        // Na hora de travar, e nao so quando a tela sair (revisao de seguranca, 09/11/2026).
         .onReceive(NotificationCenter.default.publisher(for: AppSession.didLock)) { _ in shown = [:] }
         .sheet(isPresented: $askingCopy) {
             CopyPhraseSheet {
@@ -558,7 +558,7 @@ struct ConfirmWordsView: View {
             if positions.isEmpty { positions = Self.pick(draft.wordCount) }
             focused = true
         }
-        // A palavra em digitacao sai na hora de travar (revisao dos 3 agentes, 09/11/2026).
+        // A palavra em digitacao sai na hora de travar (revisao de seguranca, 09/11/2026).
         .onReceive(NotificationCenter.default.publisher(for: AppSession.didLock)) { _ in typed = "" }
         .sensoryFeedback(.success, trigger: current)
     }
@@ -661,7 +661,7 @@ struct WalletCreatedView: View {
     }
 
     private func save() {
-        // So o nome muda, pelo saneamento de todo renomear (revisao dos 3 agentes, 08/11/2026). O resto vem do metadado de
+        // So o nome muda, pelo saneamento de todo renomear (revisao de seguranca, 08/11/2026). O resto vem do metadado de
         // agora, nao da copia desta tela: o envelope lacrado daqui grava a data nele (caca de bugs de 25/10/2026, B6).
         session.rename(wallet.id, to: name)
         if let updated = session.metadata.wallets.first(where: { $0.id == wallet.id }) { wallet = updated }

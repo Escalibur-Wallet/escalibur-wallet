@@ -167,7 +167,7 @@ private val escopoDaTron = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 /**
  * O ultimo passo: os dois campos da passphrase e o nome da carteira nova. Vindo da importacao (`abrirCom`), a carteira
  * das palavras nao esta no cofre: as palavras estao na memoria da tela de importar, e so a carteira com passphrase e
- * gravada (revisao dos 3 agentes, 08/11/2026); `aoTerminar` recebe o id dela.
+ * gravada (revisao de seguranca, 08/11/2026); `aoTerminar` recebe o id dela.
  */
 @Composable
 internal fun androidx.compose.foundation.layout.ColumnScope.DigitarPassphrase(
@@ -405,7 +405,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.BuscaDeMovimento(
         Text(titulo, style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.md))
         Text(detalhe, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
         // Sem movimento, a impressao digital para conferir com a carteira onde a passphrase ja era usada: a previa da
-        // importacao mostrava a da carteira com passphrase antes de 08/11/2026 (revisao dos 3 agentes).
+        // importacao mostrava a da carteira com passphrase antes de 08/11/2026 (revisao de seguranca).
         val digital = App.estado.carteiras.firstOrNull { it.id == id }?.digital
         if (fase != "procurando" && fase != "tron" && digital != null) {
             Text(t("Impressão digital da carteira"), style = estilo(Tipo.nota), color = Paleta.tintaSuave, textAlign = TextAlign.Center,

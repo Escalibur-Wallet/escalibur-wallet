@@ -1,0 +1,25 @@
+;; O sandbox do sips em tools/catalogo/baixar-logos.py (revisao dos 3 agentes de 23/11/2026). Fica no repositorio, fora
+;; de qualquer pasta que o sips possa gravar: uma imagem que explore o sips nao reescreve as regras da proxima. Sem rede,
+;; sem criar processo, sem servico do sistema, sem ler a pasta do usuario, /private/tmp nem as preferencias do Mac: so le o sistema e a pasta de
+;; entrada da imagem (ENTRADA), e so grava na pasta de saida dela (SAIDA, que tambem e o TMPDIR do sips). Cada imagem tem
+;; as duas pastas novas, de nome sorteado.
+;; Metadado e sysctl so do necessario: nada do nome do Mac nem do tamanho dos arquivos do usuario (rodada 2).
+(version 1)
+(deny default)
+(allow process-exec (literal "/usr/bin/sips"))
+(allow file-read-metadata
+    (literal "/") (literal "/private") (literal "/private/tmp") (literal "/private/var") (literal "/tmp") (literal "/var")
+    (subpath "/System") (subpath "/usr") (subpath "/private/var/db/dyld") (subpath "/Library/Apple/System")
+    (subpath "/System/Volumes/Preboot/Cryptexes") (subpath (param "ENTRADA")) (subpath (param "SAIDA")))
+(allow file-read*
+    (subpath "/System") (subpath "/usr/lib") (subpath "/usr/share") (subpath "/usr/bin")
+    (subpath "/private/var/db/dyld") (subpath "/private/var/db/timezone") (subpath "/Library/Apple/System")
+    (subpath "/System/Volumes/Preboot/Cryptexes")
+    (literal "/") (literal "/dev/urandom") (literal "/dev/null")
+    (subpath (param "ENTRADA")) (subpath (param "SAIDA")))
+(allow file-write* (subpath (param "SAIDA")))
+(allow file-write-data (literal "/dev/null"))
+(allow sysctl-read (sysctl-name "hw.ncpu") (sysctl-name "hw.activecpu") (sysctl-name "hw.memsize") (sysctl-name "hw.pagesize") (sysctl-name-prefix "hw.optional.") (sysctl-name "kern.osvariant_status") (sysctl-name "kern.osproductversion") (sysctl-name "hw.cachelinesize") (sysctl-name "hw.l2cachesize") (sysctl-name "hw.logicalcpu_max") (sysctl-name "hw.perflevel0.physicalcpu") (sysctl-name-prefix "hw.perflevel") (sysctl-name "kern.secure_kernel") (sysctl-name "vm.footprint_suspend") (sysctl-name "kern.hv_vmm_present") (sysctl-name "hw.cputype") (sysctl-name "hw.cpusubtype") (sysctl-name "hw.physicalcpu_max") (sysctl-name "hw.logicalcpu") (sysctl-name "hw.physicalcpu") (sysctl-name "kern.osrelease") (sysctl-name "kern.ostype") (sysctl-name "kern.version") (sysctl-name "kern.maxfilesperproc") (sysctl-name "kern.argmax"))
+(deny network*)
+(deny process-fork)
+(deny mach-lookup)

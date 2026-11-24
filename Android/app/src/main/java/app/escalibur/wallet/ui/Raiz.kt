@@ -185,7 +185,7 @@ fun Raiz() {
     // PIN e a passphrase em digitacao saem e a sessao trava, como na tela apagada. Desligado o servico, a volta e pelo PIN.
     // O travar so depois de o nucleo responder (`pronto`): antes disso a chamada correria junto com o `iniciar`. Na Activity
     // recriada o `pronto` volta a falso por um instante, sem nada da carteira montado, e o efeito roda de novo quando o nucleo
-    // responde. E vai ate o fim, mesmo que o servico desligue no meio (revisao dos 3 agentes, 17/11/2026).
+    // responde. E vai ate o fim, mesmo que o servico desligue no meio (revisao de seguranca, 17/11/2026).
     Acessibilidade.suspeitos.takeIf { it.isNotEmpty() }?.let {
         LaunchedEffect(pronto) {
             app.escalibur.wallet.nucleo.Cofre.cancelarBiometria()

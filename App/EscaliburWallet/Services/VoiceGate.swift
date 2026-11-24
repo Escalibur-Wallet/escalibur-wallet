@@ -13,7 +13,7 @@ import SwiftUI
 /// iOS nao tem verificacao de locutor, e voz clonada ou gravada passaria por
 /// qualquer "verificacao" feita no processo. A frase e uma segunda senha falada:
 /// protege contra quem viu o PIN mas nao conhece a frase. Nao protege contra quem
-/// ouve o dono falar nem contra malware no aparelho. O agente de seguranca
+/// ouve o dono falar nem contra malware no aparelho. A revisao de seguranca
 /// recomendou nao oferecer voz; o dono escolheu oferecer como camada extra, e o texto
 /// da tela nao promete mais que isto (docs/seguranca.md §3).
 ///

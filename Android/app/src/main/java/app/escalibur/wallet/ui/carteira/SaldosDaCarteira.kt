@@ -35,6 +35,8 @@ data class Linha(
     val total: String, val reconhecido: Boolean, val custom: Boolean, val conferido: Boolean,
     /** O id do grafico: o da lista ou, no token reconhecido, o que o CoinGecko deu ao contrato. */
     val grafico: String? = coingecko,
+    /** A logo embarcada: a da moeda da lista ou, no reconhecido, a da moeda que ele e quando a lista embarcada confirma o contrato. */
+    val logo: String? = coingecko,
 )
 
 /** Um token fora da lista conferida. */
@@ -78,6 +80,7 @@ data class Retrato(
             casas = json.getInt("casas"), total = json.getString("total"), reconhecido = json.optBoolean("reconhecido"),
             custom = json.optBoolean("custom"), conferido = json.optBoolean("conferido", true),
             grafico = json.optString("grafico").takeIf { it.isNotEmpty() && it != "null" },
+            logo = json.optString("logo").takeIf { it.isNotEmpty() && it != "null" },
         )
 
         private fun outro(json: JSONObject) = Outro(

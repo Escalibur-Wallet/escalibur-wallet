@@ -1,4 +1,4 @@
-# Revisão visual 1 (agente de UI, 2026-09-26, sobre 11 telas do simulador)
+# Revisão visual 1 (revisão interna de UI, 2026-09-26, sobre 11 telas do simulador)
 
 As 5 de maior retorno: (1) logos em disco e asset da Base; (2) Trocar sem CTA morto, Enviar/Receber na mesma ordem em todo lugar; (3) detalhe do ativo sem tab bar, posição como número grande, gráfico com ≤120 pontos, piso de escala e ponto final inteiro; (4) Mercado em linha única no padrão OKX (sem minigráfico, sem cabeçalho, 64pt); (5) fluxos sem vazio de template (boas-vindas ancorada embaixo, checklist no aviso, check desenhado, título com entrelinha 2).
 

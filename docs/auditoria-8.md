@@ -28,7 +28,7 @@ Auditoria completa pedida pelo dono antes de publicar a 1.0.1 (20) e o Android 1
 
 Melhoria aplicada: a presença inteira (PIN e rosto) para revelar, lacrar e remover é conferida num lugar só nas duas plataformas.
 
-## Rodada 1 dos três agentes (14 e 15/11/2026)
+## Rodada 1 da revisão de segurança (14 e 15/11/2026)
 
 Os três leram a mudança inteira de novo, cada um o código todo. O que trouxeram foi conferido no código; o que procedeu entrou nas duas plataformas.
 
@@ -44,7 +44,7 @@ Os três leram a mudança inteira de novo, cada um o código todo. O que trouxer
 
 Não procedeu: liberar o Receber para a delegação de carteiras conhecidas (a mais segura é fechar todas). Riscos que ficam, registrados: a TON passa para a W5 sem perguntar (a V4R2 só some do app quando nunca teve movimento); três marcas de operador podem cair no mesmo servidor por trás; o varredor por `approve` de token não é lido; um teclado de sistema com o nome de pacote da lista, recompilado pelo fabricante (o de fora da lista cai no Safe Keyboard); o ImageIO ainda abre a logo remontada no processo que assina (o mais forte seria só logo do pacote); o sorteio espalha os endereços por mais operadores (troca de integridade por privacidade); na prévia da Tron um operador sozinho já fecha (e só todos limpos abrem).
 
-## Rodada 2 dos três agentes (15/11/2026)
+## Rodada 2 da revisão de segurança (15/11/2026)
 
 Os três leram de novo a mudança inteira. Nenhum crítico nem alto. O que procedeu, conferido no código, entrou nas duas plataformas:
 
@@ -62,7 +62,7 @@ Os três leram de novo a mudança inteira. Nenhum crítico nem alto. O que proce
 
 Stellar e TON têm só dois operadores, e a leitura que tira a marca já pede os dois.
 
-## Rodada 3 dos três agentes (15/11/2026)
+## Rodada 3 da revisão de segurança (15/11/2026)
 
 Nenhum crítico nem alto. O que procedeu entrou nas duas plataformas:
 
@@ -80,7 +80,7 @@ Nenhum crítico nem alto. O que procedeu entrou nas duas plataformas:
 
 Riscos que ficam: numa rede de três operadores, um que recuse este IP segura a marca até voltar, e numa EVM isso fecha o Receber de todas (a Polygon tem a 1rpc entre os três; trocar a 1rpc já está com o dono); o atacante que já roda como o usuário do Mac de build redireciona o que se digita e corre o pedido do Keychain (o `-T ""` só tira a leitura calada); o `valid_until` da transação da TON não é limitado pelo `exp` do pedido (a assinatura confere o prazo, e a transação vale poucos minutos); a trava do cofre ainda é por regra do verificador, e o mais forte seria o cofre só abrir com uma prova de presença que só o `walletPhrase` e a remoção constroem.
 
-## Rodada 4 dos três agentes (15/11/2026)
+## Rodada 4 da revisão de segurança (15/11/2026)
 
 Um médio, o resto baixo. O que procedeu entrou nas duas plataformas:
 
@@ -97,7 +97,7 @@ Um médio, o resto baixo. O que procedeu entrou nas duas plataformas:
 
 Riscos que ficam: o verificador é regra de texto, e o portão de verdade é a tag assinada pelo dono (deixa de bastar se alguém além do dono puder dar merge na main sem revisão); o ImageIO ainda decodifica o deflate e os pixels do PNG sem conferência; na Tron, a conferência cancelada da busca de movimento conta como "sem outra chave", como antes.
 
-## Rodada 5 dos três agentes (15/11/2026)
+## Rodada 5 da revisão de segurança (15/11/2026)
 
 Nenhum crítico, alto nem médio. O que procedeu entrou nas duas plataformas:
 
@@ -114,7 +114,7 @@ Riscos que ficam: as regras do verificador pegam as formas conhecidas, e não to
 
 Fica com o dono: a Optimism tem só dois operadores que dão recibo (a publicnode recusa), e com três recibos a ponte e o recebimento conferido nunca fecham lá. A saída mais segura é um terceiro operador (no `Endpoints.swift`, que só o dono abre). Riscos registrados: dois operadores combinados ainda podem inflar o nonce minerado na primeira onda (a fila de nonces dá por resolvida uma transação pendente, sem mover fundo); e o XRP Ledger com a delegação de permissões (`PermissionDelegation`) e a Aptos com a abstração de conta, quando ligadas na rede, vão pedir mais uma leitura.
 
-## Rodada 6 dos três agentes (15/11/2026)
+## Rodada 6 da revisão de segurança (15/11/2026)
 
 Nenhum crítico, alto nem médio. O que procedeu entrou nas duas plataformas:
 
@@ -130,9 +130,9 @@ Nenhum crítico, alto nem médio. O que procedeu entrou nas duas plataformas:
 
 Riscos que ficam: as outras formas de engolir falha no shell (`exec true`, heredoc, função com o nome de um comando, `if false`, `!`, `echo "$(cmd)"`) seguem na classe das formas que a regra não pega, e não vale uma expressão para cada; o `enviar` do release ainda chama `python3`, `codesign` e `shasum` pelo nome, e não pelo caminho inteiro (trocar sem testar no runner arrisca o envio; o `GITHUB_PATH` e o `GITHUB_ENV`, o jeito conhecido de trocar o programa, estão barrados); a com passphrase e a já importada cuja conferência barrou a rodada do dia ficam para o próximo destravar; o JPEG com a transformação 1 e componentes de id 'R', 'G', 'B' pode sair com as cores trocadas depois de tirar o APP14 (só estética).
 
-## Rodada 7 dos três agentes (15/11/2026)
+## Rodada 7 da revisão de segurança (15/11/2026)
 
-Nenhum crítico, alto nem médio pela lente do cybersecurity e do militar; o blockchain chamou de médios os dois primeiros abaixo, e os outros dois agentes acharam os mesmos por outro caminho (o militar provou o silêncio no Kit: as 20 redes voltam sem resposta em 0,3 s). O que procedeu entrou nas duas plataformas:
+Nenhum crítico, alto nem médio pela lente do cybersecurity e do militar; o blockchain chamou de médios os dois primeiros abaixo, e as outras duas lentes acharam os mesmos por outro caminho (o militar provou o silêncio no Kit: as 20 redes voltam sem resposta em 0,3 s). O que procedeu entrou nas duas plataformas:
 
 - **Palavras escolhidas com a rede em silêncio.** A conferência que a rodada 6 criou saía dentro do `addWallet`, com a tela de digitar as palavras ainda montada, e ela deixa a rede em silêncio: toda leitura voltava "sem rede", sem marca, sem rede lida e sem data, e o "Copiar endereço" ficava aberto até o próximo destravar. Agora toda conferência (Tron, outra chave e a versão da TON) espera o silêncio acabar antes da primeira leitura (`HTTPClient.whenAudible`), e a pausa segue podendo cancelá-la nessa espera.
 - **Cópia velha da carteira (iPhone).** Confirmar as palavras gravava a carteira inteira como estava quando foi guardada, e apagava o que a conferência gravou no meio (a marca, as redes lidas, a troca da TON para a W5). O `update` que trocava a carteira inteira saiu: toda gravação muda só o campo dela, na carteira lida na hora, como o `atualizar` do Android (confirmar a cópia, a passphrase, ver as palavras, lacrar o envelope, ocultar moeda e o uso de UTXO).
@@ -147,7 +147,7 @@ Nenhum crítico, alto nem médio pela lente do cybersecurity e do militar; o blo
 
 Riscos que ficam: a regra de texto do release ainda passa formas que leem o ambiente por outro comando (o `printenv` filtrado, por exemplo), dentro da classe já aceita; o portão de verdade segue sendo a tag assinada e a aprovação do environment `release`. No Android, a consulta da prévia que já estava entrando no núcleo quando a prévia fechou ainda pode ligar a marca por microssegundos de diferença; ela sai ao travar.
 
-## Rodada 8 dos três agentes (15/11/2026)
+## Rodada 8 da revisão de segurança (15/11/2026)
 
 O que procedeu entrou nas duas plataformas:
 
@@ -163,7 +163,7 @@ O que procedeu entrou nas duas plataformas:
 - **Uso de UTXO (iPhone).** Calculado sobre o uso gravado, e não sobre o da tela, como no Android.
 - **Verificador.** No release, só as variáveis de hoje no `env:` dos jobs e dos passos, e nenhum `env:` no topo (o `PATH` trocava o `python3`, o `codesign` e o `shasum` que o `enviar` chama pelo nome); nada de `defaults` nem `working-directory`; o `if` lido pelo YAML, e não contado no texto (o `"if": false` entre aspas e o `if : false` pulavam o passo que confere o archive; militar): nenhum no job, e no passo só o da limpeza; o `&&` só com o molde sem `;` antes; a última linha com barra no fim não some mais das linhas juntas (o `sed` do Mac a engolia); e nada de `declare`, `typeset`, `printenv` nem `compgen`. Nos workflows, só ASCII que se imprime: um CR ou NEL solto escondia uma linha de todas as regras de texto, e o GitHub a rodava. As 21 formas do militar (rodadas 7 e 8) e as 7 desta auditoria são barradas, e o release.yml de hoje passa.
 
-## Rodada 9 dos três agentes (15/11/2026)
+## Rodada 9 da revisão de segurança (15/11/2026)
 
 O que procedeu entrou nas duas plataformas:
 
@@ -177,7 +177,7 @@ O que procedeu entrou nas duas plataformas:
 - **Checkout de outra ref (militar).** O job da assinatura lê o `.github/assinantes` da árvore do checkout e só conferia o commit da tag: um `ref:` no checkout, entrado num commit revisado, fazia a tag ser conferida contra a lista de assinantes de outra branch. Agora o passo da tag confere o HEAD igual ao `GITHUB_SHA`, como o `montar` e o `enviar`, e o verificar.yml também; e o verificador só aceita no `with` de todo checkout as opções de hoje (nada de `ref` nem `repository`), sempre sem credencial.
 - **Verificador.** O `needs` de cada job do release fixo (sem o verificar, o montar e o enviar saíam com o verificador vermelho); as chaves do topo dos dois workflows fixas; o verificar.yml, que é o portão, só com as chaves de hoje no job e nos passos (sem `if`, `continue-on-error`, `env` nem `defaults`); e, nos dois, as chaves, a máquina (`runs-on`), as `permissions` e o `environment` de cada job fixos (um `container`, `services` ou runner próprio mudava onde o job roda e com que git, gpg e Xcode). As 29 formas do militar (rodadas 7 a 9), reaplicadas sobre os workflows de hoje, são barradas, e os de hoje passam.
 
-## Rodada 10 dos três agentes (15/11/2026)
+## Rodada 10 da revisão de segurança (15/11/2026)
 
 O que procedeu entrou nas duas plataformas:
 
@@ -189,9 +189,9 @@ O que procedeu entrou nas duas plataformas:
 - **O corpo do portão (cybersecurity e militar).** O verificar.yml tinha as chaves conferidas, mas não o texto dos `run`: um `./tools/verificar.sh --testes || true` deixava o job verde com o verificador vermelho. Agora o verificador exige o passo do verificador uma vez, depois da linha do HEAD, que abre o primeiro `run`, e recusa no verificar.yml o `||` fora do molde, o `exit 0`, o `set +`, o `trap`, o `&& :` e o `true` solto.
 - **SHA das ações (cybersecurity).** Cada ação do release e do verificar.yml pelo SHA exato de hoje, e não só pelo formato: o commit de um fork da rede do repositório oficial resolve pelo mesmo nome. Conferido por `git ls-remote`: os cinco são tags oficiais.
 
-As mutações dos agentes (as 29 das rodadas 7 a 9, as 6 do militar e as 4 do cybersecurity desta rodada), refeitas sobre os workflows de hoje, são barradas, e os de hoje passam. Fica de fora o Compartilhar do iPhone, que não confere no toque: a tela lê a sessão a cada desenho e some com a marca, e o compartilhamento leva segundos depois do toque, então uma conferência ali não fecharia a janela.
+As mutações da revisão (as 29 das rodadas 7 a 9, as 6 do militar e as 4 do cybersecurity desta rodada), refeitas sobre os workflows de hoje, são barradas, e os de hoje passam. Fica de fora o Compartilhar do iPhone, que não confere no toque: a tela lê a sessão a cada desenho e some com a marca, e o compartilhamento leva segundos depois do toque, então uma conferência ali não fecharia a janela.
 
-## Rodada 11 dos três agentes (15/11/2026)
+## Rodada 11 da revisão de segurança (15/11/2026)
 
 O que procedeu entrou nas duas plataformas:
 
@@ -206,9 +206,9 @@ O que procedeu entrou nas duas plataformas:
 - **O passo da tag e o portão por digesto (militar, provado de ponta a ponta com chaves descartáveis).** A lista de formas não fechava: um `GITHUB_SHA=$(git rev-parse <outra ref>)` antes do cat-file, ou um `unset GIT_NO_REPLACE_OBJECTS` com outro `GIT_REPLACE_REF_BASE`, fazia o release aceitar a tag assinada pelo atacante; no verificar.yml, um `cp /usr/bin/true tools/verific?r.sh` ou o `BASH_ENV` com o nome montado na hora deixavam o portão verde. Agora o passo da tag inteiro e tudo o que roda antes do verificador no verificar.yml são fixados por digesto (SHA-256 do passo lido pelo YAML, em JSON, que não muda de formato entre versões do Ruby): qualquer mudança barra até o digesto novo entrar no verificador, com a revisão do passo.
 - **Destravar sem pendentes (Android, militar).** A cópia marcada que ficou de quando o app travou sai ao destravar, mesmo sem nenhuma gravação pendente.
 
-As 57 mutações dos agentes (as 52 de antes e as 5 do militar desta rodada), refeitas sobre os workflows de hoje, são barradas, e os de hoje passam. Fica: a retirada da cópia só acontece com o app em primeiro plano no Android e até ele ser suspenso no iPhone, e a cópia que já foi ao Mac pela área de transferência universal (a carteira sem passphrase, fora do Super Security) pode ficar lá.
+As 57 mutações da revisão (as 52 de antes e as 5 do militar desta rodada), refeitas sobre os workflows de hoje, são barradas, e os de hoje passam. Fica: a retirada da cópia só acontece com o app em primeiro plano no Android e até ele ser suspenso no iPhone, e a cópia que já foi ao Mac pela área de transferência universal (a carteira sem passphrase, fora do Super Security) pode ficar lá.
 
-## Rodada 12 dos três agentes (15/11/2026)
+## Rodada 12 da revisão de segurança (15/11/2026)
 
 O militar não achou furo novo (rodou de ponta a ponta o passo da tag de hoje: a tag da chave da lista passa, a de fora é recusada). O que procedeu:
 
@@ -222,7 +222,7 @@ O militar não achou furo novo (rodou de ponta a ponta o passo da tag de hoje: a
 - **Estado velho por cima do travar (Android, cybersecurity, desde a rodada 8).** A releitura do estado corria sem ordem com o travar: uma lida antes e aplicada depois punha a fase destravada de volta. Agora ela só vale se nenhum outro estado entrou durante a leitura.
 - **Ruby do runner.** Os digestos dos jobs e do verificar.yml foram gravados com o Ruby 2.6 deste Mac, e o runner macos-26 tem o 3.4. O JSON dessa forma (só ASCII que se imprime) não muda entre versões; se mudasse, o verificador barraria o release certo, e não deixaria passar o errado. Antes de assinar a tag do build 20, conferir que o job `verificar` do push do dia saiu verde.
 
-## Rodada 13 dos três agentes (15/11/2026)
+## Rodada 13 da revisão de segurança (15/11/2026)
 
 O que procedeu entrou nas duas plataformas:
 
@@ -236,7 +236,7 @@ O que procedeu entrou nas duas plataformas:
 
 Fica para o dono, junto do Copiar só com a rede já lida: o Receber da carteira só de observação ainda mostra e copia um endereço que outra carteira do app tem marcado (a cópia sai depois). Fica como risco: o endereço da TON só de observação é comparado como foi digitado (EQ, UQ ou cru), e não na forma canônica.
 
-## Rodada 14 dos três agentes (15/11/2026)
+## Rodada 14 da revisão de segurança (15/11/2026)
 
 O que procedeu entrou nas duas plataformas:
 
@@ -247,7 +247,7 @@ O que procedeu entrou nas duas plataformas:
 - **O último `App.aplicar` fora da thread principal (Android, cybersecurity e blockchain).** O da abertura do app passou para ela.
 - **Reforços (militar).** A remoção no Android confere a fase antes de apagar a chave (o travar logo depois da biometria não chega a apagá-la). As chaves do topo de cada workflow são conferidas pelo texto, na ordem de hoje: o leitor de YAML junta um `on:` repetido e um `yes:` na mesma chave, e o último vale (o GitHub recusaria o arquivo, mas a regra não depende disso). A regra do segredo pega também `secrets['X']` e `toJSON(secrets)`.
 
-## Rodada 15 dos três agentes (15/11/2026)
+## Rodada 15 da revisão de segurança (15/11/2026)
 
 O que procedeu entrou no Android (o iPhone não tem o caminho adiado: a sessão roda na thread principal):
 
@@ -259,9 +259,9 @@ O que procedeu entrou no Android (o iPhone não tem o caminho adiado: a sessão 
 
 Fica como risco: o processo do Android morto entre travar e destravar perde a fila da memória, e a carteira cuja chave já saiu volta à lista (a janela agora é de milissegundos, o apagar e o conferir a chave no Keystore, com a fase conferida logo antes); e a gravação da fila que falha no destravar também a deixa; e a mensagem da remoção adiada ainda diz "destrave e tente de novo", com a carteira saindo sozinha no destravar.
 
-## Rodada 16 dos três agentes (15/11/2026)
+## Rodada 16 da revisão de segurança (15/11/2026)
 
-Os dois agentes confirmaram que a rodada 15 está certa. O que procedeu entrou no Android (o iPhone já fazia):
+As duas lentes confirmaram que a rodada 15 está certa. O que procedeu entrou no Android (o iPhone já fazia):
 
 - **O aviso de recebimento com a carteira removida (médio só com o aviso ligado, cybersecurity e blockchain).** O arquivo das contas vigiadas só se acertava no laço de 2 minutos com o app aberto e destravado: a carteira removida (e a conta marcada, e a V4R2 trocada) seguia vigiada pelo trabalho de hora em hora, com o endereço e o último saldo no arquivo, e podia avisar "recebido" de uma carteira que não estava mais no aparelho; na remoção adiada, até destravar e mais 2 minutos. Agora a remoção regrava o arquivo na hora, sem a chave dos metadados, e a raiz o acerta a cada mudança da lista de carteiras, como o iPhone faz.
 - **A gaveta de notificações (cybersecurity e blockchain).** Na remoção adiada e no apagar tudo do destravar, os avisos da carteira ("Entrou moeda", as ordens) ficavam na gaveta. Agora toda ida ao onboarding limpa a gaveta, e a remoção que trava no meio também.
@@ -269,7 +269,7 @@ Os dois agentes confirmaram que a rodada 15 está certa. O que procedeu entrou n
 - **Tag no YAML (blockchain).** O `!!binary` escondia o texto do segredo da regra de texto (a do YAML lido já o decodificava, conferiu o militar); agora nenhuma tag passa nos workflows.
 - **A gravação do aviso de recebimento (militar).** Ela lia o arquivo, soltava a trava e gravava depois: um desligar ou um apagar tudo no meio deixava o arquivo recriado com os endereços dentro, na pasta que abre com o app travado (no iPhone o arquivo é de um actor, sem a corrida). Agora ler e gravar ficam sob a mesma trava, e só com o arquivo de pé e ligado, também na gravação do fim da conferência. E a remoção tira só as contas da carteira removida (pelo dono e pelo endereço), em vez de regravar a lista de uma foto de antes da biometria, que perdia a marca ou a troca da TON que outra carteira gravou no meio.
 
-## Rodada 17 dos três agentes (15/11/2026), a última
+## Rodada 17 da revisão de segurança (15/11/2026), a última
 
 Por decisão do dono, a rodada 17 fecha a auditoria: entra só o que for crítico, alto ou médio, e o baixo fica registrado aqui, sem rodada nova. Nenhum crítico nem alto.
 
@@ -297,7 +297,7 @@ O dono decidiu o que estava pendente com ele: "vamos resolver da forma mais segu
 - **Três operadores atrás do "confirmado".** O `status(of:)` e o `receiptLogs` pedem três operadores atrás do recibo (`vouched`): três recibos iguais, ou dois e a testemunha de um terceiro que vê a transação no mesmo bloco. Com dois, os dois que combinam davam por confirmada a transação recém-minerada enquanto o honesto falhava; o honesto fora do ar não testemunha. É o que o `receiptsRoot` fecharia, sem montar a árvore de recibos de 13 redes (com tipos próprios na OP Stack, na Arbitrum e na Polygon), que também dependeria do cabeçalho conferido por três. A testemunha conta porque a publicnode apaga o recibo de mais de uns 2 dias e segue devolvendo a transação: sem ela, a ponte e o envio de dias atrás ficavam em andamento para sempre. Risco que fica: na transação antiga cujo recibo o terceiro já apagou, dois que combinam ainda forjam o sucesso de uma que reverteu (sem mover fundo).
 - **O `pinnedBlock` com terceiro: não entrou.** Analisado: as leituras fixadas valem com dois operadores de acordo (`agree`), e dois que combinam já decidem qualquer uma delas; a ponta de um terceiro não muda isso, e com três operadores por rede qualquer queda de um pararia saldo e envio daquela rede.
 
-### A revisão dos três agentes sobre as decisões (15/11/2026)
+### A revisão de segurança sobre as decisões (15/11/2026)
 
 Uma rodada, pela regra do dono: entra o que for crítico, alto ou médio, e o baixo barato; o resto fica registrado. Nenhum crítico.
 
@@ -317,26 +317,26 @@ Riscos baixos que ficam registrados:
 - Nas simulações da Ethereum, Polygon, Linea e Unichain as duas fontes terminam o TLS na Cloudflare (já era assim): alguém de dentro da Cloudflare forja as duas.
 - O operador que falha no recibo e também no `eth_getTransactionByHash` não testemunha: o "confirmado" espera, e a fila de nonces solta pela poda do nonce minerado em 30 min.
 
-## Checagem final dos três agentes (15 e 16/11/2026)
+## Checagem final da revisão de segurança (15 e 16/11/2026)
 
-Pedida pelo dono antes de subir para o TestFlight e a Play: iPhone, Android, site e a geração de entropia, com o caso D'CENT em mente (app de celular drenado em setembro de 2026, suspeita de aleatório fraco). Cada agente olhou o código inteiro.
+Pedida pelo dono antes de subir para o TestFlight e a Play: iPhone, Android, site e a geração de entropia, com o caso D'CENT em mente (app de celular drenado em setembro de 2026, suspeita de aleatório fraco). Cada lente da revisão olhou o código inteiro.
 
 **Entropia: sólida nos três.** A frase sai só do gerador do sistema (`SecRandomCopyBytes`; no Android, `RAND_bytes` XOR `getrandom`), falha fechado e não tem semente por tempo em lugar nenhum (Swift, Kotlin, site e worker). secp256k1 com RFC 6979 mais 32 bytes e contexto sorteado; Ed25519 e Cardano com ruído; toda assinatura conferida antes de sair, por um caminho só (`Signer.sign`). O C vendorizado (secp256k1 v0.8.0, swift-crypto 1c80d3a, Argon2 20190702), a lista de palavras e o wrapper do Gradle conferem byte a byte com o de upstream.
 
 Aplicado (médios):
 - **M1, montagem do Android:** o `gerar-aab.sh` não conferia o JDK, a distribuição do Gradle nem o SDK, todos graváveis pelo usuário do Mac (o Xcode já era conferido pelo cdhash; o toolchain Swift e o NDK, pelo digesto). Agora o JDK pelo selo da Temurin e pelo digesto da árvore, a plataforma android-37.0 e o build-tools 36.0.0 pelo digesto, e o Gradle numa pasta nova a cada build (distribuição e dependências baixadas de novo, conferidas pelo `distributionSha256Sum` e pelo `verification-metadata`). Regras novas no `verificar.sh`.
-  - No primeiro AAB com o Gradle numa pasta nova (17/11/2026), o Gradle recusou 7 arquivos de catálogo de versões (BOM e POM pai: `guava-parent` 33.4.0-jre, `groovy-bom` 4.0.29, `kotlin-gradle-plugins-bom` 2.2.10, `kotlinx-coroutines-bom` 1.8.0 e o `.module` do `junit-bom` 5.10.2 e 5.11.0-M2) que faltavam no `verification-metadata.xml`: o cache antigo os servia sem baixar. Nenhum traz código, só versões e dependências, e todo jar que puxassem ainda precisa do digesto; nenhum digesto que já estava na lista mudou. Cada SHA-256 novo bateu no download do Gradle, no Maven Central e nos espelhos do Google e da Aliyun, e o SHA-1 publicado (e o SHA-256 publicado, nos quatro que têm) também. As sete assinaturas `.asc` conferem, com as chaves de keys.openpgp.org e keyserver.ubuntu.com: Guava `BDB5FA4FE719D787FB3D3197F6D4A1D411E9D1AE`, Groovy `34441E504A937F43EB0DAEF96A65176A0FB1CD0B` (também no KEYS da Apache), Kotlin `2FBA29D08D2E25EE84C132C30729A0AFF8999A87`, kotlinx `BC900CD2FC9A9D906ECBA48BE3822B59020A349D` e JUnit `FF6E2C001948C5F2F38B0CC385911F425EC61B51`. Entraram os sete, só como digesto (sem `also-trust` nem chave confiável), e o `bundleRelease assembleRelease` estrito numa casa nova passou com a lista nova. Revisado pelos três agentes, sem achado acima de baixo.
+  - No primeiro AAB com o Gradle numa pasta nova (17/11/2026), o Gradle recusou 7 arquivos de catálogo de versões (BOM e POM pai: `guava-parent` 33.4.0-jre, `groovy-bom` 4.0.29, `kotlin-gradle-plugins-bom` 2.2.10, `kotlinx-coroutines-bom` 1.8.0 e o `.module` do `junit-bom` 5.10.2 e 5.11.0-M2) que faltavam no `verification-metadata.xml`: o cache antigo os servia sem baixar. Nenhum traz código, só versões e dependências, e todo jar que puxassem ainda precisa do digesto; nenhum digesto que já estava na lista mudou. Cada SHA-256 novo bateu no download do Gradle, no Maven Central e nos espelhos do Google e da Aliyun, e o SHA-1 publicado (e o SHA-256 publicado, nos quatro que têm) também. As sete assinaturas `.asc` conferem, com as chaves de keys.openpgp.org e keyserver.ubuntu.com: Guava `BDB5FA4FE719D787FB3D3197F6D4A1D411E9D1AE`, Groovy `34441E504A937F43EB0DAEF96A65176A0FB1CD0B` (também no KEYS da Apache), Kotlin `2FBA29D08D2E25EE84C132C30729A0AFF8999A87`, kotlinx `BC900CD2FC9A9D906ECBA48BE3822B59020A349D` e JUnit `FF6E2C001948C5F2F38B0CC385911F425EC61B51`. Entraram os sete, só como digesto (sem `also-trust` nem chave confiável), e o `bundleRelease assembleRelease` estrito numa casa nova passou com a lista nova. Revisado pelas três lentes, sem achado acima de baixo.
 - **M3, preço de referência da troca:** quem conseguisse certificado válido (autoridade coagida ou comprometida) para o CoinGecko, os agregadores e os RPCs da simulação alinhava cotação e referência; e sem referência, duas cotações passavam sem a caixa de aceite. Agora as fontes de preço (CoinGecko e CoinPaprika, que dão a referência, e o Kraken do gráfico) só aceitam as raízes que a Cloudflare usa (GTS R1 a R4, ISRG X1, X2, YE e YR, SSL.com), no `Info.plist` e no `rede.xml`, sem data de validade (pin recusado = sem referência = a troca pede o aceite, e somem os preços do app até uma versão nova). Sem referência, a troca EVM pede o aceite também com duas fontes; os quatro textos do aviso deixaram de dizer "uma fonte só", nos 12 idiomas. Regras novas no `verificar.sh`.
 
-Decisão do dono (16/11/2026): **a passphrase antiga segue saindo calada no primeiro destravar** (o médio do agente de blockchain: quem tinha desligado "Pedir a passphrase para enviar" numa versão até o build 18 ou o Android 1010 e esqueceu a passphrase perde o acesso àquela carteira). Já está no ar desde o build 19 e o Android 1011.
+Decisão do dono (16/11/2026): **a passphrase antiga segue saindo calada no primeiro destravar** (o médio da lente de blockchain: quem tinha desligado "Pedir a passphrase para enviar" numa versão até o build 18 ou o Android 1010 e esqueceu a passphrase perde o acesso àquela carteira). Já está no ar desde o build 19 e o Android 1011.
 
 Fora do código (o dono faz no painel): DMARC `p=reject` e SPF `-all` no escaliburwallet.com (M2: hoje dá para mandar e-mail como support@; ninguém envia como support@, o domínio só recebe).
 
 Baixos registrados: o sorteio das posições da conferência das palavras no iPhone ignora o status e tem viés pequeno (`RecordWordsView.pick`); o autoteste do Ed25519 no Android confere a BoringSSL e não a chave estendida que assina; a regra de aleatoriedade do `verificar.sh` não olha o Kotlin nem `_ = SecRandomCopyBytes`; ponteiros para `docs/formato.md` e `docs/criptografia.md` (a especificação está em `tools/referencia/FORMATO.md`); o comentário do `dividir` no `Nucleo.swift` fala em quebra de linha; um airdrop faz o app perguntar o contrato ao CoinGecko; um 404 do GitHub Pages leva o iPhone direto à tela de alarme; site com TLS 1.0 e 1.1, sem CAA e sem DNSSEC; os `.lock` não são comparados com upstream por script e o Gradle não confere assinatura (`verify-signatures=false`).
 
-Não procedeu: o agente de blockchain achou que a purga da passphrase chegaria pela primeira vez no build 20 e no 1012; ela está no ar desde o 19 e o 1011 (commit 176a660c).
+Não procedeu: a lente de blockchain achou que a purga da passphrase chegaria pela primeira vez no build 20 e no 1012; ela está no ar desde o 19 e o 1011 (commit 176a660c).
 
-### A revisão dos três agentes sobre as correções (16/11/2026)
+### A revisão de segurança sobre as correções (16/11/2026)
 
 Sem crítico nem alto. Aplicado:
 - **Stellar e XRPL (médio, os três):** sem preço de referência a troca seguia sem a caixa, o mesmo caso do M3. Agora a cotação vem marcada sem comparação, o plano recusa sem o aceite e a revisão avisa (`uncomparedPrice`), com testes nas duas redes. A Solana já recusava.
@@ -347,7 +347,7 @@ Sem crítico nem alto. Aplicado:
 
 Baixos registrados: uma referência que arredonda para zero conta como referência (só em troca de pó); a Sectigo dos certificados de reserva da Cloudflare fica fora dos pins (pela forma mais segura; se a Cloudflare trocar esses hosts para ela, os preços somem até uma versão nova); com o oráculo derrubado, a paridade entre stablecoins deixa passar até 2% sem aviso; os digestos da plataforma e do build-tools são de confiança no primeiro uso (vale comparar uma vez com o zip do Google); um processo do usuário residente durante o build ainda corre contra a conferência (só acaba com os toolchains numa pasta do root); a caixa frequente (token fora do `TokenRegistry`, oráculo com limite) acostuma o dono a marcar; um job semanal que confira a cadeia dos três hosts contra a lista de pins ainda não existe.
 
-### A rodada 3 dos três agentes (16/11/2026)
+### A rodada 3 da revisão de segurança (16/11/2026)
 
 Cybersecurity e blockchain sem crítico nem alto. O militar trouxe dois altos e um médio, todos na máquina de build, e procediam:
 - **Cache do xcrun (alto):** o git, o Python, o swift e o xcodebuild de `/usr/bin` escolhem o programa pelo cache do xcrun na pasta temporária do usuário (`xcrun_db`, 0600 do usuário), e quem gravasse ali uma vez trocava o programa de todas as travas. Agora os quatro scripts da loja (`arquivar.sh`, `compilar-nucleo.sh`, `gerar-aab.sh`, `testar-nucleo.sh`) nascem com um `xcrun_db` novo e vazio numa pasta `escalibur-xcrun.*`, e o script chamado de dentro de outro renasce com o próprio. O `digesto.sh` não usa nenhum desses.

@@ -97,7 +97,7 @@ struct NEARAccountTests {
         let lookalike = "917b" + String(repeating: "0", count: 56) + "860d"
         #expect(AddressPoisoning.lookalike(lookalike, among: [Self.implicit], chain: .near) == Self.implicit)
         #expect(AddressPoisoning.lookalike(Self.implicit, among: [Self.implicit], chain: .near) == nil)
-        // Nome curto: antes ficava fora de toda comparacao (revisao dos 3 agentes, 08/11/2026).
+        // Nome curto: antes ficava fora de toda comparacao (revisao de seguranca, 08/11/2026).
         #expect(AddressPoisoning.lookalike("alicf.near", among: ["alice.near"], chain: .near) == "alice.near")
         #expect(AddressPoisoning.lookalike("b0b.near", among: ["bob.near"], chain: .near) == "bob.near")
         #expect(AddressPoisoning.lookalike("bob.tg", among: ["bob.near"], chain: .near) == "bob.near")

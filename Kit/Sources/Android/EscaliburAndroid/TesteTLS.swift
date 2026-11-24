@@ -4,7 +4,7 @@ import Foundation
 
 /// So no build de depuracao: confere, no aparelho, o que o transporte de rede do Android faz com
 /// certificado ruim e TLS antigo. Fala direto com o transporte, sem o HTTPClient, porque estes
-/// hosts estao fora da lista do app de proposito.
+/// hosts estao fora da lista do app de proposito (`Rede.executarNoTesteTLS`, tambem so em DEBUG).
 enum TesteTLS {
     static let casos: [(String, String)] = [
         ("valido", "https://badssl.com/"),
@@ -27,7 +27,7 @@ enum TesteTLS {
                 body: nil, timeout: 10, deadline: 30, limit: 1024 * 1024
             )
             do {
-                let resposta = try Rede.executar(pedido)
+                let resposta = try Rede.executarNoTesteTLS(pedido)
                 resultado[nome] = "ABRIU (HTTP \(resposta.status))"
             } catch {
                 resultado[nome] = "recusado: \((error as? URLError)?.code.rawValue ?? 0)"

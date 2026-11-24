@@ -20,6 +20,8 @@ struct PortfolioRow: Identifiable, Hashable {
     /// Token fora da lista que o CoinGecko lista com o contrato exato: nome, simbolo e
     /// logo de la, sem o selo de nao verificado. Reconhecido nao e verificado: sem troca.
     var recognized: TokenIdentity? = nil
+    /// A lista embarcada confirma o contrato de cada rede da linha reconhecida para o id dela (`CoinList.confirms`).
+    var recognizedLogoConfirmed = false
 
     /// As casas da linha: as maiores entre as redes (o USDT tem 6 na Ethereum e 18 na BNB).
     var decimals: Int { positions.map(\.asset.decimals).max() ?? 0 }
@@ -48,6 +50,9 @@ struct PortfolioRow: Identifiable, Hashable {
     var isCurated: Bool { positions.allSatisfy { $0.asset.isVerified } }
     /// O ativo cuja logo vem pelo contrato: moeda custom ou reconhecida.
     var contractLogoAsset: Asset? { isCustom || recognized != nil ? positions.first?.asset : nil }
+    /// A logo embarcada da linha: a da moeda da lista ou, no token reconhecido pelo CoinGecko pelo contrato exato, a
+    /// da moeda que ele e. Token sem reconhecimento fica sem (as letras), mesmo com o nome de uma moeda conhecida.
+    var logoID: String? { coingeckoID ?? (recognizedLogoConfirmed ? recognized?.coingeckoID : nil) }
 }
 
 /// Um token fora da lista e das moedas custom, para "Outros tokens" e "Mostrar
@@ -179,7 +184,7 @@ final class Portfolio {
     }
 
     /// Tira dos mapas o convertido que passou do prazo: com as fontes fora, ele sumia so do `price(of:)`, e os totais, as
-    /// linhas e quem le `quotes` direto ainda o mostravam (revisao dos 3 agentes de 05/11/2026).
+    /// linhas e quem le `quotes` direto ainda o mostravam (revisao de seguranca de 05/11/2026).
     private func purgeExpiredConverted() {
         let now = Date()
         for key in converted.keys where !held(key, now) {
@@ -280,6 +285,13 @@ final class Portfolio {
         let recognizedImages = recognizedTokens.values.compactMap { identity in identity.image.map { (identity.assetID, $0) } }
         let cachedLogos = (session.metadata.balanceCache[wallet.id] ?? [:]).values.flatMap { $0.unlisted ?? [] }
             .compactMap { item in item.logo.map { (item.asset.id, $0) } }
+        if EmbeddedCatalog.loaded == nil {
+            // A linha reconhecida so ganha a logo com a lista lida: quando ela chega, a carteira se remonta.
+            Task {
+                _ = await EmbeddedCatalog.load()
+                if self.walletID == wallet.id { self.recompute(wallet) }
+            }
+        }
         Task {
             await TokenLogoResolver.shared.seed(known)
             for (id, url) in recognizedImages + cachedLogos { await TokenLogoResolver.shared.remember(url, for: id) }
@@ -575,7 +587,7 @@ final class Portfolio {
     }
 
     /// O preco que veio da fonte, na moeda de agora: o que decide se a voz e pedida. O convertido na troca de moeda, uma
-    /// estimativa pela razao do bitcoin, nao decide (revisao dos 3 agentes de 05/11/2026): sem preco, a voz e pedida.
+    /// estimativa pela razao do bitcoin, nao decide (revisao de seguranca de 05/11/2026): sem preco, a voz e pedida.
     func firmPrice(of asset: Asset) -> Double? {
         guard converted[asset.coingeckoID ?? Self.contractQuotePrefix + asset.id] == nil else { return nil }
         return price(of: asset)
@@ -679,7 +691,10 @@ final class Portfolio {
             return PortfolioRow(
                 id: key, symbol: group.identity.symbol, name: group.identity.name, coingeckoID: nil, isStablecoin: false,
                 positions: group.tokens.map { Holding(asset: $0.asset, amount: $0.holding.amount) },
-                price: priced?.price, change24h: priced?.change24h, recognized: group.identity
+                price: priced?.price, change24h: priced?.change24h, recognized: group.identity,
+                recognizedLogoConfirmed: EmbeddedCatalog.loaded.map { list in
+                    !group.tokens.isEmpty && group.tokens.allSatisfy { list.confirms(id: group.identity.coingeckoID, asset: $0.asset) }
+                } ?? false
             )
         }
         allRows = (curatedRows + recognizedRows).sorted { ($0.fiatValue ?? 0) > ($1.fiatValue ?? 0) }

@@ -53,7 +53,7 @@ if __name__ == "__main__" and not (sys.flags.isolated and sys.flags.no_site):
 PACOTE = "app.escalibur.wallet"
 CHAVE = os.path.expanduser("~/.escalibur/android/play-api.json")
 # O SHA-256 de cada AAB que este Mac enviou, por versionCode: o versoes.swift liberar-android so libera o build cujo pacote
-# na Play e o que saiu daqui (revisao dos 3 agentes de 07/11/2026). Um versionCode enviado antes por outro nao entra aqui:
+# na Play e o que saiu daqui (revisao de seguranca de 07/11/2026). Um versionCode enviado antes por outro nao entra aqui:
 # o envio do dono falha como repetido, e isso e incidente.
 ENVIADOS = os.path.expanduser("~/.escalibur/android/enviados.json")
 API = f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/{PACOTE}"

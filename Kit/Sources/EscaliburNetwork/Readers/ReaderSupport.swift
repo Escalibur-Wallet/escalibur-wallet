@@ -376,7 +376,7 @@ enum Quorum {
     /// guarda uns 6 dias e meio e a Aptos Labs uns 10, e so a Sentio guarda tudo). Um dono que conheca basta para "conhecida"
     /// (o pior caso e uma linha pendente a mais). "Nao conhecida", que solta a conta, so com todos os donos da lista
     /// respondendo sem conhecer (e pelo menos dois): o que guarda tudo e um deles, e a regra nao sabe qual. O piso de tres do
-    /// `everyoneSays` deixaria tres podados decidirem numa lista de quatro (rodada 4 dos 3 agentes, 18/11/2026).
+    /// `everyoneSays` deixaria tres podados decidirem numa lista de quatro (rodada 4 da revisao de seguranca, 18/11/2026).
     static func presence(
         _ providers: [Provider], pool: ProviderPool, _ knows: @escaping @Sendable (Provider) async throws -> Bool
     ) async -> TransactionPresence {
@@ -393,7 +393,7 @@ enum Quorum {
     /// valores e o que `against` conta, por exemplo a testemunha que nao viu a transacao no bloco dele). Com quatro
     /// operadores, um que mente sozinho nao segura a resposta (`[A, B, A, A]` decide A); dois mentindo contra um honesto
     /// que respondeu nao decidem (`[R, F, F]`). Com tres, um que diverge segura: ali nao ha como saber quem mente pela
-    /// contagem (revisao dos tres agentes de 14/11/2026).
+    /// contagem (revisao de seguranca de 14/11/2026).
     static func decided<T: Equatable>(_ values: [T], against: (T) -> Int = { _ in 0 }) -> T? {
         let votes = values.map { value in values.filter { $0 == value }.count }
         guard let top = votes.indices.max(by: { votes[$0] < votes[$1] }) else { return nil }

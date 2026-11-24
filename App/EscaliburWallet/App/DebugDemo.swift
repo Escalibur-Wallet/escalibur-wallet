@@ -264,7 +264,7 @@ enum DebugDemo {
                 try? session.persist()
                 Task { @MainActor in await settle(); router.present(.send(nil)) }
             // `-tela envio-conferir-near`: "Conferir o endereco em todo envio" ligada e o envio da NEAR aberto, para digitar um
-            // nome letra a letra (revisao dos 3 agentes, 09/11/2026).
+            // nome letra a letra (revisao de seguranca, 09/11/2026).
             case "envio-conferir-near":
                 session.metadata.settings.confirmEveryAddress = true
                 try? session.persist()

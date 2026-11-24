@@ -128,7 +128,7 @@ fun TelaDeSuporte() {
     fun pedidoAgora() = listOf(detalhes, if (assunto?.pedeTransacao == true) transacao else "", if (assunto?.pedeRede == true) rede.orEmpty() else "")
     val pedido = pedidoAgora()
     /** A conferencia no nucleo; null na falha, que bloqueia. O cancelamento por uma tecla nova nao conta como falha: engolido, ele
-     *  acendia o aviso enquanto o dono digitava (revisao dos 3 agentes, 09/11/2026). */
+     *  acendia o aviso enquanto o dono digitava (revisao de seguranca, 09/11/2026). */
     suspend fun conferir(pedido: List<String>): JSONObject? = try {
         Api.objeto("suporte.pareceFrase", JSONObject().put("detalhes", pedido[0]).put("transacao", pedido[1]).put("rede", pedido[2]))
     } catch (cancelado: CancellationException) {

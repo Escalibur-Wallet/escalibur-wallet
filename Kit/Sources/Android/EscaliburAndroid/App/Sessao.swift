@@ -676,7 +676,7 @@ final class Sessao: @unchecked Sendable {
             if let existente = metadata.wallets.first(where: { $0.fingerprint == digital.hex && !$0.isWatchOnly }) {
                 if gravada { try? Chaves.wallets.delete(novo) }
                 // A digital tem 4 bytes: o endereco da Bitcoin confirma que e a mesma, e uma carteira de outra frase com a
-                // mesma digital nunca e escolhida no lugar (revisao dos 3 agentes, 08/11/2026).
+                // mesma digital nunca e escolhida no lugar (revisao de seguranca, 08/11/2026).
                 guard existente.account(.bitcoin)?.address == contas.first(where: { $0.chainID == Chain.bitcoin.id })?.address else {
                     throw Falha.jaImportada(existente.name)
                 }
@@ -829,7 +829,7 @@ final class Sessao: @unchecked Sendable {
         // Tudo o que leva enderecos ou o rastro desta carteira sai junto (revisao de seguranca de
         // 24/10/2026): o historico, as transacoes em transito, as ordens a refazer e a conta de
         // passphrases erradas dela. Numa funcao so: na gravacao de agora e, se o app travar no meio, na do destravar (rodada 14).
-        // A edicao de ordem guardada pode ser desta carteira (revisao dos 3 agentes, 17/11/2026).
+        // A edicao de ordem guardada pode ser desta carteira (revisao de seguranca, 17/11/2026).
         Troca.esquecerEdicaoSuspensa()
         let tirar: (inout Metadata) -> Void = { metadata in
             metadata.wallets.removeAll { $0.id == id }
@@ -913,7 +913,7 @@ final class Sessao: @unchecked Sendable {
         guard Chaves.wallets.probe(id) == .absent else { throw Falha.remocaoFalhou }
         // A copia de um endereco da descartada sai ja, com a chave fora (rodadas 13 e 14), como no iOS.
         Sessao.retirarCopia(Set(wallet.accounts.map(\.address)))
-        // A edicao de ordem guardada pode ser desta carteira (revisao dos 3 agentes, 17/11/2026).
+        // A edicao de ordem guardada pode ser desta carteira (revisao de seguranca, 17/11/2026).
         Troca.esquecerEdicaoSuspensa()
         let tirar: (inout Metadata) -> Void = { metadata in
             metadata.wallets.removeAll { $0.id == id }
@@ -959,7 +959,7 @@ final class Sessao: @unchecked Sendable {
     }
 
     /// As carteiras com passphrase gravadas pela importacao neste processo: podem sair pela busca de movimento mesmo sendo a
-    /// unica, a primeira do aparelho, com as palavras ainda na tela de importar (revisao dos 3 agentes, 08/11/2026).
+    /// unica, a primeira do aparelho, com as palavras ainda na tela de importar (revisao de seguranca, 08/11/2026).
     private var recemImportadas: Set<UUID> = []
 
     /// A tarefa que terminou sai da lista so se nao foi cancelada: a pausa cancela e tira sob a mesma trava, e a tarefa velha
@@ -1057,7 +1057,7 @@ final class Sessao: @unchecked Sendable {
                 let vereditos = await ForeignControlCheck.check(contas, marked: marcadas)
                 guard !Task.isCancelled else { return false }
                 // A copia de um endereco com outra chave sai ja, mesmo com o app travado na frente (rodada 12), como no iOS.
-                // Tambem a mesma conta escrita de outra forma em outra carteira (a TON so de observacao; revisao dos tres agentes).
+                // Tambem a mesma conta escrita de outra forma em outra carteira (a TON so de observacao; revisao de seguranca).
                 let todas = Sessao.shared.metadata.wallets
                 Sessao.retirarCopia(contas.reduce(into: Set<String>()) { saida, conta in
                     guard case .foreign = vereditos[conta.chainID], let rede = Chain.find(conta.chainID) else { return }

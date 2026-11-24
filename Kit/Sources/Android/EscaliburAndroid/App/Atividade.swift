@@ -106,7 +106,7 @@ final class Atividade: @unchecked Sendable {
     private var enviadosAqui: [UUID: [ActivityEntry]] = [:]
     /// Na TON e na Aptos, as leituras que nao podem fechar um envio daqui, por carteira: as que ja fecharam um (uma leitura
     /// fecha um envio so, tambem nas chamadas seguintes) e as que ja estavam la quando o envio saiu (um envio igual de antes).
-    /// Sai junto com o ultimo envio daqui da carteira (o claimedReads do iOS, revisao dos 3 agentes, 08/11/2026).
+    /// Sai junto com o ultimo envio daqui da carteira (o claimedReads do iOS, revisao de seguranca, 08/11/2026).
     private var leiturasTomadas: [UUID: Set<String>] = [:]
 
     func anotarEnviado(_ entrada: ActivityEntry, carteira: UUID) {
@@ -156,7 +156,7 @@ final class Atividade: @unchecked Sendable {
     func esquecer(carteira: UUID? = nil) {
         trava.withLock {
             // Os envios feitos aqui saem junto: travar ou apagar nao deixa endereco nenhum na memoria. Ao remover uma carteira,
-            // so os dela, como o forget do iOS: o envio pendente da outra continua em "Pendentes" (revisao dos 3 agentes,
+            // so os dela, como o forget do iOS: o envio pendente da outra continua em "Pendentes" (revisao de seguranca,
             // 08/11/2026). A leitura em curso e sempre a da carteiraID: de outra, nao ha nada a parar.
             if let carteira {
                 enviadosAqui[carteira] = nil
@@ -244,7 +244,7 @@ final class Atividade: @unchecked Sendable {
                 guard !lidos.contains(local.hash.lowercased()), local.date > umDia else { return false }
                 // So pelo hash: a regra de valor escondia um envio diferente de mesmo valor (dois pagamentos de 100 USDT seguidos).
                 // Na TON e na Aptos, o hash que a leitura traz nao e o do envio: o mesmo envio pela rede, ativo, valor, destino e
-                // hora, de uma leitura que nao e suspeita (revisao dos 3 agentes, 08/11/2026).
+                // hora, de uma leitura que nao e suspeita (revisao de seguranca, 08/11/2026).
                 guard let chain = Chain.find(local.chainID), chain.family == .ton || chain.family == .aptos,
                       let para = local.counterparty, let chave = Address.canonicalRecipient(para, chain: chain) else { return true }
                 let igual = todos.first { lido in
@@ -287,11 +287,11 @@ final class Atividade: @unchecked Sendable {
         let asset = entrada.asset
         return Item(
             id: entrada.id, rede: chain.id, redeNome: chain.name, redeCoingecko: chain.coingeckoID, direcao: entrada.direction.rawValue,
-            simbolo: asset?.symbol ?? chain.nativeSymbol, coingecko: asset?.coingeckoID ?? (asset == nil ? chain.coingeckoID : nil),
+            simbolo: asset?.symbol ?? chain.nativeSymbol, coingecko: entrada.suspicious ? nil : asset?.coingeckoID ?? (asset == nil ? chain.coingeckoID : nil),
             casas: asset?.decimals ?? chain.nativeDecimals, custom: asset?.origin != nil || entrada.suspicious, quantidade: entrada.amount.decimalString,
             contraparte: entrada.counterparty, data: entrada.date, situacao: situacao, nota: nota, taxa: entrada.fee?.decimalString,
             simboloNativo: chain.nativeSymbol, casasNativas: chain.nativeDecimals, hash: entrada.hash,
-            recebidoSimbolo: entrada.receivedAsset?.symbol, recebidoCoingecko: entrada.receivedAsset?.coingeckoID, recebidoCasas: entrada.receivedAsset?.decimals,
+            recebidoSimbolo: entrada.receivedAsset?.symbol, recebidoCoingecko: Self.logoDoRecebido(entrada), recebidoCasas: entrada.receivedAsset?.decimals,
             recebidoQuantidade: entrada.receivedAmount?.decimalString, recebidoCustom: entrada.receivedAsset?.origin != nil,
             explorador: chain.explorerName, urlDoExplorador: chain.explorerURL(tx: entrada.hash)?.absoluteString,
             conferivel: entrada.direction == .received && chain.family == .evm && entrada.status == .confirmed,
@@ -303,7 +303,7 @@ final class Atividade: @unchecked Sendable {
     private static func paraCopiar(_ entrada: ActivityEntry, chain: Chain) -> String? {
         guard entrada.direction == .sent, !entrada.suspicious, entrada.status == .confirmed, let para = entrada.counterparty,
               let enviados = Sessao.shared.metadata.sentTo[chain.id], let chave = Address.canonicalRecipient(para, chain: chain),
-              // Nunca o endereco de uma conta deste celular com outra chave no controle (revisao dos tres agentes de 15/11/2026).
+              // Nunca o endereco de uma conta deste celular com outra chave no controle (revisao de seguranca de 15/11/2026).
               Sessao.shared.metadata.wallets.donaMarcada(de: para, on: chain) == nil else { return nil }
         return enviados.first { Address.canonicalRecipient($0, chain: chain) == chave }
     }
@@ -465,5 +465,13 @@ final class Atividade: @unchecked Sendable {
         case .mismatch: return ("naoConfere", nil)
         default: return ("interna", nil)
         }
+    }
+
+    /// O id da moeda recebida numa troca, para a logo: nada no suspeito, e fora da lista so com a lista embarcada
+    /// confirmando o contrato (rodada 5 da revisao de seguranca; a tela mostra a logo do pacote por esse id).
+    static func logoDoRecebido(_ entrada: ActivityEntry) -> String? {
+        guard !entrada.suspicious, let ativo = entrada.receivedAsset, let id = ativo.coingeckoID else { return nil }
+        if ativo.origin == nil { return id }
+        return Receber.lista()?.confirms(id: id, asset: ativo) == true ? id : nil
     }
 }

@@ -28,7 +28,23 @@ enum Rede {
         AndroidTransport.install(.init(perform: Rede.executar, cancel: Rede.cancelar))
     }
 
-    @Sendable static func executar(_ pedido: AndroidTransport.Request) throws -> AndroidTransport.Response {
+    /// A porta de saida do nucleo: so o que o HTTPClient deixaria sair (host do hosts.lock, porta e
+    /// caminho), conferido de novo aqui, e o Rede.kt confere outra vez com a leitura do Java. So o
+    /// AndroidTransport chama; nenhum outro arquivo chega ao Java da rede (o verificar.sh confere).
+    @Sendable private static func executar(_ pedido: AndroidTransport.Request) throws -> AndroidTransport.Response {
+        guard AndroidTransport.permits(pedido.url) else { throw Falha.recusado.erro }
+        return try enviar(pedido)
+    }
+
+    #if DEBUG
+    /// So o TesteTLS (inteiro em DEBUG): os hosts do badssl.com ficam fora da lista de proposito, e o
+    /// Rede.kt so os aceita no build de depuracao. Nao existe no Release.
+    static func executarNoTesteTLS(_ pedido: AndroidTransport.Request) throws -> AndroidTransport.Response {
+        try enviar(pedido)
+    }
+    #endif
+
+    private static func enviar(_ pedido: AndroidTransport.Request) throws -> AndroidTransport.Response {
         let requisitar = try Java.metodo("Rede.requisitar")
         let bruto = try Java.naMaquina { java -> Data? in
             let cabecalhos = pedido.headers.flatMap { [$0.key, $0.value] }

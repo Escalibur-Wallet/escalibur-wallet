@@ -31,7 +31,7 @@ enum QRCode {
 /// aviso (`CopyPhraseSheet`, pedido do dono de 15/10/2026), vale 1 minuto e nunca sai do iPhone.
 enum Pasteboard {
     /// O Colar do app trouxe uma frase ou uma chave: a area de transferencia esvazia, para a copia nao seguir no Universal
-    /// Clipboard ate o Mac nem num gerenciador de copias (revisao dos 3 agentes, 09/11/2026).
+    /// Clipboard ate o Mac nem num gerenciador de copias (revisao de seguranca, 09/11/2026).
     static func clearSecret() {
         UIPasteboard.general.items = []
     }
@@ -419,10 +419,16 @@ struct ReceiveSheet: View {
         guard let chain = network.chain, case .token(let contract)? = try? CustomToken.kind(chain: chain, address: network.contract) else {
             return nil
         }
-        // Achada pelo CoinPaprika (reserva da busca): o id dele nao e id de preco do CoinGecko.
-        let priceID = coin.id.hasPrefix(CoinCatalog.paprikaPrefix) ? nil : coin.id
+        // Achada pelo CoinPaprika (reserva da busca): o id dele nao e id de preco do CoinGecko. A rede achada so pelo
+        // nome tambem fica sem id: um clone com o mesmo nome levaria a logo e o preco da moeda (revisao de 23/11/2026).
+        // E so com a lista embarcada confirmando o contrato, como no Android: o QR mostra a logo (e a moeda de base de uma
+        // forma embrulhada) por esse id (rodada 5 da revisao de seguranca).
+        let bare = Asset(chainID: chain.id, kind: .token(contract: contract), symbol: coin.symbol, name: coin.name, decimals: 0,
+                         coingeckoID: nil, isStablecoin: false, origin: .discovered)
+        guard !coin.id.hasPrefix(CoinCatalog.paprikaPrefix), network.byName != true,
+              EmbeddedCatalog.loaded?.confirms(id: coin.id, asset: bare) == true else { return bare }
         return Asset(chainID: chain.id, kind: .token(contract: contract), symbol: coin.symbol, name: coin.name, decimals: 0,
-                     coingeckoID: priceID, isStablecoin: false, origin: .discovered)
+                     coingeckoID: coin.id, isStablecoin: false, origin: .discovered)
     }
 
     /// As redes da moeda em que esta carteira tem conta e que ainda nao estao nela (pela
@@ -475,8 +481,8 @@ struct ReceiveSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: Space.sm) {
-                    CoinLogo(coingeckoID: coin.id, symbol: coin.symbol, size: 32, remoteURL: image, ringColor: Palette.body,
-                             logoAsset: networks.first.flatMap { Self.catalogAsset(coin, $0) })
+                    // A moeda pelo id da busca (como no cabecalho da busca), nunca a logo baixada pelo contrato de uma rede.
+                    CoinLogo(coingeckoID: coin.id, symbol: coin.symbol, size: 32, remoteURL: image, ringColor: Palette.body)
                     Text("Receber \(coin.symbol)").typeStyle(.title).foregroundStyle(Palette.ink)
                 }
                 Text("Escolha a rede. Tem de ser a mesma que quem envia escolher: \(coin.symbol) enviado por outra rede não chega a este endereço.")

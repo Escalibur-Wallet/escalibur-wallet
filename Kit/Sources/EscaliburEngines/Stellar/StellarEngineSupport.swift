@@ -81,7 +81,7 @@ enum StellarEngineSupport {
     /// ID 7 perderia os zeros que a corretora mostrou. A revisao mostra o tipo escolhido.
     static func memo(_ tag: String?) throws -> StellarMemo {
         guard let tag, !tag.isEmpty else { return .none }
-        // O memo fica publico na rede: com uma frase ou uma chave, nada e montado, como o comentario da TON (revisao dos 3 agentes,
+        // O memo fica publico na rede: com uma frase ou uma chave, nada e montado, como o comentario da TON (revisao de seguranca,
         // 09/11/2026). A tela ja apaga; aqui e a ultima conferencia.
         guard !PrivateKeyGuard.publicTextHasSecret(tag) else {
             throw SendEngineError.message(kitText("O memo tem uma frase ou uma chave de carteira. Ele fica público na rede: apague e não envie."))

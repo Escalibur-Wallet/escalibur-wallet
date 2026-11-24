@@ -49,6 +49,9 @@ public actor PolkadotReader {
         /// bloco finalizado, igual em dois provedores, tem de continuar no dela.
         var sender: PolkadotAddress? = nil
         var nonce: UInt32? = nil
+        /// O sidecar disse, na ultima leitura, que a transacao entrou num bloco final e a transferencia nao saiu. E uma fonte
+        /// so: o `status` fica pendente, e o motor fecha o envio sem resposta com a nota que manda conferir.
+        var unproven = false
     }
 
     public init(
@@ -302,7 +305,8 @@ public actor PolkadotReader {
     }
 
     /// A transacao nos blocos finalizados desde o nascimento da era. Achada, o resultado
-    /// vem do sidecar, conferido pelo hash na mesma posicao. Nao achada com o finalizado ja
+    /// vem do sidecar, conferido pelo hash na mesma posicao: sucesso confirma, e a falha fica
+    /// pendente (fonte unica, `unproven`). Nao achada com o finalizado ja
     /// alem da era: venceu, a rede nao aceita mais. Sem registro (o app foi reaberto), nao
     /// ha de onde procurar, e fica `notFound`.
     public func status(of id: String) async throws -> TransactionStatus {
@@ -344,8 +348,16 @@ public actor PolkadotReader {
         }
         let url = sidecar.adding(path: "blocks/\(found.block)").adding(query: [("noFees", "true"), ("eventDocs", "false"), ("extrinsicDocs", "false")])
         let success = try Self.parseSidecarSuccess(try await transport.send(.get(url, timeout: 30)), index: found.index, id: key)
-        return success ? .confirmed(block: found.block, confirmations: nil) : .failed(reason: "dispatch")
+        scans[key]?.unproven = !success
+        // "Falhou" de uma fonte so nao sai daqui: com o sidecar errado, o dono enviaria de novo com o nonce ja usado, e o
+        // segundo envio seria um pagamento novo. Fica pendente (`unproven`). O "falhou" com prova depende de ler os
+        // `System.Events` do bloco em dois RPCs, ainda nao feito.
+        return success ? .confirmed(block: found.block, confirmations: nil) : .pending
     }
+
+    /// O sidecar disse que a transacao entrou num bloco final e a transferencia nao saiu, sem outra fonte que confirme
+    /// (`Scan.unproven`).
+    public func unproven(_ id: String) -> Bool { scans[id.lowercased()]?.unproven == true }
 
     // MARK: Historico
 

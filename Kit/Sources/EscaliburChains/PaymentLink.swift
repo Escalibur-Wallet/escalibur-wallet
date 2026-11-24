@@ -107,7 +107,7 @@ public enum PaymentLink {
         /// endereco: nunca vai para o campo do destino (auditoria 4, C7-13).
         case containsPhrase
         /// O codigo traz uma chave privada (o WIF de uma carteira de papel, uma semente da Stellar), nao um endereco
-        /// (revisao dos 3 agentes, 09/11/2026).
+        /// (revisao de seguranca, 09/11/2026).
         case containsPrivateKey
         /// Pedido da Stellar que nao e de pagamento (`tx`), ou sem destino.
         case unsupportedStellarRequest
@@ -153,7 +153,7 @@ public enum PaymentLink {
     public static func read(_ text: String) throws -> Reading {
         let reading = try parse(text)
         // O comentario, o memo ou a tag do link com uma frase ou uma chave: ia para a tela e, enviado, ficava publico na rede
-        // (revisao dos 3 agentes, 09/11/2026).
+        // (revisao de seguranca, 09/11/2026).
         if let tag = reading.tag, PrivateKeyGuard.publicTextHasSecret(tag) {
             let phrase = PrivateKeyGuard.phraseRun(tag) != nil || PrivateKeyGuard.looksLikeSeedNumbers(tag)
             throw phrase ? Problem.containsPhrase : Problem.containsPrivateKey

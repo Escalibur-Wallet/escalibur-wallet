@@ -253,7 +253,7 @@ private fun NovoContato() {
     var escolhendoRede by remember { mutableStateOf(false) }
     /** Nome da NEAR: o texto cujo desafio ja nasceu, no toque do Salvar ou quando o endereco entra inteiro (colar, QR,
      * recentes). So o texto, sem a rede: colado na Bitcoin e trocado para a NEAR pela sugestao, o nome voltava a vista. Qualquer
-     * mudanca de texto desarma (revisao dos 3 agentes, 09/11/2026). */
+     * mudanca de texto desarma (revisao de seguranca, 09/11/2026). */
     var armadoPara by remember { mutableStateOf<String?>(null) }
     fun armar(texto: String) { armadoPara = texto.trim() }
     fun pedidoDeConferencia() = JSONObject().put("rede", rede).put("endereco", endereco).put("tag", tag).put("conferencia", conferencia)
@@ -261,7 +261,7 @@ private fun NovoContato() {
     var nomeNaoConfere by remember { mutableStateOf(false) }
     /** O texto do QR e o endereco que ele deu: trocar a rede depois confere o pedido de novo, como no iOS. */
     var lidoDoQR by remember { mutableStateOf<Pair<String, String>?>(null) }
-    // O endereco que veio de um QR de outra rede nao fica para a rede nova (paridade com o iOS, revisao dos 3 agentes, 09/11/2026).
+    // O endereco que veio de um QR de outra rede nao fica para a rede nova (paridade com o iOS, revisao de seguranca, 09/11/2026).
     LaunchedEffect(rede) {
         val qr = lidoDoQR ?: return@LaunchedEffect
         if (qr.second != endereco) { lidoDoQR = null; return@LaunchedEffect }
@@ -281,12 +281,12 @@ private fun NovoContato() {
         val pedido = rede to endereco
         val lida = runCatching { Api.objeto("contatos.conferir", pedidoDeConferencia()) }.getOrNull()
         // Cancelado por uma chave nova, nada abaixo roda: o runCatching engolia o cancelamento, e a resposta nula "em dia" mostrava
-        // o endereco inteiro durante o desafio. Numa falha do nucleo, a tela fica como estava (revisao dos 3 agentes, 09/11/2026).
+        // o endereco inteiro durante o desafio. Numa falha do nucleo, a tela fica como estava (revisao de seguranca, 09/11/2026).
         ensureActive()
         if (lida == null) return@LaunchedEffect
         resposta = lida
         respondidoPara = pedido
-        // A frase de carteira no campo sai dele na hora, como no envio (revisao dos 3 agentes, 09/11/2026).
+        // A frase de carteira no campo sai dele na hora, como no envio (revisao de seguranca, 09/11/2026).
         if (resposta?.optBoolean("limpar") == true) {
             mensagem = resposta?.optString("problema")
             // A frase tambem nao fica na marca do nome da NEAR, nem na leitura do QR.
@@ -317,10 +317,10 @@ private fun NovoContato() {
     val memoConferido = r?.optBoolean("memoConferido", true) != false
     val tipoDeTag = r?.optString("tipoDeTag") ?: "none"
     // O nome da NEAR colado na rede errada (a sugestao da NEAR na tela) tambem esconde o campo ate a troca: a vista, o dono lia o
-    // nome trocado e o digitava de memoria (revisao dos 3 agentes, 09/11/2026).
+    // nome trocado e o digitava de memoria (revisao de seguranca, 09/11/2026).
     val nomeColadoNaRedeErrada = !valido && armadoPara != null && armadoPara == endereco.trim() && r?.optBoolean("nomeNaRedeErrada") == true
     // O endereco que entrou inteiro fica escondido ate a resposta do nucleo para ele: com a resposta do texto de antes, o nome
-    // colado aparecia por uma ida ao nucleo (o esperandoInteiro do envio, revisao dos 3 agentes, 09/11/2026).
+    // colado aparecia por uma ida ao nucleo (o esperandoInteiro do envio, revisao de seguranca, 09/11/2026).
     val emDia = respondidoPara == (rede to endereco)
     val esperandoInteiro = !emDia && armadoPara != null && armadoPara == endereco.trim()
     val desafio = (emDia && valido && (r?.has("outroID") == true || r?.has("trecho") == true)) || nomeColadoNaRedeErrada || esperandoInteiro
@@ -507,7 +507,7 @@ private fun NovoContato() {
                     nomeInteiro && !conferido -> escopo.launch {
                         val pedido = rede to endereco
                         val atual = runCatching { Api.objeto("contatos.conferir", pedidoDeConferencia()) }.getOrNull()
-                        // Com o Editar no meio, a resposta e de um texto que ja saiu: nao vale (revisao dos 3 agentes, 09/11/2026).
+                        // Com o Editar no meio, a resposta e de um texto que ja saiu: nao vale (revisao de seguranca, 09/11/2026).
                         if (atual == null || pedido != (rede to endereco)) return@launch
                         resposta = atual
                         respondidoPara = pedido
@@ -538,13 +538,13 @@ private fun ConferenciaDoContato(r: JSONObject, conferencia: String, naoConfere:
             CampoCurto(conferencia, t("Número do ID"), largura = 220.dp, semColar = true, aoMudar = aoMudar)
         }
         trecho != null -> Column(verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
-            // Na NEAR com nome, o nome inteiro, com o registro, como no envio (revisao dos 3 agentes, 08/11/2026).
+            // Na NEAR com nome, o nome inteiro, com o registro, como no envio (revisao de seguranca, 08/11/2026).
             val nomeInteiro = trecho.inicio == 0 && trecho.tamanho == (if (parecido == null) r.getString("fonte") else destino).trim().length
             if (parecido != null) {
                 Faixa(TipoDeFaixa.cautela, if (nomeInteiro) t("Nome parecido com um que você já usou") else t("Endereço parecido com um que você já usou"),
                       mensagem = if (nomeInteiro) t("Golpistas registram por centavos nomes assim. Confira na fonte antes de salvar.")
                                  else t("As pontas são iguais, o meio é diferente. Confira na fonte antes de salvar."))
-                // O nome colado escondido, como no desafio escondido: a vista, quem copiasse da tela passava (revisao dos 3 agentes,
+                // O nome colado escondido, como no desafio escondido: a vista, quem copiasse da tela passava (revisao de seguranca,
                 // 09/11/2026). O conhecido fica a vista.
                 EnderecoMarcado(t("Você colou"), destino, trecho, escondido = nomeInteiro)
                 EnderecoMarcado(parecido.getString("rotulo"), parecido.getString("conhecido"), parecido.optJSONObject("trechoConhecido")?.let { Trecho.de(it) })

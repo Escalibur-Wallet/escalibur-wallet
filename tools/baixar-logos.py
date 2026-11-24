@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3 -IS
 """Baixa os logos das moedas e redes da lista curada para dentro do app.
 
 Logos embarcados, e nao baixados em tempo de uso: pedir o logo de um token a um CDN
@@ -8,18 +8,16 @@ para o repositorio e passa por revisao como qualquer outro arquivo.
     python3 tools/baixar-logos.py              todos
     python3 tools/baixar-logos.py celo linea   so os nomes dados (id do CoinGecko da
                                                moeda ou id da rede em Chain.swift)
-    python3 tools/baixar-logos.py --paprika    os da lista de reserva do Mercado (CoinPaprika)
-                                               ligados a um id do CoinGecko e ainda sem logo
-    python3 tools/baixar-logos.py --mercado 250
-                                               as 250 maiores do Mercado que ainda nao
-                                               tem logo, em 128 px: com o CoinGecko em
-                                               429, a lista de reserva nao traz logo
+
+As maiores do Mercado (os antigos --mercado e --paprika) vem de tools/catalogo/baixar-logos.py, com o filtro de
+imitacao. Toda imagem passa pelo mesmo caminho de la: o sips no sandbox de tools/catalogo/sips.sb e o PNG regravado so
+com os pixels (revisao de seguranca, 23/11/2026).
 
 So aceita imagem dos hosts de imagem do CoinGecko (os mesmos do `ImageLoader` do app),
 id em [a-z0-9-] e ate 160 KB: uma resposta adulterada nao poe arquivo local nem de
 outro host no repositorio (pentest de 14/10/2026, B7).
 """
-import json, os, re, sys, time, urllib.error, urllib.request, hashlib, shutil, subprocess, tempfile
+import json, os, re, sys, hashlib, importlib.util
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(RAIZ, "App/EscaliburWallet/Resources/Assets.xcassets/Logos")
@@ -64,50 +62,26 @@ REDES["polkadot"] = "polkadot"
 REDES["near"] = "near-protocol"
 REDES["aptos"] = "aptos"
 ARGS = sys.argv[1:]
-MERCADO = 0
-PAPRIKA = ARGS[:1] == ["--paprika"]
-if PAPRIKA: ARGS = []
-if ARGS[:1] == ["--mercado"]:
-    MERCADO = int(ARGS[1]) if len(ARGS) > 1 else 250
-    ARGS = []
+if ARGS[:1] in (["--paprika"], ["--mercado"]):
+    raise SystemExit("as maiores do Mercado vem de tools/catalogo/baixar-logos.py")
 SO = set(ARGS)
 ORIGENS = ("https://coin-images.coingecko.com/", "https://assets.coingecko.com/")
 API = "https://api.coingecko.com/api/v3/"
-PAPRIKA_API = "https://api.coinpaprika.com/v1/"
 ID = re.compile(r"^[a-z0-9-]{1,80}$")
 LIMITE = 160 * 1024
 
+# O caminho das imagens de tools/catalogo/baixar-logos.py: pedido sem redirecionamento, sips no sandbox, so pixels.
+_espec = importlib.util.spec_from_file_location("catalogo_logos", os.path.join(RAIZ, "tools/catalogo/baixar-logos.py"))
+CATALOGO = importlib.util.module_from_spec(_espec)
+_espec.loader.exec_module(CATALOGO)
+
 def get(url):
-    if not (url.startswith(API) or url.startswith(PAPRIKA_API) or url.startswith(ORIGENS)):
+    if not (url.startswith(API) or url.startswith(ORIGENS)):
         raise SystemExit("host recusado: " + url)
-    req = urllib.request.Request(url, headers={"User-Agent": "EscaliburWallet-tools"})
-    # O CoinGecko sem chave limita por minuto: 429 espera e tenta de novo.
-    for tentativa in range(6):
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resposta:
-                return resposta.read(LIMITE + 1 if not url.startswith((API, PAPRIKA_API)) else 16 * 1024 * 1024)
-        except urllib.error.HTTPError as erro:
-            if erro.code != 429 or tentativa == 5: raise
-            time.sleep(20 * (tentativa + 1))
-
-def webp_para_png(dados):
-    """O CoinGecko serve alguns logos so em WebP. O app so decodifica PNG e JPEG (menos
-    decodificador no processo que assina), entao o WebP vira PNG aqui, com o sips do macOS."""
-    if not shutil.which("sips"): return None
-    with tempfile.TemporaryDirectory() as pasta:
-        origem, destino = os.path.join(pasta, "a.webp"), os.path.join(pasta, "a.png")
-        open(origem, "wb").write(dados)
-        r = subprocess.run(["sips", "-s", "format", "png", origem, "--out", destino], capture_output=True)
-        if r.returncode != 0 or not os.path.exists(destino): return None
-        return open(destino, "rb").read()
-
-def reduzir(dados, lado):
-    """Logo do Mercado em `lado` px: a lista mostra 40 pt."""
-    with tempfile.TemporaryDirectory() as pasta:
-        origem, destino = os.path.join(pasta, "a.png"), os.path.join(pasta, "b.png")
-        open(origem, "wb").write(dados)
-        r = subprocess.run(["sips", "-s", "format", "png", "-Z", str(lado), origem, "--out", destino], capture_output=True)
-        return open(destino, "rb").read() if r.returncode == 0 and os.path.exists(destino) else dados
+    hosts = {"api.coingecko.com"} if url.startswith(API) else CATALOGO.HOSTS
+    dados = CATALOGO.pedir(url, hosts, None if url.startswith(API) else LIMITE)
+    if dados is None: raise SystemExit("sem resposta (ou redirecionado): " + url)
+    return dados
 
 def salvar(nome, url, lado=None):
     if not ID.match(nome.split("-", 1)[1] if "-" in nome else nome) or not isinstance(url, str) or not url.startswith(ORIGENS):
@@ -115,15 +89,18 @@ def salvar(nome, url, lado=None):
     dados = get(url)
     if len(dados) > LIMITE:
         print("grande demais", nome, len(dados)); return
-    if dados[:4] == b"RIFF" and dados[8:12] == b"WEBP":
-        dados = webp_para_png(dados) or dados
+    # So PNG ou JPEG, como o script novo: WebP seria mais um decodificador no sips.
     if not (dados.startswith(b"\x89PNG") or dados.startswith(b"\xff\xd8\xff")):
         print("formato recusado", nome, url); return
-    if lado: dados = reduzir(dados, lado)
-    ext = "png" if dados.startswith(b"\x89PNG") else "jpg"
+    # Sempre pelo sips no sandbox e regravado so com os pixels, em PNG.
+    dados = CATALOGO.remontar(dados, lado)
+    if not dados:
+        print("o sips nao converteu", nome); return
     pasta = os.path.join(ASSETS, nome + ".imageset")
     os.makedirs(pasta, exist_ok=True)
-    arquivo = nome + "." + ext
+    for velho in os.listdir(pasta):
+        if velho.lower().endswith((".jpg", ".jpeg")): os.remove(os.path.join(pasta, velho))
+    arquivo = nome + ".png"
     open(os.path.join(pasta, arquivo), "wb").write(dados)
     json.dump({"images": [{"filename": arquivo, "idiom": "universal"}], "info": {"author": "xcode", "version": 1}},
               open(os.path.join(pasta, "Contents.json"), "w"))
@@ -132,44 +109,6 @@ def salvar(nome, url, lado=None):
 os.makedirs(ASSETS, exist_ok=True)
 json.dump({"info": {"author": "xcode", "version": 1}, "properties": {"provides-namespace": False}},
           open(os.path.join(ASSETS, "Contents.json"), "w"))
-if PAPRIKA:
-    # As moedas da lista de reserva do Mercado (CoinPaprika) ligadas a um id do CoinGecko
-    # que ainda nao tem logo: os derivados que o CoinGecko deixa sem posicao (o stETH)
-    # nunca entram no --mercado.
-    tabela = open(os.path.join(RAIZ, "Kit/Sources/EscaliburNetwork/PaprikaGeckoIDs.swift")).read()
-    mapa = dict(re.findall(r'"([a-z0-9-]+)": "([a-z0-9-]+)"', tabela))
-    # As 300 maiores do CoinPaprika, com o id do CoinGecko pela mesma regra do app
-    # (Market.geckoID(forPaprika:)): a tabela, ou o nome depois do simbolo.
-    tickers = json.loads(get(PAPRIKA_API + "tickers"))
-    ranked = sorted((t for t in tickers if (t.get("rank") or 0) > 0), key=lambda t: t["rank"])[:300]
-    def gecko(pid):
-        if pid in mapa: return mapa[pid]
-        return pid.split("-", 1)[1] if "-" in pid else pid
-    ids = sorted({gecko(t["id"]) for t in ranked if ID.match(gecko(t["id"]))} | set(mapa.values()))
-    simbolos = {}
-    for t in tickers: simbolos.setdefault(gecko(t["id"]), set()).add(str(t.get("symbol", "")).upper())
-    faltam = [i for i in ids if not os.path.exists(os.path.join(ASSETS, "logo-" + i + ".imageset"))]
-    print(len(ids), "ids no mapa,", len(faltam), "sem logo")
-    for inicio in range(0, len(faltam), 100):
-        lote = faltam[inicio:inicio + 100]
-        for m in json.loads(get(API + "coins/markets?vs_currency=usd&per_page=100&ids=" + ",".join(lote))):
-            # So com o mesmo simbolo nas duas fontes: um id adivinhado que cai noutra moeda
-            # poria o logo errado na linha (na duvida, sem logo).
-            if m.get("id") in lote and str(m.get("symbol", "")).upper() in simbolos.get(m["id"], set()):
-                salvar("logo-" + m["id"], m.get("image"), lado=128)
-    sys.exit(0)
-if MERCADO:
-    # As maiores do Mercado, na ordem da lista, que ainda nao tem logo no app.
-    feitos = 0
-    for pagina in range(1, (MERCADO + 249) // 250 + 1):
-        lista = json.loads(get(API + "coins/markets?vs_currency=usd&order=market_cap_desc&per_page=%d&page=%d" % (min(MERCADO, 250), pagina)))
-        for m in lista:
-            if feitos >= MERCADO: break
-            feitos += 1
-            mid = m.get("id", "")
-            if not ID.match(mid) or os.path.exists(os.path.join(ASSETS, "logo-" + mid + ".imageset")): continue
-            salvar("logo-" + mid, m.get("image"), lado=128)
-    sys.exit(0)
 moedas = [m for m in MOEDAS if not SO or m in SO]
 if moedas:
     mercados = json.loads(get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=" + ",".join(moedas)))

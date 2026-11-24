@@ -34,7 +34,7 @@ public enum BIP39 {
         }
         let list = try store.wordlist(for: language)
         let checksumBits = entropy.count / 4
-        // O resumo da entropia tambem e zerado na saida: ele e o checksum, tirado do segredo (revisao dos 3 agentes de 05/11/2026).
+        // O resumo da entropia tambem e zerado na saida: ele e o checksum, tirado do segredo (revisao de seguranca de 05/11/2026).
         var digest = entropy.withUnsafeBytes { Array(SHA256.hash(data: $0)) }
         defer { digest.resetBytes() }
 

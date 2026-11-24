@@ -154,7 +154,7 @@ struct AddCustomTokenView: View {
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.asciiCapable)
                     .lineLimit(1...3)
                     .onChange(of: text.wrappedValue) { _, new in
-                        // A frase ou a chave colada ou digitada sai do campo com o aviso, como no observar (revisao dos 3 agentes,
+                        // A frase ou a chave colada ou digitada sai do campo com o aviso, como no observar (revisao de seguranca,
                         // 09/11/2026). O campo vazio nao apaga o aviso.
                         if let message = PhraseGuard.secretMessage(new.trimmingCharacters(in: .whitespacesAndNewlines), on: chain) {
                             text.wrappedValue = ""

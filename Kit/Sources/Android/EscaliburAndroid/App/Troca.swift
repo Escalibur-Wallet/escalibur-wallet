@@ -961,7 +961,7 @@ final class Troca: @unchecked Sendable {
             return
         }
         // A rede da conta conferida de novo antes, como o Receber a cada abertura: a compra chegaria nesta conta (15/11/2026, e a
-        // revisao dos tres agentes), como no iOS. Numa EVM, tambem as outras EVM marcadas, como o Receber e a ponte.
+        // revisao de seguranca), como no iOS. Numa EVM, tambem as outras EVM marcadas, como o Receber e a ponte.
         if !operacao.cancela, !carteira.isWatchOnly {
             if rede == .tron {
                 _ = await Sessao.shared.conferirTron(carteira.id).value

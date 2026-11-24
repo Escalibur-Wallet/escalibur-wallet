@@ -17,7 +17,7 @@ set -euo pipefail
 # hooks. CDPATH, as variaveis do Perl, do compilador e do Java ficam todas de fora.
 # O git, o Python, o swift e o xcodebuild de /usr/bin escolhem o programa de verdade pelo cache do xcrun, que fica
 # na pasta temporaria do usuario: cada script comeca com um cache novo e vazio (xcrun_db), resolvido de novo pelo Xcode,
-# que e do root (checagem final de 16/11/2026, rodada 3 dos 3 agentes).
+# que e do root (checagem final de 16/11/2026, rodada 3 da revisao de seguranca).
 case "$-" in *p*) ;; *) _sem_p=; : "${_sem_p:?rode pelo caminho do script, e nao por bash script}" ;; esac
 casa=$(/usr/bin/dscl . -read "/Users/$(/usr/bin/id -un)" NFSHomeDirectory | /usr/bin/sed -n 's/^NFSHomeDirectory: //p')
 limpo=true
@@ -192,11 +192,11 @@ cp "$LIBCXX" "$DESTINO/"
 # O C do nucleo que acabou de sair so chama o que o simbolos-c.lock permite, e nunca rede, exec,
 # dlopen ou abrir arquivo (auditoria de 03/11/2026).
 ./tools/verificar.sh --c-android "$CONFIG" || { echo "o C do nucleo chama o que nao devia (veja acima)" >&2; exit 1; }
-# Sem grep -q no pipe: com pipefail, o strings morria de SIGPIPE no primeiro acerto e a trava passava calada (rodada dos 3
-# agentes de 19/11/2026: o .so de Debug de 18/11 tinha 183 caminhos da pasta do usuario e passou). So no de release, o que
+# Sem grep -q no pipe: com pipefail, o strings morria de SIGPIPE no primeiro acerto e a trava passava calada (rodada da revisao
+# de seguranca de 19/11/2026: o .so de Debug de 18/11 tinha 183 caminhos da pasta do usuario e passou). So no de release, o que
 # vai para a loja: o de Debug guarda os caminhos nos simbolos de depuracao e nunca sai deste Mac.
 if [ "$CONFIG" = release ]; then
-    # O texto guardado antes: um strings que falhasse deixava o if falso e a trava passava (rodada 2 dos 3 agentes).
+    # O texto guardado antes: um strings que falhasse deixava o if falso e a trava passava (rodada 2 da revisao de seguranca).
     texto_do_nucleo=$(strings -a "$DESTINO/libEscaliburAndroid.so") || { echo "o strings da biblioteca falhou" >&2; exit 1; }
     ! grep -F "$HOME" >/dev/null <<<"$texto_do_nucleo" || { echo "a biblioteca ainda tem caminhos da pasta do usuario" >&2; exit 1; }
 fi

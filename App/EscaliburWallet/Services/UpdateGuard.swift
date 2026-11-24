@@ -50,7 +50,7 @@ final class UpdateGuard {
     private static var installedBuild: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0" }
 
     /// "Atualizar agora" tocado neste build nas ultimas 24 horas: a saida da obrigatoria continua depois de o sistema fechar o
-    /// app com a loja na frente (revisao dos 3 agentes de 07/11/2026). Ela so libera o deslizar que o toque ja liberaria.
+    /// app com a loja na frente (revisao de seguranca de 07/11/2026). Ela so libera o deslizar que o toque ja liberaria.
     private static func triedRecently() -> Bool {
         guard let saved = Preferences.updateTried else { return false }
         let parts = saved.split(separator: "|").map(String.init)
@@ -217,7 +217,7 @@ final class UpdateGuard {
     }
 
     /// "Atualizar agora": confere de novo antes de abrir a loja. A conferencia da tela pode ser de horas atras, e uma versao
-    /// que entrou na loja depois dela, fora da lista, seria instalada sem o alarme (revisao dos 3 agentes de 05/11/2026).
+    /// que entrou na loja depois dela, fora da lista, seria instalada sem o alarme (revisao de seguranca de 05/11/2026).
     /// Sem resposta, ou com outra versao, a loja nao abre e a tela mostra o que a conferencia nova achou.
     private func update(_ shown: String) {
         guard !updating else { return }

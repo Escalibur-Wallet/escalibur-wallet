@@ -1,11 +1,11 @@
 #!/bin/bash
-# Limpa os builds que tarefas e subagentes deixaram para tras (pedido do dono, 17/10/2026).
+# Limpa os builds que tarefas em paralelo deixaram para tras (pedido do dono, 17/10/2026).
 #
 #   tools/limpar-builds.sh            lista o que sairia e quanto libera
 #   tools/limpar-builds.sh --apagar   apaga
 #
-# Onde procura: os scratchpads das sessoes do Claude Code deste projeto e as worktrees dos
-# agentes (.claude/worktrees). O que sai: intermediarios do Xcode (Build, Index.noindex,
+# Onde procura: as pastas temporarias das sessoes de trabalho deste projeto e as worktrees
+# locais (.claude/worktrees). O que sai: intermediarios do Xcode (Build, Index.noindex,
 # ModuleCache.noindex, SourcePackages, CompilationCache.noindex, SDKStatCaches.noindex) e
 # as pastas de build do SwiftPM (.build, ou a pasta passada em --scratch-path). O que fica:
 # relatorios, logs (inclusive os Logs do Xcode), .xcresult com as capturas, .xcarchive, .ipa

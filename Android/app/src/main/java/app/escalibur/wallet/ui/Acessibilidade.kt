@@ -135,7 +135,7 @@ object Acessibilidade {
             }
         }
         // O rotulo e escolhido por quem fez o servico ("Sistema Android", "Google Play Protect"): vai com o pacote, cortado e
-        // sem caractere de controle ou de formato, para o dono achar qual desligar (revisao dos 3 agentes, 17/11/2026).
+        // sem caractere de controle ou de formato, para o dono achar qual desligar (revisao de seguranca, 17/11/2026).
         fun nome(info: AccessibilityServiceInfo): String {
             val pacote = info.resolveInfo?.serviceInfo?.packageName
             val rotulo = runCatching { info.resolveInfo.loadLabel(contexto.packageManager).toString() }.getOrNull()

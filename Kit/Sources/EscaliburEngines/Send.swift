@@ -210,7 +210,7 @@ public enum NonceQueuePruning {
             // transacao com ele entra de novo. O recibo da antiga pode nao existir mais nos provedores (a publicnode o
             // apaga depois de uns 2 dias), e ela ficava vista e presa para sempre (bug de 14/11/2026). So depois de 30
             // minutos: o recibo nunca some antes disso, e o prazo cobre a reorganizacao e o par que infla o nonce contra
-            // um honesto (revisao dos tres agentes de 14/11/2026).
+            // um honesto (revisao de seguranca de 14/11/2026).
             if let minedNonce, entry.nonce < minedNonce, now.timeIntervalSince(entry.sentAt) > staleAfter {
                 gone.insert(entry.hash)
                 continue
@@ -237,7 +237,7 @@ public enum NonceQueuePruning {
             let deadline = max(base.addingTimeInterval(entry.wasSeen ? seenStaleAfter : staleAfter), lowerDeadline)
             // Sumiu da rede, mas com o nonce ja gasto num bloco por outra transacao (a mesma frase em outro aparelho): sai
             // sozinha. As de cima seguem validas, porque o nonce de baixo delas ja foi usado; levar todas fazia o plano
-            // seguinte reusar o nonce de uma viva (revisao dos tres agentes de 14/11/2026). A vencida abaixo dele ja saiu
+            // seguinte reusar o nonce de uma viva (revisao de seguranca de 14/11/2026). A vencida abaixo dele ja saiu
             // pela regra do nonce minerado, porque o prazo e de pelo menos 30 minutos.
             if lowerSeen, answer == .unknown, age > grace(privateRoute: entry.privateRoute), let minedNonce, entry.nonce < minedNonce {
                 gone.insert(entry.hash)
@@ -337,7 +337,7 @@ public struct UnsureSend: Codable, Equatable, Sendable {
     /// Redes UTXO: a rede disse que nao conhece o envio, ou ele passou do teto na fila, sem prova de que nao sai. Quem recebeu
     /// os bytes pode transmiti-los depois, e no Bitcoin a transacao nao vence: o registro deixa de segurar a conta e de
     /// aparecer na Atividade, e vira a marca que obriga o proximo envio da conta a gastar uma das mesmas moedas
-    /// (rodada dos 3 agentes de 19/11/2026).
+    /// (rodada da revisao de seguranca de 19/11/2026).
     public var coinsHeld: Bool?
 
     public init(wallet: UUID, chainID: String, address: String, hash: String, sentAt: Date, asset: Asset, amount: BigUInt, recipient: String?,
@@ -401,15 +401,15 @@ public enum UnsureSends {
     }
 
     /// O que fazer com um registro, dada a resposta da rede.
-    /// - Sem resposta: nada muda. O aparelho sem conexao, ou o provedor fora do ar, nunca libera a conta sozinho (revisao dos
-    ///   3 agentes, 17/11/2026: antes o prazo contava da hora do envio, e 30 minutos sem rede soltavam a conta sem ninguem ter
+    /// - Sem resposta: nada muda. O aparelho sem conexao, ou o provedor fora do ar, nunca libera a conta sozinho (revisao de
+    ///   seguranca, 17/11/2026: antes o prazo contava da hora do envio, e 30 minutos sem rede soltavam a conta sem ninguem ter
     ///   perguntado nada).
     /// - A rede nao conhece: o prazo comeca na primeira resposta dessas, e o registro so sai numa resposta igual depois dele.
     /// - A rede conhece: o envio saiu. Deixa de segurar a conta e segue em "Pendentes" ate confirmar (uma transacao de
     ///   Bitcoin espera horas na fila, e sumir dali levava a enviar de novo).
     /// - Redes UTXO: o que sairia sem prova (a rede nao conhece, ou o teto) vira a marca das moedas (`coinsHeld`), que nao
     ///   segura a conta nem aparece na Atividade, e obriga o proximo envio a gastar uma das mesmas moedas: se quem recebeu os
-    ///   bytes os transmitir depois, so um dos dois envios confirma (rodada dos 3 agentes de 19/11/2026).
+    ///   bytes os transmitir depois, so um dos dois envios confirma (rodada da revisao de seguranca de 19/11/2026).
     public static func step(_ record: UnsureSend, lookup: SendLookup, now: Date = Date()) -> Step {
         if record.coinsHeld == true {
             if case .confirmed = lookup { return .sent }

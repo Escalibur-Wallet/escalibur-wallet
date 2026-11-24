@@ -221,7 +221,7 @@ enum Receber {
     static func buscar(_ texto: String) async -> Busca {
         let chave = texto.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard chave.count >= 2 else { return Busca(estado: "ok", resultados: []) }
-        // A chave privada colada na busca tambem nao vai ao CoinGecko (como no iOS, revisao dos 3 agentes, 09/11/2026).
+        // A chave privada colada na busca tambem nao vai ao CoinGecko (como no iOS, revisao de seguranca, 09/11/2026).
         if PrivateKeyGuard.looksLikePrivateKey(texto) { return Busca(estado: "chave", resultados: []) }
         if pareceFrase(chave) { return Busca(estado: "frase", resultados: []) }
         func saida(_ lista: [CoinSearchResult]) -> Busca {
@@ -293,9 +293,13 @@ enum Receber {
     /// validacao completa da moeda custom; invalido, nil. O mesmo `catalogAsset` do iOS.
     static func ativoDoCatalogo(_ moeda: CatalogCoin, _ rede: CatalogCoin.Network) -> Asset? {
         guard let chain = rede.chain, case .token(let contrato)? = try? CustomToken.kind(chain: chain, address: rede.contract) else { return nil }
-        let preco = moeda.id.hasPrefix(CoinCatalog.paprikaPrefix) ? nil : moeda.id
+        // A rede achada so pelo nome fica sem id: um clone com o mesmo nome levaria a logo e o preco (revisao de 23/11/2026).
+        // E so com a lista embarcada confirmando o contrato: a tela do QR mostra a logo por esse id (rodada 4).
+        let sem = Asset(chainID: chain.id, kind: .token(contract: contrato), symbol: moeda.symbol, name: moeda.name, decimals: 0,
+                        coingeckoID: nil, isStablecoin: false, origin: .discovered)
+        guard !moeda.id.hasPrefix(CoinCatalog.paprikaPrefix), rede.byName != true, lista()?.confirms(id: moeda.id, asset: sem) == true else { return sem }
         return Asset(chainID: chain.id, kind: .token(contract: contrato), symbol: moeda.symbol, name: moeda.name, decimals: 0,
-                     coingeckoID: preco, isStablecoin: false, origin: .discovered)
+                     coingeckoID: moeda.id, isStablecoin: false, origin: .discovered)
     }
 
     /// O mesmo contrato na mesma rede ja esta entre as custom (na EVM, sem olhar a caixa).

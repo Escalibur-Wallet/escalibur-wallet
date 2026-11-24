@@ -1,4 +1,4 @@
-# Auditoria de segurança 2 (agente de segurança, 2026-09-26, main em 84d9c35)
+# Auditoria de segurança 2 (revisão interna, 2026-09-26, main em 84d9c35)
 
 Feita com os motores de todas as redes ligados. Nenhum achado crítico explorável de fora sem código novo; dois altos derrubam promessas centrais e o CI não pegava.
 
@@ -23,7 +23,7 @@ Baixa
 
 Ver a tabela ao fim deste arquivo, atualizada a cada correção.
 
-## Revisão dos motores (agente de blockchain, mesmo commit)
+## Revisão dos motores (lente de blockchain, mesmo commit)
 
 Alto
 - A1 Stellar: rota e mínimo da troca de um Horizon só, path com qualquer ativo intermediário.

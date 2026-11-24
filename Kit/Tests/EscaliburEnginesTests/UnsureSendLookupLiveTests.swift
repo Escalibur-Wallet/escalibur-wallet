@@ -40,7 +40,7 @@ struct UnsureSendLookupLiveTests {
     }
 
     /// Os provedores de Litecoin e Dogecoin nao sao todos Esplora: cada API tem o proprio jeito de dizer "nao conheco", e um
-    /// "pendente" para o id que nunca existiu marcaria o envio que nunca saiu como visto (rodada 4 dos 3 agentes).
+    /// "pendente" para o id que nunca existiu marcaria o envio que nunca saiu como visto (rodada 4 da revisao de seguranca).
     @Test("Litecoin e Dogecoin: transacao nunca transmitida")
     func outrasUTXO() async throws {
         for chain in [Chain.litecoin, Chain.dogecoin] {

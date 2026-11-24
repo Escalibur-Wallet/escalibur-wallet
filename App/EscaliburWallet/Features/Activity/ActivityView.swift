@@ -232,7 +232,7 @@ final class ActivityFeed {
     private var sentHere: [UUID: [ActivityEntry]] = [:]
     /// Na TON e na Aptos, as leituras que nao podem fechar um envio daqui, por carteira: as que ja fecharam um (uma leitura
     /// fecha um envio so, tambem nas chamadas seguintes) e as que ja estavam la quando o envio saiu (um envio igual de antes).
-    /// Sai junto com o ultimo envio daqui da carteira (revisao dos 3 agentes, 08/11/2026).
+    /// Sai junto com o ultimo envio daqui da carteira (revisao de seguranca, 08/11/2026).
     private var claimedReads: [UUID: Set<String>] = [:]
 
     func noteSent(_ entry: ActivityEntry, wallet: UUID) {
@@ -281,7 +281,7 @@ final class ActivityFeed {
                 guard !read.contains(local.hash.lowercased()), local.date > day else { return false }
                 // So pelo hash: a regra de valor escondia um envio diferente de mesmo valor (dois pagamentos de 100 USDT seguidos).
                 // Na TON e na Aptos, o hash que a leitura traz nao e o do envio: o mesmo envio pela rede, ativo, valor, destino e
-                // hora, de uma leitura que nao e suspeita (revisao dos 3 agentes, 08/11/2026).
+                // hora, de uma leitura que nao e suspeita (revisao de seguranca, 08/11/2026).
                 guard let chain = local.chain, chain.family == .ton || chain.family == .aptos,
                       let to = local.counterparty, let key = Address.canonicalRecipient(to, chain: chain) else { return true }
                 let match = collected.first { item in
@@ -553,8 +553,11 @@ struct ActivityRow: View {
     var body: some View {
         HStack(spacing: Space.sm) {
             // O logo da moeda com a bolinha da rede; a direcao esta no titulo e no sinal.
-            CoinLogo(coingeckoID: entry.asset?.coingeckoID ?? entry.chain?.coingeckoID,
-                     symbol: entry.asset?.symbol ?? entry.chain?.nativeSymbol ?? "", size: 40, network: entry.chain)
+            // A logo da rede so quando a entrada e da moeda dela (sem ativo): token sem id (custom) fica com as letras, e
+            // nunca com o losango do ETH (revisao de seguranca, 23/11/2026; o mesmo do nucleo do Android).
+            CoinLogo(coingeckoID: entry.suspicious ? nil : (entry.asset == nil ? entry.chain?.coingeckoID : entry.asset?.coingeckoID),
+                     symbol: entry.asset?.symbol ?? entry.chain?.nativeSymbol ?? "", size: 40, network: entry.chain,
+                     unverified: entry.asset?.origin != nil || entry.suspicious)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).typeStyle(.row).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Text(subtitle).typeStyle(.note).foregroundStyle(isFailed ? Palette.down : Palette.inkSoft).lineLimit(1)
@@ -666,10 +669,10 @@ struct ActivityDetailView: View {
     private var copyableRecipient: String? {
         guard entry.direction == .sent, !entry.suspicious, entry.status == .confirmed, let to = entry.counterparty, let chain = entry.chain,
               let sent = session.metadata.sentTo[entry.chainID], let key = Address.canonicalRecipient(to, chain: chain),
-              // Nunca o endereco de uma conta deste iPhone com outra chave no controle (revisao dos tres agentes de 15/11/2026).
+              // Nunca o endereco de uma conta deste iPhone com outra chave no controle (revisao de seguranca de 15/11/2026).
               session.markedOwner(of: to, on: chain) == nil else { return nil }
         // A mesma conta pela identidade da rede (caixa, forma crua ou amigavel da TON), e o que vai para a area de transferencia e
-        // o endereco que o envio gravou, nao o texto do indexador (revisao dos 3 agentes, 08/11/2026).
+        // o endereco que o envio gravou, nao o texto do indexador (revisao de seguranca, 08/11/2026).
         return sent.first { Address.canonicalRecipient($0, chain: chain) == key }
     }
 
@@ -858,7 +861,7 @@ struct ActivityDetailView: View {
     @ViewBuilder
     private func logo(_ asset: Asset?, size: CGFloat, badge: Bool = true) -> some View {
         let unverified = asset?.origin != nil || entry.suspicious
-        CoinLogo(coingeckoID: asset?.coingeckoID ?? entry.chain?.coingeckoID, symbol: asset?.symbol ?? entry.chain?.nativeSymbol ?? "",
+        CoinLogo(coingeckoID: entry.suspicious ? nil : (asset == nil ? entry.chain?.coingeckoID : asset?.coingeckoID), symbol: asset?.symbol ?? entry.chain?.nativeSymbol ?? "",
                  size: size, network: badge ? entry.chain : nil, ringColor: Palette.body, unverified: unverified,
                  logoAsset: unverified && !entry.suspicious ? asset : nil)
             .overlay(alignment: .bottomTrailing) {
@@ -872,7 +875,7 @@ struct ActivityDetailView: View {
     /// O CoinLogo trata ETH na Base ou na Arbitrum como moeda nativa, sem selo; no
     /// detalhe a rede aparece sempre, menos na Ethereum.
     private func isETHAwayFromHome(_ asset: Asset?) -> Bool {
-        guard let chain = entry.chain, (asset?.coingeckoID ?? chain.coingeckoID) == chain.coingeckoID else { return false }
+        guard let chain = entry.chain, asset == nil || asset?.coingeckoID == chain.coingeckoID else { return false }
         return chain.coingeckoID == Chain.ethereum.coingeckoID && chain.id != Chain.ethereum.id
     }
 

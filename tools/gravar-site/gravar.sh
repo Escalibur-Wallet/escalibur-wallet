@@ -70,7 +70,7 @@ xcrun simctl status_bar "$U" override --time 9:41 --dataNetwork wifi --wifiMode 
     --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100 --operatorName ""
 
 echo "compilando o app (Debug, modo demo)"
-# O mesmo build do simulador e dos testes (CLAUDE.md: um build por tipo, reaproveitado).
+# O mesmo build do simulador e dos testes (instrucoes do projeto: um build por tipo, reaproveitado).
 xcodebuild -project EscaliburWallet.xcodeproj -scheme EscaliburWallet -configuration Debug -sdk iphonesimulator \
     -destination "id=$U" -derivedDataPath build/dd-ui build -quiet
 [ "${GRAVAR_LIMPO:-0}" = 1 ] && xcrun simctl uninstall "$U" app.escalibur.wallet 2>/dev/null || true

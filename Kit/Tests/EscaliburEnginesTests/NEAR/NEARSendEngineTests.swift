@@ -48,9 +48,11 @@ enum NEAREngineRecorded {
     }
 
     /// JSON-RPC pelo metodo e pelos parametros; a FastNEAR pelo caminho. `sendError` faz
-    /// o no recusar a transmissao; `functionCallKey`, a chave do dono so chamar contrato.
+    /// o no recusar a transmissao; `sendRejection`, recusar com esta variante de
+    /// `InvalidTxError`; `functionCallKey`, a chave do dono so chamar contrato.
     struct Transport: ReaderTransport {
         var sendError = false
+        var sendRejection: String? = nil
         var functionCallKey = false
 
         func send(_ request: ReaderRequest) async throws -> Data {
@@ -76,7 +78,12 @@ enum NEAREngineRecorded {
                 }
             case "EXPERIMENTAL_protocol_config": return try data("protocol_config")
             case "gas_price": return try data("gas_price")
-            case "send_tx": return try data(sendError ? "send_tx-assinatura-invalida" : "send_tx-ja-incluida")
+            case "send_tx":
+                if let sendRejection {
+                    return Data(("{\"id\":1,\"jsonrpc\":\"2.0\",\"error\":{\"name\":\"HANDLER_ERROR\",\"cause\":{\"info\":{},\"name\":\"INVALID_TRANSACTION\"},"
+                        + "\"code\":-32000,\"message\":\"Server error\",\"data\":{\"TxExecutionError\":{\"InvalidTxError\":\(sendRejection)}}}}").utf8)
+                }
+                return try data(sendError ? "send_tx-assinatura-invalida" : "send_tx-ja-incluida")
             case "tx": return try data(params["tx_hash"] as? String == "8VhtMYxX6hRaD827eaQcptC7Nw623n8FXuf17CdokwTg" ? "tx-final" : "tx-desconhecida")
             default: throw HTTPClient.Failure.status(404)
             }
@@ -174,6 +181,22 @@ struct NEARSendEngineTests {
         let tampered = SignedTransaction(chainID: "near", raw: raw, encoded: Data(raw).base64EncodedString(), id: signed.id)
         await #expect(throws: SendEngineError.message(NEAREngineText.notOurTransaction)) { _ = try await engine.broadcast([tampered], chain: .near) }
         #expect(await engine.status("11111111111111111111111111111111", chain: .near) == .pending)
+    }
+
+    @Test("Numero ja usado (InvalidNonce) nao diz que nada saiu: pode ser a propria transacao; numero adiante segue a frase antiga")
+    func usedNonceRejectionIsNotNothingLeft() async throws {
+        let old = "Outra transação desta conta entrou antes. Nada saiu por esta. Confira a Atividade e envie de novo."
+        #expect(NEAREngineText.rejected(.nonceTooLow) == NEAREngineText.nonceUsed)
+        #expect(NEAREngineText.rejected(.nonceTooLow) != old)
+        #expect(NEAREngineText.rejected(.nonceTooHigh) == old)
+        #expect(NEAREngineText.broadcastError(ReaderError.broadcastRejected(.nonceTooLow, code: "nonceTooLow")) == .message(NEAREngineText.nonceUsed))
+        #expect(NEAREngineText.broadcastError(ReaderError.broadcastRejected(.nonceTooHigh, code: "nonceTooHigh")) == .message(old))
+        // Pelo motor, como a tela recebe: os dois nos recusam com InvalidNonce (o no nao achou a transacao ja incluida).
+        let signed = try R.signed
+        let used = R.engine(R.Transport(sendRejection: "{\"InvalidNonce\":{\"ak_nonce\":217540425000009,\"tx_nonce\":217540425000009}}"))
+        await #expect(throws: SendEngineError.message(NEAREngineText.nonceUsed)) { _ = try await used.broadcast([signed], chain: .near) }
+        let ahead = R.engine(R.Transport(sendRejection: "{\"NonceTooLarge\":{\"tx_nonce\":999999999999999999,\"upper_bound\":217540425000010}}"))
+        await #expect(throws: SendEngineError.message(old)) { _ = try await ahead.broadcast([signed], chain: .near) }
     }
 
     @Test("Atividade: envios, recebimentos e a taxa, com a triagem de conta parecida")

@@ -121,7 +121,7 @@ enum PlanWarningText {
         switch warning {
         case .firstSendToAddress: return String(localized: "Primeira vez que você envia para este endereço.")
         case .lookalikeAddress(let known):
-            // Nome da NEAR: o aviso e o do nome (revisao dos 3 agentes, 09/11/2026).
+            // Nome da NEAR: o aviso e o do nome (revisao de seguranca, 09/11/2026).
             if let chain, AddressPoisoning.wholeNEARName(known, chain: chain) != nil { return String(localized: "Nome parecido com \(known).") }
             return String(localized: "Endereço parecido com \(Fmt.address(known, chain: chain)).")
         case .noDestinationTag:

@@ -21,7 +21,7 @@ public struct ReleaseManifest: Sendable, Equatable {
         /// O dia em que o dono viu o build dele aprovado e na App Store e assinou de novo (`versoes.swift liberar`). Sem
         /// isso, a versao so passa na conferencia: a tela de atualizar nao empurra ninguem para ela. A versao entra na lista
         /// antes de o binario existir, e um build de terceiro com o mesmo numero tambem diria "confirmada" (auditoria 6,
-        /// A6-01; revisao dos 3 agentes de 05/11/2026). Depois de publicada, a Apple nao aceita outro build com o numero.
+        /// A6-01; revisao de seguranca de 05/11/2026). Depois de publicada, a Apple nao aceita outro build com o numero.
         public let released: String?
 
         enum CodingKeys: String, CodingKey { case version = "versao", builds, published = "publicada", released = "liberada" }

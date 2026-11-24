@@ -10,7 +10,7 @@
 # - os scripts da loja daqui sao os do commit publicado: uma edicao local deles nao roda;
 # - o build roda num worktree novo e destacado desse commit, fora desta pasta e sem os hooks do git. O que o git
 #   ignora ou nao mostra (uma pasta build dentro das fontes, skip-worktree, status sem os arquivos novos) e o
-#   que outra sessao editar nesta pasta durante o build ficam de fora;
+#   que outro trabalho em paralelo editar nesta pasta durante o build ficam de fora;
 # - o commit e a arvore vao dentro do app.
 raiz=$(git rev-parse --show-toplevel)
 [ "$(git -C "$raiz" remote get-url origin)" = "https://github.com/Escalibur-Wallet/escalibur-wallet.git" ] \

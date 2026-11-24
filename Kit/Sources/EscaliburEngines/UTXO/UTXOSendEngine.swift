@@ -179,12 +179,12 @@ struct UTXOSendEngine: SendEngine {
     /// Para o registro dos envios sem resposta. Na fila de pelo menos um provedor, a rede conhece a transacao: aqui nao ha
     /// prazo de validade, e a fila cheia segura uma transacao por horas.
     /// "A rede nao conhece" so com dois donos respondendo isso: quando os outros falham, a resposta de um so valia sozinha, e
-    /// um 404 dele soltava a conta de uma transacao que entrou (revisao dos 3 agentes, 17/11/2026). Um so que a conhece
+    /// um 404 dele soltava a conta de uma transacao que entrou (revisao de seguranca, 17/11/2026). Um so que a conhece
     /// basta para "vista": o pior caso e uma linha pendente a mais. O final e o do `status`, com a prova de bloco.
     /// A transacao ja vista que saiu da fila dos dois (a fila cheia tira a de taxa baixa) nao morreu: sem prazo de validade,
     /// quem guardou os bytes, ate o destinatario, pode transmitir de novo quando quiser, e um envio novo com outras moedas
     /// confirmaria junto. Ela fica sem resposta: o registro, que ja nao segura a conta, segue com a linha pendente ate
-    /// confirmar ou ate o teto de 14 dias (rodada 4 dos 3 agentes, 18/11/2026). So a nunca vista sai como "nao conhece": os
+    /// confirmar ou ate o teto de 14 dias (rodada 4 da revisao de seguranca, 18/11/2026). So a nunca vista sai como "nao conhece": os
     /// bytes so chegaram ao provedor da transmissao.
     func lookup(_ send: UnsureSend, chain: Chain) async -> SendLookup {
         guard chain == self.chain else { return .noAnswer }

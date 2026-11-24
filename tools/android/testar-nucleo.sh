@@ -25,7 +25,7 @@ set -euo pipefail
 # hooks. CDPATH, as variaveis do Perl, do compilador e do Java ficam todas de fora.
 # O git, o Python, o swift e o xcodebuild de /usr/bin escolhem o programa de verdade pelo cache do xcrun, que fica
 # na pasta temporaria do usuario: cada script comeca com um cache novo e vazio (xcrun_db), resolvido de novo pelo Xcode,
-# que e do root (checagem final de 16/11/2026, rodada 3 dos 3 agentes).
+# que e do root (checagem final de 16/11/2026, rodada 3 da revisao de seguranca).
 case "$-" in *p*) ;; *) _sem_p=; : "${_sem_p:?rode pelo caminho do script, e nao por bash script}" ;; esac
 casa=$(/usr/bin/dscl . -read "/Users/$(/usr/bin/id -un)" NFSHomeDirectory | /usr/bin/sed -n 's/^NFSHomeDirectory: //p')
 limpo=true
@@ -61,8 +61,8 @@ export ANDROID_NDK_HOME="$HOME/Library/Android/android-ndk-r30"
 ADB=$HOME/Library/Android/sdk/platform-tools/adb
 SDK_LIBS=~/Library/org.swift.swiftpm/swift-sdks/swift-6.4.1-RELEASE_android.artifactbundle/swift-android/swift-resources/usr/lib/swift-aarch64/android
 NDK_LIBS=$(ls -d "$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/sysroot/usr/lib/aarch64-linux-android | head -1)
-# Uma pasta por rodada: outra rodada no mesmo aparelho, ao mesmo tempo, nao troca os runners desta (revisao dos 3
-# agentes de 05/11/2026).
+# Uma pasta por rodada: outra rodada no mesmo aparelho, ao mesmo tempo, nao troca os runners desta (revisao de
+# seguranca de 05/11/2026).
 D=/data/local/tmp/escalibur-$$
 CONFIG=debug
 FILTRO=""
@@ -81,7 +81,7 @@ P=$K/$PASTA/out/Products/$([ "$CONFIG" = release ] && echo Release || echo Debug
 TESTES=("${@:-EscaliburCoreTests EscaliburChainsTests EscaliburNetworkTests}")
 read -r -a TESTES <<< "${TESTES[*]}"
 
-# O adb e o do Google (revisao dos 3 agentes da checagem final de 16/11/2026): no gerar-aab.sh ele roda antes da
+# O adb e o do Google (revisao de seguranca da checagem final de 16/11/2026): no gerar-aab.sh ele roda antes da
 # conferencia do JDK e do SDK.
 /usr/bin/codesign --verify --strict \
     -R='identifier "adb" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "EQHXZ8M8AV"' "$ADB" \
@@ -90,7 +90,7 @@ read -r -a TESTES <<< "${TESTES[*]}"
 
 # O toolchain Swift, o Swift SDK e o NDK conferidos antes de rodar, como no compilar-nucleo.sh, e nao so depois dele: no
 # gerar-aab.sh os vetores rodam primeiro, e um binario trocado rodaria aqui sem conferencia nenhuma (checagem final de
-# 16/11/2026, rodada 3 dos 3 agentes). Os digestos so nos vetores da loja (o mesmo nucleo otimizado), como la.
+# 16/11/2026, rodada 3 da revisao de seguranca). Os digestos so nos vetores da loja (o mesmo nucleo otimizado), como la.
 TOOLCHAIN=~/Library/Developer/Toolchains/swift-6.4.1-RELEASE.xctoolchain
 NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64"
 for binario in swift swift-build swift-driver swift-frontend clang ld.lld; do
@@ -140,8 +140,8 @@ fi
     || { echo "a compilacao dos testes falhou (build/android-testes.log)" >&2; grep error: build/android-testes.log | head >&2; exit 1; }
 
 # A pasta do aparelho comeca vazia, e cada teste tem o runner desta compilacao: um runner ou uma biblioteca de rodada
-# anterior (outro commit, ou a depuracao) rodaria no lugar e passaria os vetores sem o nucleo deste build (revisao dos 3
-# agentes de 05/11/2026).
+# anterior (outro commit, ou a depuracao) rodaria no lugar e passaria os vetores sem o nucleo deste build (revisao de
+# seguranca de 05/11/2026).
 for t in "${TESTES[@]}"; do
     [ -x "$P/$t-test-runner" ] || { echo "a compilacao nao gerou o $t-test-runner" >&2; exit 1; }
 done
@@ -178,7 +178,7 @@ for t in "${TESTES[@]}"; do
         # O swift-testing conta o teste pulado, o cancelado e o de falha conhecida no total que passou: nos vetores,
         # nenhum dos tres. Pelo fluxo de eventos, que precisa chegar inteiro ate o fim da rodada; o texto fica como
         # segunda trava, direto no arquivo (sem pipe: com pipefail, o grep -q que acha cedo mata o sed e a conferencia
-        # passaria). Revisao dos 3 agentes de 05/11/2026.
+        # passaria). Revisao de seguranca de 05/11/2026.
         rm -f "$E"
         "$ADB" pull "$D/eventos-$t.jsonl" "$E" > /dev/null 2>&1 || true
         python3 -I - "$E" <<'PY' || { echo "== $t: um vetor foi pulado, cancelado ou marcado como falha conhecida, ou a rodada nao terminou" >&2; falhou=1; }

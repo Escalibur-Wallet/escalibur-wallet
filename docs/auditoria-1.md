@@ -1,4 +1,4 @@
-# Auditoria de segurança 1 (agente de segurança, 2026-09-26, main em b7bbdec)
+# Auditoria de segurança 1 (revisão interna, 2026-09-26, main em b7bbdec)
 
 Nenhum achado crítico alcançável (nenhum motor de envio ligado). O que pode virar crítico: o spike da senha de aplicativo (MUST 1).
 

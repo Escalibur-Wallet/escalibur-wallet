@@ -62,7 +62,7 @@ final class SendModel {
     var blindSegment: AddressPoisoning.Segment?
     /// Nome da NEAR: o texto cujo desafio ja nasceu, no toque do Continuar ou na entrada inteira. Digitando, cada comeco ja e
     /// conta valida ("bo" de "bob.near"), e o desafio nascia no segundo caractere. So o texto, sem a rede: colado noutra rede e
-    /// trocado para a NEAR pela sugestao, o nome voltava a vista (revisao dos 3 agentes, 09/11/2026).
+    /// trocado para a NEAR pela sugestao, o nome voltava a vista (revisao de seguranca, 09/11/2026).
     var nearArmedFor: String?
     /// Nome da NEAR valido no campo, com o desafio ainda por nascer: o Continuar o faz nascer.
     var nearPending = false
@@ -196,7 +196,7 @@ final class SendModel {
     }
 
     /// O desafio na tela e o nome inteiro de uma conta NEAR: a resposta e conferida no toque do Continuar, e nao ao vivo. Ao vivo,
-    /// o Continuar acendia no meio do nome verdadeiro, no tamanho de um colado que fosse o comeco dele (revisao dos 3 agentes,
+    /// o Continuar acendia no meio do nome verdadeiro, no tamanho de um colado que fosse o comeco dele (revisao de seguranca,
     /// 09/11/2026).
     var wholeNameOnScreen: Bool {
         if lookalike != nil { return lookalikeSegment.map { AddressPoisoning.coversAll($0, of: destination?.address ?? "") } ?? false }
@@ -207,13 +207,13 @@ final class SendModel {
 
     /// O nome da NEAR que entrou inteiro e ainda nao tem o desafio calculado: o historico da rede chegando (ate 4 s, e quem
     /// segura o indexador estica), ou a rede errada com a sugestao da NEAR. O campo e os blocos ficam escondidos, como com o
-    /// desafio na tela: a vista, o dono lia o nome trocado e o digitava de memoria (revisao dos 3 agentes, 09/11/2026).
+    /// desafio na tela: a vista, o dono lia o nome trocado e o digitava de memoria (revisao de seguranca, 09/11/2026).
     /// So na NEAR (com destino) ou com o texto que e nome da NEAR (sem destino): o bc1 e o addr1 tambem passam pela gramatica do
     /// nome, e na Bitcoin o campo sumia a toa enquanto o historico chegava.
     var wholeEntryHidden: Bool {
         let text = destinationText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return false }
-        // Sem destino: o colado inteiro que a sugestao de rede torna destino com um desafio (revisao dos 3 agentes, 09/11/2026). No
+        // Sem destino: o colado inteiro que a sugestao de rede torna destino com um desafio (revisao de seguranca, 09/11/2026). No
         // envio, a rede so muda pela sugestao: sem ela ("vitalik.eth"), esconder so tirava do dono o que ele colou. A sugestao e o
         // Editar ficam fora do campo escondido.
         guard destination != nil, let chain else { return nearArmedFor == text && networkSuggestion != nil }
@@ -221,7 +221,7 @@ final class SendModel {
         // Nome da NEAR digitado letra a letra fica a vista (o desafio espera o Continuar); armado, escondido.
         if chain.family == .near, AddressPoisoning.wholeNEARName(text, chain: chain) != nil { return nearArmedFor == text }
         // Em toda rede, o desafio escondido pode nascer quando o prazo do historico vencer: a vista, os blocos destacavam o fim, e
-        // o dono digitava de memoria quase toda a resposta dos 6 ultimos (revisao dos 3 agentes, 09/11/2026).
+        // o dono digitava de memoria quase toda a resposta dos 6 ultimos (revisao de seguranca, 09/11/2026).
         return blindPossible
     }
 
@@ -526,7 +526,7 @@ struct SendStages: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .animation(Motion.crossfade, value: model.stage)
         // De volta ao destino, por qualquer caminho (o voltar, a revisao, o deslizar, uma leitura tardia), os desafios, a
-        // rede do primeiro envio e a consulta recomecam, iguais aos do Android (rodada 19 dos 3 agentes, 06/11/2026).
+        // rede do primeiro envio e a consulta recomecam, iguais aos do Android (rodada 19 da revisao de seguranca, 06/11/2026).
         .onChange(of: model.stage) { old, new in
             if new == .destination, old != .destination { validate() }
         }
@@ -650,8 +650,8 @@ struct SendStages: View {
                     HStack(spacing: Space.xs) {
                         AppPasteButton { text in
                             let reading = PaymentURI.read(text)
-                            // A frase ou a chave colada sai tambem da area de transferencia, pela mesma regra do Android (revisao dos 3
-                            // agentes, 09/11/2026).
+                            // A frase ou a chave colada sai tambem da area de transferencia, pela mesma regra do Android (revisao de
+                            // seguranca, 09/11/2026).
                             if PrivateKeyGuard.clipboardHasSecret(text, on: model.chain) { Pasteboard.clearSecret() }
                             apply(reading)
                         }
@@ -679,8 +679,8 @@ struct SendStages: View {
                 optionalTag.id("tag-opcional")
 
                 if let lookalike = model.lookalike, let destination = model.destination, let chain = model.chain {
-                    // Parecido com nome da NEAR: o aviso e o do nome, e o desafio, o nome colado inteiro, a vista acima (revisao dos 3
-                    // agentes, 08/11/2026).
+                    // Parecido com nome da NEAR: o aviso e o do nome, e o desafio, o nome colado inteiro, a vista acima (revisao de
+                    // seguranca, 08/11/2026).
                     let wholeLookalike = model.lookalikeSegment.map { AddressPoisoning.coversAll($0, of: destination.address) } ?? false
                     Banner(kind: .caution,
                            title: wholeLookalike ? String(localized: "Nome parecido com um que você já usou") : String(localized: "Endereço parecido com um que você já usou"),
@@ -688,8 +688,8 @@ struct SendStages: View {
                                                    : String(localized: "As pontas são iguais, o meio é diferente. Golpistas mandam centavos de um endereço assim para ele aparecer no seu histórico."))
                         .padding(.top, Space.md)
                     VStack(alignment: .leading, spacing: Space.sm) {
-                        // O nome colado escondido, como no desafio escondido: a vista, quem copiasse da tela passava (revisao dos 3
-                        // agentes, 09/11/2026). O conhecido fica a vista.
+                        // O nome colado escondido, como no desafio escondido: a vista, quem copiasse da tela passava (revisao de
+                        // seguranca, 09/11/2026). O conhecido fica a vista.
                         MarkedAddress(label: String(localized: "Você colou"), address: destination.address, segment: model.lookalikeSegment,
                                       masked: wholeLookalike)
                         comparedAddress(KnownAddress.label(lookalike, chain: chain, session: session, history: model.historyRecipients), lookalike,
@@ -718,7 +718,7 @@ struct SendStages: View {
                 }
 
                 if model.lookalike == nil, let segment = model.blindSegment, model.destination != nil {
-                    // Na NEAR com nome, o trecho e o nome inteiro, com o registro (revisao dos 3 agentes, 08/11/2026).
+                    // Na NEAR com nome, o trecho e o nome inteiro, com o registro (revisao de seguranca, 08/11/2026).
                     let wholeName = AddressPoisoning.coversAll(segment, of: model.blindSource)
                     if model.everySendCheck {
                         Banner(kind: .neutral, title: String(localized: "Conferência do endereço"),
@@ -756,7 +756,7 @@ struct SendStages: View {
             // nos contatos. So a digitacao, letra a letra, espera o Continuar.
             .onChange(of: model.destinationText) { old, new in
                 // Colado pelo menu do sistema: com um segredo, a area de transferencia esvazia tambem (o campo esvazia na validacao),
-                // como no Colar do app (revisao dos 3 agentes, 09/11/2026).
+                // como no Colar do app (revisao de seguranca, 09/11/2026).
                 if new.count > old.count + 1, PrivateKeyGuard.clipboardHasSecret(new, on: model.chain) { Pasteboard.clearSecret() }
                 if AddressPoisoning.enteredWhole(from: old, to: new) { armNEAR(new) }
                 validate()
@@ -868,7 +868,7 @@ struct SendStages: View {
         model.amountText = ""
         model.sendAll = false
         // O historico era da rede de antes: zerado aqui, e nao so na leitura da nova, o nome colado nao aparece nem um quadro, e
-        // uma leitura da rede de antes que chegue depois nao vale (revisao dos 3 agentes, 09/11/2026; o trocarRede do Android
+        // uma leitura da rede de antes que chegue depois nao vale (revisao de seguranca, 09/11/2026; o trocarRede do Android
         // faz igual).
         model.historyReading?.cancel()
         model.historyChainID = nil
@@ -1096,7 +1096,7 @@ struct SendStages: View {
         guard !text.isEmpty else { return }
         // A frase (ou a chave) digitada ou colada no campo do destino sai dele na hora.
         if let message = PhraseGuard.secretMessage(text, on: chain) {
-            // A frase tambem nao fica na marca do nome da NEAR (revisao dos 3 agentes, 09/11/2026).
+            // A frase tambem nao fica na marca do nome da NEAR (revisao de seguranca, 09/11/2026).
             model.nearArmedFor = nil
             model.destinationText = ""
             model.linkProblem = (text: "", message: message)
@@ -1205,13 +1205,13 @@ struct SendStages: View {
 
     /// O endereco entrou inteiro (colar, QR, contato, Minhas carteiras): o desafio do nome da NEAR nasce na hora. Adiar ate o
     /// Continuar deixava o nome trocado a vista no campo, e o dono digitava de memoria o que o app mostrou, sem ler na fonte
-    /// (revisao dos 3 agentes, 09/11/2026).
+    /// (revisao de seguranca, 09/11/2026).
     private func armNEAR(_ text: String) {
         model.nearArmedFor = text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// O Continuar do destino. Nome da NEAR: o desafio nasce aqui, e nao na digitacao; o nome inteiro e conferido aqui, e nao ao
-    /// vivo (revisao dos 3 agentes, 09/11/2026). Sem desafio, segue direto. O `continueFromDestination` confere tudo de novo.
+    /// vivo (revisao de seguranca, 09/11/2026). Sem desafio, segue direto. O `continueFromDestination` confere tudo de novo.
     private func continueTapped() async {
         if model.nearPending {
             armNEAR(model.destinationText)
@@ -1237,7 +1237,7 @@ struct SendStages: View {
             let info = try await engine.destination(destination.address, chain: chain)
             // A consulta vale so para o destino consultado, inteiro (o X-address da XRPL e o classico da mesma conta tem o
             // mesmo endereco e tags diferentes), e so com os passos do destino ainda feitos: o campo, o colar, os contatos,
-            // a rede e uma leitura tardia do historico continuam ativos durante ela (rodada 19 dos 3 agentes, 06/11/2026).
+            // a rede e uma leitura tardia do historico continuam ativos durante ela (rodada 19 da revisao de seguranca, 06/11/2026).
             guard model.stage == .destination, model.chain?.id == chain.id, model.destination == destination,
                   model.historyLoaded, model.lookalikeCleared, tagProblem == nil,
                   !model.needsNetworkConfirmation || model.networkConfirmed else { return }
@@ -1398,7 +1398,7 @@ struct SendStages: View {
     }
 
     /// A frase ou a chave na tag, no memo ou no comentario sai do campo na hora: o comentario da TON vai a rede ja na estimativa
-    /// da taxa e, enviado, fica publico para sempre (revisao dos 3 agentes, 09/11/2026).
+    /// da taxa e, enviado, fica publico para sempre (revisao de seguranca, 09/11/2026).
     private func guardTag(_ text: String) {
         if PhraseGuard.tagHasSecret(text) {
             model.tagText = ""
@@ -1441,7 +1441,7 @@ struct SendStages: View {
                     .keyboardType(.decimalPad)
                     .focused($amountFocused)
                     // Enquanto a revisao espera o historico e monta o plano, o valor fica o do toque: as ordens abertas
-                    // ja foram conferidas com ele, e o plano e comparado com ele (rodada 19 dos 3 agentes).
+                    // ja foram conferidas com ele, e o plano e comparado com ele (rodada 19 da revisao de seguranca).
                     .disabled(model.working)
                     .fixedSize()
                 Text(holding.asset.symbol).typeStyle(.heading).foregroundStyle(Palette.inkSoft).lineLimit(1)
@@ -1615,7 +1615,7 @@ struct SendStages: View {
             amount: amount, sendAll: sendAll, feeLevel: model.feeLevel, utxoUsage: model.wallet.utxoUsage[chain.id],
             knownAddresses: session.metadata.sentTo[chain.id] ?? [],
             nonceQueue: NonceQueue.queue(session, wallet: model.wallet.id, chain: chain, address: account.address),
-            // Redes UTXO: as moedas de um envio que a rede disse nao conhecer entram de novo (rodada dos 3 agentes de 19/11/2026).
+            // Redes UTXO: as moedas de um envio que a rede disse nao conhecer entram de novo (rodada da revisao de seguranca de 19/11/2026).
             unsureCoins: UnsureSends.coinsToSpend(in: session.metadata.unsureSends ?? [], wallet: model.wallet.id, chainID: chain.id,
                                                   address: account.address)
         )
@@ -2149,7 +2149,7 @@ struct SendStages: View {
         }
         session.metadata.activityFetched?[walletID]?[chain.id] = nil
         // So a carteira que esta na tela, e so esta rede: com outra escolhida, ler a que enviou punha o historico dela na
-        // Atividade da outra, e ligava as duas para quem ve a rede (revisao dos 3 agentes, 08/11/2026).
+        // Atividade da outra, e ligava as duas para quem ve a rede (revisao de seguranca, 08/11/2026).
         Task {
             guard session.phase == .unlocked, let wallet = session.selectedWallet, wallet.id == walletID else { return }
             await portfolio.refreshChain(chain, wallet: wallet, session: session)
@@ -2443,7 +2443,7 @@ struct MarkedAddress: View {
         if masked, let segment, segment.start + segment.length <= address.count {
             let start = address.index(address.startIndex, offsetBy: segment.start)
             let end = address.index(start, offsetBy: segment.length)
-            // O nome inteiro escondido vai em 8 pontos fixos: um por letra diria o tamanho do colado (revisao dos 3 agentes, 08/11/2026).
+            // O nome inteiro escondido vai em 8 pontos fixos: um por letra diria o tamanho do colado (revisao de seguranca, 08/11/2026).
             let dots = AddressPoisoning.coversAll(segment, of: address) ? 8 : segment.length
             shown.replaceSubrange(start..<end, with: String(repeating: "•", count: dots))
             marked = AddressPoisoning.Segment(start: segment.start, length: dots)
@@ -2533,7 +2533,7 @@ struct CaseNote: View {
 
 /// O campo do trecho que o dono le na fonte e digita. So entra um caractere por vez, e o Colar do menu, o texto da camera e o
 /// ditado ficam de fora: colar a area de transferencia, que um programa no computador pode ter trocado, dava a resposta
-/// certa no nome inteiro de uma conta NEAR (revisao dos 3 agentes, 08/11/2026). Previsao, correcao e as ferramentas de
+/// certa no nome inteiro de uma conta NEAR (revisao de seguranca, 08/11/2026). Previsao, correcao e as ferramentas de
 /// escrita desligadas, como no campo da palavra (`WordInputField`).
 struct ChallengeTextField: UIViewRepresentable {
     @Binding var text: String
@@ -2677,7 +2677,7 @@ struct OtherIDCheck: View {
             Text(String(localized: "Para seguir, digite o número do ID que quem vai receber mostra, ou os 6 últimos caracteres do endereço, lendo onde você o copiou."))
                 .typeStyle(.note).foregroundStyle(Palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
-            // Um caractere por vez e sem Colar, como as caixas: o ID e lido na fonte (revisao dos 3 agentes, 08/11/2026). Ate 20, o maior ID.
+            // Um caractere por vez e sem Colar, como as caixas: o ID e lido na fonte (revisao de seguranca, 08/11/2026). Ate 20, o maior ID.
             ChallengeTextField(text: $check, isFocused: $focused, limit: 20, identifier: identifier,
                                placeholder: String(localized: "Número do ID"), fontSize: 16, weight: .medium)
                 .padding(Space.sm)
@@ -2711,10 +2711,10 @@ enum KnownAddress {
 /// virgula, ponto e virgula ou hifen): nunca vai para um campo de endereco, por colar,
 /// digitar ou ler QR (revisao do envio da auditoria 4, B-8).
 /// A chave privada colada (WIF, xprv, a semente da Stellar ou da XRPL, a chave da Solana) tem o mesmo destino
-/// (`PrivateKeyGuard`, revisao dos 3 agentes, 09/11/2026).
+/// (`PrivateKeyGuard`, revisao de seguranca, 09/11/2026).
 enum PhraseGuard {
     /// Tambem o pedaco da frase (seis palavras seguidas, ou unidas por ponto, que na NEAR e um nome valido e ia ao RPC), o
-    /// SeedQR digitado e os 64 hexadecimais com rotulo de chave (revisao dos 3 agentes, 09/11/2026).
+    /// SeedQR digitado e os 64 hexadecimais com rotulo de chave (revisao de seguranca, 09/11/2026).
     static func looksLikePhrase(_ text: String) -> Bool {
         PrivateKeyGuard.looksLikeSecretInAddressField(text)
     }
@@ -2742,7 +2742,7 @@ enum PhraseGuard {
     }
 
     /// O campo da tag, do memo ou do comentario com um segredo: o que vai ali fica publico na rede. A regra das 12 palavras
-    /// soltas fica so no campo do endereco: aqui ela apagava qualquer comentario comprido (revisao dos 3 agentes, 09/11/2026).
+    /// soltas fica so no campo do endereco: aqui ela apagava qualquer comentario comprido (revisao de seguranca, 09/11/2026).
     static func tagHasSecret(_ text: String) -> Bool {
         PrivateKeyGuard.publicTextHasSecret(text)
     }

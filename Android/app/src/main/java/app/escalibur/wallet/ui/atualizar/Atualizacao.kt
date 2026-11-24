@@ -140,7 +140,7 @@ object Atualizacao {
 
     /**
      * "Atualizar agora" tocado neste build nas ultimas 24 horas: a saida da obrigatoria continua depois de o sistema fechar o
-     * app com a Play na frente, comum em celular com pouca memoria (revisao dos 3 agentes de 07/11/2026). O arquivo so
+     * app com a Play na frente, comum em celular com pouca memoria (revisao de seguranca de 07/11/2026). O arquivo so
      * libera o deslizar que o toque ja liberaria; fica na pasta sem backup.
      */
     private fun arquivoDaTentativa(contexto: Context) = java.io.File(contexto.noBackupFilesDir, "atualizacao-tentou")

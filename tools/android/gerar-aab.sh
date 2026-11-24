@@ -19,7 +19,7 @@ set -euo pipefail
 # hooks. CDPATH, as variaveis do Perl, do compilador e do Java ficam todas de fora.
 # O git, o Python, o swift e o xcodebuild de /usr/bin escolhem o programa de verdade pelo cache do xcrun, que fica
 # na pasta temporaria do usuario: cada script comeca com um cache novo e vazio (xcrun_db), resolvido de novo pelo Xcode,
-# que e do root (checagem final de 16/11/2026, rodada 3 dos 3 agentes).
+# que e do root (checagem final de 16/11/2026, rodada 3 da revisao de seguranca).
 case "$-" in *p*) ;; *) _sem_p=; : "${_sem_p:?rode pelo caminho do script, e nao por bash script}" ;; esac
 casa=$(/usr/bin/dscl . -read "/Users/$(/usr/bin/id -un)" NFSHomeDirectory | /usr/bin/sed -n 's/^NFSHomeDirectory: //p')
 limpo=true
@@ -130,7 +130,7 @@ PY
     # verification-metadata. Nada do ~/.gradle nem do ~/.android entra (nem distribuicao extraida, nem cache, nem
     # transformacao, nem jar de lint). Aqui, logo antes do Gradle, e nao no comeco: o testar-nucleo.sh e o
     # compilar-nucleo.sh rodam o adb e o toolchain Swift, e o que eles mudassem no JDK, no SDK ou na copia limpa passaria
-    # por uma conferencia feita antes (revisao dos 3 agentes da checagem final). A copia limpa e conferida de novo, e o
+    # por uma conferencia feita antes (revisao de seguranca da checagem final). A copia limpa e conferida de novo, e o
     # sdk.dir gravado agora.
     /usr/bin/codesign --verify --deep --strict \
         -R='identifier "net.java.openjdk.jdk" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "JCDTMS22B4"' \
@@ -139,7 +139,7 @@ PY
         && [ "$(arvore "$ANDROID_HOME/platforms/android-37.0")" = 79a0343c9b1f159b66e28adad51838ef22cc9ac47570cb3fe42a2f0ff56400eb ] \
         && [ "$(arvore "$ANDROID_HOME/build-tools/36.0.0")" = a74275b60c4b098b13049d9c3fa17d1afa5f0e23ca9f354f05a42e8c670f6790 ] \
         || { echo "o JDK, a plataforma ou o build-tools do SDK nao sao os conferidos (selo ou digesto da arvore): nada foi montado" >&2; exit 1; }
-    # Tambem o que o git ignora (rodada 3 dos 3 agentes): sem historico nem saida de build do Gradle plantados (apagados
+    # Tambem o que o git ignora (rodada 3 da revisao de seguranca): sem historico nem saida de build do Gradle plantados (apagados
     # aqui), e so as pastas que os vetores e o nucleo deixam, com os dois .so no jniLibs e nada mais.
     /bin/rm -rf Android/.gradle Android/.kotlin Android/build Android/app/build
     [ -z "$(git status --porcelain=v1 --untracked-files=all)" ] \
@@ -156,7 +156,7 @@ PY
     export ESCALIBUR_UPLOAD_SENHA
     # Sem o cache de configuracao (ele guardaria a senha da chave em disco, dentro de Android/.gradle) e sem
     # daemon (um daemon que sobra, se o build falhar, guardaria a senha no ambiente por horas). O compilador do Kotlin
-    # dentro do proprio Gradle, e nao no daemon dele, que herdaria a senha e ficaria ate 2 h ocioso (revisao dos 3 agentes
+    # dentro do proprio Gradle, e nao no daemon dele, que herdaria a senha e ficaria ate 2 h ocioso (revisao de seguranca
     # da checagem final de 16/11/2026).
     (cd "$aqui/Android" && ./gradlew -q --no-daemon --no-configuration-cache --dependency-verification strict -Pkotlin.compiler.execution.strategy=in-process -PcommitDeOrigem="$commit" -ParvoreDeOrigem="$arvore" bundleRelease assembleRelease)
     unset ESCALIBUR_UPLOAD_SENHA GRADLE_USER_HOME ANDROID_USER_HOME
@@ -174,7 +174,7 @@ PY
         grep -rqaF -- "$valor" "$dex/aab" || { echo "o AAB nao leva $valor" >&2; exit 1; }
     done
     # O nucleo e a libc++ que entraram no APK e no AAB sao os do carimbo do compilar-nucleo.sh, byte a byte: nada no
-    # Gradle trocou o .so depois da conferencia (o strip fica desligado no build.gradle.kts; revisao dos 3 agentes da
+    # Gradle trocou o .so depois da conferencia (o strip fica desligado no build.gradle.kts; revisao de seguranca da
     # checagem final de 16/11/2026).
     local carimbo_modo carimbo_commit carimbo_nucleo carimbo_libcxx biblioteca
     read -r carimbo_modo carimbo_commit carimbo_nucleo carimbo_libcxx < build/android-kit/origem-do-nucleo.txt
@@ -187,8 +187,23 @@ PY
             && [ "$(shasum -a 256 "$biblioteca/libc++_shared.so" | cut -d' ' -f1)" = "$carimbo_libcxx" ] \
             || { echo "o nucleo ou a libc++ no pacote nao sao os do carimbo: nada foi entregue" >&2; exit 1; }
     done
+    # E nenhuma biblioteca nativa a mais (auditoria de 23/11/2026): os .so do APK e do AAB sao exatamente o nucleo, a libc++
+    # e os tres das bibliotecas do androidx (o graphics-path do Compose e os dois do CameraX, conferidos pelo
+    # verification-metadata.xml), so em arm64-v8a. Um .so em outra ABI, outra pasta ou outro modulo nao passa.
+    local libs_esperadas="arm64-v8a/libEscaliburAndroid.so arm64-v8a/libandroidx.graphics.path.so arm64-v8a/libc++_shared.so arm64-v8a/libimage_processing_util_jni.so arm64-v8a/libsurface_util_jni.so"
+    # shellcheck disable=SC2086
+    [ "$(unzip -Z1 "$apk" | grep -E '^lib/|\.so$' | LC_ALL=C sort | tr '\n' ' ')" = "$(printf 'lib/%s ' $libs_esperadas)" ] \
+        && [ "$(unzip -Z1 "$aab" | grep -E '^base/lib/|\.so$' | LC_ALL=C sort | tr '\n' ' ')" = "$(printf 'base/lib/%s ' $libs_esperadas)" ] \
+        || { echo "biblioteca nativa a mais ou fora do lugar no APK ou no AAB: nada foi entregue" >&2; exit 1; }
+    # O bytecode do app, e nao o texto do Kotlin (auditoria de 23/11/2026): nenhuma classe do app abre conexao fora do Rede,
+    # carrega codigo, executa programa, usa reflexao, manda dado a outro app ou chama o Rede. O R8 renomeia e funde as
+    # classes do app com as das bibliotecas, e no pacote o nome nao diz de quem e a classe: a conferencia le a entrada do R8
+    # deste build (as classes do release que o Kotlin e o Java compilaram, pelo d8 do build-tools conferido acima), e o
+    # dexdump le inteiros os dex do APK e do AAB (base/dex/).
+    ./tools/verificar.sh --dex-loja "$dex/apk" "$dex/aab" \
+        || { echo "o bytecode do app chama o que nao pode (veja acima): nada foi entregue" >&2; exit 1; }
     rm -rf "$dex"
-    # Numa pasta nova fora do repositorio, e nao na pasta de trabalho, que outra sessao edita (setima passada).
+    # Numa pasta nova fora do repositorio, e nao na pasta de trabalho, que outro trabalho em paralelo edita (setima passada).
     local saida
     saida=$(mktemp -d "/private/tmp/escalibur-aab-$versao-$build.XXXXXX")
     mkdir -p "$saida"

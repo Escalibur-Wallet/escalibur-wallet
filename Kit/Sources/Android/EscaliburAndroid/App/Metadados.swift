@@ -159,8 +159,8 @@ extension Array where Element == WalletMeta {
     }
 
     /// Como o endereco esta gravado em cada carteira deste aparelho com a mesma conta (`Address.canonicalRecipient`; numa EVM, em
-    /// qualquer EVM), mais ele mesmo: a copia da TON so de observacao em EQ ou crua sai junto com a marca (revisao dos tres
-    /// agentes de 15/11/2026), como o `addressForms` do iOS.
+    /// qualquer EVM), mais ele mesmo: a copia da TON so de observacao em EQ ou crua sai junto com a marca (revisao de
+    /// seguranca de 15/11/2026), como o `addressForms` do iOS.
     func formas(de endereco: String, on chain: Chain) -> Set<String> {
         guard let alvo = Address.canonicalRecipient(endereco, chain: chain) else { return [endereco] }
         var saida: Set<String> = [endereco]

@@ -300,7 +300,7 @@ struct AddressPoisoningTests {
         #expect(AddressPoisoning.lookalike(String(repeating: "7", count: 60) + "5c3e", among: [implicit], chain: .near) == nil)
         #expect(AddressPoisoning.lookalike("2b9f" + String(repeating: "0", count: 56) + "c3e1", among: ["2b9f" + String(repeating: "d", count: 56) + "c3e1"], chain: .near) != nil)
         // Nome parecido continua parecido pelas duas pontas do nome; o mesmo nome em outro
-        // registro tambem, e o desafio pede o nome colado inteiro, com o registro (revisao dos 3 agentes, 08/11/2026).
+        // registro tambem, e o desafio pede o nome colado inteiro, com o registro (revisao de seguranca, 08/11/2026).
         #expect(AddressPoisoning.lookalike("alice-wellet.near", among: ["alice-wallet.near"], chain: .near) == "alice-wallet.near")
         #expect(AddressPoisoning.lookalike("binance-hot-wallet.tg", among: ["binance-hot-wallet.near"], chain: .near) == "binance-hot-wallet.near")
         let segment = AddressPoisoning.differingSegment("binance-hot-wallet.tg", from: "binance-hot-wallet.near", chain: .near)

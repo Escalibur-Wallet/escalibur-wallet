@@ -924,7 +924,7 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
     // O arquivo sendo lido (ate o prazo do `LeitorDeEnvelope`): o botao gira e nao aceita outro toque.
     var lendo by remember { mutableStateOf(false) }
     // O arquivo da tela chegou de outro app, e nao do seletor: a faixa vale por arquivo. O que o dono escolhe depois, no
-    // seletor, nao leva a faixa nem o "Veio de" do app anterior (revisao dos 3 agentes, 17/11/2026).
+    // seletor, nao leva a faixa nem o "Veio de" do app anterior (revisao de seguranca, 17/11/2026).
     var veioDeFora by remember { mutableStateOf(false) }
     var palavras by remember { mutableStateOf(12) }
     // Super Security em "Bloquear as carteiras": importar recusa antes da senha; so ver as palavras continua (como no iOS).
@@ -1164,7 +1164,7 @@ fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancela
                          textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = Espaco.md))
                     // O envelope veio de outro app (auditoria Android de 31/10/2026, AA-10): o golpe do "envelope pronto"
                     // e abrir a Escalibur ja nesta tela com um envelope do golpista, e convencer o dono a importa-lo. Antes do
-                    // campo: embaixo dele, o teclado cobria a faixa na hora de digitar a senha (revisao dos 3 agentes, 17/11/2026).
+                    // campo: embaixo dele, o teclado cobria a faixa na hora de digitar a senha (revisao de seguranca, 17/11/2026).
                     if (veioDeFora) {
                         Faixa(TipoDeFaixa.cautela, t("Este envelope veio de outro app"),
                               mensagem = t("Veio de %@. Só abra e importe se foi você que lacrou este envelope: um envelope feito por outra pessoa abre uma carteira que ela controla.",

@@ -370,7 +370,7 @@ fun CopiarEndereco(carteira: Carteira, aoFechar: () -> Unit) {
     // "todas as redes EVM" sai, e o Receber de cada rede diz qual recebe (auditoria 8, 14/11/2026), como no iOS.
     // So o que copia agora: a rede ja lida para outra chave no controle, e nenhum endereco que outra carteira deste celular tem
     // marcado (pedido do dono, 15/11/2026, a forma mais segura), como no iOS. O toque confere de novo no nucleo.
-    // So as redes ligadas: a desligada nao e conferida, e seguraria para sempre a linha das EVM (revisao dos tres agentes de
+    // So as redes ligadas: a desligada nao e conferida, e seguraria para sempre a linha das EVM (revisao de seguranca de
     // 15/11/2026), como no iOS.
     val desligadas = App.estado.redesDesligadas
     val todasEvm = redes.filter { it.familia == "evm" && carteira.endereco(it.id) != null && it.id !in desligadas }

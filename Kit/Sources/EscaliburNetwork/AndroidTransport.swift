@@ -73,6 +73,15 @@ public enum AndroidTransport {
 
     public static var isInstalled: Bool { lock.withLock { installed != nil } }
 
+    /// A regra do HTTPClient (`HTTPClient.permits`: https, host do hosts.lock, a porta e o caminho
+    /// do host), sem usuario nem senha no endereco, para o transporte do app conferir de novo na
+    /// saida o que chegar a ele por outro caminho (auditoria de 23/11/2026). So consulta: a lista
+    /// continua fechada neste modulo.
+    public static func permits(_ address: String) -> Bool {
+        guard let url = URL(string: address), url.user == nil, url.password == nil else { return false }
+        return HTTPClient.permits(url, allowedHosts: AllowedHosts.all)
+    }
+
     static var current: Functions? { lock.withLock { installed } }
 
     static func nextID() -> Int64 {

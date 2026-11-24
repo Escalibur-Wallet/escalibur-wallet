@@ -20,6 +20,9 @@ final class Saldos: @unchecked Sendable {
         /// O id do grafico: o da lista conferida ou, no token reconhecido, o que o CoinGecko deu
         /// ao contrato (o grafico do iOS para reconhecido, MarketChartSection).
         let grafico: String?
+        /// A logo embarcada da linha: a da moeda da lista ou, no reconhecido, a da moeda que ele e, so quando a lista
+        /// embarcada tem esse contrato para esse id (`CoinList.confirms`). Sem isso, as letras.
+        let logo: String?
         let estavel: Bool
         let posicoes: [Posicao]
         let preco: Double?
@@ -118,7 +121,7 @@ final class Saldos: @unchecked Sendable {
     }
 
     /// Tira dos mapas o convertido que passou do prazo: com as fontes fora, ele sumia so do `preco`, e os totais e as
-    /// linhas ainda o mostravam (revisao dos 3 agentes de 05/11/2026). Chamar com a trava.
+    /// linhas ainda o mostravam (revisao de seguranca de 05/11/2026). Chamar com a trava.
     private func purgarConvertidasVencidas() {
         let agora = Date()
         for chave in convertidas.keys where !noPrazo(chave, agora) {
@@ -642,7 +645,11 @@ final class Saldos: @unchecked Sendable {
         let reconhecidas = ordemReconhecidos.compactMap { chave -> Linha? in
             guard let (identidade, itens) = grupos[chave] else { return nil }
             let cotada = itens.first { $0.1 != nil }?.1
-            return linha(id: chave, simbolo: identidade.symbol, nome: identidade.name, coingecko: nil, grafico: identidade.coingeckoID, estavel: false,
+            let confirmada = Receber.lista().map { lista in
+                !itens.isEmpty && itens.allSatisfy { lista.confirms(id: identidade.coingeckoID, asset: $0.0.asset) }
+            } ?? false
+            return linha(id: chave, simbolo: identidade.symbol, nome: identidade.name, coingecko: nil, grafico: identidade.coingeckoID,
+                         logo: confirmada ? identidade.coingeckoID : nil, estavel: false,
                          itens: itens.map { Holding(asset: $0.0.asset, amount: $0.0.amount) }, cotacao: cotada, reconhecido: true)
         }
         let todas = (conferidas + reconhecidas).sorted { ($0.valor ?? 0) > ($1.valor ?? 0) }
@@ -668,14 +675,14 @@ final class Saldos: @unchecked Sendable {
         )
     }
 
-    private func linha(id: String, simbolo: String, nome: String, coingecko: String?, grafico: String? = nil, estavel: Bool, itens: [Holding],
-                       cotacao: Quote?, reconhecido: Bool) -> Linha {
+    private func linha(id: String, simbolo: String, nome: String, coingecko: String?, grafico: String? = nil, logo: String? = nil, estavel: Bool,
+                       itens: [Holding], cotacao: Quote?, reconhecido: Bool) -> Linha {
         let casas = itens.map(\.asset.decimals).max() ?? 0
         let total = itens.reduce(BigUInt()) { $0 + $1.amount * BigUInt.power(of: 10, casas - $1.asset.decimals) }
         let valor = cotacao.map { cotacao in itens.reduce(0.0) { $0 + Self.decimal($1.amount, casas: $1.asset.decimals) * cotacao.price } }
         let primeiro = itens.first?.asset
         return Linha(
-            id: id, simbolo: simbolo, nome: nome, coingecko: coingecko, grafico: grafico ?? coingecko, estavel: estavel,
+            id: id, simbolo: simbolo, nome: nome, coingecko: coingecko, grafico: grafico ?? coingecko, logo: logo ?? coingecko, estavel: estavel,
             posicoes: itens.map { item in
                 let disponivel = item.asset.chain.flatMap { saldos[$0.id] }.map { $0.available(item) } ?? item.amount
                 return Posicao(rede: item.asset.chainID, redeNome: item.asset.chain?.name ?? item.asset.chainID, ativo: item.asset.id,

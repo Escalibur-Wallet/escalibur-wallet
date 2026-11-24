@@ -1,6 +1,6 @@
 # Escalibur Wallet: sistema visual v1
 
-Especificação do agente de UI, 2026-09-25. Fonte da verdade para `App/Design/`.
+Especificação de UI, 2026-09-25. Fonte da verdade para `App/Design/`.
 Herda do Escalibur: fundo, superfícies, tinta, laca branca, escala de espaço, raios 12/14/28,
 alturas de botão, botão sem `.disabled()` com estado desligado opaco, filamento de foco.
 

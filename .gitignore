@@ -8,6 +8,7 @@ xcuserdata/
 .swiftpm/
 Kit/.swiftpm/
 
-# Copias de trabalho dos agentes do Claude Code (git worktree).
+# Copias de trabalho locais (git worktree).
 .claude/worktrees/
 .wrangler/
+CLAUDE.md

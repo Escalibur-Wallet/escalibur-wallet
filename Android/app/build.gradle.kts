@@ -80,7 +80,7 @@ android {
         // direto dele), e o .so do nucleo ja vem sem simbolos de depuracao.
         // Sem strip: o AGP rodaria o llvm-strip de um NDK da pasta do SDK, que ninguem confere, sobre o nucleo e a
         // libc++, que ja saem enxutos do NDK r30 conferido; o gerar-aab.sh confere os dois no pacote pelo carimbo
-        // (revisao dos 3 agentes da checagem final de 16/11/2026).
+        // (revisao de seguranca da checagem final de 16/11/2026).
         jniLibs { useLegacyPackaging = false; keepDebugSymbols += "**/*.so" }
     }
 

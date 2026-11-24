@@ -217,7 +217,7 @@ struct PolkadotReaderTests {
         #expect(try await reader.status(of: "0x" + String(repeating: "cd", count: 32)) == .notFound)
     }
 
-    @Test("Acompanhamento: fora da era sem aparecer, venceu; o sidecar diz falha, falhou")
+    @Test("Acompanhamento: fora da era sem aparecer, venceu; o sidecar diz falha, fica pendente (fonte unica)")
     func statusExpiredAndFailed() async throws {
         let reader = PolkadotRecorded.reader(PolkadotRecorded.transport())
         let missing = "0x" + String(repeating: "cd", count: 32)
@@ -232,7 +232,10 @@ struct PolkadotReaderTests {
         let failing = PolkadotRecorded.transport(first: [{ request, _ in request.url.host == "sidecar.test" ? flipped : nil }])
         let reader2 = PolkadotRecorded.reader(failing)
         await reader2.track(PolkadotRecorded.signedID, birth: PolkadotRecorded.transferBlock - 1, death: PolkadotRecorded.transferBlock + 100)
-        #expect(try await reader2.status(of: PolkadotRecorded.signedID) == .failed(reason: "dispatch"))
+        // So o sidecar diz que falhou: nunca `.failed`, que a tela mostraria como "falhou" e convidaria a reenviar.
+        #expect(try await reader2.status(of: PolkadotRecorded.signedID) == .pending)
+        #expect(await reader2.unproven(PolkadotRecorded.signedID))
+        #expect(await !reader.unproven(missing))
         #expect(throws: ReaderError.responseMismatch(field: "sidecar.hash")) {
             try PolkadotReader.parseSidecarSuccess(Data(recorded.utf8), index: 3, id: PolkadotRecorded.signedID)
         }

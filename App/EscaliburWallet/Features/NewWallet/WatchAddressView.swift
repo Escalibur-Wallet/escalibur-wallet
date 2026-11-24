@@ -91,8 +91,8 @@ struct WatchAddressView: View {
                 .submitLabel(.next)
                 .onSubmit { focus = .name }
                 .accessibilityIdentifier("campo-endereco")
-                // Digitada ou colada pelo menu do campo, a frase ou a chave sai na hora, como no botao Colar (revisao dos 3
-                // agentes, 09/11/2026).
+                // Digitada ou colada pelo menu do campo, a frase ou a chave sai na hora, como no botao Colar (revisao de
+                // seguranca, 09/11/2026).
                 .onChange(of: address) { old, new in
                     let text = new.trimmingCharacters(in: .whitespacesAndNewlines)
                     // Colado pelo menu do sistema: com um segredo, a area de transferencia esvazia tambem.

@@ -81,7 +81,7 @@ struct SupportView: View {
     @FocusState private var writing: Bool
 
     /// A chave, a frase ou um pedaco dela, e no texto os hexadecimais longos (`PrivateKeyGuard.supportSecret`): o chamado nao sai
-    /// (revisao dos 3 agentes, 09/11/2026). A conta roda fora da linha principal, depois de uma pausa curta na digitacao, e de
+    /// (revisao de seguranca, 09/11/2026). A conta roda fora da linha principal, depois de uma pausa curta na digitacao, e de
     /// novo no Enviar; ate ela chegar, o Enviar espera.
     @State private var secret: PrivateKeyGuard.FreeTextSecret = .none
     @State private var checkedFor: String?
@@ -271,7 +271,7 @@ struct SupportView: View {
             }
         }
         .background(Palette.void.ignoresSafeArea())
-        // O texto mudou: o "Copiar o chamado" de antes sai, e volta so pelo Enviar, que confere de novo (revisao dos 3 agentes).
+        // O texto mudou: o "Copiar o chamado" de antes sai, e volta so pelo Enviar, que confere de novo (revisao de seguranca).
         .onChange(of: details) { _, new in
             if new.count > Self.fieldLimit { details = String(new.prefix(Self.fieldLimit)) }
             noMailApp = false

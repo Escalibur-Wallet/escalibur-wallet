@@ -88,7 +88,7 @@ public enum TONPlanError: Error, Equatable, Sendable {
     /// comentario como memo nao reconhece "123 " como "123".
     case commentHasSurroundingSpaces
     /// O comentario tem uma frase ou uma chave de carteira: ele vai a rede ja na estimativa da taxa e, enviado, fica publico
-    /// para sempre (revisao dos 3 agentes, 09/11/2026).
+    /// para sempre (revisao de seguranca, 09/11/2026).
     case commentHasSecret
     /// Caminho com indice nao endurecido: Ed25519 (SLIP-10) nao deriva.
     case invalidPath

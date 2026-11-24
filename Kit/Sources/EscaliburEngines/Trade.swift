@@ -92,7 +92,7 @@ public struct TradeQuote: Sendable, Equatable {
     /// plano recusa sem esse aceite (pedido do dono, 05/11/2026).
     public let unanchored: Bool
     /// Sem comparacao e com uma fonte so (as diretas, que saem do mesmo RPC, contam como uma): o
-    /// rotulo da rota diz "sem comparação" em vez de "o melhor entre N" (rodada 3 dos 3 agentes da
+    /// rotulo da rota diz "sem comparação" em vez de "o melhor entre N" (rodada 3 da revisao de seguranca da
     /// checagem final de 16/11/2026). Na Stellar e no XRPL, `providersCompared` ja e 1.
     public let singleSource: Bool
 

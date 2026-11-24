@@ -57,7 +57,7 @@ public actor TradeStateReader {
 
     /// Pergunta a varios provedores em paralelo e devolve as `count` primeiras respostas
     /// de fontes distintas: de operadores distintos (`operatorName`), e nao so de enderecos distintos. Dois nos do mesmo dono
-    /// (as dataseeds da BNB Chain) contavam como as duas simulacoes que conferem o calldata (revisao dos tres agentes de
+    /// (as dataseeds da BNB Chain) contavam como as duas simulacoes que conferem o calldata (revisao de seguranca de
     /// 15/11/2026).
     func collect<T: Sendable>(_ providers: [ProviderPool.Provider], count: Int, what: String,
                               _ operation: @escaping @Sendable (ProviderPool.Provider) async throws -> T) async throws -> [(String, T)] {

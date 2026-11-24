@@ -1,6 +1,6 @@
 # Convenções de código da Escalibur Wallet
 
-Vale para qualquer pessoa ou agente que escreva código neste repositório.
+Vale para qualquer pessoa que escreva código neste repositório.
 
 ## Módulos (Kit/Package.swift)
 

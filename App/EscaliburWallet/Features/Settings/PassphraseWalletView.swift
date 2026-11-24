@@ -120,7 +120,7 @@ struct PassphraseEntryView: View {
     /// O nome que o campo Nome traz; sem ele, o da carteira das palavras com "com passphrase".
     var suggestedName: String? = nil
     /// Importando: abre a carteira com passphrase das palavras na memoria (`addImportedPassphraseWallet`), sem a
-    /// carteira das palavras no cofre (revisao dos 3 agentes, 08/11/2026).
+    /// carteira das palavras no cofre (revisao de seguranca, 08/11/2026).
     var opening: ((SecureBytes, String, Credential) async throws -> WalletMeta)? = nil
 
     /// Importando, a passphrase com caractere invisivel abre so depois de o dono dizer que ela e de outra carteira: uma nova
@@ -421,7 +421,7 @@ struct PassphraseUsageView: View {
             .padding(.top, Space.md)
             .animation(Motion.fade, value: phase)
             // Sem movimento, a impressao digital para conferir com a carteira onde a passphrase ja era usada: a previa
-            // da importacao mostrava a da carteira com passphrase antes de 08/11/2026 (revisao dos 3 agentes).
+            // da importacao mostrava a da carteira com passphrase antes de 08/11/2026 (revisao de seguranca).
             if phase != .checking, phase != .foreignTron, let fingerprint = wallet.fingerprint {
                 VStack(spacing: Space.xxs) {
                     Text("Impressão digital da carteira").typeStyle(.note).foregroundStyle(Palette.inkSoft)

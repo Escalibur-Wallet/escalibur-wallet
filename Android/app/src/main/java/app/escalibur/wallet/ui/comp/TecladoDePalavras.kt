@@ -314,7 +314,7 @@ class PalavraEmDigitacao {
 
     companion object {
         /** As palavras em digitacao vivas: travar as zera, com as sugestoes, que entregam a palavra (o `typed` do iOS no didLock,
-         * revisao dos 3 agentes, 08/11/2026). Ir ao fundo nao: a previa manda comparar os enderecos noutro app. */
+         * revisao de seguranca, 08/11/2026). Ir ao fundo nao: a previa manda comparar os enderecos noutro app. */
         private val ateTravar: MutableSet<PalavraEmDigitacao> = java.util.Collections.newSetFromMap(java.util.WeakHashMap())
 
         fun zerarAoTravar() {

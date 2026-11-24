@@ -60,11 +60,23 @@ struct CoinLogo: View {
         }
     }
 
-    private var bundled: UIImage? { coingeckoID.flatMap { UIImage(named: "logo-\($0)") } }
+    /// So um id no formato do CoinGecko (minusculas, numeros e hifen), como a regra do Android em `Logos.imagem`. Fora da
+    /// lista, so quando a lista embarcada confirma o contrato de `logoAsset` para esse id (`CoinList.confirms`): o id lido
+    /// na hora (busca, troca, reconhecimento) nao escolhe sozinho a logo de outra moeda (rodada 4 da revisao de seguranca).
+    private var bundled: UIImage? {
+        guard let id = coingeckoID, (1...100).contains(id.count),
+              id.unicodeScalars.allSatisfy({ ("a"..."z").contains($0) || ("0"..."9").contains($0) || $0 == "-" }) else { return nil }
+        if unverified {
+            guard let logoAsset, EmbeddedCatalog.loaded?.confirms(id: id, asset: logoAsset) == true else { return nil }
+        }
+        return UIImage(named: "logo-\(id)")
+    }
 
     @ViewBuilder
     private var base: some View {
-        if unverified {
+        // Fora da lista, so a logo que vem dentro do app (as maiores do CoinGecko, remontadas e revisadas no build por
+        // tools/catalogo/baixar-logos.py), com o contrato confirmado pela lista embarcada: nada baixado nem aberto da internet.
+        if unverified && bundled == nil {
             let letters = TokenGlyph.letters(symbol)
             Circle().fill(Palette.control)
                 .overlay {

@@ -498,8 +498,8 @@ fun LinhaDeAtivo(linha: Linha, oculto: Boolean, unidade: String, taxa: Double?, 
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.sm),
     ) {
         LogoDaMoeda(
-            linha.coingecko, linha.simbolo, 40.dp, rede = umaRede?.rede, redeCoingecko = umaRede?.let { Redes.rede(it.rede)?.coingecko },
-            quantasRedes = linha.posicoes.size, naoConferido = !linha.conferido && !linha.reconhecido,
+            linha.logo, linha.simbolo, 40.dp, rede = umaRede?.rede, redeCoingecko = umaRede?.let { Redes.rede(it.rede)?.coingecko },
+            quantasRedes = linha.posicoes.size, naoConferido = !linha.conferido && !linha.reconhecido, logoConfirmada = linha.reconhecido,
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(linha.simbolo, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)

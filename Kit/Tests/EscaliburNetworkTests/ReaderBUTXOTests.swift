@@ -476,6 +476,46 @@ struct ReaderBUTXOTests {
         await #expect(throws: ChainReaderError.broadcastRejected) { try await reader.broadcast(good) }
     }
 
+    @Test("Nenhum aceite: a transacao que um provedor ja conhece sai como aceita; sem quem conheca, recusada como antes")
+    func broadcastAlreadyKnown() async throws {
+        let signed = try Self.signed()
+        func refusingAll() -> ReaderBFakeTransport {
+            let transport = ReaderBFakeTransport()
+            // O "Transmitir de novo" de uma que ja saiu: um diz "ja esta na fila", um esgota o tempo, um sem conexao.
+            transport.on("esplora-a.test/api/tx", status: 400)
+            transport.on("esplora-b.test/api/tx") { _, _ in throw HTTPClient.Failure.timeout }
+            transport.on("esplora-c.test/api/tx") { _, _ in throw HTTPClient.Failure.offline }
+            return transport
+        }
+
+        // (1) Um conhece: recibo aceito por ele, sem erro.
+        let known = refusingAll()
+        known.on("esplora-a.test/api/tx/\(T.fundedTxid)", status: 404)
+        known.on("esplora-b.test/api/tx/\(T.fundedTxid)", text: Self.esploraTransaction(T.fundedTxid))
+        let receipt = try await UTXOReader(chain: .bitcoin, transport: known, providers: T.esploraProviders).broadcast(signed)
+        #expect(receipt.txid == T.fundedTxid)
+        #expect(receipt.acceptedBy == ["blockstream"])
+        #expect(Set(receipt.rejectedBy) == ["mempool", "emzy"])
+
+        // (2) Os dois que respondem nao conhecem (um com outro id nao conta): recusada.
+        let unknown = refusingAll()
+        unknown.on("esplora-a.test/api/tx/\(T.fundedTxid)", status: 404)
+        unknown.on("esplora-b.test/api/tx/\(T.fundedTxid)", text: Self.esploraTransaction(String(repeating: "cd", count: 32)))
+        unknown.on("esplora-c.test/api/tx/\(T.fundedTxid)", status: 404)
+        await #expect(throws: ChainReaderError.broadcastRejected) {
+            try await UTXOReader(chain: .bitcoin, transport: unknown, providers: T.esploraProviders).broadcast(signed)
+        }
+
+        // (3) A pergunta tambem falha em todos: recusada.
+        let silent = refusingAll()
+        for host in ["esplora-a.test", "esplora-b.test", "esplora-c.test"] {
+            silent.on("\(host)/api/tx/\(T.fundedTxid)") { _, _ in throw HTTPClient.Failure.offline }
+        }
+        await #expect(throws: ChainReaderError.broadcastRejected) {
+            try await UTXOReader(chain: .bitcoin, transport: silent, providers: T.esploraProviders).broadcast(signed)
+        }
+    }
+
     @Test("Dogecoin: Blockcypher em JSON, Blockchair em formulario, mesmos bytes")
     func broadcastDogecoinFormats() async throws {
         let signed = try Self.signed(chain: .dogecoin)

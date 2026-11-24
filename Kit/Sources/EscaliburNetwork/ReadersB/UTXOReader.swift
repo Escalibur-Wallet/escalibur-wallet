@@ -736,8 +736,17 @@ public struct UTXOReader: Sendable {
                 refused.append(provider.name)
             }
         }
-        guard !accepted.isEmpty else { throw ChainReaderError.broadcastRejected }
-        return UTXOBroadcastReceipt(txid: signed.id, acceptedBy: accepted, rejectedBy: refused)
+        if !accepted.isEmpty {
+            return UTXOBroadcastReceipt(txid: signed.id, acceptedBy: accepted, rejectedBy: refused)
+        }
+        // Nenhum aceite nao quer dizer que a transacao nao saiu: o "Transmitir de novo" de uma que ja saiu recebe
+        // "ja esta na fila" ou "ja esta num bloco", e o tempo esgotado tambem cai aqui. Dizer "a rede recusou" disso
+        // soltava a conta pelo registro dos envios sem resposta, e um envio novo com outras moedas pagava duas vezes
+        // (revisao de 23/11/2026). Quem conhece a transacao pela pergunta propria (`knows`) conta como aceite: um so
+        // basta, a mesma regra do aceite acima, e o acompanhamento depois e o do `status`, com a prova de bloco.
+        let knowers = (try? await knownBy(txid: signed.id))?.knowing ?? []
+        guard !knowers.isEmpty else { throw ChainReaderError.broadcastRejected }
+        return UTXOBroadcastReceipt(txid: signed.id, acceptedBy: knowers, rejectedBy: refused.filter { !knowers.contains($0) })
     }
 
     /// Onde a transacao esta, na opiniao de dois provedores de donos diferentes quando ha dois
@@ -781,17 +790,23 @@ public struct UTXOReader: Sendable {
     /// nao conhece" precisa dos dois. "Conhece" pela pergunta propria de cada provedor (`knows`): o `status` do Esplora diz
     /// "pendente" tambem de um id que ele nunca viu.
     public func knowledge(txid: String) async throws -> (answered: Int, knowing: Int) {
+        let said = try await knownBy(txid: txid)
+        return (said.answered, said.knowing.count)
+    }
+
+    /// O mesmo que `knowledge`, com o nome de quem conhece: o recibo da transmissao que nenhum provedor aceitou (`broadcast`).
+    private func knownBy(txid: String) async throws -> (answered: Int, knowing: [String]) {
         guard let id = UTXOTxID(hex: txid.lowercased()) else { throw ChainReaderError.signedTransactionInconsistent }
         let tip = try? await tipHeight()
         var answered = 0
-        var knowing = 0
+        var knowing: [String] = []
         var owners = Set<String>()
         for provider in Self.completeFirst(await pool.available()) where answered < 2 && !owners.contains(provider.operatorName) {
             do {
                 let known = try await client(provider).knows(id, tip: tip)
                 owners.insert(provider.operatorName)
                 answered += 1
-                if known { knowing += 1 }
+                if known { knowing.append(provider.name) }
                 await pool.reportSuccess(provider)
             } catch {
                 await report(provider, error)

@@ -70,7 +70,7 @@ enum Contatos {
         let pendente: Bool
         /// O desafio e o nome inteiro: conferido no toque do Salvar, e nao ao vivo.
         let nomeInteiro: Bool
-        /// O campo tem uma frase de carteira: a tela o esvazia na hora, como no envio (revisao dos 3 agentes, 09/11/2026).
+        /// O campo tem uma frase de carteira: a tela o esvazia na hora, como no envio (revisao de seguranca, 09/11/2026).
         let limpar: Bool
         /// A tag tem uma frase ou uma chave: a tela a esvazia na hora (salva, ela iria a rede em cada envio).
         let limparTag: Bool
@@ -120,7 +120,7 @@ enum Contatos {
         }
         guard let destino = c.destino else { return c }
         // Nome da NEAR: o desafio nasce no toque do Salvar, como no Continuar do envio. Digitando, cada comeco ja e conta valida, e
-        // o desafio nascia no segundo caractere (revisao dos 3 agentes, 09/11/2026). O salvar calcula sempre armado.
+        // o desafio nascia no segundo caractere (revisao de seguranca, 09/11/2026). O salvar calcula sempre armado.
         if !armado, AddressPoisoning.wholeNEARName(limpo, chain: chain) != nil {
             c.pendente = true
             return c
@@ -216,7 +216,7 @@ enum Contatos {
             credencial.zerar()
             throw Nucleo.Falha(erro: "contato.conferirMemo")
         }
-        // A tag com uma frase ou uma chave nunca e salva: ela iria a rede em cada envio (revisao dos 3 agentes, 09/11/2026).
+        // A tag com uma frase ou uma chave nunca e salva: ela iria a rede em cada envio (revisao de seguranca, 09/11/2026).
         if PrivateKeyGuard.publicTextHasSecret(tag) {
             credencial.zerar()
             throw Nucleo.Falha(erro: "contato.tagSegredo")

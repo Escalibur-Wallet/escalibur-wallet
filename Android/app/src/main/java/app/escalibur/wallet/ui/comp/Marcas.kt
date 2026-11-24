@@ -61,15 +61,20 @@ fun SeloDaCarteira(tamanho: Dp = 44.dp, fundo: Color = Paleta.acento, modifier: 
 /** Os logos embarcados (assets/logos, os mesmos do iOS), lidos uma vez cada. */
 object Logos {
     private val cache = LruCache<String, ImageBitmap>(160)
-    private val ausentes = mutableSetOf<String>()
+    /** Os nomes que nao estao no pacote, com limite: ids da busca e dos avisos nao crescem a lista sem fim. */
+    private val ausentes = LruCache<String, Unit>(512)
+
+    /** "logo-<id do CoinGecko>", "rede-<rede>" ou "provedor-<nome>": so minusculas, numeros e hifen, nada de barra nem ponto no caminho. */
+    private val nomeValido = Regex("(logo|rede|provedor)-[a-z0-9-]{1,100}")
 
     fun imagem(contexto: Context, nome: String): ImageBitmap? {
+        if (!nomeValido.matches(nome)) return null
         cache.get(nome)?.let { return it }
-        if (nome in ausentes) return null
+        if (ausentes.get(nome) != null) return null
         val imagem = listOf("png", "jpg").firstNotNullOfOrNull { extensao ->
             runCatching { contexto.assets.open("logos/$nome.$extensao").use { BitmapFactory.decodeStream(it)?.asImageBitmap() } }.getOrNull()
         }
-        if (imagem == null) ausentes += nome else cache.put(nome, imagem)
+        if (imagem == null) ausentes.put(nome, Unit) else cache.put(nome, imagem)
         return imagem
     }
 
@@ -82,16 +87,22 @@ object Logos {
 /**
  * O logo de uma moeda, com o selo da rede quando o ativo nao esta na rede nativa dele (USDC na Base
  * leva selo; ETH na Ethereum nao), ou a contagem de redes. Token fora da lista nunca usa o logo que
- * ele mesmo declara: so as letras.
+ * ele mesmo declara: so o que vem dentro do app (as maiores do CoinGecko, tools/catalogo/baixar-logos.py), com o id ja
+ * conferido pelo nucleo contra a lista embarcada (`logoConfirmada`), ou as letras. Nada e baixado nem aberto da internet.
  */
 @Composable
 fun LogoDaMoeda(
     coingecko: String?, simbolo: String = "", tamanho: Dp = 40.dp, modifier: Modifier = Modifier,
     rede: String? = null, redeCoingecko: String? = null, quantasRedes: Int = 1, anel: Color = Paleta.vazio,
     naoConferido: Boolean = false,
+    /** O id ja foi conferido pelo nucleo contra a lista embarcada (`CoinList.confirms`): a linha reconhecida da Carteira. */
+    logoConfirmada: Boolean = false,
 ) {
     val contexto = LocalContext.current
-    val imagem = remember(coingecko) { if (naoConferido || coingecko == null) null else Logos.imagem(contexto, "logo-$coingecko") }
+    // Fora da lista, so com o id conferido pelo nucleo: o id lido na hora nao escolhe a logo de outra moeda (rodada 4).
+    val imagem = remember(coingecko, naoConferido, logoConfirmada) {
+        if (naoConferido && !logoConfirmada) null else coingecko?.let { Logos.imagem(contexto, "logo-$it") }
+    }
     Box(modifier.size(tamanho)) {
         when {
             imagem != null && coingecko in Logos.soltos -> Box(

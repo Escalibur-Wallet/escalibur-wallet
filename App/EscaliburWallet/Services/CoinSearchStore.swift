@@ -45,7 +45,7 @@ final class CoinSearchStore {
     }
 
     /// O texto que pode ser um segredo, com a resposta da lista embarcada: um lugar so, que a proxima busca troca e o travar
-    /// apaga. No dicionario, ele ficava ate o app fechar (revisao dos 3 agentes, 09/11/2026).
+    /// apaga. No dicionario, ele ficava ate o app fechar (revisao de seguranca, 09/11/2026).
     private var barred: (key: String, status: Status)?
     private var lockObserver: NSObjectProtocol?
 
@@ -75,7 +75,7 @@ final class CoinSearchStore {
     func search(_ query: String) async {
         let key = Self.key(query)
         guard key.count >= 2 else { return }
-        // A chave privada colada na busca tambem nao vai ao CoinGecko, e nada dela fica guardado (revisao dos 3 agentes,
+        // A chave privada colada na busca tambem nao vai ao CoinGecko, e nada dela fica guardado (revisao de seguranca,
         // 09/11/2026). O `CoinCatalog.search` tem a porta de novo, para as duas plataformas.
         if Self.looksLikePhrase(key) || PrivateKeyGuard.looksLikePrivateKey(query) { return }
         // O que pode ser um segredo (um pedaco longo, 64 hexadecimais, o comeco de uma chave) nao sai do iPhone e nao entra no
@@ -144,11 +144,7 @@ final class CoinSearchStore {
     /// A lista embarcada, ou nil se o arquivo faltar ou nao abrir.
     private func coinList() async -> CoinList? {
         if list == nil {
-            list = Task.detached(priority: .userInitiated) {
-                guard let url = Bundle.main.url(forResource: "catalogo-moedas", withExtension: "json"),
-                      let data = try? Data(contentsOf: url) else { return nil }
-                return try? CoinList(data: data)
-            }
+            list = Task { await EmbeddedCatalog.load() }
         }
         return await list?.value
     }
@@ -217,5 +213,29 @@ final class CoinSearchStore {
                 coins[id] = shown.merged(with: fresh, addingNetworks: false)
             }
         }
+    }
+}
+
+/// A lista embarcada (catalogo-moedas.json), lida uma vez e dividida entre a busca e a carteira. A carteira so mostra a
+/// logo embarcada de um token reconhecido quando esta lista confirma o contrato dele (`CoinList.confirms`).
+/// A leitura (2,7 MB, 22 mil moedas) roda fora da linha principal; antes de ela acabar, `loaded` e nil e a logo de fora da
+/// lista fica nas letras (revisao de seguranca, 23/11/2026: o `static let` travava a tela na primeira abertura).
+@MainActor
+enum EmbeddedCatalog {
+    private(set) static var loaded: CoinList?
+    private static var loading: Task<CoinList?, Never>?
+
+    static func load() async -> CoinList? {
+        if let loaded { return loaded }
+        if loading == nil { loading = Task.detached(priority: .userInitiated) { read() } }
+        let list = await loading?.value
+        loaded = list
+        return list
+    }
+
+    nonisolated private static func read() -> CoinList? {
+        guard let url = Bundle.main.url(forResource: "catalogo-moedas", withExtension: "json"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return try? CoinList(data: data)
     }
 }

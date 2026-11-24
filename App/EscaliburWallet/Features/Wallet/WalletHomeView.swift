@@ -594,7 +594,7 @@ struct AssetRowView: View {
 
     private var logo: some View {
         CoinLogo(
-            coingeckoID: row.coingeckoID, symbol: row.symbol, size: 40,
+            coingeckoID: row.logoID, symbol: row.symbol, size: 40,
             network: row.positions.count == 1 ? row.positions.first?.asset.chain : nil,
             networkCount: row.positions.count, unverified: row.origin != nil,
             logoAsset: row.contractLogoAsset
@@ -906,7 +906,7 @@ struct CopyAddressSheet: View {
         let wallet = current
         var out = [Target]()
         var seen = Set<String>()
-        // So as redes ligadas: a desligada nao e conferida, e seguraria para sempre a linha das EVM (revisao dos tres agentes de
+        // So as redes ligadas: a desligada nao e conferida, e seguraria para sempre a linha das EVM (revisao de seguranca de
         // 15/11/2026).
         let off = session.metadata.settings.disabledChainIDs
         let evm = Chain.all.filter { $0.family == .evm && wallet.account($0) != nil && !off.contains($0.id) }

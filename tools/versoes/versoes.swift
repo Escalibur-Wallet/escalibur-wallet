@@ -293,7 +293,7 @@ func contaDaPlay(_ arquivo: URL) -> Data? {
 /// O build na Play, so lendo (abre uma edicao, le a faixa e os pacotes e descarta a edicao), com a conta de servico do
 /// tools/android/play.py. Recusa, dizendo por que: o lancamento fora de 100% (fracao ou paises), o pacote na Play que nao e o
 /// que este Mac enviou (`~/.escalibur/android/enviados.json`, gravado pelo play.py no envio) e um versionCode mais novo na
-/// Play fora dos autorizados (revisao dos 3 agentes de 07/11/2026). Aqui em Swift, e nao chamando o play.py: o Python de um
+/// Play fora dos autorizados (revisao de seguranca de 07/11/2026). Aqui em Swift, e nao chamando o play.py: o Python de um
 /// processo filho roda com `-I`, que deixa de fora o PyJWT instalado na pasta do usuario. A chave nunca e impressa.
 func conferirNaPlay(_ build: String, autorizados: Set<String>) {
     let arquivo = pasta.appendingPathComponent("android/play-api.json")
@@ -352,7 +352,7 @@ func conferirNaPlay(_ build: String, autorizados: Set<String>) {
         sair("o pacote do build \(build) na Play nao e o que este Mac enviou: e incidente, nao libere")
     }
     // Um pacote mais novo na Play que nao saiu deste Mac: os numeros sao autorizados antes de o binario existir, entao estar
-    // na lista nao basta (revisao dos 3 agentes de 07/11/2026, segunda rodada). Fora da lista tambem conta.
+    // na lista nao basta (revisao de seguranca de 07/11/2026, segunda rodada). Fora da lista tambem conta.
     let estranhos = lista.filter { pacote in
         guard let numero = codigo(pacote), numero > Int(build)! else { return false }
         guard let digesto = pacote["sha256"] as? String else { return true }
@@ -484,7 +484,7 @@ case "obrigatoria":
 
 case "liberar":
     // Depois de a Apple publicar o build do dono: so entao a tela de atualizar do app empurra para a versao. Antes, um build
-    // de terceiro com o mesmo numero diria "confirmada" (auditoria 6, A6-01; revisao dos 3 agentes de 05/11/2026).
+    // de terceiro com o mesmo numero diria "confirmada" (auditoria 6, A6-01; revisao de seguranca de 05/11/2026).
     guard argumentos.count == 4 else { sair("uso: liberar <versao> <build aprovado no App Store Connect> <id>") }
     let (versao, build, id) = (argumentos[1], argumentos[2], argumentos[3])
     let (chaves, limiar) = confiadas()

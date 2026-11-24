@@ -1,9 +1,9 @@
 import EscaliburChains
 import EscaliburCore
-import EscaliburNetwork
 import Foundation
 import Testing
 @testable import EscaliburEngines
+@testable import EscaliburNetwork
 
 /// As respostas gravadas da Polkadot Asset Hub, as mesmas dos testes do leitor
 /// (EscaliburNetworkTests/Fixtures/leitores/polkadot, `gravar.mjs`), lidas do repositorio.
@@ -47,11 +47,19 @@ enum PolkadotEngineRecorded {
     struct Transport: ReaderTransport {
         var runtime: String?
         var feeError = false
+        /// O sidecar diz que a transferencia nao saiu (`success: false`), a unica fonte do resultado.
+        var sidecarFails = false
+        /// Os nos recusam a transmissao com o codigo 1010 e este texto (o `author_submitExtrinsic` do Substrate).
+        var submitRejection: String?
 
         func send(_ request: ReaderRequest) async throws -> Data {
             let body = request.body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
             switch request.url.host ?? "" {
-            case "sidecar.test": return try data("sidecar-21172670")
+            case "sidecar.test":
+                let recorded = try data("sidecar-21172670")
+                guard sidecarFails else { return recorded }
+                let marker = "\"hash\":\"\(signedID)\",\"success\":"
+                return Data(String(decoding: recorded, as: UTF8.self).replacingOccurrences(of: marker + "true", with: marker + "false").utf8)
             case "historico.test":
                 return try data((body["query"] as? String ?? "").contains("_metadata") ? "historico-metadados" : "historico-dono")
             default: break
@@ -76,7 +84,11 @@ enum PolkadotEngineRecorded {
                 if feeError { return Data("{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32000,\"message\":\"Client error\"}}".utf8) }
                 return try data("query_info")
             case "chain_getBlock": return try data("block-21172670")
-            case "author_submitExtrinsic": return Data("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":\"\(signedID)\"}".utf8)
+            case "author_submitExtrinsic":
+                if let submitRejection {
+                    return Data("{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":1010,\"message\":\"\(submitRejection)\"}}".utf8)
+                }
+                return Data("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":\"\(signedID)\"}".utf8)
             default: throw HTTPClient.Failure.status(404)
             }
         }
@@ -210,6 +222,66 @@ struct PolkadotSendEngineTests {
                          counterparty: "149nNNZaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaZGJJ3", date: .now, status: .confirmed, fee: nil, hash: "0x02", explorerURL: nil),
         ]
         #expect(PolkadotActivitySource.entries(items, owner: PolkadotEngineRecorded.owner).last?.suspicious == true)
+    }
+
+    @Test("So o sidecar diz que a transferencia nao saiu: pendente na tela, e o envio sem resposta fica com a nota de conferir")
+    func sidecarFailureIsNotFinal() async throws {
+        #expect(String(decoding: try PolkadotEngineRecorded.data("sidecar-21172670"), as: UTF8.self)
+            .contains("\"hash\":\"\(PolkadotEngineRecorded.signedID)\",\"success\":true"))
+        let engine = PolkadotEngineRecorded.engine(PolkadotEngineRecorded.Transport(sidecarFails: true))
+        #expect(try await engine.broadcast([PolkadotEngineRecorded.signed], chain: .polkadot) == PolkadotEngineRecorded.signedID)
+        // Duas leituras: a varredura acha a transacao num bloco final, e o resultado vem do sidecar. Nunca "falhou".
+        for _ in 0..<2 {
+            #expect(await engine.status(PolkadotEngineRecorded.signedID, chain: .polkadot) == .pending)
+        }
+        #expect(await engine.reader.unproven(PolkadotEngineRecorded.signedID))
+        let record = UnsureSend(wallet: UUID(), chainID: Chain.polkadot.id, address: PolkadotEngineRecorded.owner, hash: PolkadotEngineRecorded.signedID,
+                                sentAt: Date(), asset: .native(.polkadot), amount: 5_000_000_000, recipient: PolkadotEngineRecorded.destination)
+        // A mesma nota do numero usado lido depois de reabrir o app: manda conferir, sem dizer que a transferencia nao saiu.
+        #expect(await engine.lookup(record, chain: .polkadot) == .seenUnclear(note: PolkadotEngineText.failure("nonceUsed")))
+
+        // O mesmo envio com o sidecar dizendo sucesso: confirmado, sem a marca.
+        let fine = PolkadotEngineRecorded.engine()
+        _ = try await fine.broadcast([PolkadotEngineRecorded.signed], chain: .polkadot)
+        var last = TransferStatus.pending
+        for _ in 0..<2 where last == .pending { last = await fine.status(PolkadotEngineRecorded.signedID, chain: .polkadot) }
+        #expect(last == .confirmed(detail: PolkadotEngineText.confirmed))
+        #expect(await !fine.reader.unproven(PolkadotEngineRecorded.signedID))
+    }
+
+    @Test("Numero antigo na transmissao (o \"Transmitir de novo\" da transacao que ja entrou): nunca \"nada saiu\"")
+    func outdatedRejectionIsNotNothingLeft() async throws {
+        let old = "Outra transação desta conta entrou antes. Nada saiu por esta. Confira a Atividade e envie de novo."
+        #expect(PolkadotEngineText.rejected(.nonceTooLow) == PolkadotEngineText.failure("nonceUsed"))
+        #expect(PolkadotEngineText.rejected(.nonceTooLow) != old)
+        #expect(PolkadotEngineText.rejected(.nonceTooHigh) == old)
+        #expect(PolkadotEngineText.broadcastError(ReaderError.broadcastRejected(.nonceTooLow, code: "1014"))
+            == .message(PolkadotEngineText.failure("nonceUsed")))
+        #expect(PolkadotEngineText.broadcastError(ReaderError.broadcastRejected(.nonceTooHigh, code: "1010")) == .message(old))
+        // Pelo motor, como a tela recebe: os dois nos recusam com 1010 "Transaction is outdated".
+        let engine = PolkadotEngineRecorded.engine(PolkadotEngineRecorded.Transport(submitRejection: "Invalid Transaction: Transaction is outdated"))
+        await #expect(throws: SendEngineError.message(PolkadotEngineText.failure("nonceUsed"))) {
+            _ = try await engine.broadcast([PolkadotEngineRecorded.signed], chain: .polkadot)
+        }
+        let future = PolkadotEngineRecorded.engine(PolkadotEngineRecorded.Transport(submitRejection: "Invalid Transaction: Transaction will be valid in the future"))
+        await #expect(throws: SendEngineError.message(old)) {
+            _ = try await future.broadcast([PolkadotEngineRecorded.signed], chain: .polkadot)
+        }
+    }
+
+    @Test("Acompanhamento: numero usado fica pendente, so \"venceu\" vira falha")
+    func statusFailsOnlyWhenExpired() async throws {
+        let owner = try PolkadotAddress.parse(PolkadotEngineRecorded.owner).get()
+        // O nonce gravado em storage-dono.json e 485; a era acabou 40 blocos antes do finalizado gravado (21.173.079).
+        let finalized: UInt64 = 21_173_079
+        let missing = "0x" + String(repeating: "cd", count: 32)
+        let used = PolkadotEngineRecorded.engine()
+        await used.reader.track(missing, birth: finalized - 70, death: finalized - 40, sender: owner, nonce: 484)
+        #expect(try await used.reader.status(of: missing) == .failed(reason: "nonceUsed"))
+        #expect(await used.status(missing, chain: .polkadot) == .pending)
+        let expired = PolkadotEngineRecorded.engine()
+        await expired.reader.track(missing, birth: finalized - 70, death: finalized - 40, sender: owner, nonce: 485)
+        #expect(await expired.status(missing, chain: .polkadot) == .failed(reason: PolkadotEngineText.failure("expired")))
     }
 
     @Test("Registro: envio e historico existem, troca nao")

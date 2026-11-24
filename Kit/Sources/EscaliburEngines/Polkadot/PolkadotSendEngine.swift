@@ -120,13 +120,17 @@ struct PolkadotSendEngine: SendEngine {
     }
 
     /// A transacao nos blocos finalizados. Enquanto nao aparece, ou a leitura falha,
-    /// pendente: a tela continua perguntando.
+    /// pendente: a tela continua perguntando. A falha que so o sidecar viu tambem chega
+    /// aqui como pendente (`PolkadotReader.unproven`), e o numero usado tambem: a tela nao
+    /// diz que falhou nem convida a enviar de novo com o nonce ja usado.
     func status(_ id: String, chain: Chain) async -> TransferStatus {
         guard chain.id == Chain.polkadot.id, let status = try? await reader.status(of: id) else { return .pending }
         switch status {
         case .notFound, .pending: return .pending
         case .confirmed: return .confirmed(detail: PolkadotEngineText.confirmed)
-        case .failed(let reason): return .failed(reason: PolkadotEngineText.failure(reason))
+        case .failed(let reason):
+            // So "venceu" tem prova (numero parado em dois provedores e bloco final alem da era). O numero usado nao prova falha.
+            return reason == "expired" ? .failed(reason: PolkadotEngineText.failure(reason)) : .pending
         }
     }
 
@@ -142,12 +146,16 @@ struct PolkadotSendEngine: SendEngine {
     /// existe. Ai a pergunta e pelo numero da conta num bloco final igual em dois provedores, com o que o registro guardou
     /// (`unsureContext`). So "venceu" prova que nada saiu: o numero parado e a era acabada. O numero usado quer dizer que o
     /// envio pode ter saido, e o resultado do bloco vem de uma fonte so (o sidecar): os dois deixam de segurar a conta sem
-    /// dizer "falhou", e a linha fica com o texto que manda conferir (revisao dos 3 agentes, 17/11/2026).
+    /// dizer "falhou", e a linha fica com o texto que manda conferir (revisao de seguranca, 17/11/2026).
     func lookup(_ send: UnsureSend, chain: Chain) async -> SendLookup {
         guard chain.id == Chain.polkadot.id else { return .noAnswer }
         let status: TransactionStatus
         if await reader.tracks(send.hash) {
             guard let read = try? await reader.status(of: send.hash) else { return .noAnswer }
+            // Entrou num bloco final e o sidecar diz que a transferencia nao saiu: o numero da conta foi usado e o resultado
+            // vem de uma fonte so. Deixa de segurar a conta com a mesma nota do numero usado lido pelo `context` depois de
+            // reabrir o app (o mesmo fato), que manda conferir e nao afirma que a transferencia nao saiu. Nunca "falhou".
+            if read == .pending, await reader.unproven(send.hash) { return .seenUnclear(note: PolkadotEngineText.failure("nonceUsed")) }
             status = read
         } else {
             let parts = (send.context ?? "").split(separator: "|")

@@ -2,7 +2,7 @@ import Testing
 import UIKit
 @testable import EscaliburWallet
 
-/// O campo do trecho que o dono le na fonte: um caractere por vez, sem Colar (revisao dos 3 agentes, 08/11/2026). Colar a area
+/// O campo do trecho que o dono le na fonte: um caractere por vez, sem Colar (revisao de seguranca, 08/11/2026). Colar a area
 /// de transferencia, que um programa no computador pode ter trocado, dava a resposta certa no nome inteiro de uma conta NEAR.
 @MainActor
 struct ChallengeFieldTests {

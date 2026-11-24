@@ -53,7 +53,7 @@ struct OpenEnvelopeFlow: View {
     let onClose: () -> Void
 
     /// O arquivo desta tela e o que chegou de fora, e nao um que o dono escolheu depois no seletor do app: a faixa vale por
-    /// arquivo (revisao dos 3 agentes, 17/11/2026).
+    /// arquivo (revisao de seguranca, 17/11/2026).
     @State private var loadedFromOutside = false
 
     @State private var picking = false

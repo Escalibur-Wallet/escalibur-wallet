@@ -116,7 +116,7 @@ public struct UTXOSendIntent: Sendable {
     /// Moedas de envios desta conta que a rede disse nao conhecer: de cada grupo que ainda esteja entre as moedas da conta,
     /// pelo menos uma entra, mesmo pequena, sem confirmacao ou fora da escolha a mao. Quem recebeu os bytes do envio antigo
     /// pode transmiti-los depois, e no Bitcoin a transacao nao vence: gastando a mesma moeda, so um dos dois confirma
-    /// (rodada dos 3 agentes de 19/11/2026). Grupo sem nenhuma moeda na conta ja foi gasto, e nao obriga nada.
+    /// (rodada da revisao de seguranca de 19/11/2026). Grupo sem nenhuma moeda na conta ja foi gasto, e nao obriga nada.
     public let mustSpendOneOf: [[UTXOOutpoint]]
 
     public init(

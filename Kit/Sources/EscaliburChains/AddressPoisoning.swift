@@ -49,7 +49,7 @@ public enum AddressPoisoning {
     ///
     /// `forHiding`: a triagem da Atividade, que esconde o recebimento sem como mostrar. Ali ficam de fora as regras dos nomes
     /// curtos da NEAR (o mesmo nome em outro registro, uma edicao abaixo de 8 letras): "alexa.near" mandando 50 NEAR depois de
-    /// o dono pagar "alex.near" sumia. No envio e no contato elas valem, e o custo e so digitar o nome (revisao dos 3 agentes,
+    /// o dono pagar "alex.near" sumia. No envio e no contato elas valem, e o custo e so digitar o nome (revisao de seguranca,
     /// 08/11/2026).
     public static func lookalike(_ address: String, among known: [String], chain: Chain, forHiding: Bool = false) -> String? {
         let shortNames = !forHiding
@@ -98,7 +98,7 @@ public enum AddressPoisoning {
         let shorter = min(a.count, b.count)
         if commonPrefix(a, b) >= max(nameSharedPrefix, shorter - 2) { return true }
         // Nome curto: uma edicao so ("bob" e "bod", e "b0b" pelo `visualFold`), ou o menor inteiro no comeco do maior ("alice" e
-        // "alice01", "alice-pay", "alice.nearx" de "alice.nearx.near"). Antes nada marcava abaixo de 8 letras (revisao dos 3 agentes,
+        // "alice01", "alice-pay", "alice.nearx" de "alice.nearx.near"). Antes nada marcava abaixo de 8 letras (revisao de seguranca,
         // 08/11/2026).
         if shorter < nameMinimumForEdits {
             return shortNames && (commonPrefix(a, b) == shorter || editDistance(a, b, limit: 1) <= 1)
@@ -155,7 +155,7 @@ public enum AddressPoisoning {
         init?(_ address: String, chain: Chain, shortNames: Bool) {
             text = AddressPoisoning.afterPrefix(address, chain: chain)
             // O nome da NEAR entra curto ou nao: e escolhido letra a letra e registrado por centavos, e "bob.near" ficava fora de
-            // toda comparacao (revisao dos 3 agentes, 08/11/2026). O tamanho minimo e o de endereco gerado.
+            // toda comparacao (revisao de seguranca, 08/11/2026). O tamanho minimo e o de endereco gerado.
             let named = shortNames && AddressPoisoning.wholeNEARName(address.trimmingCharacters(in: .whitespacesAndNewlines), chain: chain) != nil
             guard named || text.count >= AddressPoisoning.minimumLength else { return nil }
             body = AddressPoisoning.body(address, chain: chain)
@@ -280,13 +280,13 @@ public enum AddressPoisoning {
     /// meio do endereco. Num M da Stellar o meio ainda e a chave, igual em todo M da mesma
     /// conta, e a troca so do ID passava; ali o trecho e o fim, o ID e o checksum (revisao
     /// do B-6). Na NEAR com nome, o nome inteiro, com o registro, como no envio (`tailSegment(_:chain:)`): o meio de um nome
-    /// o golpista registra por centavos, e nome com menos de 10 caracteres ficava sem desafio (revisao dos 3 agentes, 08/11/2026).
+    /// o golpista registra por centavos, e nome com menos de 10 caracteres ficava sem desafio (revisao de seguranca, 08/11/2026).
     public static func blindSegment(_ address: String, chain: Chain, length: Int = 6) -> Segment? {
         let text = address.trimmingCharacters(in: .whitespacesAndNewlines)
         if let whole = wholeNEARName(text, chain: chain) { return whole }
         // Cardano com stake: o meio (indices 48 a 53) caia 17 bits no pagamento e 13 no stake, que o sosia escolhe de graca, e o
-        // sosia saia em segundos de CPU. Os 6 do indice 26 sao do pagamento inteiros, 30 bits como nas outras redes (revisao dos
-        // 3 agentes, 09/11/2026).
+        // sosia saia em segundos de CPU. Os 6 do indice 26 sao do pagamento inteiros, 30 bits como nas outras redes (revisao de
+        // seguranca, 09/11/2026).
         if chain.family == .cardano, case .success(let cardano) = CardanoAddress.parse(text), cardano.stakeHash != nil,
            text.count >= cardanoPaymentSegmentStart + length + 6 {
             return Segment(start: cardanoPaymentSegmentStart, length: length)
@@ -347,7 +347,7 @@ public enum AddressPoisoning {
 
     /// O fim do endereco para o desafio do envio. Na NEAR com nome, o nome inteiro, com o registro (".near", ".tg"): quem
     /// registra escolhe as letras, entao qualquer pedaco do nome sai quase de graca para o golpista, e sem o registro
-    /// "alice.near" passava no lugar de "alice.tg" (revisao dos 3 agentes, 08/11/2026).
+    /// "alice.near" passava no lugar de "alice.tg" (revisao de seguranca, 08/11/2026).
     public static func tailSegment(_ address: String, chain: Chain, length: Int = 6) -> Segment? {
         let text = address.trimmingCharacters(in: .whitespacesAndNewlines)
         if let whole = wholeNEARName(text, chain: chain) { return whole }
@@ -364,7 +364,7 @@ public enum AddressPoisoning {
     /// medido pelo comeco e pelo fim em comum, tem mais de um caractere e ponto, ou trocou caracteres, ou o resultado termina no
     /// registro ou tem 32 ou mais. Deslizar
     /// no teclado ou aceitar uma sugestao poe uma palavra sem ponto, e contar so o tamanho armava o desafio no comeco do nome;
-    /// colar por cima de um texto do mesmo tamanho nao armava (revisao dos 3 agentes, 09/11/2026).
+    /// colar por cima de um texto do mesmo tamanho nao armava (revisao de seguranca, 09/11/2026).
     public static func enteredWhole(from old: String, to new: String) -> Bool {
         let a = Array(old), b = Array(new)
         var start = 0
@@ -389,7 +389,7 @@ public enum AddressPoisoning {
 
     /// Texto que nao vale na rede escolhida mas e um nome da NEAR (a sugestao da NEAR, ou um nome fora de ".near" e ".tg"): colado
     /// inteiro, o campo fica escondido ate a troca de rede. O bech32 e o addr1 de outra rede tambem passam pela gramatica do nome,
-    /// e ficam de fora pela sugestao da rede deles (revisao dos 3 agentes, 09/11/2026).
+    /// e ficam de fora pela sugestao da rede deles (revisao de seguranca, 09/11/2026).
     public static func looksLikeNEARName(_ text: String) -> Bool {
         guard let near = Chain.all.first(where: { $0.id == "near" }), wholeNEARName(text, chain: near) != nil else { return false }
         if let guess = Address.guessChain(text) { return guess.id == near.id }
@@ -397,14 +397,14 @@ public enum AddressPoisoning {
         // como o bech32 de outra rede: um bc1 cortado fica a vista com o erro.
         if text.contains(".") { return true }
         // Hexadecimal (um 0x ou uma chave cortados, o EVM sem 0x, a Tron em hex) e bech32 de rede fora do app nao sao nome: ficam
-        // a vista com o erro (revisao dos 3 agentes, 09/11/2026).
+        // a vista com o erro (revisao de seguranca, 09/11/2026).
         if text.hasPrefix("0x") || text.allSatisfy(\.isHexDigit) || Bech32.decode(text) != nil { return false }
         return text.count >= 32 && !["bc1", "ltc1", "tb1", "addr1", "addr_test1", "stake1", "stake_test1"].contains(where: text.hasPrefix)
     }
 
     /// O texto vale como destino noutra rede (o nome da NEAR so com `looksLikeNEARName`, porque quase todo texto minusculo passa na
     /// gramatica dele): no contato a rede e livre, e o endereco da Sui, da Aptos ou a conta implicita da NEAR, que nao tem sugestao,
-    /// ficava a vista ate a troca e o desafio (revisao dos 3 agentes, 09/11/2026).
+    /// ficava a vista ate a troca e o desafio (revisao de seguranca, 09/11/2026).
     public static func validElsewhere(_ text: String, than chain: Chain) -> Bool {
         Chain.all.contains { other in
             guard other.id != chain.id, case .success = Address.validate(text, for: other) else { return false }
@@ -419,11 +419,11 @@ public enum AddressPoisoning {
     }
 
     /// O maximo que o campo do nome inteiro aceita: mais que o trecho, para quem digita o nome verdadeiro, mais comprido que o
-    /// colado, nao parar no tamanho dele e passar com o comeco (revisao dos 3 agentes, 08/11/2026).
+    /// colado, nao parar no tamanho dele e passar com o comeco (revisao de seguranca, 08/11/2026).
     public static let wholeNameLimit = NEARAccountID.maxLength
 
     /// O digitado responde o trecho de `address`: o mesmo tamanho e o mesmo texto. A caixa conta onde ela e parte do endereco
-    /// (`caseMatters`): ali, aceitar qualquer caixa barateava de 30 a 60 vezes o sosia que passa nos 6 (revisao dos 3 agentes,
+    /// (`caseMatters`): ali, aceitar qualquer caixa barateava de 30 a 60 vezes o sosia que passa nos 6 (revisao de seguranca,
     /// 08/11/2026; o dono escolheu a caixa exata). Sem rede, exata.
     public static func answers(_ typed: String, segment: Segment, of address: String, chain: Chain?) -> Bool {
         let answer = typed.trimmingCharacters(in: .whitespaces)

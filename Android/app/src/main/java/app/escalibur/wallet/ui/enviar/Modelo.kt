@@ -189,7 +189,7 @@ class ControleDoEnvio {
     /** Uma chamada "envio.*". Devolve se o nucleo aceitou. */
     suspend fun chamar(metodo: String, corpo: JSONObject = JSONObject()): Boolean = try {
         // O Continuar espera as chamadas rapidas que ja estao na fila (a ultima letra, a ultima resposta do desafio): passando na
-        // frente, armava o comeco do nome da NEAR ou dizia "nao confere" a uma resposta velha (revisao dos 3 agentes, 09/11/2026).
+        // frente, armava o comeco do nome da NEAR ou dizia "nao confere" a uma resposta velha (revisao de seguranca, 09/11/2026).
         if (metodo == "envio.continuar") fila.withLock { }
         val resposta = if (metodo in longas) Api.objeto(metodo, corpo) else fila.withLock { Api.objeto(metodo, corpo) }
         aplicar(resposta)

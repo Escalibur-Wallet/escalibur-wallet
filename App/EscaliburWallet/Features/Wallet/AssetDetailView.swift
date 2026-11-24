@@ -70,7 +70,7 @@ struct AssetDetailView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 6) {
-                    CoinLogo(coingeckoID: row.coingeckoID, symbol: row.symbol, size: 20, unverified: row.origin != nil,
+                    CoinLogo(coingeckoID: row.logoID, symbol: row.symbol, size: 20, unverified: row.origin != nil,
                              logoAsset: row.contractLogoAsset)
                     Text(verbatim: row.name).typeStyle(.action).foregroundStyle(Palette.ink)
                     if row.isCustom { TokenBadge(.custom) }

@@ -160,7 +160,7 @@ struct NewWalletFlow: View {
         // (auditoria 4, C7-11).
         .guardedAgainstCapture()
         // Travar zera a frase da carteira recem-criada na hora do aviso: suspenso, o SwiftUI so tira a tela na volta, e a frase
-        // ficava na memoria do iPhone travado (revisao dos 3 agentes, 09/11/2026; o Android zera o rascunho no travar). A carteira
+        // ficava na memoria do iPhone travado (revisao de seguranca, 09/11/2026; o Android zera o rascunho no travar). A carteira
         // ja guardada fica "Palavras nao confirmadas", como no "Confirmar depois".
         .onReceive(NotificationCenter.default.publisher(for: AppSession.didLock)) { _ in
             drawnWord = nil

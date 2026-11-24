@@ -79,7 +79,7 @@ struct ContactsView: View {
             }
             Spacer(minLength: Space.xs)
             Menu {
-                // Nunca o endereco de uma conta deste iPhone com outra chave no controle (revisao dos tres agentes de 15/11/2026).
+                // Nunca o endereco de uma conta deste iPhone com outra chave no controle (revisao de seguranca de 15/11/2026).
                 if chain.map({ session.markedOwner(of: contact.address, on: $0) == nil }) ?? true {
                     Button {
                         Pasteboard.copyAddress(contact.address)
@@ -116,7 +116,7 @@ struct AddContactSheet: View {
     /// O trecho do endereco digitado pelo dono olhando a fonte (auditoria 4, C7-07).
     @State private var check = ""
     /// Nome da NEAR: o texto cujo desafio ja nasceu, no toque do Salvar ou na entrada inteira, como no Continuar do envio
-    /// (revisao dos 3 agentes, 09/11/2026).
+    /// (revisao de seguranca, 09/11/2026).
     @State private var nearArmedFor: String?
     @State private var wholeNameMiss = false
     @State private var qrProblem: String?
@@ -231,8 +231,8 @@ struct AddContactSheet: View {
     }
 
     /// O nome da NEAR que entrou inteiro na rede errada (a sugestao da NEAR na tela): o campo fica escondido ate a troca, como com
-    /// o desafio na tela. A vista, o dono lia o nome trocado pelo tempo que quisesse e o digitava de memoria (revisao dos 3
-    /// agentes, 09/11/2026).
+    /// o desafio na tela. A vista, o dono lia o nome trocado pelo tempo que quisesse e o digitava de memoria (revisao de
+    /// seguranca, 09/11/2026).
     private var wholeEntryHidden: Bool {
         // Tambem o endereco que vale noutra rede, com ou sem sugestao (a Sui, a Aptos, a implicita da NEAR): a rede do contato e
         // livre, e depois da troca o desafio pede um trecho que estava a vista.
@@ -382,8 +382,8 @@ struct AddContactSheet: View {
                                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                                     .padding(.horizontal, Space.md).frame(height: Height.field)
                                     .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Palette.rail))
-                                    // A frase ou a chave na tag sai na hora: salva, ela iria a rede em cada envio (revisao dos 3
-                                    // agentes, 09/11/2026).
+                                    // A frase ou a chave na tag sai na hora: salva, ela iria a rede em cada envio (revisao de
+                                    // seguranca, 09/11/2026).
                                     .onChange(of: tag) { _, new in
                                         if PhraseGuard.tagHasSecret(new) {
                                             tag = ""
@@ -421,7 +421,7 @@ struct AddContactSheet: View {
             .onChange(of: trimmed) { old, new in
                 // Colado pelo menu do sistema: com um segredo, a area de transferencia esvazia tambem.
                 if new.count > old.count + 1, PrivateKeyGuard.clipboardHasSecret(new, on: chain) { Pasteboard.clearSecret() }
-                // A frase colada ou digitada no campo sai dele na hora, como no envio (revisao dos 3 agentes, 09/11/2026).
+                // A frase colada ou digitada no campo sai dele na hora, como no envio (revisao de seguranca, 09/11/2026).
                 if let message = PhraseGuard.secretMessage(new, on: chain) {
                     // A frase tambem nao fica na marca do nome da NEAR (digitada palavra a palavra, ela arma), nem na leitura do QR.
                     nearArmedFor = nil
@@ -484,7 +484,7 @@ struct AddContactSheet: View {
 
     @ViewBuilder
     private func sourceCheck(_ destination: Address.Destination, _ segment: AddressPoisoning.Segment) -> some View {
-        // Na NEAR com nome, o nome inteiro, com o registro, como no envio (revisao dos 3 agentes, 08/11/2026).
+        // Na NEAR com nome, o nome inteiro, com o registro, como no envio (revisao de seguranca, 08/11/2026).
         let wholeName = AddressPoisoning.coversAll(segment, of: lookalike == nil ? trimmed : destination.address)
         VStack(alignment: .leading, spacing: Space.sm) {
             if let lookalike {
@@ -492,7 +492,7 @@ struct AddContactSheet: View {
                        title: wholeName ? String(localized: "Nome parecido com um que você já usou") : String(localized: "Endereço parecido com um que você já usou"),
                        message: wholeName ? String(localized: "Golpistas registram por centavos nomes assim. Confira na fonte antes de salvar.")
                                           : String(localized: "As pontas são iguais, o meio é diferente. Confira na fonte antes de salvar."))
-                // O nome colado escondido, como no desafio escondido: a vista, quem copiasse da tela passava (revisao dos 3 agentes,
+                // O nome colado escondido, como no desafio escondido: a vista, quem copiasse da tela passava (revisao de seguranca,
                 // 09/11/2026). O conhecido fica a vista.
                 MarkedAddress(label: String(localized: "Você colou"), address: destination.address, segment: segment, masked: wholeName)
                 MarkedAddress(label: KnownAddress.label(lookalike, chain: chain, session: session), address: lookalike,
@@ -527,7 +527,7 @@ struct AddContactSheet: View {
             Text(String(localized: "Para seguir, digite o memo que quem vai receber mostra, lendo onde você o copiou."))
                 .typeStyle(.note).foregroundStyle(Palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
-            // Um caractere por vez e sem Colar: o memo colado pode ter sido trocado, e colar de novo respondia (revisao dos 3 agentes,
+            // Um caractere por vez e sem Colar: o memo colado pode ter sido trocado, e colar de novo respondia (revisao de seguranca,
             // 08/11/2026). Ate 20, o maior ID.
             ChallengeTextField(text: $memoCheck, isFocused: $memoFocused, limit: 20, identifier: "contato-conferir-memo",
                                placeholder: String(localized: "Memo"), fontSize: 16, weight: .medium)
@@ -548,13 +548,13 @@ struct AddContactSheet: View {
     /// na conferencia de endereco parecido. Por isso gravar pede Face ID ou PIN, como
     /// qualquer operacao que muda para onde o dinheiro pode ir.
     /// O endereco entrou inteiro (colar, QR, recentes): o desafio do nome da NEAR nasce na hora. Adiar ate o Salvar deixava o nome
-    /// trocado a vista no campo (revisao dos 3 agentes, 09/11/2026).
+    /// trocado a vista no campo (revisao de seguranca, 09/11/2026).
     private func armNEAR(_ text: String, chain: Chain) {
         // So o texto, sem a rede: colado na Bitcoin e trocado para a NEAR pela sugestao, o nome voltava a vista.
         nearArmedFor = text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Um nome (com ponto) noutra rede: o aviso diz que e um nome, e nao manda copiar de novo (revisao dos 3 agentes, 09/11/2026).
+    /// Um nome (com ponto) noutra rede: o aviso diz que e um nome, e nao manda copiar de novo (revisao de seguranca, 09/11/2026).
     private func problemMessage(_ problem: Address.Problem) -> String {
         if case .malformed = problem, AddressPoisoning.nameNotAddress(trimmed, on: chain) {
             return String(localized: "Este é um nome, não um endereço. Cole o endereço da rede \(chain.name).")
@@ -578,7 +578,7 @@ struct AddContactSheet: View {
 
     private func save() async {
         guard case .success(let destination) = validation, checked, memoConfirmed else { return }
-        // A tag com uma frase ou uma chave nunca e salva: iria a rede em cada envio (como no Android, revisao dos 3 agentes).
+        // A tag com uma frase ou uma chave nunca e salva: iria a rede em cada envio (como no Android, revisao de seguranca).
         guard !PhraseGuard.tagHasSecret(tag) else {
             tag = ""
             tagNotice = PhraseGuard.tagMessage
@@ -632,7 +632,7 @@ struct ManageAssetsView: View {
                                 }
                             )) {
                                 HStack(spacing: Space.sm) {
-                                    CoinLogo(coingeckoID: row.coingeckoID, symbol: row.symbol, size: 28, ringColor: Palette.body, unverified: row.origin != nil,
+                                    CoinLogo(coingeckoID: row.logoID, symbol: row.symbol, size: 28, ringColor: Palette.body, unverified: row.origin != nil,
                                              logoAsset: row.contractLogoAsset)
                                     Text(verbatim: row.symbol).typeStyle(.body).foregroundStyle(Palette.ink)
                                     if row.isCustom { TokenBadge(.custom) }

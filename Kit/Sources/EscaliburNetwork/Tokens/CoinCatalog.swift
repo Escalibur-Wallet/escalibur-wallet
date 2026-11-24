@@ -99,6 +99,16 @@ public struct CoinList: Sendable {
 
     public var count: Int { entries.count }
 
+    /// A lista embarcada confirma que este token e a moeda `id`: a rede dele tem exatamente esse contrato na lista. O token
+    /// reconhecido pelo CoinGecko so ganha a logo embarcada assim: uma resposta adulterada na hora nao escolhe a logo de
+    /// outra moeda, porque a lista vai dentro do app (revisao de seguranca, 23/11/2026).
+    public func confirms(id: String, asset: Asset) -> Bool {
+        guard case .token(let contract) = asset.kind, let chain = asset.chain, let shaped = CoinCatalog.shape(contract, chain: chain),
+              let network = coin(id: id)?.networks.first(where: { $0.chainID == chain.id })
+        else { return false }
+        return chain.family == .evm ? network.contract.lowercased() == shaped.lowercased() : network.contract == shaped
+    }
+
     /// A moeda com as redes em que a carteira recebe ela, ou nil se nao esta na lista (moeda
     /// listada depois do build) ou nao passa nas conferencias.
     public func coin(id: String) -> CatalogCoin? {
@@ -185,7 +195,7 @@ public enum CoinCatalog {
 
     /// A busca procura nome e simbolo, e nenhum tem um pedaco de 20 letras e algarismos seguidos, ou 16 algarismos: um texto
     /// assim e um endereco, uma chave (inteira, entre aspas, com "bitcoin:", ou o comeco dela sendo digitada) ou os numeros
-    /// secretos do Xaman, e nao sai do aparelho. A porta e uma so, aqui, para as duas plataformas (revisao dos 3 agentes,
+    /// secretos do Xaman, e nao sai do aparelho. A porta e uma so, aqui, para as duas plataformas (revisao de seguranca,
     /// 09/11/2026). O pedaco de 12 com algarismo ou maiuscula no meio tambem fica: o comeco de uma semente da XRPL digitada a
     /// mao, com 19 caracteres, deixava pouco para adivinhar. O nome comprido ("Decentraland") continua indo; o resto acha pela
     /// lista embarcada. Recebe o texto como foi digitado, sem passar para minusculas.
@@ -193,7 +203,7 @@ public enum CoinCatalog {
         // Sem os caracteres invisiveis e com os de largura cheia trocados pelos comuns, como no `PrivateKeyGuard`.
         let text = PrivateKeyGuard.visible(raw)
         // A frase chinesa digitada sem espaco, como o teclado chines escreve: seis caracteres seguidos das listas. So 10 dos 22 mil
-        // nomes de moeda do catalogo dao isso, e a lista embarcada continua achando-os (revisao dos 3 agentes, 09/11/2026).
+        // nomes de moeda do catalogo dao isso, e a lista embarcada continua achando-os (revisao de seguranca, 09/11/2026).
         if PrivateKeyGuard.longestHanRun(text) >= 6 { return true }
         // Tres palavras das listas, ou do comeco de 4 letras delas (a placa de aco), com o espaco de largura zero ja tirado: a frase
         // digitada na busca deixava sair o bastante para o resto cair numa GPU.

@@ -47,7 +47,7 @@ final class SendLookalikeTests: XCTestCase {
 }
 
 /// Nome da NEAR digitado letra a letra, com "Conferir o endereco em todo envio" ligada: cada comeco ja e conta valida, e o
-/// desafio nascia no segundo caractere. Ele nasce no Continuar, e o nome inteiro e conferido no toque (revisao dos 3 agentes,
+/// desafio nascia no segundo caractere. Ele nasce no Continuar, e o nome inteiro e conferido no toque (revisao de seguranca,
 /// 09/11/2026).
 final class SendNEARNameTests: XCTestCase {
     var shots: String? { ProcessInfo.processInfo.environment["ESCALIBUR_FOTOS"] }

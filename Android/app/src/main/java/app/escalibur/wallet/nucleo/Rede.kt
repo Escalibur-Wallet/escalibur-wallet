@@ -22,8 +22,10 @@ import javax.net.ssl.SSLSocketFactory
  * O transporte de rede do nucleo em Swift: o HttpsURLConnection do sistema, so com TLS 1.2 e 1.3.
  *
  * Quem decide o que sai do aparelho e o HTTPClient do nucleo (hosts, portas, caminhos, tamanho,
- * redirecionamento). Aqui so se leva e traz, sem cache, sem cookie e sem seguir redirecionamento.
- * Chamado pelo nucleo (JNI), de threads dele, nunca da thread da interface.
+ * redirecionamento). Aqui so se leva e traz, sem cache, sem cookie e sem seguir redirecionamento,
+ * e a regra de host, porta e caminho do HTTPClient vale de novo na saida (`permitido`).
+ * Chamado pelo nucleo (JNI), de threads dele, nunca da thread da interface. Nenhum outro arquivo
+ * do Kotlin abre conexao nem chama este (o verificar.sh confere).
  */
 object Rede {
     private const val SEM_REDE = -1
@@ -39,6 +41,22 @@ object Rede {
     private val fabrica: SSLSocketFactory by lazy { SoTlsModerno(HttpsURLConnection.getDefaultSSLSocketFactory()) }
 
     /**
+     * As portas alem da 443, iguais as do HTTPClient.extraPorts (o verificar.sh confere): a Ripple atende na 51234.
+     * Uma funcao, e nao um mapa: nada a muda em tempo de execucao.
+     */
+    private fun portaExtra(host: String): Int? = when (host) {
+        "s1.ripple.com" -> 51234
+        "s2.ripple.com" -> 51234
+        else -> null
+    }
+
+    /** Os caminhos, iguais aos do HTTPClient.pathPrefixes (o verificar.sh confere): do GitHub, so as logos da Trust Wallet. */
+    private fun caminhoDo(host: String): String? = when (host) {
+        "raw.githubusercontent.com" -> "/trustwallet/assets/"
+        else -> null
+    }
+
+    /**
      * Devolve o status (ou o codigo da falha, negativo) e o tamanho dos cabecalhos em 4 bytes
      * cada, big-endian; os cabecalhos como "nome\u0000valor\u0000"; e o corpo, lido ate `limite`.
      */
@@ -48,7 +66,7 @@ object Rede {
         prazoMs: Int, prazoTotalMs: Int, limite: Int,
     ): ByteArray {
         val url = runCatching { URL(endereco) }.getOrNull()
-        if (url == null || url.protocol != "https") return falha(RECUSADO)
+        if (url == null || !permitido(url)) return falha(RECUSADO)
         val inicio = System.nanoTime()
         val conexao = try {
             url.openConnection() as HttpsURLConnection
@@ -96,6 +114,35 @@ object Rede {
             abertas.remove(id)
             if (canceladas.remove(id) || !reaproveitar) conexao.disconnect()
         }
+    }
+
+    /**
+     * A regra do HTTPClient (`HTTPClient.permits`), de novo na saida e com a leitura do endereco que o
+     * proprio Java faz: https, host do hosts.lock (HostsPermitidos.kt, em minusculas), a porta 443 (ou
+     * a do host) e, quando o host tem, so o caminho dele, sem `..` nem escape; e nenhum usuario ou
+     * senha no endereco. O nucleo ja confere antes de chamar; esta trava vale para o que chegar aqui
+     * por outro caminho.
+     */
+    private fun permitido(url: URL): Boolean {
+        if (url.protocol != "https" || url.userInfo != null) return false
+        val host = (url.host ?: return false).lowercase()
+        val porta = url.port
+        // So no build de depuracao: os hosts do TesteTLS do nucleo, fora da lista de proposito.
+        if (BuildConfig.DEBUG && doTesteTls(host, porta)) return true
+        if (!HostsPermitidos.contem(host)) return false
+        if (porta != -1 && porta != 443 && porta != portaExtra(host)) return false
+        val caminho = caminhoDo(host) ?: return true
+        return url.path.startsWith(caminho) && ".." !in url.path && '%' !in url.path
+    }
+
+    /** Os hosts do badssl.com do TesteTLS.swift, cada um com a porta dele. So vale com BuildConfig.DEBUG. */
+    private fun doTesteTls(host: String, porta: Int): Boolean = when (host) {
+        "badssl.com", "expired.badssl.com", "self-signed.badssl.com", "wrong.host.badssl.com",
+        "untrusted-root.badssl.com", "revoked.badssl.com" -> porta == -1
+        "tls-v1-0.badssl.com" -> porta == 1010
+        "tls-v1-1.badssl.com" -> porta == 1011
+        "tls-v1-2.badssl.com" -> porta == 1012
+        else -> false
     }
 
     /** Fecha a conexao no meio: a thread que le recebe IOException e devolve CANCELADO. */

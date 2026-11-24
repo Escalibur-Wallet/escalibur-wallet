@@ -154,7 +154,7 @@ final class ImportPhraseTests: XCTestCase {
     }
 
     /// A primeira carteira do aparelho, importada com passphrase: a carteira com passphrase e a unica, e "Tentar outra
-    /// passphrase" ainda funciona, de volta a tela da passphrase (revisao dos 3 agentes, 08/11/2026).
+    /// passphrase" ainda funciona, de volta a tela da passphrase (revisao de seguranca, 08/11/2026).
     func testFirstWalletRetryPassphrase() {
         let app = XCUIApplication()
         app.launchArguments = ["-reset"]
@@ -225,7 +225,7 @@ final class ImportPhraseTests: XCTestCase {
     }
 
     /// `words`: a carteira das palavras; `wordsStay`: ela ja estava aqui antes e fica. Com o interruptor, a importacao nunca
-    /// guarda a carteira das palavras, so a com passphrase (revisao dos 3 agentes, 08/11/2026).
+    /// guarda a carteira das palavras, so a com passphrase (revisao de seguranca, 08/11/2026).
     private func importWithPassphrase(_ arguments: [String], opens name: String, prefix: String, words: String, wordsStay: Bool) {
         let app = XCUIApplication()
         app.launchArguments = arguments

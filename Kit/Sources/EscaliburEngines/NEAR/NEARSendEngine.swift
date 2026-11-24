@@ -140,7 +140,7 @@ struct NEARSendEngine: SendEngine {
         let inHistory = try? await reader.historyContains(send.hash, owner: send.address)
         if inHistory == true { return .seen }
         // Registro sem o numero (o planejador sempre monta uma transacao so, entao nao acontece): o historico, uma fonte so,
-        // nao diz sozinho que a rede nao conhece (rodada 4 dos 3 agentes).
+        // nao diz sozinho que a rede nao conhece (rodada 4 da revisao de seguranca).
         guard let key = Self.unsureKey(send.context), case .success(let owner) = NEARAccountID.parse(send.address) else { return .noAnswer }
         let current: UInt64?
         do {

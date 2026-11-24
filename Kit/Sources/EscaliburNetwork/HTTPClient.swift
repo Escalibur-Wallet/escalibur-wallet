@@ -173,12 +173,17 @@ public final class HTTPClient: NSObject, @unchecked Sendable {
         "s2.ripple.com": 51234,
     ]
 
-    /// A regra de todo endereco: https, host da lista, a porta 443 (ou a do host, acima) e,
-    /// quando o host tem, so o caminho dele.
+    /// A regra de todo endereco: https, sem usuario nem senha, host da lista, a porta 443 (ou a do
+    /// host, acima) e, quando o host tem, so o caminho dele. O caminho conferido e o cru, como sai no
+    /// pedido: o `url.path` decodificado lia `%2e%2e` como `..` e o escape passava pelo prefixo
+    /// (auditoria de 23/11/2026). O unico produtor de endereco com prefixo (TokenLogos) nunca gera `%`
+    /// nem `..` (`TokenLogos.isSafe`).
     static func permits(_ url: URL, allowedHosts: Set<String>) -> Bool {
-        guard url.scheme == "https", let host = url.host, allowedHosts.contains(host) else { return false }
+        guard url.scheme == "https", url.user == nil, url.password == nil, let host = url.host, allowedHosts.contains(host) else { return false }
         guard url.port == nil || url.port == 443 || url.port == extraPorts[host] else { return false }
-        return pathPrefixes[host].map { url.path.hasPrefix($0) } ?? true
+        guard let prefix = pathPrefixes[host] else { return true }
+        let cru = url.path(percentEncoded: true)
+        return cru.hasPrefix(prefix) && !cru.contains("..") && !cru.contains("%")
     }
 
     /// O corpo e lido em fluxo e cortado ao passar do limite. Resposta sem

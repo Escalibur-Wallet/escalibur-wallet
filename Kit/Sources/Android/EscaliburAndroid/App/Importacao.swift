@@ -166,7 +166,7 @@ enum Importacao {
     /// Importar com o interruptor da passphrase (08/11/2026): as palavras ficaram so na memoria da tela, e uma gravacao so
     /// guarda a carteira com passphrase, como a importacao fazia antes. Nenhuma carteira sem passphrase destas palavras e
     /// criada: com uma aqui, quem tem o PIN e a digital veria as palavras sem a passphrase e testaria passphrases fora do
-    /// aparelho, e travar no meio deixava as duas (o addImportedPassphraseWallet do iOS, revisao dos 3 agentes, 08/11/2026).
+    /// aparelho, e travar no meio deixava as duas (o addImportedPassphraseWallet do iOS, revisao de seguranca, 08/11/2026).
     /// Ver as palavras da carteira com passphrase pede a passphrase. A passphrase que o
     /// papel nao mostra nao e recusada: ela ja existe em outra carteira. A mesma frase com a mesma passphrase ja aqui so passa
     /// a ser a escolhida.

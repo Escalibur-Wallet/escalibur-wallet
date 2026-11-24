@@ -406,7 +406,7 @@ final class AppSession {
         VoiceGate.shared.cancel()
         PassphraseGate.shared.clearGrace()
         NotificationCenter.default.post(name: SecureInputField.wipeAll, object: nil)
-        // Na hora do aviso, e nao quando a tela sair: suspenso, o SwiftUI so tira a tela na volta (revisao dos 3 agentes, 08/11/2026).
+        // Na hora do aviso, e nao quando a tela sair: suspenso, o SwiftUI so tira a tela na volta (revisao de seguranca, 08/11/2026).
         NotificationCenter.default.post(name: Self.didLock, object: nil)
         // Um rosto do Super Security confirmado e ainda sem PIN nao vale depois de travar.
         KeyServices.root.discardHardenedFace()
@@ -827,7 +827,7 @@ final class AppSession {
         }
         // A mesma frase com a mesma passphrase abre a mesma carteira: se ela ja esta aqui,
         // abrir e so passar a usa-la. A digital tem 4 bytes: o endereco da Bitcoin confirma que e a mesma, e uma
-        // carteira de outra frase com a mesma digital nunca e escolhida no lugar (revisao dos 3 agentes, 08/11/2026).
+        // carteira de outra frase com a mesma digital nunca e escolhida no lugar (revisao de seguranca, 08/11/2026).
         if let existing = metadata.wallets.first(where: { $0.fingerprint == fingerprint.hex && !$0.isWatchOnly }) {
             if saved { try? KeyServices.wallets.delete(id) }
             guard existing.account(.bitcoin)?.address == accounts.first(where: { $0.chainID == Chain.bitcoin.id })?.address else {
@@ -1039,7 +1039,7 @@ final class AppSession {
     func discardFreshPassphraseWallet(_ id: UUID, restoring previous: UUID?) throws {
         guard phase == .unlocked, indexKey != nil else { throw WalletError.locked }
         // Vinda da importacao, ela pode ser a unica: a primeira carteira do aparelho, com as palavras ainda na tela de importar,
-        // que segue aberta (revisao dos 3 agentes, 08/11/2026). Nada mais e apagado.
+        // que segue aberta (revisao de seguranca, 08/11/2026). Nada mais e apagado.
         guard let openedAt = freshPassphraseWallets[id], PINPolicy.uptime - openedAt < 3600,
               let wallet = metadata.wallets.first(where: { $0.id == id }), wallet.hasPassphrase, !wallet.isWatchOnly,
               metadata.wallets.count > 1 || importedPassphraseWallets.contains(id)
@@ -1084,7 +1084,7 @@ final class AppSession {
     /// Importar com o interruptor da passphrase (08/11/2026): as palavras ficaram so na memoria da tela, e uma gravacao
     /// so guarda a carteira com passphrase, como a importacao fazia antes. Nenhuma carteira sem passphrase destas palavras e
     /// criada: com uma aqui, quem tem o PIN e o rosto veria as palavras sem a passphrase e testaria passphrases fora do
-    /// aparelho, e travar no meio deixava as duas (revisao dos 3 agentes, 08/11/2026). Ver as palavras da carteira com
+    /// aparelho, e travar no meio deixava as duas (revisao de seguranca, 08/11/2026). Ver as palavras da carteira com
     /// passphrase pede a passphrase. As palavras continuam com a tela, para
     /// tentar outra passphrase; a mesma frase com a mesma passphrase ja aqui so passa a ser a escolhida.
     func addImportedPassphraseWallet(words: WalletSecret, passphrase: SecureBytes, name: String, wordCount: Int,
@@ -1230,7 +1230,7 @@ final class AppSession {
     }
 
     /// A rede da conta conferida de novo antes de receber nela pela troca (pedido do dono, 15/11/2026), como o Receber a cada
-    /// abertura: a delegacao posta depois da conferencia do dia receberia o que foi comprado (revisao dos tres agentes). Numa EVM,
+    /// abertura: a delegacao posta depois da conferencia do dia receberia o que foi comprado (revisao de seguranca). Numa EVM,
     /// tambem as outras EVM marcadas, como o Receber e a ponte. Devolve se a conferencia foi ate o fim.
     @discardableResult
     func checkBeforeReceiving(_ id: UUID, on chain: Chain) async -> Bool {
@@ -1267,7 +1267,7 @@ final class AppSession {
     /// A copia de um endereco que deixou de receber (a marca de outra chave, a troca da TON) sai da area de transferencia antes do
     /// prazo (rodada 10 da auditoria 8).
     /// Tambem a mesma conta escrita de outra forma em outra carteira deste aparelho (a TON so de observacao em EQ ou crua; revisao
-    /// dos tres agentes de 15/11/2026): a copia dela sai junto.
+    /// de seguranca de 15/11/2026): a copia dela sai junto.
     fileprivate func withdrawBlockedCopy(_ walletID: UUID, also extra: Set<String> = []) {
         guard let wallet = metadata.wallets.first(where: { $0.id == walletID }) else { return }
         let blocked = wallet.accounts.reduce(into: Set<String>()) { out, account in
