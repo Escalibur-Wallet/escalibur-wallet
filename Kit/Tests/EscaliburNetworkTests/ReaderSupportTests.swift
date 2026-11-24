@@ -1,0 +1,368 @@
+import EscaliburChains
+import EscaliburCore
+import Foundation
+import Testing
+@testable import EscaliburNetwork
+
+/// O que os quatro leitores compartilham: JSON estrito, consenso entre provedores e as
+/// regras do historico.
+@Suite("Suporte dos leitores")
+struct ReaderSupportTests {
+    // MARK: JSON estrito
+
+    @Test("Numero grande mantem todos os digitos")
+    func bigNumbers() throws {
+        let json = try StrictJSON.parse(Data(#"{"balance": 2101293387317688123, "wei": "439595913402087593105057"}"#.utf8))
+        #expect(try json.field("balance", "$").unsigned("balance") == BigUInt(decimal: "2101293387317688123")!)
+        #expect(try json.field("wei", "$").decimalString("wei") == BigUInt(decimal: "439595913402087593105057")!)
+        // Double perderia o ultimo digito: 2101293387317688123 vira ...8000.
+        #expect(Double("2101293387317688123").map { UInt64($0) } != 2_101_293_387_317_688_123)
+    }
+
+    @Test("Campo faltando, tipo errado, negativo e fracao sao erro, nunca zero")
+    func strictAccess() throws {
+        let json = try StrictJSON.parse(Data(#"{"a": 1, "b": "2", "c": -3, "d": 1.5, "e": null}"#.utf8))
+        #expect(throws: ReaderError.malformed(field: "$.x")) { _ = try json.field("x", "$") }
+        #expect(throws: ReaderError.malformed(field: "b")) { _ = try json.field("b", "$").unsigned("b") }
+        #expect(throws: ReaderError.malformed(field: "c")) { _ = try json.field("c", "$").unsigned("c") }
+        #expect(throws: ReaderError.malformed(field: "d")) { _ = try json.field("d", "$").uint64("d") }
+        #expect(try json.field("c", "$").int64("c") == -3)
+        #expect(json.optionalField("e") == nil)
+        #expect(throws: ReaderError.malformed(field: "q")) { _ = try StrictJSON.string("0x").quantity("q") }
+        #expect(throws: ReaderError.malformed(field: "q")) { _ = try StrictJSON.string("12").quantity("q") }
+        #expect(try StrictJSON.number("0.2").scaledDecimal("r", scale: 6) == BigUInt(200_000))
+        #expect(throws: ReaderError.malformed(field: "r")) { _ = try StrictJSON.number("0.0000001").scaledDecimal("r", scale: 6) }
+    }
+
+    @Test("Regressao R7-B1: numero de 1 MB e recusado na hora, em todo acesso numerico")
+    func hugeNumberRefusedFast() throws {
+        // Um provedor hostil manda `"height": 999...9` com um milhao de digitos (cabe no
+        // corte de 4 MB). A conversao custa o quadrado do tamanho: sem teto, minutos.
+        let digits = String(repeating: "9", count: 1_000_000)
+        let json = try StrictJSON.parse(Data(#"{"height": \#(digits), "text": "\#(digits)", "scaled": \#(digits).5}"#.utf8))
+        let height = try json.field("height", "$"), text = try json.field("text", "$"), scaled = try json.field("scaled", "$")
+        let elapsed = ContinuousClock().measure {
+            #expect(throws: ReaderError.malformed(field: "height")) { _ = try height.unsigned("height") }
+            #expect(throws: ReaderError.malformed(field: "height")) { _ = try height.uint64("height") }
+            #expect(throws: ReaderError.malformed(field: "height")) { _ = try height.int64("height") }
+            #expect(throws: ReaderError.malformed(field: "height")) { _ = try height.integer("height") }
+            #expect(throws: ReaderError.malformed(field: "text")) { _ = try text.decimalString("text") }
+            #expect(throws: ReaderError.malformed(field: "scaled")) { _ = try scaled.scaledDecimal("scaled", scale: 6) }
+        }
+        #expect(elapsed < .milliseconds(50))
+        // Os tetos: 78 digitos (2^256 tem 78) no inteiro sem limite de largura, 20 nos de
+        // 64 bits, e a parte inteira do decimal com escala no mesmo teto do inteiro.
+        let max78 = StrictJSON.number(String(repeating: "9", count: 78))
+        #expect(try max78.unsigned("n") == BigUInt(decimal: String(repeating: "9", count: 78))!)
+        #expect(throws: ReaderError.malformed(field: "n")) { _ = try StrictJSON.number(String(repeating: "9", count: 79)).unsigned("n") }
+        #expect(try StrictJSON.number("18446744073709551615").uint64("n") == UInt64.max)
+        #expect(throws: ReaderError.malformed(field: "n")) { _ = try StrictJSON.number("1" + String(repeating: "0", count: 20)).uint64("n") }
+        #expect(try StrictJSON.number("-9223372036854775807").int64("n") == -Int64.max)
+        #expect(throws: ReaderError.malformed(field: "n")) { _ = try StrictJSON.number("-" + String(repeating: "1", count: 21)).int64("n") }
+        #expect(try StrictJSON.number(String(repeating: "9", count: 70) + ".5").scaledDecimal("n", scale: 1)
+            == BigUInt(decimal: String(repeating: "9", count: 70) + "5")!)
+        #expect(throws: ReaderError.malformed(field: "n")) {
+            _ = try StrictJSON.number(String(repeating: "9", count: 79) + ".5").scaledDecimal("n", scale: 1)
+        }
+    }
+
+    @Test("Chave duplicada, lixo depois do valor e escape invalido sao recusados")
+    func strictGrammar() {
+        for text in [#"{"a":1,"a":2}"#, #"{"a":1} x"#, #""\q""#, "[1,]", "{\"a\":\u{01}}", "01", "\"\u{0A}\""] {
+            #expect(throws: ReaderError.self, "\(text)") { _ = try StrictJSON.parse(Data(text.utf8)) }
+        }
+        let deep = String(repeating: "[", count: 200) + String(repeating: "]", count: 200)
+        #expect(throws: ReaderError.self) { _ = try StrictJSON.parse(Data(deep.utf8)) }
+    }
+
+    @Test("Serializacao com chaves em ordem e escape")
+    func serialization() {
+        let value = StrictJSON.object(["b": .int(2), "a": .array([.string("x\"y\n"), .bool(true), .null])])
+        #expect(String(decoding: value.serialized, as: UTF8.self) == #"{"a":["x\"y\n",true,null],"b":2}"#)
+    }
+
+    // MARK: Consenso
+
+    struct Boom: Error {}
+
+    @Test("agree: dois iguais bastam; divergencia pergunta ao terceiro; sem par, erro")
+    func agree() async throws {
+        let providers = testProviders("a", "b", "c")
+        let pool = ProviderPool(providers)
+        let first = try await Quorum.agree(providers, pool: pool, field: "x") { $0.name == "b" ? 2 : 1 }
+        #expect(first == 1)
+        await #expect(throws: ReaderError.providersDisagree(field: "x")) {
+            _ = try await Quorum.agree(providers, pool: pool, field: "x") { provider -> Int in
+                ["a": 1, "b": 2, "c": 3][provider.name]!
+            }
+        }
+        await #expect(throws: ReaderError.notEnoughProviders(needed: 2, got: 1)) {
+            _ = try await Quorum.agree(providers, pool: pool, field: "x") { provider -> Int in
+                guard provider.name == "a" else { throw ReaderError.providerError(code: "x") }
+                return 1
+            }
+        }
+    }
+
+    @Test("collect: provedor que falha e trocado pelo proximo")
+    func collect() async throws {
+        let providers = testProviders("a", "b", "c")
+        let answers = try await Quorum.collect(providers, pool: ProviderPool(providers), count: 2) { provider -> String in
+            if provider.name == "a" { throw HTTPClient.Failure.timeout }
+            return provider.name
+        }
+        #expect(answers.map(\.value) == ["b", "c"])
+    }
+
+    @Test("Falha de transporte conta contra o provedor; erro do protocolo nao")
+    func circuitBreaker() async throws {
+        let providers = testProviders("a", "b")
+        let pool = ProviderPool(providers)
+        for _ in 0..<3 {
+            _ = try? await Quorum.first(providers, pool: pool) { provider -> Int in
+                if provider.name == "a" { throw HTTPClient.Failure.timeout }
+                return 1
+            }
+        }
+        #expect(await pool.available().map(\.name) == ["b"])
+        let other = ProviderPool(providers)
+        for _ in 0..<3 {
+            _ = try? await Quorum.first(providers, pool: other) { provider -> Int in
+                if provider.name == "a" { throw ReaderError.providerError(code: "actNotFound") }
+                return 1
+            }
+        }
+        #expect(await other.available().map(\.name) == ["a", "b"])
+    }
+
+    @Test("Transmissao: 'ja conhecida' conta como aceita; recusa geral traz o motivo")
+    func tally() throws {
+        let providers = testProviders("a", "b")
+        var tally = BroadcastTally()
+        tally.add(.failure(ReaderError.broadcastRejected(.alreadyKnown, code: "-32000")), provider: providers[0])
+        tally.add(.failure(HTTPClient.Failure.timeout), provider: providers[1])
+        #expect(try tally.receipt(chainID: "ethereum", id: "0x1").acceptedBy == ["a"])
+        var rejected = BroadcastTally()
+        rejected.add(.failure(ReaderError.broadcastRejected(.insufficientFunds, code: "-32000")), provider: providers[0])
+        #expect(throws: ReaderError.broadcastRejected(.insufficientFunds, code: "-32000")) { _ = try rejected.receipt(chainID: "ethereum", id: "0x1") }
+    }
+
+    @Test("Mensagens de erro de no EVM classificadas sem guardar o texto")
+    func evmRejections() {
+        #expect(BroadcastRejection.evm(message: "already known") == .alreadyKnown)
+        #expect(BroadcastRejection.evm(message: "nonce too low: next nonce 7, tx nonce 6") == .nonceTooLow)
+        #expect(BroadcastRejection.evm(message: "insufficient funds for gas * price + value: address 0xabc have 1 want 2") == .insufficientFunds)
+        #expect(BroadcastRejection.evm(message: "replacement transaction underpriced") == .underpriced)
+        #expect(BroadcastRejection.evm(message: "max fee per gas less than block base fee") == .underpriced)
+        #expect(BroadcastRejection.evm(message: "invalid chain id for signer") == .wrongNetwork)
+        #expect(BroadcastRejection.evm(message: "algo novo") == .other)
+    }
+
+    @Test("Codigo de erro de provedor saneado: nada de endereco, link ou texto livre")
+    func sanitizedCodes() {
+        #expect(ReaderError.sanitized("tefPAST_SEQ") == "tefPAST_SEQ")
+        #expect(ReaderError.sanitized("-32000") == "-32000")
+        #expect(ReaderError.sanitized("veja https://golpe.example/0xABC") == "vejahttpsgolpeexample0xABC")
+        #expect(ReaderError.sanitized(String(repeating: "a", count: 100)).count == 40)
+        #expect(ReaderError.sanitized("!!!") == "error")
+    }
+
+    @Test("Cota de RPC gratuito e falha do provedor, nao resposta")
+    func rateLimitMessages() {
+        #expect(EVMReader.isRateLimit(code: "-32001", message: "You've reached the usage limit for your current plan."))
+        #expect(EVMReader.isRateLimit(code: "35", message: "ranges over 10000 blocks are not supported on free plan"))
+        #expect(EVMReader.isRateLimit(code: "-32005", message: "limit exceeded"))
+        #expect(!EVMReader.isRateLimit(code: "-32000", message: "exceeds block gas limit"))
+        #expect(!EVMReader.isRateLimit(code: "-32000", message: "nonce too low"))
+    }
+
+    @Test("Espacamento por host: requisicoes seguidas ao mesmo host esperam a vez")
+    func pacing() async throws {
+        let transport = FixtureTransport([{ _, _ in Data("{}".utf8) }])
+        let paced = PacedTransport(base: transport, intervals: ["paced.test": 0.15])
+        let started = Date()
+        for _ in 0..<3 { _ = try await paced.send(.get(URL(string: "https://paced.test/x")!)) }
+        #expect(Date().timeIntervalSince(started) >= 0.29)
+        // Host sem espacamento: nenhuma reserva de horario, logo nenhuma espera. Conferido
+        // pelo estado do espacador e nao pelo relogio, que no runner do CI carregado
+        // passava de qualquer teto.
+        for _ in 0..<3 { _ = try await paced.send(.get(URL(string: "https://free.test/x")!)) }
+        #expect(await HostPacer.shared.reservedSlot(host: "free.test") == nil)
+        #expect(await HostPacer.shared.reservedSlot(host: "paced.test") != nil)
+    }
+
+    @Test("429 espera e tenta de novo uma vez")
+    func retryOn429() async throws {
+        final class Flaky: ReaderTransport, @unchecked Sendable {
+            let lock = NSLock()
+            var calls = 0
+            func send(_ request: ReaderRequest) async throws -> Data {
+                let count = lock.withLock { calls += 1; return calls }
+                if count == 1 { throw HTTPClient.Failure.status(429) }
+                return Data("ok".utf8)
+            }
+        }
+        let flaky = Flaky()
+        let data = try await PacedTransport(base: flaky, intervals: [:], retryDelay: 0.01).send(.get(URL(string: "https://retry.test/x")!))
+        #expect(data == Data("ok".utf8))
+        #expect(flaky.calls == 2)
+    }
+
+    // MARK: Historico
+
+    @Test("Limite de po: 0,01 em stablecoin, 0,0001 no resto")
+    func dust() {
+        let usdt = TokenRegistry.find(chainID: "tron", contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")!
+        #expect(ActivityRules.dustLimit(for: usdt) == BigUInt(10_000))
+        #expect(ActivityRules.dustLimit(for: .native(.ethereum)) == BigUInt(100_000_000_000_000))
+        #expect(ActivityRules.dustLimit(for: .native(.xrpl)) == BigUInt(100))
+        #expect(ActivityRules.judgeIncoming(asset: nil, amount: 5) == .unknownAsset)
+        #expect(ActivityRules.judgeIncoming(asset: usdt, amount: 0) == .zeroValue)
+        #expect(ActivityRules.judgeIncoming(asset: usdt, amount: 9_999) == .dust)
+        #expect(ActivityRules.judgeIncoming(asset: usdt, amount: 1_000_000, flaggedByProvider: true) == .flaggedByProvider)
+        #expect(ActivityRules.judgeIncoming(asset: usdt, amount: 10_000) == nil)
+    }
+
+    @Test("Pagina: mais recente primeiro, sem repetir, no maximo 30")
+    func page() {
+        let items = (0..<40).map { index in
+            ActivityItem(
+                id: "x:\(index % 35)", chainID: "tron", direction: .received, asset: .native(.tron), amount: 1,
+                counterparty: nil, date: Date(timeIntervalSince1970: TimeInterval(index)), status: .confirmed, fee: nil,
+                hash: "\(index)", explorerURL: nil
+            )
+        }
+        let page = ActivityRules.page(chainID: "tron", items: items, suspicious: SuspiciousSummary())
+        #expect(page.items.count == 30)
+        #expect(page.items.first?.date == Date(timeIntervalSince1970: 39))
+        #expect(Set(page.items.map(\.id)).count == 30)
+    }
+
+    // MARK: Ordem do consenso (auditoria 8, 14/11/2026)
+
+    @Test("Auditoria 8: na rede de verdade, a primeira onda sorteia os donos; nos testes, a ordem da lista")
+    func consensusOrderDraws() {
+        let list = [
+            ProviderPool.Provider(name: "a", baseURL: URL(string: "https://a.test")!, operatorName: "A"),
+            ProviderPool.Provider(name: "a2", baseURL: URL(string: "https://a2.test")!, operatorName: "A"),
+            ProviderPool.Provider(name: "b", baseURL: URL(string: "https://b.test")!, operatorName: "B"),
+            ProviderPool.Provider(name: "c", baseURL: URL(string: "https://c.test")!, operatorName: "C"),
+            ProviderPool.Provider(name: "d", baseURL: URL(string: "https://d.test")!, operatorName: "D"),
+        ]
+        let fixed = ProviderPool(list)
+        #expect(fixed.consensusOrder(list).map(\.name) == ["a", "b", "c", "d", "a2"])
+        let drawn = ProviderPool(list, draws: true)
+        var pairs = Set<String>()
+        for _ in 0..<400 {
+            let order = drawn.consensusOrder(list)
+            // Os donos diferentes na frente, cada um uma vez; a repeticao do mesmo dono, no fim.
+            #expect(Set(order.prefix(4).map(\.operatorName)) == ["A", "B", "C", "D"])
+            #expect(order.last?.name == "a2")
+            pairs.insert(order.prefix(2).map(\.operatorName).sorted().joined())
+        }
+        // Os seis pares de quatro donos saem na primeira onda.
+        #expect(pairs.count == 6)
+        // O transporte de teste nao sorteia; o cliente de verdade, sem URLProtocol de teste, sorteia.
+        #expect(!FixtureTransport([]).drawsProviders)
+        #expect(HTTPClient.shared.drawsProviders)
+    }
+
+    @Test("Rodada 1: firm decide com os dois primeiros de acordo; sem acordo, so com margem; everyone so com todos iguais")
+    func firm() async throws {
+        let providers = testProviders("a", "b", "c", "d")
+        let pool = ProviderPool(providers)
+        #expect(try await Quorum.firm(providers, pool: pool) { _ in 7 } == 7)
+        // [1, 2, 1, 1]: tres contra um decide.
+        #expect(try await Quorum.firm(providers, pool: pool) { ["a": 1, "b": 2, "c": 1, "d": 1][$0.name]! } == 1)
+        // [1, 2, 2]: dois contra um honesto que respondeu nao decidem.
+        let three = testProviders("a", "b", "c")
+        #expect(try await Quorum.firm(three, pool: ProviderPool(three)) { ["a": 1, "b": 2, "c": 2][$0.name]! } == nil)
+        #expect(try await Quorum.firm(providers, pool: pool, everyone: true) { _ in 7 } == 7)
+        #expect(try await Quorum.firm(providers, pool: pool, everyone: true) { $0.name == "d" ? 1 : 7 } == nil)
+        await #expect(throws: ReaderError.notEnoughProviders(needed: 2, got: 1)) {
+            _ = try await Quorum.firm(providers, pool: pool) { provider -> Int in
+                guard provider.name == "a" else { throw ReaderError.providerError(code: "x") }
+                return 1
+            }
+        }
+    }
+
+    @Test("Rodada 1: everyoneSays so com todos os donos que responderam iguais, e pelo menos tres (ou todos, se forem menos)")
+    func everyoneSays() async {
+        let three = testProviders("a", "b", "c")
+        #expect(await Quorum.everyoneSays(true, three, pool: ProviderPool(three)) { _ in true })
+        #expect(!(await Quorum.everyoneSays(true, three, pool: ProviderPool(three)) { $0.name != "c" }))
+        // Com tres donos, um fora do ar: os dois que dizem nao bastam.
+        #expect(!(await Quorum.everyoneSays(true, three, pool: ProviderPool(three)) { provider -> Bool in
+            if provider.name == "c" { throw HTTPClient.Failure.timeout }
+            return true
+        }))
+        let two = testProviders("a", "b")
+        #expect(await Quorum.everyoneSays(true, two, pool: ProviderPool(two)) { _ in true })
+    }
+
+    @Test("Envio sem resposta: presence conhece com um dono so; 'nao conhecida' so com todos respondendo, e pelo menos tres")
+    func presence() async {
+        let three = testProviders("a", "b", "c")
+        // O no de arquivo e o ultimo e os dois primeiros podaram: conhecida.
+        #expect(await Quorum.presence(three, pool: ProviderPool(three)) { $0.name == "c" } == .known)
+        #expect(await Quorum.presence(three, pool: ProviderPool(three)) { _ in false } == .unknown)
+        // Um fora do ar: os dois que nao conhecem nao bastam, porque o de fora pode ser o que guarda tudo.
+        #expect(await Quorum.presence(three, pool: ProviderPool(three)) { provider -> Bool in
+            if provider.name == "c" { throw HTTPClient.Failure.timeout }
+            return false
+        } == .unclear)
+        // O que conhece responde mesmo com outro fora do ar.
+        #expect(await Quorum.presence(three, pool: ProviderPool(three)) { provider -> Bool in
+            if provider.name == "a" { throw HTTPClient.Failure.timeout }
+            return provider.name == "b"
+        } == .known)
+        // Com quatro donos, tres que nao conhecem nao bastam: o de fora do ar pode ser o que guarda tudo.
+        let four = testProviders("a", "b", "c", "d")
+        #expect(await Quorum.presence(four, pool: ProviderPool(four)) { _ in false } == .unknown)
+        #expect(await Quorum.presence(four, pool: ProviderPool(four)) { provider -> Bool in
+            if provider.name == "d" { throw HTTPClient.Failure.timeout }
+            return false
+        } == .unclear)
+        let two = testProviders("a", "b")
+        #expect(await Quorum.presence(two, pool: ProviderPool(two)) { _ in false } == .unknown)
+        #expect(await Quorum.presence(two, pool: ProviderPool(two)) { provider -> Bool in
+            if provider.name == "b" { throw HTTPClient.Failure.timeout }
+            return false
+        } == .unclear)
+    }
+
+    @Test("Rodada 1: o ledger fixado e o menor de dois perto um do outro (XRP Ledger ate 20 ledgers, Aptos ate 30 s)")
+    func pinnedGap() throws {
+        #expect(try XRPLReader.pin([120, 100]) == 100)
+        #expect(throws: ReaderError.providersDisagree(field: "ledger")) { try XRPLReader.pin([100, 121]) }
+        #expect(throws: ReaderError.notEnoughProviders(needed: 2, got: 1)) { try XRPLReader.pin([100]) }
+        let early = AptosReader.Ledger(chainID: 1, version: 10, timestampMicros: 1_000_000_000)
+        try AptosReader.checkGap(early, AptosReader.Ledger(chainID: 1, version: 20, timestampMicros: 1_030_000_000))
+        #expect(throws: ReaderError.providersDisagree(field: "ledger")) {
+            try AptosReader.checkGap(early, AptosReader.Ledger(chainID: 1, version: 20, timestampMicros: 1_030_000_001))
+        }
+    }
+
+    @Test("Rodada 2: tirar a marca pede todos os que respondem e pelo menos tres; com os honestos fora do ar, dois nao bastam")
+    func unanimousFloor() async throws {
+        let four = testProviders("a", "b", "c", "d")
+        let pool = ProviderPool(four)
+        #expect(Quorum.floorOfEveryone(pool) == 3)
+        #expect(Quorum.floorOfEveryone(ProviderPool(testProviders("a", "b"))) == 2)
+        // Dois honestos derrubados, dois combinados dizendo "limpa": nada decide, e a marca fica.
+        #expect(try await Quorum.unanimous(four, pool: pool) { provider -> Int in
+            if provider.name == "a" || provider.name == "b" { throw HTTPClient.Failure.timeout }
+            return 0
+        } == nil)
+        #expect(try await Quorum.unanimous(four, pool: pool) { provider -> Int in
+            if provider.name == "a" { throw HTTPClient.Failure.timeout }
+            return 0
+        } == 0)
+        // O `firm` com `everyone` segue a mesma regra.
+        #expect(try await Quorum.firm(four, pool: pool, everyone: true) { provider -> Int in
+            if provider.name == "a" || provider.name == "b" { throw HTTPClient.Failure.timeout }
+            return 0
+        } == nil)
+    }
+}

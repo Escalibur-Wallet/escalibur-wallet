@@ -1,0 +1,186 @@
+package app.escalibur.wallet.ui.enviar
+
+import app.escalibur.wallet.ui.comp.Interruptor
+import app.escalibur.wallet.ui.comp.seguraToques
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import app.escalibur.wallet.ui.comp.acimaDoTeclado
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import app.escalibur.wallet.ui.comp.Segredo
+import app.escalibur.wallet.ui.comp.EntradaDeSegredo
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import app.escalibur.wallet.ui.comp.BotaoPrimario
+import app.escalibur.wallet.ui.comp.Segmentado
+import app.escalibur.wallet.ui.t
+import app.escalibur.wallet.ui.tema.Altura
+import app.escalibur.wallet.ui.tema.Espaco
+import app.escalibur.wallet.ui.tema.Paleta
+import app.escalibur.wallet.ui.tema.Raio
+import app.escalibur.wallet.ui.tema.Tipo
+import app.escalibur.wallet.ui.tema.estilo
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+
+/**
+ * A passphrase antes de cada assinatura (o `PassphraseGate` do iOS): a carteira com passphrase pede ela
+ * antes da biometria ou do PIN. Ela nunca fica salva no app (pedido do dono, 05/11/2026): a conferencia
+ * e do assinador, no nucleo, pelo fingerprint da raiz; esta folha so coleta o que foi digitado, em bytes
+ * que o chamador zera.
+ */
+object PedidoDePassphrase {
+    class Resposta(val bytes: ByteArray, val folga: Int?)
+
+    /** `campo`: o que a folha digita, do pedido, e nao da tela: fechar o pedido de fora (o app saiu, travou) o zera na hora. */
+    class Pedido(val nomeDaCarteira: String, val motivo: String, val ofereceFolga: Boolean, val responder: (Resposta?) -> Unit) {
+        val campo = Segredo(limpaAoSair = true)
+    }
+
+    var pedido by mutableStateOf<Pedido?>(null)
+        private set
+
+    val escolhasDeFolga = listOf(5, 10, 15, 20)
+
+    /** Soma um a cada `cancelar`: a resposta que chega depois de o app sair ou travar nao segue (sai zerada). */
+    @Volatile private var epoca = 0
+
+    /** `ofereceFolga`: sem dizer, so a frase de mover saldo (sem `motivo`) oferece a folga. */
+    suspend fun pedir(nomeDaCarteira: String, motivo: String? = null, ofereceFolga: Boolean = motivo == null): Resposta? {
+        val inicio = epoca
+        val resposta = pedirAgora(nomeDaCarteira, motivo, ofereceFolga)
+        if (resposta != null && epoca != inicio) {
+            resposta.bytes.fill(0)
+            return null
+        }
+        return resposta
+    }
+
+    private suspend fun pedirAgora(nomeDaCarteira: String, motivo: String?, ofereceFolga: Boolean): Resposta? = suspendCancellableCoroutine { continuacao ->
+        pedido?.responder?.invoke(null)
+        val linha = motivo ?: t("%@ pede a passphrase para mover saldo. Depois dela vem a biometria ou o PIN, como sempre.", nomeDaCarteira)
+        pedido = Pedido(nomeDaCarteira, linha, ofereceFolga) { resposta ->
+            pedido = null
+            if (continuacao.isActive) continuacao.resume(resposta) else resposta?.bytes?.fill(0)
+        }
+        continuacao.invokeOnCancellation { pedido = null }
+    }
+
+    /** O app travou ou saiu: a folha aberta responde "fechou", e o que estava digitado sai zerado. */
+    fun cancelar() {
+        epoca++
+        val aberto = pedido ?: return
+        aberto.campo.clearText()
+        aberto.responder(null)
+    }
+}
+
+/** A folha, por cima de qualquer tela (desenhada na raiz, como a do PIN). */
+@Composable
+fun FolhaDaPassphrase(pedido: PedidoDePassphrase.Pedido) {
+    val campo = pedido.campo
+    var mostrar by remember { mutableStateOf(false) }
+    var folgaLigada by remember(pedido) { mutableStateOf(false) }
+    var minutos by remember(pedido) { mutableIntStateOf(PedidoDePassphrase.escolhasDeFolga.first()) }
+    var respondida by remember(pedido) { mutableStateOf(false) }
+    val foco = remember { FocusRequester() }
+
+    fun fechar() {
+        if (respondida) return
+        respondida = true
+        campo.clearText()
+        pedido.responder(null)
+    }
+
+    fun confirmar() {
+        if (respondida || campo.text.isEmpty()) return
+        respondida = true
+        // Os bytes saem direto do campo, que nunca teve o texto em String; o campo zera o dele.
+        val copia = campo.bytes()
+        campo.clearText()
+        pedido.responder(PedidoDePassphrase.Resposta(copia, if (folgaLigada && pedido.ofereceFolga) minutos else null))
+    }
+
+    DisposableEffect(pedido) { onDispose { if (!respondida) { campo.clearText(); pedido.responder(null) } } }
+    LaunchedEffect(pedido) { runCatching { foco.requestFocus() } }
+    BackHandler { fechar() }
+
+    Column(Modifier.fillMaxSize().background(Paleta.vazio).seguraToques().statusBarsPadding().navigationBarsPadding().acimaDoTeclado()) {
+        // O selo das telas onde se digita um segredo, no centro, com o fechar na mesma linha; o titulo e o motivo vem embaixo
+        // dele, no centro, como na folha do iOS (pedido do dono, 17/11/2026). Menor que nas telas cheias: a folha divide a
+        // altura com o teclado, e por isso o miolo rola quando nao cabe.
+        Box(Modifier.fillMaxWidth().padding(horizontal = Espaco.xs)) {
+            app.escalibur.wallet.ui.comp.EmblemaCifrado(60.dp, modifier = Modifier.align(androidx.compose.ui.Alignment.TopCenter).padding(top = Espaco.xs))
+            app.escalibur.wallet.ui.comp.BotaoDeCanto(app.escalibur.wallet.ui.comp.Icones.fechar, t("Fechar"),
+                                                      Modifier.align(androidx.compose.ui.Alignment.TopEnd).padding(top = Espaco.xxs)) { fechar() }
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem)) {
+            Text(t("Digite a passphrase"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
+                 modifier = Modifier.fillMaxWidth().padding(top = Espaco.sm))
+            Text(pedido.motivo, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
+                 modifier = Modifier.fillMaxWidth().padding(top = Espaco.xs))
+            Box(
+                Modifier.padding(top = Espaco.lg).fillMaxWidth().height(Altura.primaria)
+                    .background(Paleta.corpo, RoundedCornerShape(Raio.cartao))
+                    .border(1.dp, Paleta.bordaForte, RoundedCornerShape(Raio.cartao))
+                    .pointerInput(Unit) { detectTapGestures(onPress = { mostrar = true; tryAwaitRelease(); mostrar = false }, onTap = { runCatching { foco.requestFocus() } }) }
+                    .padding(horizontal = Espaco.md),
+                contentAlignment = androidx.compose.ui.Alignment.CenterStart,
+            ) {
+                if (campo.text.isEmpty()) Text(t("Passphrase"), style = estilo(Tipo.mono), color = Paleta.tintaMorta)
+                EntradaDeSegredo(campo, t("Passphrase"), mostrar, estilo(Tipo.mono).copy(color = Paleta.tinta), foco, Modifier.fillMaxWidth()) { confirmar() }
+            }
+            Text(t("Segure o dedo no campo para conferir o que digitou."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
+                 modifier = Modifier.padding(top = Espaco.xs))
+            if (pedido.ofereceFolga) {
+                Column(Modifier.padding(top = Espaco.lg), verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text(t("Não pedir de novo por um tempo"), style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f))
+                        Interruptor(folgaLigada, { folgaLigada = it })
+                    }
+                    Text(
+                        if (folgaLigada) t("Nos próximos %lld minutos, %@ não pede a passphrase. Até lá ela fica só na memória do app, e sai apagada no fim do tempo, ao sair do app ou ao travar. A biometria ou o PIN continuam.", minutos, pedido.nomeDaCarteira)
+                        else t("Depois de a passphrase conferir, os próximos envios, trocas e ordens pulam esta etapa por alguns minutos."),
+                        style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(end = 64.dp),
+                    )
+                    AnimatedVisibility(folgaLigada) {
+                        Segmentado(PedidoDePassphrase.escolhasDeFolga.map { it to t("%lld min", it) }, minutos) { minutos = it }
+                    }
+                }
+            }
+            Spacer(Modifier.height(Espaco.md))
+        }
+        BotaoPrimario(t("Continuar"), Modifier.padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs), ligado = campo.text.isNotEmpty()) { confirmar() }
+    }
+}
+

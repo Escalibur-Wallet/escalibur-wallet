@@ -1,0 +1,226 @@
+package app.escalibur.wallet.ui
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import app.escalibur.wallet.nucleo.Api
+import app.escalibur.wallet.nucleo.FalhaDoNucleo
+import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONObject
+import kotlin.coroutines.resume
+
+/** Como o dono prova presenca para uma operacao que precisa da chave raiz. */
+sealed class Credencial {
+    abstract val motivo: String
+
+    /** O PIN da credencial, quando ela e por PIN. Vai primeiro no segredo da chamada. */
+    open val pin: ByteArray? get() = null
+
+    class Pin(override val pin: ByteArray, override val motivo: String = "") : Credencial()
+    class Biometria(override val motivo: String) : Credencial()
+    /** O PIN e, com a biometria ligada, ela tambem: ver as palavras, remover, desligar a biometria. */
+    class PinEBiometria(override val pin: ByteArray, override val motivo: String) : Credencial()
+    /** Modo reforcado: o PIN e a biometria pela criptografia, em tudo. */
+    class Reforcado(override val pin: ByteArray, override val motivo: String) : Credencial()
+
+    fun json(): JSONObject = JSONObject()
+        .put("tipo", when (this) { is Pin -> "pin"; is Biometria -> "biometria"; is PinEBiometria -> "pinEBiometria"; is Reforcado -> "reforcado" })
+        .put("motivo", motivo)
+
+    /** As partes do segredo: o PIN (se houver) e o que a operacao pede. */
+    fun partes(vararg resto: ByteArray): Array<ByteArray> = (listOfNotNull(pin) + resto).toTypedArray()
+
+    fun zerar() { pin?.fill(0) }
+}
+
+/**
+ * Pede presenca do dono para uma operacao: biometria quando ligada, PIN quando nao, ou quando a
+ * biometria falhar. Uma folha de PIN so, desenhada na raiz do app. O `AuthCoordinator` do iOS.
+ */
+object Autorizacao {
+    /** `entrada`: os digitos, do pedido e nao da tela: fechar o pedido de fora (o app saiu, travou) os zera na hora. */
+    class PedidoDePin(val motivo: String, val aviso: String?, val erro: String?, val responder: (ByteArray?) -> Unit) {
+        val entrada = app.escalibur.wallet.ui.pin.EntradaDoPin(App.estado.pinDigitos)
+    }
+
+    var pedido by mutableStateOf<PedidoDePin?>(null)
+        private set
+
+    /**
+     * Soma um a cada `cancelar` (o app saiu ou travou): a operacao que esperava pela biometria ou pelo PIN nao reabre a
+     * folha do PIN depois disso, nem em segundo plano (revisao de seguranca de 05/11/2026: a biometria cancelada pela
+     * saida caia para o PIN, que abria com o app ja no fundo).
+     */
+    @Volatile var epoca = 0
+        private set
+
+    /** O app saiu ou travou: a folha do PIN aberta responde "fechou", com os digitos zerados, e a operacao para. */
+    fun cancelar() {
+        epoca++
+        val aberto = pedido ?: return
+        aberto.entrada.limpar()
+        aberto.responder(null)
+    }
+
+    /** O que uma operacao pede ao dono. */
+    enum class Presenca {
+        /** Biometria quando ligada, PIN quando nao: envios, trocas, ordens. */
+        qualquer,
+        /** O PIN sempre: o que muda as barreiras. */
+        pin,
+        /** O PIN e, com a biometria ligada, ela tambem: o que entrega ou destroi a carteira inteira. */
+        pinEBiometria,
+    }
+
+    private suspend fun pedirPin(motivo: String, aviso: String?, erro: String?): ByteArray? = suspendCancellableCoroutine { continuacao ->
+        pedido = PedidoDePin(motivo, aviso, erro) { pin ->
+            pedido = null
+            if (continuacao.isActive) continuacao.resume(pin) else pin?.fill(0)
+        }
+        continuacao.invokeOnCancellation { pedido = null }
+    }
+
+    /** A credencial para uma operacao. Nil quando o dono cancela. */
+    suspend fun credencial(motivo: String, forcarPin: Boolean = false, aviso: String? = null, erro: String? = null,
+                           rostoPrimeiro: Boolean = false, desde: Int = epoca): Credencial? {
+        // `desde`: a epoca de quando a operacao comecou, e nao a de agora (o `tentando` passa a dele).
+        val inicio = desde
+        // Antes de abrir a chave raiz: um depurador ou codigo injetado desde a ultima volta ao app acende o aviso.
+        runCatching { Integridade.conferir(app.escalibur.wallet.nucleo.Cofre.contexto) }
+        val estado = App.estado
+        if (estado.reforcado) {
+            // Nas operacoes (enviar, trocar, ver as palavras), a biometria antes do PIN (pedido do dono,
+            // 01/11/2026): o nucleo guarda a confirmada para um PIN so. Sem ela, o PIN pede a biometria depois.
+            var avisoFinal = aviso ?: avisoDoReforcado
+            var erroFinal = erro
+            var confirmado = false
+            if (rostoPrimeiro) {
+                try {
+                    Api.objeto("sessao.confirmarRosto", JSONObject().put("motivo", motivo))
+                    confirmado = true
+                    avisoFinal = t("A biometria confirmou. Agora o PIN.")
+                } catch (falha: FalhaDoNucleo) {
+                    erroFinal = erroFinal ?: if (falha.codigo == "cofre.biometriaNaoConfirmou") mensagemDeBiometriaNaoConfirmou(falha.restantes)
+                                             else mensagemDeRecusa(falha)
+                }
+            }
+            val pin = if (epoca == inicio) pedirPin(motivo, avisoFinal, erroFinal) else null
+            if (pin == null) {
+                if (confirmado) runCatching { Api.objeto("sessao.descartarRosto") }
+                return null
+            }
+            return Credencial.Reforcado(pin, motivo)
+        }
+        val depoisDeReiniciar = estado.biometriaLigada && estado.pedePINDepoisDeReiniciar
+        if (!forcarPin && estado.biometriaLigada && !depoisDeReiniciar) return Credencial.Biometria(motivo)
+        val avisoFinal = aviso ?: if (depoisDeReiniciar && !forcarPin) avisoDeReinicio else null
+        if (epoca != inicio) return null
+        val pin = pedirPin(motivo, avisoFinal, erro) ?: return null
+        return Credencial.Pin(pin, motivo)
+    }
+
+    /**
+     * Executa uma operacao com a credencial, caindo para o PIN se a biometria for cancelada, tiver
+     * mudado ou pedir o PIN depois de reiniciar; PIN errado ou espera voltam ao teclado com o aviso.
+     * Devolve nil se o dono desistir. O apagamento e qualquer outro erro sobem.
+     */
+    suspend fun <T> tentando(motivo: String, presenca: Presenca = Presenca.qualquer, operacao: suspend (Credencial) -> T): T? {
+        val ambos = presenca == Presenca.pinEBiometria
+        val inicio = epoca
+        // A espera depois de a biometria mudar, e a biometria perdida e nao religada, recusam antes
+        // do teclado (o `retrying` do iOS): digitar o PIN para ouvir "espere" nao ajuda ninguem.
+        Api.objeto("sessao.podeComecar", JSONObject().put("ambos", ambos))
+        if (epoca != inicio) return null
+        var tentativa = credencial(motivo, forcarPin = presenca != Presenca.qualquer, aviso = if (ambos) avisoDosDois else null, rostoPrimeiro = true,
+                                   desde = inicio) ?: return null
+        while (true) {
+            if (ambos && tentativa is Credencial.Pin) tentativa = Credencial.PinEBiometria(tentativa.pin, motivo)
+            var aviso: String? = null
+            var erro: String? = null
+            try {
+                val resultado = operacao(tentativa)
+                App.recarregar()
+                return resultado
+            } catch (falha: FalhaDoNucleo) {
+                when (falha.codigo) {
+                    "cofre.cancelled" -> aviso = if (ambos) avisoDosDoisCancelado else null
+                    "cofre.biometryChanged" -> {
+                        if (ambos) throw FalhaDoNucleo("cofre.biometryRequired", falha.dados)
+                        aviso = t("A biometria deste celular mudou desde que foi ligada aqui. Confirme com o PIN; depois você pode religar.")
+                    }
+                    "cofre.pinRequiredAfterRestart" -> aviso = avisoDeReinicio
+                    "cofre.pinErrado" -> erro = mensagemDePinErrado(falha)
+                    "cofre.espera" -> erro = t("Tentativas demais. Tente de novo em %@.", Formato.duracao(falha.segundos))
+                    "cofre.biometriaNaoConfirmou" -> erro = mensagemDeBiometriaNaoConfirmou(falha.restantes)
+                    else -> {
+                        // O PIN errado que apagou tudo: toda tela que pede o PIN por aqui segue o nucleo na hora (como o
+                        // iPhone, que apaga num lugar so).
+                        if (falha.codigo == "cofre.wiped") runCatching { App.recarregar() }
+                        throw falha
+                    }
+                }
+            }
+            App.recarregar()
+            // O app saiu ou travou durante a biometria: nada de reabrir o PIN.
+            if (epoca != inicio) return null
+            tentativa = credencial(motivo, forcarPin = true, aviso = aviso ?: if (ambos) avisoDosDois else null, erro = erro, rostoPrimeiro = true,
+                                   desde = inicio) ?: return null
+        }
+    }
+
+    /**
+     * O texto da recusa conhecida antes de comecar uma operacao (a espera depois de a biometria
+     * mudar), para a tela avisar antes da checagem e do PIN. Nil quando pode seguir.
+     */
+    suspend fun recusaAntes(presenca: Presenca = Presenca.qualquer): String? = try {
+        Api.objeto("sessao.podeComecar", JSONObject().put("ambos", presenca == Presenca.pinEBiometria))
+        null
+    } catch (falha: FalhaDoNucleo) {
+        mensagemDeRecusa(falha)
+    }
+
+    private val avisoDoReforcado get() = t("Depois do PIN, a biometria confirma que é você.")
+    private val avisoDeReinicio get() = t("O celular reiniciou: o PIN é necessário uma vez antes de a biometria voltar a valer.")
+    private val avisoDosDois: String? get() = if (App.estado.biometriaLigada) t("Depois do PIN, a biometria confirma que é você.") else null
+    private val avisoDosDoisCancelado get() = t("A biometria não confirmou. Com ela ligada, isto pede o PIN e a biometria.")
+
+    /** A biometria que nao confirmou nao conta tentativa nem leva ao apagar (decisao do dono, 25/10/2026). */
+    @Suppress("UNUSED_PARAMETER")
+    fun mensagemDeBiometriaNaoConfirmou(restantes: Int?): String = t("A biometria não confirmou. Nada mudou.")
+
+    /** O aviso de PIN errado, o mesmo na tela de bloqueio e dentro das operacoes. */
+    fun mensagemDePinErrado(falha: FalhaDoNucleo): String {
+        val restantes = falha.restantes
+        return when {
+            restantes != null && restantes <= 3 -> t("PIN incorreto. Depois de mais %lld, as carteiras deste celular são apagadas.", restantes)
+            falha.erros >= 2 && falha.dados.optDouble("proximaEspera", 0.0) > 0 ->
+                t("PIN incorreto. Mais um erro e o app pede uma espera de %@.", Formato.duracao(falha.dados.optDouble("proximaEspera")))
+            else -> t("PIN incorreto.")
+        }
+    }
+
+    /** O texto de uma recusa conhecida, no lugar do erro generico. Nil quando nao e uma. */
+    fun mensagemDeRecusa(erro: Throwable): String? {
+        val falha = erro as? FalhaDoNucleo ?: return null
+        return when (falha.codigo) {
+            "cofre.esperaDaBiometria" -> t("A biometria deste celular mudou há pouco. Por segurança, isto volta a funcionar em %@.", Formato.duracao(falha.segundos))
+            "cofre.biometryNotEnrolled" -> t("Nenhuma biometria cadastrada neste celular. Cadastre uma digital ou o rosto nas configurações do celular e tente de novo: as carteiras continuam aqui.")
+            "cofre.biometryRequired" -> t("A biometria deste celular mudou desde que foi ligada aqui. Para isto, ligue a biometria de novo em Ajustes, Segurança; por segurança, volta a funcionar 24 horas depois.")
+            "cofre.biometryUnavailable" -> t("A biometria não está disponível agora. Confira se ela está ligada nas configurações do celular e tente de novo.")
+            "cofre.biometryLockedOut" -> t("O celular bloqueou a biometria depois de tentativas demais. Bloqueie e desbloqueie o celular com o PIN da tela, e tente de novo.")
+            "cofre.wiped" -> t("Tentativas demais: as carteiras deste celular foram apagadas. Só as palavras de cada carteira trazem de volta.")
+            "sessao.travada" -> t("O app travou antes de terminar. Destrave e tente de novo.")
+            "passphrase.vazia" -> t("A passphrase chegou vazia. Nada foi feito: digite de novo.")
+            "importacao.mudou" -> t("A carteira mudou desde a conferência dos endereços. Nada foi guardado: comece de novo.")
+            "sessao.pinCurto" -> t("Neste celular o PIN precisa ter 6 dígitos.")
+            "sessao.bloqueioLigado" -> t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova.")
+            // A passphrase que esta versao nao confere (`passphraseUnverified`): o texto vem do nucleo.
+            "passphrase.semConferencia" -> falha.dados.optString("mensagem", "").ifEmpty { null }
+            "sessao.listaMudou" -> t("As carteiras mudaram enquanto o cofre abria. Nada foi guardado; tente de novo.")
+            // O aparelho que calcula diferente dos vetores publicos: o problema e o aparelho, e nao o papel.
+            "autoteste.derivacao" -> t("Este aparelho calculou um endereço de teste diferente do esperado. Por segurança, nenhuma carteira é criada ou importada aqui.")
+            "autoteste.assinatura" -> t("Este aparelho calculou uma assinatura de teste diferente da esperada. Por segurança, nada é assinado aqui.")
+            else -> null
+        }
+    }
+}

@@ -1,0 +1,289 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+}
+
+android {
+    namespace = "app.escalibur.wallet"
+    compileSdk = 37
+
+    defaultConfig {
+        applicationId = "app.escalibur.wallet"
+        // Android 11: a biometria forte por operacao no Keystore (setUserAuthenticationParameters)
+        // e o BiometricPrompt com a classe de biometria existem a partir dele. O nucleo em Swift e
+        // compilado para android28 e roda em qualquer um destes.
+        minSdk = 30
+        targetSdk = 36
+        // De 1001 em diante: os builds do Android nunca usam um numero de build do iOS.
+        versionCode = 1013
+        versionName = "1.0.1"
+        // O commit publicado de onde o app saiu e a arvore dele, que o gerar-aab.sh passa (-PcommitDeOrigem,
+        // -ParvoreDeOrigem) de uma copia limpa da main do GitHub: a tela de Ajustes mostra o commit, e a arvore
+        // sobrevive a juncao diaria (auditoria de 03/11/2026). Fora dele, vazios, e o release nao sai.
+        val commitDeOrigem = (project.findProperty("commitDeOrigem") as String?)?.takeIf { Regex("^[0-9a-f]{40}$").matches(it) } ?: ""
+        val arvoreDeOrigem = (project.findProperty("arvoreDeOrigem") as String?)?.takeIf { Regex("^[0-9a-f]{40}$").matches(it) } ?: ""
+        buildConfigField("String", "COMMIT_DE_ORIGEM", "\"$commitDeOrigem\"")
+        buildConfigField("String", "ARVORE_DE_ORIGEM", "\"$arvoreDeOrigem\"")
+        // O nucleo so existe para arm64 (todos os aparelhos Android atuais e o emulador do Mac
+        // com chip da Apple).
+        ndk { abiFilters += listOf("arm64-v8a") }
+    }
+
+    // A chave de upload da Google Play: fora do repositorio, em ~/.escalibur/android, com a senha no
+    // Keychain do Mac. tools/android/gerar-aab.sh passa a senha por variavel de ambiente; sem ela, o
+    // release sai sem assinatura.
+    val senhaDeUpload: String? = System.getenv("ESCALIBUR_UPLOAD_SENHA")
+    signingConfigs {
+        create("upload") {
+            if (senhaDeUpload != null) {
+                storeFile = file(System.getenv("ESCALIBUR_UPLOAD_JKS") ?: "${System.getProperty("user.home")}/.escalibur/android/upload.jks")
+                storePassword = senhaDeUpload
+                keyAlias = "upload"
+                keyPassword = senhaDeUpload
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (senhaDeUpload != null) signingConfig = signingConfigs.getByName("upload")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        // O release minificado, com outro id e a chave de depuracao: conferir no emulador o que o R8
+        // faz, instalado ao lado do app de depuracao (e sem apagar as carteiras dele).
+        create("conferencia") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".conferencia"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+
+    packaging {
+        // As bibliotecas nativas ficam descomprimidas e alinhadas no APK (o carregador le
+        // direto dele), e o .so do nucleo ja vem sem simbolos de depuracao.
+        // Sem strip: o AGP rodaria o llvm-strip de um NDK da pasta do SDK, que ninguem confere, sobre o nucleo e a
+        // libc++, que ja saem enxutos do NDK r30 conferido; o gerar-aab.sh confere os dois no pacote pelo carimbo
+        // (revisao dos 3 agentes da checagem final de 16/11/2026).
+        jniLibs { useLegacyPackaging = false; keepDebugSymbols += "**/*.so" }
+    }
+
+    androidResources {
+        // As listas de palavras sao conferidas por digesto: nada de compressao mexendo nelas, e o
+        // video toca direto do APK.
+        noCompress += listOf("txt", "mp4")
+    }
+}
+
+// O que o app Android usa do iOS e do nucleo vem direto das pastas deles, no build: nenhuma
+// copia no repositorio que possa divergir.
+val raiz: File = rootDir.parentFile
+
+/** Copia arquivos para uma pasta que vira assets ou res do APK. */
+abstract class CopiarParaOApp : DefaultTask() {
+    @get:InputFiles abstract val origem: ConfigurableFileCollection
+    @get:Input abstract val subpasta: Property<String>
+    @get:Input abstract val achatar: Property<Boolean>
+    @get:OutputDirectory abstract val saida: DirectoryProperty
+
+    @TaskAction
+    fun copiar() {
+        val destino = saida.get().asFile.resolve(subpasta.get())
+        destino.deleteRecursively()
+        destino.mkdirs()
+        origem.asFileTree.visit {
+            if (!isDirectory) {
+                val alvo = if (achatar.get()) destino.resolve(name) else destino.resolve(relativePath.pathString)
+                alvo.parentFile.mkdirs()
+                file.copyTo(alvo, overwrite = true)
+            }
+        }
+    }
+}
+
+/**
+ * As tabelas de texto de cada idioma, geradas do catalogo do iOS (Localizable.xcstrings) mais o que
+ * so o Android diz (textos-android.json): `assets/textos/<idioma>.json`, da frase em portugues
+ * para a traducao. Plural vira um objeto com as formas ("one", "other"...).
+ */
+abstract class GerarTextos : DefaultTask() {
+    @get:InputFile abstract val catalogo: RegularFileProperty
+    @get:InputFile abstract val adicoes: RegularFileProperty
+    @get:OutputDirectory abstract val saida: DirectoryProperty
+
+    @TaskAction
+    fun gerar() {
+        @Suppress("UNCHECKED_CAST")
+        val strings = (JsonSlurper().parse(catalogo.get().asFile) as Map<String, Any?>)["strings"] as Map<String, Map<String, Any?>>
+        val tabelas = sortedMapOf<String, MutableMap<String, Any>>()
+        for ((chave, entrada) in strings) {
+            @Suppress("UNCHECKED_CAST")
+            val localizacoes = entrada["localizations"] as? Map<String, Map<String, Any?>> ?: continue
+            for ((idioma, local) in localizacoes) {
+                val valor = valorDe(local) ?: continue
+                tabelas.getOrPut(idioma) { sortedMapOf() }[chave] = valor
+            }
+        }
+        val extras = JsonSlurper().parse(adicoes.get().asFile) as Map<*, *>
+        for (entrada in extras.entries) {
+            val chave = entrada.key as String
+            val traducoes = entrada.value as? Map<*, *> ?: continue
+            for ((idioma, valor) in traducoes) tabelas.getOrPut(idioma as String) { sortedMapOf() }[chave] = valor as Any
+        }
+        val pasta = saida.get().asFile.resolve("textos")
+        pasta.deleteRecursively()
+        pasta.mkdirs()
+        for ((idioma, tabela) in tabelas) pasta.resolve("$idioma.json").writeText(JsonOutput.toJson(tabela))
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun valorDe(local: Map<String, Any?>): Any? {
+        (local["stringUnit"] as? Map<String, Any?>)?.let { return it["value"] }
+        val plural = (local["variations"] as? Map<String, Any?>)?.get("plural") as? Map<String, Map<String, Any?>> ?: return null
+        return plural.mapValues { (_, forma) -> (forma["stringUnit"] as? Map<String, Any?>)?.get("value") ?: "" }
+    }
+}
+
+/**
+ * O pacote da loja nunca leva o nucleo de depuracao (cofre.teste, o saldo de teste, o detalhe nos
+ * erros): o Gradle empacota o .so que estiver na pasta, de qualquer compilacao. Vale para o release
+ * e para o `conferencia`, que e o release minificado e tambem pode sair do Mac (auditoria Android de
+ * 31/10/2026, AA-09).
+ */
+abstract class ConferirNucleoDeRelease : DefaultTask() {
+    @get:InputFile abstract val nucleo: RegularFileProperty
+
+    @TaskAction
+    fun conferir() {
+        val texto = String(nucleo.get().asFile.readBytes(), Charsets.ISO_8859_1)
+        check("cofre.teste" !in texto) { "o nucleo em jniLibs e o de depuracao: rode tools/android/compilar-nucleo.sh release" }
+    }
+}
+
+val conferirNucleo = tasks.register<ConferirNucleoDeRelease>("conferirNucleoDeRelease") {
+    nucleo.set(layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libEscaliburAndroid.so"))
+}
+tasks.matching { it.name == "preReleaseBuild" || it.name == "preConferenciaBuild" }.configureEach { dependsOn(conferirNucleo) }
+
+// O C do nucleo de release so chama o que esta em simbolos-c.lock, e nunca rede, programa, arquivo nem o
+// kernel direto: conferido a cada pacote, e nao so pelo compilar-nucleo.sh. Sem os objetos do build de
+// release do nucleo, falha (terceira passada da auditoria de 03/11/2026).
+val conferirCDoNucleo = tasks.register<Exec>("conferirCDoNucleo") {
+    workingDir = raiz
+    commandLine("tools/verificar.sh", "--c-android", "Release")
+}
+// O pacote de release so sai pelo gerar-aab.sh, com o commit e a arvore publicados dentro: o
+// `./gradlew bundleRelease` direto deixaria os dois vazios em silencio. E os dois tem de ser os desta pasta,
+// sem mudanca nenhuma: quaisquer 40 hexadecimais nao bastam (quarta passada da auditoria de 03/11/2026).
+val origemDoRelease = listOf("commitDeOrigem", "arvoreDeOrigem").map { (project.findProperty(it) as String?).orEmpty() }
+val pastaDoRepositorio = raiz
+val conferirOrigem = tasks.register("conferirOrigemDoRelease") {
+    doLast {
+        fun git(vararg argumentos: String): String {
+            val processo = ProcessBuilder(listOf("git", "-C", pastaDoRepositorio.path) + argumentos).redirectErrorStream(true).start()
+            val texto = processo.inputStream.bufferedReader().readText().trim()
+            check(processo.waitFor() == 0) { "git ${argumentos.joinToString(" ")} falhou: $texto" }
+            return texto
+        }
+        check(origemDoRelease.all { Regex("^[0-9a-f]{40}$").matches(it) }) {
+            "o release so sai pelo tools/android/gerar-aab.sh, com o commit e a arvore publicados na main"
+        }
+        check(origemDoRelease[0] == git("rev-parse", "HEAD") && origemDoRelease[1] == git("rev-parse", "HEAD^{tree}")) {
+            "o commit e a arvore pedidos nao sao os desta pasta"
+        }
+        check(git("status", "--porcelain=v1", "--untracked-files=all").isEmpty()) {
+            "a pasta do release tem mudanca sem commit"
+        }
+        // So na copia limpa do gerar-aab.sh (um worktree ligado em /private/tmp/escalibur-loja.*), sem nada marcado
+        // para o git nao olhar, no commit da main publicada e com o nucleo de release deste commit (quinta passada da
+        // auditoria de 03/11/2026).
+        check(git("rev-parse", "--absolute-git-dir") != git("rev-parse", "--path-format=absolute", "--git-common-dir") &&
+              git("rev-parse", "--show-toplevel").startsWith("/private/tmp/escalibur-loja.")) {
+            "o release so sai da copia limpa que o tools/android/gerar-aab.sh monta"
+        }
+        check(git("ls-files", "-v").lines().all { it.startsWith("H ") }) { "ha arquivo marcado para o git nao olhar" }
+        check(origemDoRelease[0] == git("rev-parse", "--verify", "refs/remotes/origin/main^{commit}")) {
+            "o commit do release nao e o da main publicada"
+        }
+        val nucleo = pastaDoRepositorio.resolve("Android/app/src/main/jniLibs/arm64-v8a/libEscaliburAndroid.so")
+        val libcxx = pastaDoRepositorio.resolve("Android/app/src/main/jniLibs/arm64-v8a/libc++_shared.so")
+        val carimbo = pastaDoRepositorio.resolve("build/android-kit/origem-do-nucleo.txt")
+        fun digestoDe(arquivo: File) = MessageDigest.getInstance("SHA-256").digest(arquivo.readBytes()).joinToString("") { "%02x".format(it) }
+        // So o nucleo do modo da loja (do zero, com o log do compilador conferido), e a libc++ que ele conferiu
+        // (decima primeira passada da auditoria de 03/11/2026).
+        check(carimbo.isFile && carimbo.readText().trim() == "release-loja ${origemDoRelease[0]} ${digestoDe(nucleo)} ${digestoDe(libcxx)}") {
+            "o nucleo em jniLibs nao e o da loja deste commit (tools/android/compilar-nucleo.sh release --loja, pelo gerar-aab.sh)"
+        }
+    }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(conferirOrigem, conferirCDoNucleo) }
+tasks.matching { it.name == "preConferenciaBuild" }.configureEach { dependsOn(conferirCDoNucleo) }
+
+val gerarTextos = tasks.register<GerarTextos>("gerarTextos") {
+    catalogo.set(raiz.resolve("App/EscaliburWallet/Resources/Localizable.xcstrings"))
+    adicoes.set(layout.projectDirectory.file("textos-android.json"))
+    saida.set(layout.buildDirectory.dir("gerado/textos"))
+}
+val copiarLogos = tasks.register<CopiarParaOApp>("copiarLogos") {
+    origem.from(fileTree(raiz.resolve("App/EscaliburWallet/Resources/Assets.xcassets/Logos")) { include("**/*.png", "**/*.jpg") })
+    subpasta.set("logos")
+    achatar.set(true)
+    saida.set(layout.buildDirectory.dir("gerado/logos"))
+}
+val copiarListas = tasks.register<CopiarParaOApp>("copiarListas") {
+    origem.from(fileTree(raiz.resolve("Kit/Sources/EscaliburCore/Resources")) { include("Wordlists/**", "Forca/**") })
+    // A lista de moedas com as redes da busca do Receber, a mesma do iOS (tools/catalogo).
+    origem.from(fileTree(raiz.resolve("App/EscaliburWallet/Resources")) { include("Versoes/**", "catalogo-moedas.json") })
+    subpasta.set("nucleo")
+    achatar.set(false)
+    saida.set(layout.buildDirectory.dir("gerado/nucleo"))
+}
+val copiarAbertura = tasks.register<CopiarParaOApp>("copiarAbertura") {
+    origem.from(
+        raiz.resolve("App/EscaliburWallet/Resources/Abertura/abertura-espada.mp4"),
+        raiz.resolve("App/EscaliburWallet/Resources/Assets.xcassets/AberturaEspada.imageset/abertura-espada.jpg"),
+    )
+    subpasta.set("abertura")
+    achatar.set(true)
+    saida.set(layout.buildDirectory.dir("gerado/abertura"))
+}
+
+androidComponents {
+    onVariants { variante ->
+        variante.sources.assets?.addGeneratedSourceDirectory(gerarTextos, GerarTextos::saida)
+        variante.sources.assets?.addGeneratedSourceDirectory(copiarLogos, CopiarParaOApp::saida)
+        variante.sources.assets?.addGeneratedSourceDirectory(copiarListas, CopiarParaOApp::saida)
+        variante.sources.assets?.addGeneratedSourceDirectory(copiarAbertura, CopiarParaOApp::saida)
+    }
+}
+
+dependencies {
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.activity.compose)
+    // O QR do Receber e a leitura do QR do Enviar: a biblioteca de codigos, sem rede.
+    implementation(libs.zxing.core)
+    // A camera do leitor de QR do Enviar: os quadros vao para o ZXing aqui mesmo, nada e gravado.
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.compose)
+    implementation(libs.lifecycle.runtime.compose)
+}

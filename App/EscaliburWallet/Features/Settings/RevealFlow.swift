@@ -1,0 +1,212 @@
+import EscaliburCore
+import EscaliburKeys
+import SwiftUI
+
+/// X1 e X2: revelar a senha da carteira. Tambem e o caminho de "Gravar agora"
+/// (fazer a copia que faltou), que termina na conferencia digitada.
+struct RevealFlow: View {
+    enum Purpose { case reveal, backup }
+
+    @Environment(AppSession.self) private var session
+    @Environment(AuthCoordinator.self) private var auth
+    let wallet: WalletMeta
+    let purpose: Purpose
+    let onClose: () -> Void
+
+    @State private var draft: PhraseDraft?
+    @State private var confirming = false
+    @State private var working = false
+    @State private var error: String?
+    @State private var acknowledged: Set<Int> = []
+    /// Depois das palavras conferidas, a passphrase da carteira que tem uma (C7-02).
+    @State private var confirmingPassphrase = false
+    /// A checagem do aparelho entre o "estou ciente" e o PIN, como antes de digitar ou de
+    /// gerar as palavras (pedido do dono, 15/11/2026). Cada "Ver as palavras" confere de novo.
+    @State private var checkingDevice = false
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let draft, confirming {
+                    ConfirmWordsView(draft: draft, onBack: { confirming = false }) { confirmed() }
+                } else if let draft {
+                    // So as palavras: a passphrase nunca aparece, nem na carteira que tem uma (pedido do
+                    // dono, 01/11/2026), e nem esta no cofre (05/11/2026).
+                    RecordWordsView(draft: draft, walletName: purpose == .reveal ? wallet.name : nil) {
+                        if purpose == .backup { confirming = true } else { finish() }
+                    }
+                } else if working {
+                    // Do toque em "Ver as palavras" ate elas abrirem (PIN, rosto e o cofre), a
+                    // lista sai da tela: antes ela reaparecia por baixo, e um toque rapido no
+                    // teclado do PIN desmarcava um "estou ciente" (pedido do dono, 16/10/2026).
+                    opening
+                } else if checkingDevice {
+                    DeviceCheckView(slideTitle: String(localized: "Deslize para ver as palavras"),
+                                    consent: String(localized: "Estou ciente de que este iPhone falhou na verificação de integridade e de que ver as palavras aqui pode expor a carteira. Quero seguir mesmo assim.")) {
+                        Task { await open() }
+                    }
+                } else {
+                    warning
+                }
+            }
+            .background(Palette.void.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { finish() } label: {
+                        Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.inkSoft)
+                    }
+                    .accessibilityLabel("Fechar")
+                }
+            }
+        }
+        .interactiveDismissDisabled()
+        .guardedAgainstCapture()
+        .fullScreenCover(isPresented: $confirmingPassphrase) {
+            if let draft {
+                ConfirmPassphraseView(wallet: wallet, words: draft) {
+                    confirmingPassphrase = false
+                    finish()
+                }
+            }
+        }
+    }
+
+    private var opening: some View {
+        CipherWorking(title: String(localized: "Abrindo as palavras"))
+            .accessibilityIdentifier("revelar-abrindo")
+    }
+
+    private var warning: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Ninguém da Escalibur vai pedir suas palavras")
+                .typeStyle(.title).foregroundStyle(Palette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Suporte, gerente de exchange, recuperação de conta: quem pede a senha da carteira está tentando roubar o saldo.")
+                .typeStyle(.body).foregroundStyle(Palette.inkSoft).padding(.top, Space.sm)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Estou ciente que:")
+                .typeStyle(.row).foregroundStyle(Palette.ink)
+                .padding(.top, Space.lg)
+            VStack(spacing: 0) {
+                ForEach(Array(Self.statements.enumerated()), id: \.offset) { index, statement in
+                    Button {
+                        if acknowledged.contains(index) { acknowledged.remove(index) } else { acknowledged.insert(index) }
+                    } label: {
+                        HStack(spacing: Space.sm) {
+                            ZStack {
+                                Circle().stroke(acknowledged.contains(index) ? Palette.success : Palette.inkMuted, lineWidth: 1.5)
+                                if acknowledged.contains(index) {
+                                    Circle().fill(Palette.success)
+                                    Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Palette.void)
+                                }
+                            }
+                            .frame(width: 22, height: 22)
+                            Text(statement).typeStyle(.body).foregroundStyle(Palette.ink)
+                                .multilineTextAlignment(.leading)
+                            Spacer(minLength: 0)
+                        }
+                        .frame(minHeight: Height.rowCompact)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .sensoryFeedback(.selection, trigger: acknowledged.contains(index))
+                }
+            }
+            .padding(.top, Space.xxs)
+            if let error { Banner(kind: .failure, title: error).padding(.top, Space.md) }
+            Spacer()
+            PrimaryButton(title: String(localized: "Ver as palavras"), enabled: acknowledged.count == Self.statements.count, loading: working) {
+                error = nil
+                checkingDevice = true
+            }
+        }
+        .padding(.horizontal, Space.gutter)
+        .padding(.top, Space.md)
+        .padding(.bottom, Space.xs)
+    }
+
+    /// Cada item continua a frase "Estou ciente que:", com maiuscula no comeco, como item
+    /// de lista (pedido do dono, 16/10/2026).
+    static let statements = [
+        String(localized: "Quem tem as palavras tem o saldo"),
+        String(localized: "A Escalibur nunca pede as palavras"),
+        String(localized: "Devo ver as palavras sozinho, longe de câmeras"),
+        // O "estou ciente" do Espelhamento do iPhone no Mac saiu a pedido do dono (16/10/2026):
+        // o aviso continua na checagem do aparelho, antes das palavras (auditoria 4, C7-06).
+    ]
+
+    private func open() async {
+        working = true
+        // Sem as palavras (recusa, PIN cancelado, passphrase errada), volta ao aviso com o motivo,
+        // e o proximo "Ver as palavras" confere o aparelho de novo.
+        defer { working = false; checkingDevice = false }
+        error = nil
+        let id = wallet.id
+        var counted = false
+        do {
+            // A espera do A1 antes da frase de voz: nada de pedir a voz para ouvir "espere".
+            try AuthCoordinator.checkPINAndBiometry()
+            guard await VoiceGate.shared.confirm(.reveal, session: session) else { return }
+            // Na carteira com passphrase, as palavras so aparecem depois de a passphrase digitada
+            // conferir: sem a carteira de base neste iPhone, quem tem o PIN e o rosto levaria as
+            // palavras daqui e testaria passphrases fora do aparelho (revisao de seguranca de
+            // 16/10/2026). Ela confere pelo fingerprint da raiz e sai zerada no fim.
+            let current = session.metadata.wallets.first { $0.id == id } ?? wallet
+            if PassphraseGate.unverified(current) {
+                self.error = PassphraseGate.unverifiedMessage
+                return
+            }
+            let fingerprint = current.fingerprint.flatMap(Hex.decode)
+            var typed: SecureBytes?
+            if PassphraseGate.asks(current) {
+                guard let given = await PassphraseGate.shared.ask(current, reason: String(localized: "Para ver as palavras de \(current.name), digite a passphrase. Depois vem a confirmação de sempre.")) else { return }
+                typed = given
+                if let wait = PassphraseGate.shared.begin(session, wallet: id) {
+                    self.error = wait
+                    given.wipe()
+                    return
+                }
+                counted = true
+            }
+            defer { typed?.wipe() }
+            let check = typed
+            let result: SecureBytes? = try await auth.retrying(reason: String(localized: "Ver a senha de \(wallet.name)"), presence: .pinAndBiometry) {
+                try await session.walletPhrase($0, walletID: id, check: check, fingerprint: fingerprint)
+            }
+            guard let phrase = result else {
+                if check != nil { PassphraseGate.shared.refund(session, wallet: id) }
+                return
+            }
+            if check != nil { PassphraseGate.shared.passed(session, wallet: id) }
+            let words = phrase.withUnsafeBytes { raw in raw.filter { $0 == 0x20 }.count + 1 }
+            draft = PhraseDraft(phrase: phrase, wordCount: words)
+        } catch {
+            if (error as? Signer.Failure) == .passphraseMismatch {
+                PassphraseGate.shared.failed(session, wallet: id)
+                self.error = PassphraseGate.mismatchMessage
+                return
+            }
+            // Parou antes da passphrase: nada foi conferido, a tentativa volta.
+            if counted { PassphraseGate.shared.refund(session, wallet: id) }
+            self.error = AuthCoordinator.refusalMessage(error) ?? String(localized: "Não foi possível abrir a carteira agora.")
+        }
+    }
+
+    private func confirmed() {
+        let updated = session.update(wallet.id) { $0.backupConfirmedAt = .now } ?? wallet
+        if updated.hasPassphrase, updated.passphraseConfirmedAt == nil, draft != nil {
+            confirmingPassphrase = true
+        } else {
+            finish()
+        }
+    }
+
+    private func finish() {
+        if draft != nil {
+            session.update(wallet.id) { $0.lastRevealedAt = .now }
+        }
+        draft?.wipe()
+        draft = nil
+        onClose()
+    }
+}

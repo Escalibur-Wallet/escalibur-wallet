@@ -1,0 +1,155 @@
+import XCTest
+
+/// Tudo o que a carteira tem: "Outros tokens", "Mostrar suspeitos" e a moeda custom
+/// aparecendo na Carteira, em Receber e em Enviar. A carteira de teste (frase publica
+/// "abandon ... about") recebe tokens de golpe de verdade na Base e na Tron, e tem o
+/// "OpenAI" (sem cara de golpe) na Base: e ele que vira moeda custom aqui. Le a rede de
+/// verdade, como os outros testes da carteira de teste.
+final class CustomTokenTests: XCTestCase {
+    var shots: String? { ProcessInfo.processInfo.environment["ESCALIBUR_FOTOS"] }
+    static let openAI = "0xd77cD3531c306204069684F48Af23F1213FE0165"
+
+    func shot(_ name: String, _ app: XCUIApplication) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        if let shots { try? app.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: "\(shots)/\(name).png")) }
+    }
+
+    func launch(reset: Bool = true) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = reset ? ["-reset", "-demo"] : ["-demo"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Receber"].firstMatch.waitForExistence(timeout: 30))
+        return app
+    }
+
+    /// Rola a Carteira ate o elemento aparecer acima da barra de abas: embaixo dela ele
+    /// conta como tocavel, mas o toque cai na aba.
+    func scroll(to element: XCUIElement, in app: XCUIApplication, tries: Int = 10) {
+        let bar = app.tabBars.firstMatch
+        func visible() -> Bool {
+            guard element.exists, element.isHittable else { return false }
+            return !bar.exists || element.frame.maxY < bar.frame.minY - 8
+        }
+        for _ in 0..<tries where !visible() { app.swipeUp() }
+    }
+
+    func testOtherTokensAndSuspicious() {
+        let app = launch()
+        let section = app.staticTexts["Outros tokens"]
+        let suspicious = app.buttons["mostrar-suspeitos"]
+        // A leitura das redes demora: espera o botao de suspeitos existir.
+        let deadline = Date().addingTimeInterval(60)
+        while !suspicious.exists && Date() < deadline { app.swipeUp(); sleep(1) }
+        scroll(to: suspicious, in: app)
+        XCTAssertTrue(suspicious.waitForExistence(timeout: 10))
+        // "Outros tokens" comeca fechado e abre no toque (16/10/2026).
+        let others = app.buttons["mostrar-outros"]
+        if others.exists {
+            others.tap()
+            XCTAssertTrue(app.buttons["Esconder outros tokens"].waitForExistence(timeout: 5))
+        }
+        if section.exists || others.exists { shot("c1-outros-tokens", app) }
+        // Suspeitos ficam escondidos ate o toque.
+        XCTAssertFalse(app.staticTexts["Suspeito"].exists)
+        suspicious.tap()
+        XCTAssertTrue(app.buttons["Esconder suspeitos"].waitForExistence(timeout: 5))
+        // Os saldos seguem chegando e empurram a lista para baixo: rola ate o selo, que
+        // so existe quando a linha (lista preguicosa) entra na tela.
+        let badge = app.staticTexts["Suspeito"].firstMatch
+        scroll(to: badge, in: app, tries: 20)
+        XCTAssertTrue(badge.waitForExistence(timeout: 5))
+        app.swipeUp()
+        shot("c2-suspeitos", app)
+        badge.tap()
+        XCTAssertTrue(app.staticTexts["Por que está em suspeitos"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Qualquer pessoa cria um token'")).firstMatch.exists)
+    }
+
+    func testAddCustomCoinAppearsEverywhere() {
+        let app = launch()
+        let manage = app.buttons["gerenciar-ativos"]
+        XCTAssertTrue(manage.waitForExistence(timeout: 10))
+        // Enquanto os saldos chegam, o cartao do total muda de altura e o "Gerenciar"
+        // desce: o toque pode cair onde ele estava. Toca de novo se a tela nao abriu.
+        for _ in 0..<3 where !app.staticTexts["Moedas custom"].waitForExistence(timeout: 1) {
+            manage.tap()
+            _ = app.staticTexts["Moedas custom"].waitForExistence(timeout: 4)
+        }
+        let add = app.buttons["adicionar-moeda"]
+        scroll(to: add, in: app)
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        add.tap()
+        // So o contrato: a rede (Base) sai da leitura nas redes da carteira.
+        let field = app.descendants(matching: .any)["campo-endereco"].firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        // O colar dentro do campo vazio (pedido do dono, 18/10/2026); com texto, ele sai.
+        let paste = app.buttons.matching(NSPredicate(format: "identifier == 'campo-endereco-colar' OR label == 'Colar' OR label == 'Paste'")).firstMatch
+        XCTAssertTrue(paste.exists, "sem o colar dentro do campo")
+        shot("m1-adicionar-moeda", app)
+        field.tap()
+        field.typeText(Self.openAI)
+        app.buttons["ler-na-rede"].tap()
+        let confirm = app.buttons["adicionar-a-carteira"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 60))
+        XCTAssertTrue(app.staticTexts["Não verificado pela Escalibur"].exists)
+        XCTAssertTrue(app.staticTexts["Base"].exists, "a rede achada pelo contrato nao e a Base")
+        shot("m2-previa", app)
+        scroll(to: confirm, in: app)
+        confirm.tap()
+        // De volta a Gerenciar ativos, com a moeda na lista de moedas custom.
+        XCTAssertTrue(app.buttons["Remover OpenAI"].waitForExistence(timeout: 10))
+        shot("g1-gerenciar", app)
+
+        // Carteira: a moeda aparece com o selo de custom. O voltar tocado enquanto a folha
+        // de adicionar ainda fecha e ignorado: toca de novo se Gerenciar ativos ficou.
+        let manageBar = app.navigationBars["Gerenciar ativos"]
+        for _ in 0..<3 where manageBar.exists {
+            manageBar.buttons["BackButton"].tap()
+            _ = manageBar.waitForNonExistence(timeout: 3)
+        }
+        XCTAssertFalse(manageBar.exists, "nao voltou para a Carteira")
+        // A linha da Carteira e um botao; o selo vai no rotulo dele.
+        let custom = app.buttons.matching(NSPredicate(format: "label CONTAINS 'OpenAI' AND label CONTAINS 'Custom'")).firstMatch
+        let deadline = Date().addingTimeInterval(60)
+        while !custom.exists && Date() < deadline { sleep(1) }
+        scroll(to: custom, in: app)
+        XCTAssertTrue(custom.waitForExistence(timeout: 10))
+
+        // Receber: a moeda custom e uma linha propria, marcada. A moeda ficou salva:
+        // reabre o app sem apagar.
+        app.terminate()
+        let again = launch(reset: false)
+        receiveAndSend(again)
+    }
+
+    func receiveAndSend(_ app: XCUIApplication) {
+        app.buttons["Receber"].firstMatch.tap()
+        let search = app.textFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        search.tap()
+        search.typeText("OpenAI")
+        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Custom'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        shot("r5-receber-custom", app)
+        row.tap()
+        // O contrato num cartao a parte, que nao se confunde com o endereco (17/10/2026).
+        XCTAssertTrue(app.descendants(matching: .any)["receber-contrato"].firstMatch.waitForExistence(timeout: 10))
+        app.terminate()
+
+        // Enviar: aparece no seletor, com o selo, e abre o envio.
+        let sendApp = launch(reset: false)
+        sendApp.buttons["Enviar"].firstMatch.tap()
+        sendFlow(sendApp)
+    }
+
+    func sendFlow(_ app: XCUIApplication) {
+        let send = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Custom'")).firstMatch
+        XCTAssertTrue(send.waitForExistence(timeout: 30))
+        shot("e1-enviar-custom", app)
+        send.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Enviar'")).firstMatch.waitForExistence(timeout: 10))
+    }
+}

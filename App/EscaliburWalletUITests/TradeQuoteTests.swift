@@ -1,0 +1,177 @@
+import XCTest
+
+/// A aba Trocar cota de verdade, na carteira publica de teste (sem saldo): nada e
+/// assinado, porque sem saldo o botao de revisar nao liga. So roda com
+/// ESCALIBUR_REDE=1, porque fala com os provedores reais.
+final class TradeQuoteTests: XCTestCase {
+    var shots: String? { ProcessInfo.processInfo.environment["ESCALIBUR_FOTOS"] }
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["ESCALIBUR_REDE"] == "1", "so com rede")
+    }
+
+    func shot(_ name: String, _ app: XCUIApplication) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        if let shots { try? app.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: "\(shots)/\(name).png")) }
+    }
+
+    func testBaseQuote() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-reset", "-demo", "-tela", "trocar"]
+        app.launch()
+
+        let menu = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Rede:'")).firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 30))
+        shot("t0-trocar", app)
+        menu.tap()
+        let base = app.buttons["Base"].firstMatch
+        XCTAssertTrue(base.waitForExistence(timeout: 5))
+        base.tap()
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        field.typeText("0,01")
+        shot("t0b-carregando", app)
+        // A proxima cotacao no relogio redondo, ao lado do preco.
+        let next = app.descendants(matching: .any)["troca-proxima-cotacao"]
+        XCTAssertTrue(next.waitForExistence(timeout: 40), "a cotacao nao chegou")
+        // A bomba de combustivel com a taxa da rede na moeda do app.
+        let fee = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Taxa da rede'")).firstMatch
+        XCTAssertTrue(fee.waitForExistence(timeout: 5), "a taxa da rede nao apareceu")
+        shot("t1-cotacao-base", app)
+        app.buttons["Pronto"].tap()
+        shot("t2-cotacao-base-detalhe", app)
+    }
+
+    /// Cotacao sem comparacao (`-tela trocar-sem-comparacao`: a do XRP Ledger, ao vivo, marcada como viria
+    /// com uma fonte so e sem preco de referencia): o aviso e a caixa aparecem, o botao de revisar so liga com
+    /// a caixa marcada e desliga ao desmarcar. Nada e revisado nem assinado (05/11/2026).
+    func testUnanchoredConsent() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-reset", "-demo", "-tela", "trocar-sem-comparacao"]
+        app.launch()
+        let consent = app.buttons["aceite-sem-comparacao"]
+        XCTAssertTrue(consent.waitForExistence(timeout: 60), "a cotacao sem comparacao nao chegou")
+        let warning = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Não há preço de referência do mercado para comparar com esta cotação. Um'")).firstMatch
+        XCTAssertTrue(warning.exists)
+        let review = app.buttons["Revisar troca"]
+        XCTAssertTrue(review.waitForExistence(timeout: 10))
+        XCTAssertFalse(review.isEnabled, "o botao ligou sem o aceite")
+        shot("u1-sem-comparacao", app)
+        consent.tap()
+        XCTAssertEqual(consent.value as? String, "Marcado")
+        XCTAssertTrue(review.isEnabled, "o botao nao ligou com o aceite")
+        shot("u2-sem-comparacao-aceite", app)
+        // A recotacao de 15 s pode ter desmarcado sozinha: so toca se ainda esta marcada.
+        if consent.value as? String == "Marcado" { consent.tap() }
+        XCTAssertFalse(review.isEnabled, "o botao ficou ligado depois de desmarcar")
+    }
+
+    /// XRP por RLUSD no livro do XRP Ledger: a cotacao vem do livro, e o plano, sem
+    /// assinar, nunca pode cair na recusa de "nao confere com o pedido". A carteira
+    /// publica de teste tem a conta do XRP Ledger tomada (chave mestra desativada por
+    /// quem pos outra chave), e a recusa propria disso tambem vale como chegada.
+    func testXRPLPlanReview() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-reset", "-demo", "-tela", "trocar"]
+        app.launch()
+        let menu = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Rede:'")).firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 30))
+        menu.tap()
+        let xrpl = app.buttons["XRP Ledger"].firstMatch
+        XCTAssertTrue(xrpl.waitForExistence(timeout: 5), "o XRP Ledger nao apareceu nas redes de troca")
+        xrpl.tap()
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        field.typeText("1")
+        // A proxima cotacao no relogio redondo, ao lado do preco.
+        let next = app.descendants(matching: .any)["troca-proxima-cotacao"]
+        if !next.waitForExistence(timeout: 40) {
+            app.buttons["Pronto"].tap()
+            shot("t4-falha-cotacao-xrpl", app)
+            XCTFail("a cotacao nao chegou: " + app.staticTexts.allElementsBoundByIndex.map { $0.label }.joined(separator: " | "))
+            return
+        }
+        app.buttons["Pronto"].tap()
+        shot("t4-cotacao-xrpl", app)
+        let review = app.buttons["Revisar troca"]
+        if !review.waitForExistence(timeout: 10) { shot("t4-falha-revisar-xrpl", app) }
+        XCTAssertTrue(review.exists)
+        review.tap()
+        let title = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Trocar ' AND label CONTAINS ' por '")).firstMatch
+        let hijacked = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Esta conta desativou a chave mestra'")).firstMatch
+        let deadline = Date().addingTimeInterval(60)
+        while Date() < deadline, !(title.exists || hijacked.exists) { usleep(500_000) }
+        shot("t5-revisao-xrpl", app)
+        XCTAssertFalse(app.staticTexts["O plano montado não confere com a troca pedida. Nada foi assinado."].exists)
+        XCTAssertTrue(title.exists || hijacked.exists, "nem a revisao nem a recusa da conta tomada")
+    }
+}
+
+/// O seletor de moedas da troca: "Voce vende" so com o que tem saldo, do maior para o menor.
+final class TradePickerTests: XCTestCase {
+    func testSellPickerShowsOnlyHeld() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-reset", "-demo", "-tela", "trocar"]
+        app.launch()
+        let menu = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Rede:'")).firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 30))
+        menu.tap()
+        let solana = app.buttons["Solana"].firstMatch
+        XCTAssertTrue(solana.waitForExistence(timeout: 5))
+        solana.tap()
+        // A carteira de teste precisa do saldo da Solana carregado.
+        sleep(6)
+        let sell = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'escolher-token-'")).firstMatch
+        XCTAssertTrue(sell.waitForExistence(timeout: 10))
+        sell.tap()
+        XCTAssertTrue(app.staticTexts["Escolher token"].waitForExistence(timeout: 5))
+        let sellRows = app.buttons.matching(NSPredicate(format: "label CONTAINS 'SOL'")).count
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "s1-vende"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTAssertGreaterThan(sellRows, 0, "o SOL, com saldo, nao aparece para vender")
+        // Sem saldo, o USDC da Solana nao aparece para vender. A linha da lista tem o nome junto; o
+        // "USDC" do Voce recebe, atras da folha, nao. Com USDC de outra rede na carteira, ele aparece
+        // em "Suas moedas em outras redes", e a conta nao vale.
+        if !app.staticTexts["Suas moedas em outras redes"].exists {
+            XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS 'USD Coin'")).firstMatch.exists, "token sem saldo na lista de vender")
+        }
+    }
+
+    /// As moedas da carteira nas outras redes aparecem, e escolher uma muda a rede la em cima
+    /// (pedido do dono, 02/11/2026).
+    func testPickerShowsOtherNetworksAndSwitches() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-reset", "-demo", "-tela", "trocar"]
+        app.launch()
+        let menu = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Rede:'")).firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 30))
+        let before = menu.label
+        // Os saldos de todas as redes carregados.
+        sleep(10)
+        let sell = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'escolher-token-'")).firstMatch
+        XCTAssertTrue(sell.waitForExistence(timeout: 10))
+        sell.tap()
+        XCTAssertTrue(app.staticTexts["Escolher token"].waitForExistence(timeout: 5))
+        let header = app.staticTexts["Suas moedas em outras redes"]
+        XCTAssertTrue(header.waitForExistence(timeout: 10), "as moedas das outras redes nao aparecem")
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "s2-outras-redes"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        // A primeira linha abaixo do titulo: uma moeda de outra rede.
+        let rows = app.buttons.allElementsBoundByIndex.filter { $0.frame.minY > header.frame.maxY && $0.isHittable }
+        XCTAssertFalse(rows.isEmpty)
+        rows[0].tap()
+        let switched = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", before), object: menu)
+        XCTAssertEqual(XCTWaiter.wait(for: [switched], timeout: 5), .completed, "a rede la em cima nao mudou")
+    }
+}
+

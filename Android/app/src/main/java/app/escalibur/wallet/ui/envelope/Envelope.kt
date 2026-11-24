@@ -1,0 +1,1306 @@
+package app.escalibur.wallet.ui.envelope
+
+import app.escalibur.wallet.ui.comp.BotaoTerciario
+import java.io.File
+import androidx.core.content.IntentCompat
+import androidx.core.content.FileProvider
+import android.content.Intent
+import android.content.res.AssetFileDescriptor
+import android.content.Context
+import android.app.PendingIntent
+import android.content.ClipData
+import app.escalibur.wallet.ui.comp.EmblemaCifrado
+import app.escalibur.wallet.ui.comp.Girando
+import android.net.Uri
+import android.os.CancellationSignal
+import android.provider.OpenableColumns
+import android.util.Base64
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import app.escalibur.wallet.ui.comp.acimaDoTeclado
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import app.escalibur.wallet.ui.comp.Segredo
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.escalibur.wallet.BuildConfig
+import app.escalibur.wallet.nucleo.Api
+import app.escalibur.wallet.nucleo.FalhaDoNucleo
+import app.escalibur.wallet.ui.App
+import app.escalibur.wallet.ui.Ciclo
+import app.escalibur.wallet.ui.Autorizacao
+import app.escalibur.wallet.ui.Carteira
+import app.escalibur.wallet.ui.Formato
+import app.escalibur.wallet.ui.comp.Avisos
+import app.escalibur.wallet.ui.comp.BotaoDeCanto
+import app.escalibur.wallet.ui.comp.BotaoPrimario
+import app.escalibur.wallet.ui.comp.BotaoSecundario
+import app.escalibur.wallet.ui.comp.CabecalhoDeFolha
+import app.escalibur.wallet.ui.comp.Confirmacao
+import app.escalibur.wallet.ui.comp.Faixa
+import app.escalibur.wallet.ui.comp.Icone
+import app.escalibur.wallet.ui.comp.Icones
+import app.escalibur.wallet.ui.comp.Rodape
+import app.escalibur.wallet.ui.comp.TipoDeFaixa
+import app.escalibur.wallet.ui.enviar.PedidoDePassphrase
+import app.escalibur.wallet.ui.importar.CampoSecreto
+import app.escalibur.wallet.ui.importar.ConferenciaDaImportacao
+import app.escalibur.wallet.ui.novacarteira.GravarPalavras
+import app.escalibur.wallet.ui.novacarteira.VerificacaoDoAparelho
+import app.escalibur.wallet.ui.principal.Navegacao
+import app.escalibur.wallet.ui.t
+import app.escalibur.wallet.ui.tema.Altura
+import app.escalibur.wallet.ui.tema.Espaco
+import app.escalibur.wallet.ui.tema.Paleta
+import app.escalibur.wallet.ui.tema.Raio
+import app.escalibur.wallet.ui.tema.Tipo
+import app.escalibur.wallet.ui.tema.estilo
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import app.escalibur.wallet.nucleo.PalavrasNaTela
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONObject
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.thread
+
+/** O tamanho fixo de todo envelope `.esclbr` v1. */
+private const val TAMANHO_DO_ENVELOPE = 16_504
+
+/**
+ * A leitura do arquivo do envelope, com prazo (pentest de 17/11/2026, A-3). O `content://` pode vir de outro app, porque a
+ * `MainActivity` e exportada, e o provedor dele pode nunca responder: sem prazo, a tela ficava parada, sem erro, e a
+ * leitura prendia para sempre uma thread da fila de fundo, a mesma das chamadas ao nucleo.
+ *
+ * A leitura roda numa thread propria, fora dessa fila. Vencido o prazo, ou com a tela fechada no meio, o provedor recebe o
+ * cancelamento e o descritor e fechado, o que solta a leitura presa nele; isso tambem numa thread propria, porque fechar o
+ * descritor de um provedor hostil pode nao voltar, e quem chama esta na thread da interface. A chamada presa dentro de um
+ * provedor que ignora o cancelamento (abrir o arquivo, ou a consulta do nome) nao tem como ser solta daqui, e a thread dela
+ * fica para tras ate ele responder ou morrer: por isso o teto de threads em andamento (a da leitura e a que fecha), que
+ * recusa a proxima em vez de empilhar. O que chega de outro app e o que o dono escolhe no seletor contam separados: um
+ * provedor de fora que nunca responde ocupa so as vagas de fora, e o seletor do app continua abrindo o arquivo do dono.
+ * Pelo seletor, o prazo vencido com o arquivo ainda chegando nao cancela nada: so desiste de esperar (ver `ler`).
+ */
+private object LeitorDeEnvelope {
+    /** O arquivo tem 16 KiB, mas o provedor de nuvem baixa antes de entregar: no dia de recuperar a carteira, numa rede ruim,
+     * um prazo curto recusaria o envelope do proprio dono. O botao gira enquanto isso, e a tela pode ser fechada. */
+    private const val PRAZO_DOS_BYTES = 60_000L
+    /** O nome e so o que a tela mostra: sem resposta, vale o nome padrao. */
+    private const val PRAZO_DO_NOME = 3_000L
+    private const val DE_FORA_DE_UMA_VEZ = 2
+    private const val DO_SELETOR_DE_UMA_VEZ = 4
+    private val deFora = AtomicInteger(0)
+    private val doSeletor = AtomicInteger(0)
+
+    /** `dados` nulo: o arquivo foi lido e nao tem o tamanho de um envelope (ou o provedor falhou). */
+    class Leitura(val dados: ByteArray?, val nome: String?)
+
+    private class Lidos(val dados: ByteArray?)
+
+    /** Nulo: o prazo venceu, ou ja ha leituras demais sem resposta. `deOutroApp`: o arquivo chegou por um intent, e nao pelo seletor. */
+    suspend fun ler(contexto: Context, uri: Uri, deOutroApp: Boolean): Leitura? {
+        val emAndamento = if (deOutroApp) deFora else doSeletor
+        if (emAndamento.incrementAndGet() > (if (deOutroApp) DE_FORA_DE_UMA_VEZ else DO_SELETOR_DE_UMA_VEZ)) {
+            emAndamento.decrementAndGet()
+            return null
+        }
+        val resolvedor = contexto.applicationContext.contentResolver
+        val bytes = CompletableDeferred<ByteArray?>()
+        val nome = CompletableDeferred<String?>()
+        // O descritor aberto. Um fechador so: quem o tirar daqui fecha (a thread da leitura ao terminar, ou o `largar` no prazo),
+        // porque dois fechando o mesmo numero ao mesmo tempo podem fechar o descritor de outra parte do app.
+        val aberto = AtomicReference<AssetFileDescriptor?>(null)
+        val desistiu = AtomicBoolean(false)
+        val sinal = CancellationSignal()
+        val lancada = runCatching {
+            thread(isDaemon = true, name = "envelope-leitura") {
+                try {
+                    val lido = runCatching {
+                        val descritor = resolvedor.openAssetFileDescriptor(uri, "r", sinal) ?: return@runCatching null
+                        aberto.set(descritor)
+                        try {
+                            // O prazo venceu enquanto o provedor abria o arquivo: nada a ler.
+                            if (desistiu.get()) return@runCatching null
+                            val entrada = descritor.createInputStream()
+                            val buffer = ByteArray(TAMANHO_DO_ENVELOPE + 1)
+                            var lidos = 0
+                            while (lidos < buffer.size) {
+                                val n = entrada.read(buffer, lidos, buffer.size - lidos)
+                                if (n < 0) break
+                                lidos += n
+                            }
+                            if (lidos == TAMANHO_DO_ENVELOPE) buffer.copyOf(lidos) else null
+                        } finally {
+                            aberto.getAndSet(null)?.let { runCatching { it.close() } }
+                        }
+                    }.getOrNull()
+                    bytes.complete(lido)
+                    // O nome que o dono ve no seletor; o caminho da uri e so um numero do provedor.
+                    nome.complete(if (lido == null || desistiu.get()) null else runCatching {
+                        resolvedor.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null, sinal)?.use { c ->
+                            if (c.moveToFirst()) c.getString(0) else null
+                        }
+                    }.getOrNull())
+                } finally {
+                    // Ninguem espera para sempre por uma thread que saiu por um erro que o `runCatching` nao pega.
+                    bytes.complete(null)
+                    nome.complete(null)
+                    emAndamento.decrementAndGet()
+                }
+            }
+        }
+        if (lancada.isFailure) {
+            emAndamento.decrementAndGet()
+            return null
+        }
+        try {
+            val lidos = withTimeoutOrNull(PRAZO_DOS_BYTES) { Lidos(bytes.await()) } ?: return null
+            val dados = lidos.dados ?: return Leitura(null, null)
+            return Leitura(dados, withTimeoutOrNull(PRAZO_DO_NOME) { nome.await() })
+        } finally {
+            // O `nome` so se completa no fim do trabalho da thread: incompleto, ela ainda trabalha (o prazo venceu, ou a tela saiu
+            // com a leitura ou a consulta do nome no meio).
+            if (!nome.isCompleted) {
+                desistiu.set(true)
+                // Pelo seletor, com o arquivo ainda chegando, so desiste: o provedor de nuvem baixa antes de entregar e respeita o
+                // cancelamento, e cancelar no prazo faria toda tentativa numa rede ruim recomecar do zero, no dia de recuperar a
+                // carteira. A thread termina quando ele responder, e a proxima escolha abre na hora; o teto do seletor segura o resto.
+                if (deOutroApp || bytes.isCompleted) largar(emAndamento, sinal, aberto.getAndSet(null))
+            }
+        }
+    }
+
+    /**
+     * Cancela e fecha fora da thread de quem chamou: o provedor que coopera para, e o descritor fechado solta a leitura presa nele.
+     * A thread daqui conta no mesmo teto: fechar o descritor de um provedor hostil pode nao voltar nunca.
+     */
+    private fun largar(emAndamento: AtomicInteger, sinal: CancellationSignal, descritor: AssetFileDescriptor?) {
+        emAndamento.incrementAndGet()
+        val lancou = runCatching {
+            thread(isDaemon = true, name = "envelope-fecha") {
+                try {
+                    runCatching { sinal.cancel() }
+                    runCatching { descritor?.close() }
+                } finally {
+                    emAndamento.decrementAndGet()
+                }
+            }
+        }.isSuccess
+        if (!lancou) emAndamento.decrementAndGet()
+    }
+}
+
+/** "cerca de 3 segundos": o tempo do Argon2 neste celular. */
+private fun cercaDe(segundos: Double): String {
+    val n = maxOf(1, Math.round(segundos).toInt())
+    return if (n == 1) t("cerca de 1 segundo") else t("cerca de %lld segundos", n)
+}
+
+@Composable
+private fun PontoDoEnvelope(icone: ImageVector, texto: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(Paleta.controle), contentAlignment = Alignment.Center) {
+            Icone(icone, Paleta.tinta, tamanho = 18.dp)
+        }
+        Text(texto, style = estilo(Tipo.corpo), color = Paleta.tinta, modifier = Modifier.weight(1f).padding(top = 5.dp))
+    }
+}
+
+/** O "Como funciona" do envelope, o mesmo em lacrar e em abrir: uma capsula com o play. */
+@Composable
+private fun BotaoComoFunciona(modifier: Modifier = Modifier) {
+    Row(
+        modifier.height(34.dp).clip(CircleShape).background(Paleta.trilho)
+            .clickable(role = Role.Button) { Navegacao.folha { ComoFuncionaOEnvelope { Navegacao.fechar() } } }
+            .padding(horizontal = Espaco.sm),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icone(Icones.reproduzirCirculo, Paleta.tinta, tamanho = 15.dp)
+        Text(t("Como funciona"), style = estilo(Tipo.rotulo), color = Paleta.tinta)
+    }
+}
+
+/** As escolhas da senha do envelope: capsulas da mesma largura, com o icone do que fazem (o sorteio em pixels). */
+@Composable
+private fun BotaoDeOpcao(titulo: String, icone: ImageVector?, modifier: Modifier = Modifier, acao: () -> Unit) {
+    Row(
+        modifier.fillMaxWidth().height(48.dp).clip(CircleShape).background(Paleta.trilho).border(1.dp, Paleta.borda, CircleShape)
+            .clickable(role = Role.Button, onClick = acao),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs, Alignment.CenterHorizontally),
+    ) {
+        if (icone == null) app.escalibur.wallet.ui.comp.PixelsDoSorteio(Modifier.size(16.dp)) else Icone(icone, Paleta.tinta, tamanho = 15.dp)
+        Text(titulo, style = estilo(Tipo.acao), color = Paleta.tinta, maxLines = 1)
+    }
+}
+
+// MARK: Lacrar
+
+/**
+ * V1: lacrar a senha de uma carteira num envelope Escalibur. A explicacao, a checagem do aparelho,
+ * a senha do envelope (seis palavras sorteadas, ou a propria com o medidor e o "sim" abaixo de
+ * forte), a repeticao com o nome e o lacre. O arquivo sai pelo seletor do sistema, para onde o
+ * dono escolher.
+ */
+@Composable
+fun FluxoDeLacrar(carteira: Carteira, demo: String? = null) {
+    val escopo = rememberCoroutineScope()
+    val contexto = LocalContext.current
+    var passo by remember { mutableStateOf("explicacao") }
+    var erro by remember { mutableStateOf<String?>(null) }
+    var trabalhando by remember { mutableStateOf(false) }
+    var segundos by remember { mutableStateOf(3.0) }
+    // As seis palavras sorteadas vem do nucleo em bytes e ficam em CharArray, nunca em String (PalavrasNaTela).
+    val leitorDaSugestao = remember { PalavrasNaTela() }
+    var sugestao by remember { mutableStateOf<List<CharArray>>(emptyList()) }
+    DisposableEffect(Unit) { onDispose { leitorDaSugestao.zerar() } }
+    /** Troca as palavras na tela; as que saem sao zeradas depois do Crossfade. */
+    fun mostrarSugestao(novas: List<CharArray>) {
+        val antigas = sugestao
+        sugestao = novas
+        if (antigas.isNotEmpty()) escopo.launch { delay(1_000); antigas.forEach { it.fill('\u0000') } }
+    }
+    // Na volta do segundo plano: as palavras na tela foram zeradas na ida (PalavrasNaTela.zerarTodas), e o sorteio continua
+    // no nucleo ate o travar. Le de novo so no passo em que elas aparecem; a volta para "criar" ja le (voltarParaCriar).
+    LaunchedEffect(app.escalibur.wallet.ui.Ciclo.vinda) {
+        if (passo == "criar" && sugestao.isNotEmpty()) leitorDaSugestao.lerSugestao()?.takeIf { it.isNotEmpty() }?.let { mostrarSugestao(it) }
+    }
+    var propria by remember { mutableStateOf(false) }
+    val senha = remember { Segredo() }
+    val repeticao = remember { Segredo() }
+    var revelar by remember { mutableStateOf(false) }
+    // O envelope leva so as palavras, que abrem a carteira de base: o nome da carteira com passphrase nao vai nele (auditoria
+    // do envelope de 06/11/2026).
+    var nome by remember { mutableStateOf(if (carteira.pedePassphrase) "" else carteira.nome) }
+    var risco by remember { mutableStateOf<JSONObject?>(null) }
+    var arquivo by remember { mutableStateOf<ByteArray?>(null) }
+    var nomeDoArquivo by remember { mutableStateOf("") }
+    var fraca by remember { mutableStateOf(false) }
+    /** A parte do lacre na tela: 0 a conta da senha, 1 a cifra, 2 a gravacao. */
+    var parte by remember { mutableStateOf(0) }
+    var inicioDoLacre by remember { mutableStateOf(0L) }
+    val vista = androidx.compose.ui.platform.LocalView.current
+
+    // O custo do Argon2 deste celular, medido fora da tela.
+    LaunchedEffect(Unit) {
+        runCatching { segundos = Api.objeto("envelope.calibrar").optDouble("segundos", 3.0) }
+    }
+    // So na depuracao: uma etapa do lacre sem a carteira aberta, para ver a tela. Nada e cifrado.
+    if (BuildConfig.DEBUG && demo != null) LaunchedEffect(Unit) {
+        when (demo) {
+            "lacrar-criar" -> { sugestao = CifraDoEnvelope.exemplo.take(6).map { it.toCharArray() }; passo = "criar" }
+            "lacrar-propria" -> { propria = true; passo = "criar" }
+            "lacrar-repetir" -> passo = "repetir"
+            "lacrando" -> {
+                inicioDoLacre = System.currentTimeMillis()
+                passo = "lacrando"
+                delay((segundos * 1000).toLong())
+                parte = 1
+                delay(450)
+                parte = 2
+                nomeDoArquivo = "envelope-7F3A.esclbr"
+                delay(450)
+                passo = "feito"
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            senha.clearText()
+            repeticao.clearText()
+            arquivo?.fill(0)
+            // A copia que foi para a folha de compartilhar nao sai aqui: a tela fecha ao travar, e o app escolhido ainda pode
+            // estar lendo. Cada copia sai no prazo dela (`EnvelopeCompartilhado.enviar`) e na varredura de cada abertura.
+            CoroutineScope(Dispatchers.IO).launch { runCatching { Api.objeto("envelope.encerrar") } }
+        }
+    }
+    val salvar = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        // Uma copia propria, gravada fora do escopo da tela: se a tela sair no meio (o app travou), a
+        // gravacao termina, e o `fill(0)` da tela nao zera os bytes que estao indo para o arquivo (antes
+        // podia sobrar um envelope so de zeros; caca de bugs de 27/10/2026). O envelope ja e cifrado.
+        val dados = arquivo?.copyOf() ?: return@rememberLauncherForActivityResult
+        val resolver = contexto.contentResolver
+        CoroutineScope(Dispatchers.IO).launch {
+            // "wt" trunca o que havia no arquivo; e so diz "salvo" depois de ler de volta o mesmo
+            // conteudo (um provedor de nuvem que gravou pela metade nao passa).
+            val ok = runCatching {
+                resolver.openOutputStream(uri, "wt")?.use { it.write(dados) } ?: return@runCatching false
+                val lido = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching false
+                java.security.MessageDigest.isEqual(lido, dados)
+            }.getOrDefault(false)
+            dados.fill(0)
+            if (ok) runCatching { Api.objeto("envelope.entregue") }
+            withContext(Dispatchers.Main) { Avisos.mostrar(if (ok) t("Arquivo salvo.") else t("Não foi possível salvar o arquivo. Tente de novo.")) }
+        }
+    }
+
+    fun fechar() {
+        Navegacao.fechar()
+    }
+
+    fun sortear() {
+        escopo.launch {
+            val novas = try {
+                Api.objeto("envelope.sugerir")
+                leitorDaSugestao.lerSugestao()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            mostrarSugestao(novas ?: emptyList())
+        }
+    }
+
+    // A espera depois de a biometria mudar recusa ja no "Continuar", antes da checagem e do PIN.
+    fun comecar() {
+        erro = null
+        escopo.launch {
+            trabalhando = true
+            val recusa = Autorizacao.recusaAntes(Autorizacao.Presenca.pinEBiometria)
+            trabalhando = false
+            if (recusa != null) erro = recusa else passo = "checagem"
+        }
+    }
+
+    // Depois do deslize: o PIN e a biometria abrem as palavras. Na carteira com passphrase, ela vem
+    // antes e confere pelo fingerprint da raiz, mas nao vai no envelope (05/11/2026).
+    fun abrirCarteira() {
+        if (carteira.semConferencia) {
+            erro = t("Esta versão do app não consegue conferir a passphrase desta carteira, e ela não assina aqui. As palavras com a passphrase continuam abrindo a carteira em qualquer carteira BIP-39.")
+            passo = "explicacao"
+            return
+        }
+        escopo.launch {
+            erro = null
+            var passphrase: PedidoDePassphrase.Resposta? = null
+            if (carteira.pedePassphrase) {
+                passphrase = PedidoDePassphrase.pedir(carteira.nome,
+                    t("Para lacrar as palavras de %@, digite a passphrase. Ela não vai no envelope: guarde-a à parte. Depois vem a confirmação de sempre.", carteira.nome))
+                if (passphrase == null) { passo = "explicacao"; return@launch }
+            }
+            trabalhando = true
+            try {
+                // A passphrase vai para o nucleo antes do PIN, e a daqui sai zerada ja (05/11/2026).
+                passphrase?.let { Api.comSegredo("passphrase.entregar", JSONObject(), it.bytes) }
+                if (passphrase != null && !app.escalibur.wallet.ui.Ciclo.primeiroPlano) { passo = "explicacao"; return@launch }
+                val aberta = Autorizacao.tentando(t("Lacrar a senha de %@ num envelope", carteira.nome), Autorizacao.Presenca.pinEBiometria) { credencial ->
+                    Api.comSegredo("envelope.abrirCarteira", JSONObject().put("id", carteira.id).put("credencial", credencial.json()), *credencial.partes())
+                }
+                if (aberta == null) { passo = "explicacao"; return@launch }
+                sortear()
+                passo = "criar"
+            } catch (falha: FalhaDoNucleo) {
+                erro = when (falha.codigo) {
+                    "passphrase.errada" -> t("A passphrase não confere. Nada foi assinado. Escreva igual ao que você anotou: maiúscula, acento e espaço contam.")
+                    else -> Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível abrir a carteira agora.")
+                }
+                passo = "explicacao"
+            } finally {
+                passphrase?.bytes?.fill(0)
+                if (passphrase != null) runCatching { app.escalibur.wallet.nucleo.Nucleo.chamar("passphrase.descartar", "{}") }
+                trabalhando = false
+            }
+        }
+    }
+
+    fun seguirDaCriacao() {
+        erro = null
+        escopo.launch {
+            if (!propria) {
+                if (runCatching { Api.objeto("envelope.usarSorteada") }.isSuccess) {
+                    mostrarSugestao(emptyList())
+                    passo = "repetir"
+                }
+                return@launch
+            }
+            val resposta = runCatching { Api.comSegredo("envelope.conferir", JSONObject(), senha.bytes()) }.getOrNull() ?: return@launch
+            when (resposta.getString("resultado")) {
+                "ok" -> passo = "repetir"
+                "curta" -> erro = t("Use pelo menos 4 caracteres.")
+                "usaFrase" -> erro = t("Esta senha usa palavras da própria carteira. Quem achar o papel abre o envelope. Escolha outra.")
+                "risco" -> risco = resposta
+            }
+        }
+    }
+
+    fun voltarParaCriar() {
+        repeticao.clearText()
+        erro = null
+        escopo.launch {
+            val sorteada = runCatching { Api.objeto("envelope.voltar").optBoolean("sorteada") }.getOrDefault(false)
+            if (sorteada) leitorDaSugestao.lerSugestao()?.takeIf { it.isNotEmpty() }?.let { mostrarSugestao(it) }
+            passo = "criar"
+        }
+    }
+
+    fun lacrar() {
+        erro = null
+        parte = 0
+        inicioDoLacre = System.currentTimeMillis()
+        passo = "lacrando"
+        escopo.launch {
+            try {
+                val lacrado = Api.comSegredo("envelope.lacrar", JSONObject().put("nome", nome.trim().take(64)), repeticao.bytes())
+                arquivo = Base64.decode(lacrado.getString("arquivo"), Base64.NO_WRAP)
+                nomeDoArquivo = lacrado.getString("nome")
+                fraca = lacrado.optBoolean("fraca")
+                App.recarregar()
+                senha.clearText()
+                repeticao.clearText()
+                // A cifra e a gravacao levam milissegundos: a tela mostra cada uma por um instante,
+                // para o dono ver o que aconteceu, e so entao o envelope fecha.
+                parte = 1
+                delay(450)
+                parte = 2
+                delay(450)
+                passo = "feito"
+                vista.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
+            } catch (falha: FalhaDoNucleo) {
+                repeticao.clearText()
+                erro = when (falha.codigo) {
+                    "envelope.naoConferem" -> t("As duas não conferem. Digite a senha do envelope de novo.")
+                    "envelope.notEnoughMemory" -> t("Pouca memória livre agora. Feche outros apps e tente de novo.")
+                    else -> t("Não foi possível lacrar o envelope.")
+                }
+                passo = "repetir"
+            }
+        }
+    }
+
+    BackHandler(enabled = passo != "lacrando") {
+        when (passo) {
+            "repetir" -> voltarParaCriar()
+            else -> fechar()
+        }
+    }
+    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().acimaDoTeclado()) {
+        when (passo) {
+            "explicacao" -> {
+                // A cena comeca por baixo do fechar, sem cortar o alto dela (como no iOS).
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem)
+                               .padding(top = Altura.barra + Espaco.xs + 8.dp, bottom = Espaco.lg)) {
+                        // A mesma cena do passo 1 do "Como funciona", toda em pixels.
+                        CenaDoEnvelope(Modifier.padding(bottom = Espaco.xs))
+                        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                            Text(t("Criptografar a senha da carteira"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
+                            Text(t("Uma cópia de segurança da senha da carteira, trancada com outra senha que só você conhece."), style = estilo(Tipo.corpo),
+                                 color = Paleta.tintaSuave, textAlign = TextAlign.Center)
+                            BotaoComoFunciona(Modifier.padding(top = Espaco.xxs))
+                        }
+                        Column(
+                            Modifier.padding(top = Espaco.md).fillMaxWidth().clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo).padding(Espaco.base),
+                            verticalArrangement = Arrangement.spacedBy(Espaco.md),
+                        ) {
+                            PontoDoEnvelope(Icones.documentoCadeado, t("A senha da carteira vira um arquivo criptografado, aqui no celular."))
+                            PontoDoEnvelope(Icones.chaveEmPe, t("Só você cria a senha do arquivo. Ela nunca sai deste celular."))
+                            PontoDoEnvelope(Icones.olhoRiscado, t("O arquivo não passa por nós. Sem a sua senha, ninguém abre. Só você."))
+                            PontoDoEnvelope(Icones.disco, t("Guarde onde quiser: sem a sua senha, o arquivo criptografado não abre."))
+                        }
+                    }
+                    CabecalhoDeFolha("", { fechar() })
+                }
+                // O aviso fica junto do botao: embaixo da lista, ele passava despercebido e o fluxo
+                // parecia voltar ao comeco sozinho (visto pelo dono, 22/10/2026).
+                Rodape {
+                    erro?.let { Faixa(TipoDeFaixa.falha, it) }
+                    BotaoPrimario(t("Continuar"), carregando = trabalhando) { comecar() }
+                }
+            }
+            "checagem" -> {
+                CabecalhoDeFolha("", { fechar() })
+                Box(Modifier.weight(1f)) {
+                    VerificacaoDoAparelho(t("Deslize para criar a senha"), criando = false) { abrirCarteira() }
+                    if (trabalhando) app.escalibur.wallet.ui.novacarteira.Trabalhando(t("Abrindo as palavras"))
+                }
+            }
+            "criar" -> CriarSenha(propria, sugestao, senha, revelar, { revelar = it }, erro,
+                                  aoSortear = { sortear() }, aoPropria = { erro = null; propria = true },
+                                  aoSorteadas = { senha.clearText(); erro = null; propria = false; sortear() }, aoFechar = { fechar() }) { seguirDaCriacao() }
+            "repetir" -> {
+                CabecalhoDeFolha("", { fechar() }, aoVoltar = { voltarParaCriar() })
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
+                    Box(Modifier.fillMaxWidth().padding(bottom = Espaco.md), contentAlignment = Alignment.Center) { EmblemaCifrado() }
+                    Text(t("Repita a senha do envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center,
+                         modifier = Modifier.fillMaxWidth())
+                    Box(Modifier.padding(top = Espaco.lg)) { CampoSecreto(repeticao, t("Senha do envelope"), revelar) { revelar = it } }
+                    Text(t("Segure o dedo no campo para ver o que digitou."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
+                         modifier = Modifier.padding(top = Espaco.xs))
+                    erro?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.baixa, modifier = Modifier.padding(top = Espaco.xs)) }
+                    Text(t("Nome dentro do envelope"), style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.lg))
+                    Box(Modifier.padding(top = Espaco.xs)) { CampoDeTexto(nome) { nome = it.take(64) } }
+                    Text(t("O nome fica cifrado. O arquivo não diz de quem é."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
+                         modifier = Modifier.padding(top = Espaco.xs))
+                    if (carteira.pedePassphrase) {
+                        Text(t("Esta carteira tem passphrase. O envelope leva só as palavras, que abrem a carteira de base. Não use aqui o nome da carteira com passphrase."), style = estilo(Tipo.nota), color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.xs))
+                    }
+                }
+                Rodape { BotaoPrimario(t("Lacrar envelope"), ligado = repeticao.text.isNotEmpty()) { lacrar() } }
+            }
+            // Lacrando e lacrado dividem a cena: as palavras caem no envelope, a aba fecha e o cadeado
+            // se monta, sem o envelope sair do lugar.
+            "lacrando", "feito" -> {
+                CabecalhoDeFolha("", { fechar() })
+                LacreEmCena(passo == "feito", parte, inicioDoLacre, segundos, nomeDoArquivo, fraca,
+                            // A folha de compartilhar leva para outro app (o WhatsApp, o e-mail): sair por ela e sair do app, e a
+                            // trava automatica vale como em qualquer saida. Antes ela contava como o seletor de arquivos, e o app
+                            // ficava aberto por ate 10 minutos com o dono em outro app (auditoria 8, 14/11/2026).
+                            aoEnviar = { arquivo?.let { EnvelopeCompartilhado.enviar(contexto, it, nomeDoArquivo) } }) {
+                    Ciclo.abrindoSeletor()
+                    salvar.launch(nomeDoArquivo)
+                }
+            }
+        }
+    }
+    risco?.let { r ->
+        AvisoDeRisco(r, aoSortear = {
+            risco = null
+            senha.clearText()
+            propria = false
+            sortear()
+        }) {
+            risco = null
+            escopo.launch {
+                runCatching { Api.objeto("envelope.aceitarRisco") }
+                passo = "repetir"
+            }
+        }
+    }
+}
+
+/** A senha do envelope: o caminho padrao e o forte, seis palavras sorteadas; a propria e livre. */
+@Composable
+private fun ColumnScope.CriarSenha(
+    propria: Boolean, sugestao: List<CharArray>, senha: Segredo, revelar: Boolean, aoRevelar: (Boolean) -> Unit, erro: String?,
+    aoSortear: () -> Unit, aoPropria: () -> Unit, aoSorteadas: () -> Unit, aoFechar: () -> Unit, aoSeguir: () -> Unit,
+) {
+    CabecalhoDeFolha("", aoFechar)
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md)) {
+        // Digitando a senha propria: o selo das telas onde se digita um segredo.
+        if (propria) Box(Modifier.fillMaxWidth().padding(bottom = Espaco.md), contentAlignment = Alignment.Center) { EmblemaCifrado() }
+        Text(t("Crie a senha do envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        Text(t("Só ela abre o envelope, em qualquer aparelho. Não é o PIN e não pode ser a senha da carteira. Não existe redefinir."),
+             style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.sm))
+        if (propria) {
+            Box(Modifier.padding(top = Espaco.lg)) { CampoSecreto(senha, t("Senha do envelope"), revelar, aoRevelar) }
+            Text(t("Segure o dedo no campo para ver o que digitou."), style = estilo(Tipo.nota), color = Paleta.tintaApagada, modifier = Modifier.padding(top = Espaco.xs))
+            LinhaDaForca(senha, Modifier.padding(top = Espaco.sm))
+            BotaoDeOpcao(t("Usar 6 palavras sorteadas"), null, Modifier.padding(top = Espaco.md), acao = aoSorteadas)
+        } else {
+            // As seis palavras na placa laqueada, como a senha da carteira.
+            // Duas por linha, na ordem de leitura, desenhadas sem String (TextoSecreto).
+            androidx.compose.animation.Crossfade(sugestao, label = "sorteadas") { palavras ->
+                Column(
+                    Modifier.padding(top = Espaco.lg).fillMaxWidth().background(Paleta.viva, app.escalibur.wallet.ui.comp.PlacaLaqueada()).padding(Espaco.base),
+                    verticalArrangement = Arrangement.spacedBy(Espaco.xs),
+                ) {
+                    palavras.chunked(2).forEach { linha ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Espaco.md)) {
+                            linha.forEach { palavra ->
+                                Box(Modifier.weight(1f)) {
+                                    app.escalibur.wallet.ui.comp.TextoSecreto(palavra, 22.sp, FontWeight.SemiBold, Paleta.placaTinta)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Text(t("Seis palavras sorteadas neste celular. Anote em outro lugar, longe do papel da senha da carteira."), style = estilo(Tipo.nota),
+                 color = Paleta.tintaSuave, modifier = Modifier.padding(top = Espaco.sm))
+            Row(Modifier.padding(top = Espaco.md), horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                BotaoDeOpcao(t("Sortear outras"), null, Modifier.weight(1f), acao = aoSortear)
+                BotaoDeOpcao(t("Criar a minha"), Icones.lapis, Modifier.weight(1f), acao = aoPropria)
+            }
+        }
+        erro?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.baixa, modifier = Modifier.padding(top = Espaco.xs)) }
+    }
+    Rodape {
+        Text(t("Na próxima tela, você digita a senha de novo para confirmar."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
+             textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = Espaco.sm))
+        if (propria) BotaoPrimario(t("Continuar"), ligado = senha.text.isNotEmpty(), acao = aoSeguir)
+        else BotaoPrimario(t("Anotei, continuar"), ligado = sugestao.isNotEmpty(), acao = aoSeguir)
+    }
+}
+
+/** Ao vivo, enquanto o dono digita: em quanto tempo a senha cai, com o custo deste celular. */
+@Composable
+private fun LinhaDaForca(senha: Segredo, modifier: Modifier = Modifier) {
+    var medida by remember { mutableStateOf<Pair<Int, JSONObject>?>(null) }
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    LaunchedEffect(senha) {
+        snapshotFlow { senha.text.length }.debounce(450).collect { tamanho ->
+            medida = if (tamanho == 0) null else runCatching { tamanho to Api.comSegredo("envelope.medir", JSONObject(), senha.bytes()) }.getOrNull()
+        }
+    }
+    val tamanho = senha.text.length
+    val atual = medida?.takeIf { it.first == tamanho }?.second
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        when {
+            tamanho == 0 -> Text(t("Qualquer senha com pelo menos 4 caracteres. Quanto mais longa e menos óbvia, mais tempo ela aguenta. Não use a senha da carteira."),
+                                 style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+            atual == null -> Text(t("Medindo a senha…"), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+            atual.optBoolean("curta") -> Text(t("No mínimo 4 caracteres."), style = estilo(Tipo.nota), color = Paleta.baixa)
+            else -> {
+                val cor = when (atual.optString("faixa")) {
+                    "muitoFraca" -> Paleta.baixa
+                    "fraca" -> Paleta.cautela
+                    "media" -> Paleta.tinta
+                    else -> Paleta.sucesso
+                }
+                Text(atual.optString("texto"), style = estilo(Tipo.nota), color = cor)
+                if (atual.optBoolean("soDigitos")) {
+                    Text(t("Não use o código do celular nem o PIN do app: quem já viu você digitar abre o envelope."), style = estilo(Tipo.nota), color = Paleta.tintaSuave)
+                }
+            }
+        }
+    }
+}
+
+/** O risco de uma senha abaixo de forte, dito com o tempo, antes do lacre. */
+@Composable
+private fun AvisoDeRisco(r: JSONObject, aoSortear: () -> Unit, aoUsar: () -> Unit) {
+    val media = r.optBoolean("media")
+    androidx.compose.ui.window.Dialog(onDismissRequest = aoSortear) {
+        app.escalibur.wallet.ui.comp.ProtegerJanela()
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(Raio.folha)).background(Paleta.corpo).padding(Espaco.lg),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icone(Icones.alerta, if (media) Paleta.tinta else Paleta.baixa, tamanho = 34.dp)
+            Text(r.optString("titulo"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.md))
+            Text(t("Seis palavras sorteadas aguentam milhões de anos."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center,
+                 modifier = Modifier.padding(top = Espaco.sm))
+            BotaoPrimario(t("Usar 6 palavras sorteadas"), Modifier.padding(top = Espaco.lg), acao = aoSortear)
+            BotaoDeSegurar(if (r.optBoolean("segurar")) t("Segure para usar mesmo assim") else t("Usar mesmo assim"),
+                           segundos = if (r.optBoolean("segurar")) 2 else 0, modifier = Modifier.padding(top = Espaco.sm), acao = aoUsar)
+        }
+    }
+}
+
+/** O botao que so age depois de segurado pelo tempo dado (o HoldButton do iOS); sem tempo, um toque. */
+@Composable
+private fun BotaoDeSegurar(titulo: String, segundos: Int, modifier: Modifier = Modifier, acao: () -> Unit) {
+    val escopo = rememberCoroutineScope()
+    val progresso = remember { Animatable(0f) }
+    val forma = RoundedCornerShape(Raio.botao)
+    Box(
+        modifier.fillMaxWidth().height(Altura.secundaria).clip(forma).border(1.dp, Paleta.borda, forma)
+            .pointerInput(segundos) {
+                detectTapGestures(onPress = {
+                    if (segundos == 0) {
+                        if (tryAwaitRelease()) acao()
+                        return@detectTapGestures
+                    }
+                    val trabalho = escopo.launch {
+                        progresso.snapTo(0f)
+                        progresso.animateTo(1f, tween(segundos * 1000, easing = LinearEasing))
+                        acao()
+                    }
+                    tryAwaitRelease()
+                    if (progresso.value < 1f) {
+                        trabalho.cancel()
+                        escopo.launch { progresso.animateTo(0f, tween(150)) }
+                    }
+                })
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.align(Alignment.CenterStart).fillMaxHeight().fillMaxWidth(progresso.value).background(Paleta.baixaFundo))
+        Text(titulo, style = estilo(Tipo.acao), color = Paleta.baixa)
+    }
+}
+
+/**
+ * Lacrando e lacrado na mesma cena (o `sealStage` do iOS): as palavras viram pixels e caem no envelope
+ * enquanto a senha fica cara de adivinhar, a aba fecha gravando, e lacrado o cadeado se monta e o
+ * anel acende. A cena e os textos ficam no mesmo lugar nas duas etapas; o rodape troca embaixo.
+ */
+@Composable
+private fun ColumnScope.LacreEmCena(
+    feito: Boolean, parte: Int, inicio: Long, segundos: Double, nomeDoArquivo: String, fraca: Boolean, aoEnviar: () -> Unit, aoSalvar: () -> Unit,
+) {
+    val f by androidx.compose.animation.core.animateFloatAsState(if (feito) 1f else 0f, tween(250), label = "lacrado")
+    val etapa = when {
+        feito -> EtapaDoLacre.lacrado
+        parte >= 2 -> EtapaDoLacre.gravando
+        else -> EtapaDoLacre.trabalhando
+    }
+    Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = Espaco.margem).padding(bottom = Espaco.xs)) {
+        // O alto da cena fica vazio depois que as palavras caem: o conjunto sobe metade disso.
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Column(Modifier.offset(y = -AltoVazioDaCena / 2), horizontalAlignment = Alignment.CenterHorizontally) {
+                CenaDoEnvelope(Modifier.padding(bottom = Espaco.xl), etapa = etapa)
+                Box(contentAlignment = Alignment.TopCenter) {
+                    Column(Modifier.fillMaxWidth().alpha(1 - f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                        Text(t("Lacrando o envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
+                        androidx.compose.animation.Crossfade(parte, label = "parte") { p ->
+                            Text(when (p) {
+                                0 -> t("Deixando a senha difícil de adivinhar")
+                                1 -> t("Cifrando a senha da carteira")
+                                else -> t("Gravando o arquivo")
+                            }, style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center)
+                        }
+                        ProgressoDoLacre(inicio, segundos, terminado = parte > 0, Modifier.padding(top = Espaco.sm).width(220.dp))
+                        Text(t("Leva %@, só neste celular, sem internet.", cercaDe(segundos)), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
+                             textAlign = TextAlign.Center)
+                    }
+                    if (feito) Column(Modifier.fillMaxWidth().alpha(f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Espaco.sm)) {
+                        Text(t("Envelope lacrado"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                            Icone(Icones.documentoCadeado, Paleta.tintaSuave, tamanho = 15.dp)
+                            Text(nomeDoArquivo, style = estilo(Tipo.linha), color = Paleta.tinta, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                        }
+                        Text(t("O arquivo não mostra o que guarda. Guarde o arquivo e a senha em lugares diferentes: quem tiver os dois tem a carteira."),
+                             style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.xxs))
+                        if (fraca) {
+                            Faixa(TipoDeFaixa.cautela, t("Senha muito fraca: guarde o arquivo num pendrive ou no seu computador, nunca na nuvem nem por e-mail."),
+                                  Modifier.padding(top = Espaco.xs))
+                        }
+                    }
+                }
+            }
+        }
+        // Os dois rodapes ocupam a mesma altura: o meio de cima nao muda ao lacrar.
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
+            Column(Modifier.fillMaxWidth().alpha(f)) {
+                // A folha de compartilhar do Android, como o `ShareLink` do iOS; ela nao tem o "salvar em Arquivos", que fica embaixo.
+                // Com a senha muito fraca, so salvar, sem a folha (Gmail, WhatsApp, Drive): o aviso diz "nunca na nuvem nem
+                // por e-mail" (revisao final de 07/11/2026).
+                if (fraca) {
+                    BotaoPrimario(t("Salvar neste celular"), ligado = feito, acao = aoSalvar)
+                } else {
+                    BotaoPrimario(t("Salvar ou enviar o arquivo"), ligado = feito, acao = aoEnviar)
+                    BotaoTerciario(t("Salvar neste celular"), Modifier.fillMaxWidth(), acao = aoSalvar)
+                }
+                Text(t("Para abrir: Ajustes, Abrir um envelope, neste ou em outro celular com o app."), style = estilo(Tipo.nota), color = Paleta.tintaApagada,
+                     textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.sm))
+            }
+            if (!feito) Text(t("A senha do envelope não sai deste celular."), style = estilo(Tipo.nota), color = Paleta.tintaApagada, textAlign = TextAlign.Center,
+                             modifier = Modifier.fillMaxWidth().padding(bottom = Espaco.sm).alpha(1 - f))
+        }
+    }
+}
+
+/**
+ * A barra do lacre, em pixels: anda pelo tempo que este celular costuma levar e para em 92% ate o
+ * Argon2 terminar de verdade; dai enche. Cada pixel aceso cifra de leve; os apagados ficam escuros.
+ */
+@Composable
+private fun ProgressoDoLacre(inicio: Long, estimativa: Double, terminado: Boolean, modifier: Modifier = Modifier) {
+    // O relogio so faz a barra redesenhar a cada quadro; o tempo vem do inicio do lacre.
+    val quadro = app.escalibur.wallet.ui.comp.relogio(terminado)
+    Canvas(modifier.height(6.dp)) {
+        quadro.value
+        val decorrido = (System.currentTimeMillis() - inicio) / 1000.0
+        val bruto = (decorrido / maxOf(estimativa, 0.5)).coerceIn(0.0, 1.0)
+        // Desacelera perto do fim: 1 - (1 - t)^2, ate 92%.
+        val fracao = if (terminado) 1.0 else 0.92 * (1 - (1 - bruto) * (1 - bruto))
+        val quantos = 30
+        val passo = size.width / quantos
+        val lado = minOf(passo - 1.6.dp.toPx(), size.height)
+        val acesos = (fracao * quantos).toInt()
+        val relogio = System.currentTimeMillis() / 1000.0
+        for (i in 0 until quantos) {
+            val bit = app.escalibur.wallet.ui.comp.PixelsCifrando.ruido(i, (relogio * 6).toInt() % 997, 0x4E)
+            val tom = if (i < acesos) 0.62 + 0.3 * bit else 0.16
+            drawRoundRect(app.escalibur.wallet.ui.comp.PixelsCifrando.cinza(tom), Offset(i * passo + (passo - lado) / 2, (size.height - lado) / 2),
+                          Size(lado, lado), CornerRadius(1.2.dp.toPx()))
+        }
+    }
+}
+
+@Composable
+private fun CampoDeTexto(texto: String, aoMudar: (String) -> Unit) {
+    Box(
+        Modifier.fillMaxWidth().height(Altura.campo).clip(RoundedCornerShape(Raio.cartao)).background(Paleta.corpo)
+            .border(1.dp, Paleta.borda, RoundedCornerShape(Raio.cartao)).padding(horizontal = Espaco.md),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        BasicTextField(texto, aoMudar, singleLine = true, textStyle = estilo(Tipo.linha).copy(color = Paleta.tinta), cursorBrush = SolidColor(Paleta.acento),
+                       keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), modifier = Modifier.fillMaxWidth())
+    }
+}
+
+// MARK: Abrir
+
+/** O nome do idioma da lista de palavras, na lingua do app. */
+private fun nomeDoIdioma(idioma: String): String {
+    val codigo = when (idioma) {
+        "english" -> "en"; "spanish" -> "es"; "portuguese" -> "pt"; "french" -> "fr"; "italian" -> "it"; "czech" -> "cs"
+        "japanese" -> "ja"; "korean" -> "ko"; "chineseSimplified" -> "zh-Hans"; "chineseTraditional" -> "zh-Hant"
+        else -> return idioma
+    }
+    // O nome como o idioma escreve, igual ao iOS: "inglês" em portugues, "English" em ingles.
+    return Locale.forLanguageTag(codigo).getDisplayName(Formato.locale)
+}
+
+/**
+ * Abrir um envelope Escalibur: o arquivo `.esclbr` escolhido no seletor do sistema e a senha do
+ * envelope. A senha da carteira e decifrada so aqui, sem internet; depois, importar a carteira ou
+ * so ver as palavras.
+ */
+@Composable
+fun FluxoDeAbrirEnvelope(inicial: Uri? = null, origem: String? = null, aoCancelar: () -> Unit = { Navegacao.fechar() }, aoTerminar: () -> Unit = aoCancelar) {
+    val escopo = rememberCoroutineScope()
+    val contexto = LocalContext.current
+    var passo by remember { mutableStateOf("escolher") }
+    var nomeDoArquivo by remember { mutableStateOf("") }
+    var segundos by remember { mutableStateOf(3.0) }
+    var erro by remember { mutableStateOf<String?>(null) }
+    val senha = remember { Segredo(limpaAoSair = true) }
+    var revelar by remember { mutableStateOf(false) }
+    var pesado by remember { mutableStateOf(false) }
+    var pesadoConfirmado by remember { mutableStateOf(false) }
+    var aberto by remember { mutableStateOf<JSONObject?>(null) }
+    var previa by remember { mutableStateOf<JSONObject?>(null) }
+    var trabalhando by remember { mutableStateOf(false) }
+    // O arquivo sendo lido (ate o prazo do `LeitorDeEnvelope`): o botao gira e nao aceita outro toque.
+    var lendo by remember { mutableStateOf(false) }
+    // O arquivo da tela chegou de outro app, e nao do seletor: a faixa vale por arquivo. O que o dono escolhe depois, no
+    // seletor, nao leva a faixa nem o "Veio de" do app anterior (revisao dos 3 agentes, 17/11/2026).
+    var veioDeFora by remember { mutableStateOf(false) }
+    var palavras by remember { mutableStateOf(12) }
+    // Super Security em "Bloquear as carteiras": importar recusa antes da senha; so ver as palavras continua (como no iOS).
+    // Ate o nucleo responder, nem aberto nem fechado: a faixa so com sim, e os botoes so com nao (falha fechada, rodada 19).
+    var bloqueado by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(Unit) { bloqueado = app.escalibur.wallet.ui.ajustes.adicionarBloqueado() }
+    // Saiu do app: o nucleo esqueceu o conteudo aberto, e o arquivo cifrado ficou. A volta e pela senha (05/11/2026). Com a
+    // previa ou a gravacao em curso, a volta espera elas terminarem; as palavras abertas saem tambem.
+    var vindaVista by remember { mutableStateOf(Ciclo.vinda) }
+    LaunchedEffect(Ciclo.vinda, trabalhando) {
+        if (Ciclo.vinda != vindaVista && !trabalhando) {
+            vindaVista = Ciclo.vinda
+            if (passo == "aberto" || passo == "previa" || passo == "palavras" || passo == "checagem") {
+                if (passo == "palavras") runCatching { Api.objeto("carteira.descartarRascunho") }
+                aberto = null
+                previa = null
+                erro = null
+                passo = "senha"
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            senha.clearText()
+            CoroutineScope(Dispatchers.IO).launch {
+                runCatching { Api.objeto("envelope.encerrar") }
+                runCatching { Api.objeto("carteira.descartarRascunho") }
+            }
+        }
+    }
+
+    fun mensagemDeMemoria(mib: Int) = t("Este envelope exige %lld MiB por tentativa, e este celular não consegue reservar tanto agora. Feche outros apps e tente de novo. A senha não chegou a ser testada.", mib)
+
+    fun receber(uri: Uri, deFora: Boolean) {
+        if (lendo) return
+        erro = null
+        lendo = true
+        escopo.launch {
+            // Com prazo: o arquivo pode ser de outro app, e o provedor dele pode nunca responder (`LeitorDeEnvelope`).
+            val leitura = try {
+                LeitorDeEnvelope.ler(contexto, uri, deFora)
+            } finally {
+                lendo = false
+            }
+            if (leitura == null) {
+                // De outro app, tentar de novo la pode nao adiantar (o provedor dele nao respondeu, ou as vagas de fora estao presas);
+                // o botao de escolher o arquivo esta nesta tela e conta em outra fila.
+                erro = if (deFora) t("Não foi possível abrir este envelope agora. Tente de novo ou toque em Escolher arquivo.")
+                       else t("Não foi possível abrir este envelope agora. Tente de novo.")
+                return@launch
+            }
+            val dados = leitura.dados
+            if (dados == null) {
+                erro = t("Este arquivo não é um envelope Escalibur. Envelopes terminam em .esclbr e têm 16.504 bytes.")
+                return@launch
+            }
+            nomeDoArquivo = leitura.nome ?: "envelope.esclbr"
+            try {
+                segundos = Api.objeto("envelope.inspecionar", JSONObject().put("dados", Base64.encodeToString(dados, Base64.NO_WRAP))).optDouble("segundos", 3.0)
+                pesadoConfirmado = false
+                veioDeFora = deFora
+                passo = "senha"
+            } catch (falha: FalhaDoNucleo) {
+                erro = when (falha.codigo) {
+                    "envelope.boundToDevice" -> t("Este envelope foi lacrado preso ao aparelho que o criou e só abre no app Escalibur daquele aparelho.")
+                    "envelope.caro" -> mensagemDeMemoria(falha.dados.optInt("mib"))
+                    else -> t("Este arquivo não é um envelope Escalibur. Envelopes terminam em .esclbr e têm 16.504 bytes.")
+                }
+            }
+        }
+    }
+    val escolher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? -> uri?.let { receber(it, deFora = false) } }
+    // O arquivo aberto em outro app (o `initialURL` do iOS): lido na hora, direto para a senha.
+    LaunchedEffect(inicial) { inicial?.let { receber(it, deFora = true) } }
+
+    fun abrir() {
+        if (senha.text.isEmpty() || passo == "abrindo") return
+        if (segundos > 10 && !pesadoConfirmado) {
+            pesado = true
+            return
+        }
+        erro = null
+        passo = "abrindo"
+        escopo.launch {
+            try {
+                aberto = Api.comSegredo("envelope.abrir", JSONObject(), senha.bytes())
+                senha.clearText()
+                passo = "aberto"
+            } catch (falha: FalhaDoNucleo) {
+                erro = when (falha.codigo) {
+                    "envelope.slip39Share" -> t("Este envelope guarda uma parte SLIP-39. Uma parte sozinha não abre carteira, e esta versão ainda não junta partes.")
+                    "envelope.invalidPhrase" -> t("Este envelope está danificado e não abre. Se você tem outra cópia do arquivo, use a outra.")
+                    "envelope.unknownLanguage" -> t("O envelope abriu, mas a senha da carteira dentro dele está num idioma que esta versão não reconhece.")
+                    "envelope.caro" -> mensagemDeMemoria(falha.dados.optInt("mib"))
+                    // Saiu do app durante o Argon2: o conteudo nao ficou, e a senha e pedida de novo, sem erro.
+                    "sessao.travada" -> { senha.clearText(); null }
+                    "envelope.cannotOpen" -> { senha.clearText(); t("Não abriu. Confira a senha, com maiúsculas, acentos e espaços, e tente de novo.") }
+                    else -> { senha.clearText(); t("Não foi possível abrir este envelope agora. Tente de novo.") }
+                }
+                passo = "senha"
+            }
+        }
+    }
+
+    // O envelope lacrado antes de 05/11/2026 leva a passphrase, que nao fica no app nem aparece na tela: sem saber
+    // ela, quem importa ficaria com uma carteira que nao envia. Ela e digitada antes e o nucleo compara com a do envelope.
+    fun mostrarPrevia() {
+        erro = null
+        escopo.launch {
+            if (aberto?.optBoolean("comPassphrase") == true) {
+                val nome = aberto?.optString("rotulo")?.ifEmpty { null } ?: t("Envelope")
+                val resposta = PedidoDePassphrase.pedir(nome,
+                    t("O envelope de %@ leva a passphrase da carteira, e este app não a guarda: ela vai ser pedida a cada envio. Digite a passphrase que você anotou para importar.", nome))
+                if (resposta == null) {
+                    // Fechada por sair do app, nao por nao saber a passphrase: nada a dizer.
+                    if (app.escalibur.wallet.ui.Ciclo.primeiroPlano) {
+                        erro = t("Sem a passphrase, esta carteira não envia neste app. Ela está dentro deste envelope: se você não a anotou, o decifrador público da Escalibur (github.com/Escalibur-Wallet/escalibur-wallet, arquivo tools/referencia/decifrar.py) mostra a passphrase num computador sem internet.")
+                    }
+                    return@launch
+                }
+                try {
+                    Api.comSegredo("envelope.conferirPassphrase", JSONObject(), resposta.bytes)
+                } catch (falha: FalhaDoNucleo) {
+                    // Saiu do app no meio (o conteudo aberto ja foi esquecido): a volta e pela senha, sem erro.
+                    erro = if (falha.codigo == "envelope.notAnEnvelope" || !app.escalibur.wallet.ui.Ciclo.primeiroPlano) null
+                    else if (falha.codigo == "passphrase.errada") {
+                        t("Não confere com a passphrase do envelope. Escreva igual ao que você anotou: maiúscula, acento e espaço contam.")
+                    } else Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível importar a carteira.")
+                    return@launch
+                } finally {
+                    resposta.bytes.fill(0)
+                }
+            }
+            trabalhando = true
+            try {
+                previa = Api.objeto("envelope.previa")
+                passo = "previa"
+            } catch (falha: FalhaDoNucleo) {
+                // Saiu do app durante a previa: a volta e pela senha, sem erro.
+                erro = if (falha.codigo == "sessao.travada" || !app.escalibur.wallet.ui.Ciclo.primeiroPlano) null
+                else Autorizacao.mensagemDeRecusa(falha) ?: t("Não foi possível importar a carteira.")
+            } finally {
+                trabalhando = false
+            }
+        }
+    }
+
+    val conferir = previa
+    if (passo == "previa" && conferir != null) {
+        Box(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
+            ConferenciaDaImportacao(conferir, comPassphrase = aberto?.optBoolean("comPassphrase") == true, doEnvelope = true,
+                                    aoVoltar = { passo = "aberto" }, aoGuardar = aoTerminar) { tronOutraChave ->
+                // A gravacao conta como trabalho: sair do app no meio nao manda a tela de volta para a senha antes de ela terminar.
+                trabalhando = true
+                try {
+                    val salva = Autorizacao.tentando(t("Guardar a carteira do envelope neste celular")) { credencial ->
+                        Api.comSegredo("envelope.importar", JSONObject().put("tronOutraChave", tronOutraChave).put("credencial", credencial.json()), *credencial.partes())
+                    }
+                    salva?.let { Avisos.mostrar(t("%@ foi guardada neste celular.", it.optString("nome"))) }
+                    salva != null
+                } finally {
+                    trabalhando = false
+                }
+            }
+        }
+        return
+    }
+    // A checagem do aparelho antes do "Só ver as palavras", como no Ver as palavras (pedido do dono, 15/11/2026), como no iOS. Cada
+    // toque confere de novo; o voltar leva ao envelope aberto.
+    if (passo == "checagem") {
+        BackHandler { passo = "aberto" }
+        Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
+            CabecalhoDeFolha("", { passo = "aberto" })
+            VerificacaoDoAparelho(t("Deslize para ver as palavras"), criando = false, ciencia = t("Estou ciente de que este celular falhou na verificação de integridade e de que ver as palavras aqui pode expor a carteira. Quero seguir mesmo assim.")) {
+                escopo.launch { passo = if (runCatching { Api.objeto("envelope.verPalavras") }.isSuccess) "palavras" else "aberto" }
+            }
+        }
+        return
+    }
+    if (passo == "palavras") {
+        val dados = aberto
+        BackHandler { aoCancelar() }
+        Box(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding()) {
+            Column(Modifier.fillMaxSize()) {
+                Spacer(Modifier.height(Altura.barra))
+                // So as palavras: a passphrase do envelope nunca aparece (pedido do dono, 01/11/2026).
+                GravarPalavras(palavras, nomeDaCarteira = dados?.optString("rotulo")?.ifEmpty { null } ?: t("Envelope")) { aoCancelar() }
+            }
+            BotaoDeCanto(Icones.fechar, t("Fechar"), Modifier.padding(start = Espaco.xs)) { aoCancelar() }
+        }
+        return
+    }
+    BackHandler(enabled = passo != "abrindo") {
+        when (passo) {
+            "senha" -> { senha.clearText(); passo = "escolher" }
+            else -> aoCancelar()
+        }
+    }
+    Column(Modifier.fillMaxSize().background(Paleta.vazio).statusBarsPadding().navigationBarsPadding().acimaDoTeclado()) {
+        CabecalhoDeFolha("", if (passo == "abrindo") null else ({ aoCancelar() }))
+        when (passo) {
+            "escolher" -> {
+                // O conteudo no meio da pagina, entre o fechar e o botao; num celular baixo, rola.
+                BoxWithConstraints(Modifier.weight(1f)) {
+                Column(Modifier.fillMaxWidth().heightIn(min = maxHeight).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem),
+                       horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    // O bloco cifrado com o cadeado, a senha e as palavras abrindo (redesenhada do zero,
+                    // como no iOS, 24/10/2026). Mais 16 dp embaixo dela e no respiro de baixo: so a
+                    // animacao sobe, o texto fica onde estava.
+                    app.escalibur.wallet.ui.comp.CenaDeAbrirEnvelope(Modifier.fillMaxWidth().height(236.dp).padding(top = Espaco.sm, bottom = Espaco.lg + 16.dp))
+                    Text(t("Abrir um envelope criptografado"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center)
+                    Text(t("Escolha o arquivo .esclbr e digite a senha do envelope. A senha da carteira é decifrada só aqui, neste celular, sem internet, e o arquivo original continua onde está."),
+                         style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Espaco.sm))
+                    BotaoComoFunciona(Modifier.padding(top = Espaco.md))
+                    erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
+                    // 44 dp acima do meio: o botao lima pesa embaixo, e no meio exato o conjunto
+                    // parecia baixo (pedido do dono, 22/10/2026; mais 20 em 24/10/2026, e os 16 da animacao).
+                    Spacer(Modifier.height(104.dp))
+                }
+                }
+                Rodape {
+                    // Com "Bloquear as carteiras" ligado, o envelope abre so para ver as palavras: o aviso vem antes da senha.
+                    if (bloqueado == true) Faixa(TipoDeFaixa.cautela, t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova."), Modifier.padding(bottom = Espaco.sm))
+                    BotaoPrimario(t("Escolher arquivo"), carregando = lendo) { Ciclo.abrindoSeletor(); escolher.launch(arrayOf("*/*")) }
+                }
+            }
+            "senha" -> {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Espaco.margem).padding(bottom = Espaco.md),
+                       verticalArrangement = Arrangement.spacedBy(Espaco.xs)) {
+                    Box(Modifier.fillMaxWidth().padding(bottom = Espaco.md), contentAlignment = Alignment.Center) { EmblemaCifrado() }
+                    // O nome, o titulo e o subtitulo no centro, embaixo do selo, como os outros passos do envelope (pedido do dono, 17/11/2026).
+                    Text(nomeDoArquivo, style = estilo(Tipo.monoPequeno), color = Paleta.tintaApagada, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Text(t("Senha do envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Text(t("A senha escolhida quando o envelope foi lacrado. No app Escalibur, é a senha do cofre."), style = estilo(Tipo.corpo), color = Paleta.tintaSuave,
+                         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(bottom = Espaco.md))
+                    // O envelope veio de outro app (auditoria Android de 31/10/2026, AA-10): o golpe do "envelope pronto"
+                    // e abrir a Escalibur ja nesta tela com um envelope do golpista, e convencer o dono a importa-lo. Antes do
+                    // campo: embaixo dele, o teclado cobria a faixa na hora de digitar a senha (revisao dos 3 agentes, 17/11/2026).
+                    if (veioDeFora) {
+                        Faixa(TipoDeFaixa.cautela, t("Este envelope veio de outro app"),
+                              mensagem = t("Veio de %@. Só abra e importe se foi você que lacrou este envelope: um envelope feito por outra pessoa abre uma carteira que ela controla.",
+                                           origem ?: t("outro app")),
+                              modifier = Modifier.padding(bottom = Espaco.md))
+                    }
+                    CampoSecreto(senha, t("Senha do envelope"), revelar) { revelar = it }
+                    Text(t("Segure o dedo no campo para ver o que digitou."), style = estilo(Tipo.nota), color = Paleta.tintaApagada)
+                    erro?.let { Text(it, style = estilo(Tipo.nota), color = Paleta.baixa, modifier = Modifier.padding(top = Espaco.xs)) }
+                }
+                Rodape { BotaoPrimario(t("Abrir envelope"), ligado = senha.text.isNotEmpty()) { abrir() } }
+            }
+            // Abrindo e aberto dividem a ilustracao: o arquivo com o cifrado trocando enquanto o app faz
+            // a conta e, aberto, um visto no lugar de cada palavra (nunca as de exemplo).
+            "abrindo" -> {
+                Column(Modifier.weight(1f).padding(horizontal = Espaco.margem)) {
+                    CartaoCifrado(ModoDoCartao.abrindo, Modifier.padding(top = Espaco.sm, bottom = Espaco.xl), nomeDoArquivo)
+                    Text(t("Abrindo o envelope"), style = estilo(Tipo.titulo), color = Paleta.tinta, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Text(t("Leva %@, e cada tentativa custa o mesmo para quem tentar adivinhar.", cercaDe(segundos)), style = estilo(Tipo.corpo),
+                         color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.sm))
+                }
+            }
+            "aberto" -> {
+                val dados = aberto ?: return@Column
+                palavras = dados.optInt("palavras", 12)
+                Column(Modifier.weight(1f).padding(horizontal = Espaco.margem)) {
+                    CartaoCifrado(ModoDoCartao.aberto, Modifier.padding(top = Espaco.sm, bottom = Espaco.xl), nomeDoArquivo, palavras)
+                    Text(dados.optString("rotulo").ifEmpty { t("Envelope aberto") }, style = estilo(Tipo.titulo), color = Paleta.tinta,
+                         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Text(t("%lld palavras, lista em %@", palavras, nomeDoIdioma(dados.optString("idioma"))) +
+                             (if (dados.optBoolean("comPassphrase")) t(" · com passphrase") else ""),
+                         style = estilo(Tipo.corpo), color = Paleta.tintaSuave, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Espaco.xxs))
+                    erro?.let { Faixa(TipoDeFaixa.falha, it, Modifier.padding(top = Espaco.md)) }
+                    if (bloqueado == true) Faixa(TipoDeFaixa.cautela, t("Com Bloquear as carteiras ligado, carteira nova não entra. Troque essa opção do Super Security, adicione a carteira e volte para Bloquear as carteiras digitando as palavras de todas, inclusive a nova."), Modifier.padding(top = Espaco.md))
+                }
+                Rodape {
+                    BotaoPrimario(t("Importar esta carteira"), ligado = bloqueado == false, carregando = trabalhando) { mostrarPrevia() }
+                    BotaoSecundario(t("Só ver as palavras"), Modifier.padding(top = Espaco.sm)) { passo = "checagem" }
+                }
+            }
+        }
+    }
+    if (pesado) {
+        Confirmacao(
+            t("Este envelope pede uma conta pesada"),
+            t("Abrir leva cerca de %lld segundos com a tela parada. Um envelope lacrado pela Escalibur leva de 1 a 3. Se você não sabe de onde veio este arquivo, não abra.",
+              Math.round(segundos).toInt()),
+            t("Abrir mesmo assim"),
+            aoConfirmar = {
+                pesado = false
+                pesadoConfirmado = true
+                abrir()
+            },
+            aoCancelar = { pesado = false }, destrutiva = false,
+        )
+    }
+}
+
+/**
+ * O envelope lacrado na folha de compartilhar do Android (o `ShareLink` do iOS): uma copia na pasta de cache do app, que nunca
+ * entra no backup, entregue por um link de leitura so para o app escolhido. Sai quando a tela do lacre fecha e a cada abertura do
+ * app, como a pasta temporaria do iOS. O envelope ja e cifrado.
+ */
+object EnvelopeCompartilhado {
+    private fun pasta(contexto: Context) = File(contexto.cacheDir, "envelopes")
+
+    fun enviar(contexto: Context, dados: ByteArray, nome: String) {
+        val arquivo = runCatching { File(pasta(contexto).apply { mkdirs() }, File(nome).name).apply { writeBytes(dados) } }.getOrNull()
+        if (arquivo == null) {
+            Avisos.mostrar(t("Não foi possível salvar o arquivo. Tente de novo."))
+            return
+        }
+        val uri = FileProvider.getUriForFile(contexto, "${contexto.packageName}.arquivos", arquivo)
+        val envio = Intent(Intent.ACTION_SEND).setType("application/octet-stream").putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        envio.clipData = ClipData.newRawUri(arquivo.name, uri)
+        // O sistema avisa qual app o dono escolheu: so ai o envelope conta como entregue (a data de "lacrado").
+        val escolhido = PendingIntent.getBroadcast(
+            contexto, 1, Intent(contexto, EnvelopeEntregue::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        runCatching { contexto.startActivity(Intent.createChooser(envio, null, escolhido.intentSender)) }
+        // A copia sai sozinha no prazo, mesmo com a tela fechada pela trava: o app escolhido le o arquivo depois que o dono
+        // escolhe o contato, e apagar ao travar quebrava o envio. Ela e cifrada, fica no cache do app e so o app escolhido
+        // pode ler (auditoria 8, 14/11/2026).
+        val apagar = Runnable { runCatching { arquivo.delete() } }
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(apagar, PRAZO_DA_COPIA)
+    }
+
+    /** Quanto a copia compartilhada fica para o app escolhido ler. */
+    private const val PRAZO_DA_COPIA = 10 * 60 * 1000L
+
+    fun apagar(contexto: Context) {
+        runCatching { pasta(contexto).deleteRecursively() }
+    }
+
+    /** So as copias com mais que o prazo. */
+    fun apagarVelhas(contexto: Context) {
+        val limite = System.currentTimeMillis() - PRAZO_DA_COPIA
+        runCatching { pasta(contexto).listFiles()?.filter { it.lastModified() < limite }?.forEach { it.delete() } }
+    }
+}
+
+/** O app escolhido na folha de compartilhar: o envelope saiu, e a data de "lacrado" vai para a carteira. */
+class EnvelopeEntregue : android.content.BroadcastReceiver() {
+    override fun onReceive(contexto: Context, intent: Intent) {
+        // O sistema pode encerrar o processo quando o onReceive volta: o goAsync o segura ate a data ser gravada.
+        val pendente = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                runCatching { Api.objeto("envelope.entregue") }
+            } finally {
+                pendente.finish()
+            }
+        }
+    }
+}
+
+/**
+ * Um envelope aberto em outro app (o gerenciador de arquivos, o e-mail, o WhatsApp), como o `incomingEnvelope` do iOS: a tela de
+ * abrir envelope vem com ele, depois de destravar e com carteira. O arquivo so e lido ali, e qualquer outro e recusado pelo tamanho.
+ */
+object EnvelopeRecebido {
+    var uri by mutableStateOf<Uri?>(null)
+    /** O nome do app de onde o envelope veio (o `referrer` da Activity), para a faixa da tela de senha. */
+    var origem by mutableStateOf<String?>(null)
+
+    fun receber(intent: Intent?, origem: String? = null) {
+        val recebido = when (intent?.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+            else -> null
+        } ?: return
+        if (recebido.scheme == "content") {
+            uri = recebido
+            this.origem = origem
+        }
+    }
+}

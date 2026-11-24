@@ -1,0 +1,10 @@
+{
+  "nota": "A cola em C da Escalibur em volta do Argon2 e da secp256k1 (o que nao veio de upstream). Mudou um destes arquivos: revise o diff e grave o digesto novo aqui.",
+  "arquivos": {
+    "Kit/Sources/CArgon2/escalibur_blake2b.c": "f3580538c06b2db67e9e8a07ede7faeb5aba7f01f503af13d606c54ea627d0b6",
+    "Kit/Sources/CArgon2/include/escalibur_blake2b.h": "e2ca491f554926c69a4639b158d7f4111f52622a4e104edab8357b3cd83b3286",
+    "Kit/Sources/CArgon2/include/module.modulemap": "a53df4fcb60fbc0f49befa5f4fb38502becb0191d5ddd8141426b2a826a58bc6",
+    "Kit/Sources/CSecp256k1/include/CSecp256k1.h": "dc13f1281300825db9823571e2db6a51dc6332eef430401d2bca973f923de2ee",
+    "Kit/Sources/CSecp256k1/include/module.modulemap": "40974be131237ebee1f675535a816a1ae7f21d4bfcd92b1f32dcf21b8c5bd8d0"
+  }
+}

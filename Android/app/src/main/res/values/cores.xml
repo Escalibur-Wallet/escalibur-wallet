@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- O lima do icone do app, o mesmo do iOS (24/10/2026, antes rosa). -->
+    <color name="icone_fundo">#FFE1FF00</color>
+    <!-- Palette.void do iOS: o fundo do app, ja na abertura. -->
+    <color name="vazio">#FF0B0B0C</color>
+</resources>

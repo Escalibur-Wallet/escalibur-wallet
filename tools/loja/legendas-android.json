@@ -1,0 +1,23 @@
+[
+  {"captura": "1-carteira", "saida": "1-redes", "tipo": "redes",
+   "pt-BR": ["Só você tem as chaves", "Bitcoin, Ethereum, Solana e mais 23 redes, numa carteira criptografada só neste celular."],
+   "en-US": ["Only you hold the keys", "Bitcoin, Ethereum, Solana and 23 more networks, in a wallet encrypted only on this phone."]},
+  {"captura": "2-alertas",
+   "pt-BR": ["Avisos sem servidor", "O próprio celular confere preços e recebimentos, sem push e sem conta."],
+   "en-US": ["Alerts without a server", "The phone itself checks prices and incoming funds, with no push and no account."]},
+  {"captura": "3-trocar",
+   "pt-BR": ["Troque sem sair da carteira", "Pelos protocolos públicos de cada rede, com o mínimo conferido antes de assinar."],
+   "en-US": ["Swap from your wallet", "Through public protocols, with the minimum checked before you sign."]},
+  {"captura": "4-receber",
+   "pt-BR": ["Receba em qualquer rede", "O endereço e o QR de cada rede, com o aviso do que pode ser enviado."],
+   "en-US": ["Receive on any network", "The address and QR code for each network, with a note on what can be sent."]},
+  {"captura": "5-mercado",
+   "pt-BR": ["O mercado à mão", "Preços ao vivo em reais, dólar ou euro, com a variação do dia."],
+   "en-US": ["The market at hand", "Live prices in dollars, euros or reais, with the day's change."]},
+  {"captura": "6-moeda",
+   "pt-BR": ["Cada moeda por inteiro", "Gráfico, dados do mercado e alerta de preço de cada moeda."],
+   "en-US": ["Every coin in full", "Chart, market data and a price alert for each coin."]},
+  {"captura": "7-envelope",
+   "pt-BR": ["Um envelope só seu", "A senha da carteira num arquivo criptografado, com outra senha que só você conhece."],
+   "en-US": ["A backup only you open", "Your recovery phrase in an encrypted file, with a password only you know."]}
+]
